@@ -4,11 +4,24 @@
  * bounded committed batches with cooperative cancel at each boundary. A re-run
  * simply finds less to delete.
  */
+import { DAY_MS } from '../calendar-days.ts';
 import { policy } from '../config.ts';
+import type { Database } from '../db/database.ts';
 import { payloadString, type Executor } from '../queue/executor.ts';
 
 const BATCH_SIZE = 500;
-const DAY_MS = 86_400_000;
+
+/** The next batch of one workspace's referral events dated before `cutoff`, oldest first. */
+export function expiredBatch(db: Database, workspaceId: string, cutoff: Date) {
+  return db
+    .selectFrom('referral_events')
+    .select('id')
+    .where('workspace_id', '=', workspaceId)
+    .where('occurred_at', '<', cutoff)
+    .orderBy('occurred_at', 'asc')
+    .orderBy('id', 'asc')
+    .limit(BATCH_SIZE);
+}
 
 export const referralRetentionSweep: Executor = async (task, { db, checkCancelled }) => {
   if (payloadString(task, 'sweep_key') === null) {
@@ -22,15 +35,7 @@ export const referralRetentionSweep: Executor = async (task, { db, checkCancelle
   for (;;) {
     await checkCancelled('batch');
     const deleted = await db.transaction().execute(async (trx) => {
-      const expired = await trx
-        .selectFrom('referral_events')
-        .select('id')
-        .where('workspace_id', '=', task.workspace_id)
-        .where('occurred_at', '<', cutoff)
-        .orderBy('occurred_at', 'asc')
-        .orderBy('id', 'asc')
-        .limit(BATCH_SIZE)
-        .execute();
+      const expired = await expiredBatch(trx, task.workspace_id, cutoff).execute();
       const ids = expired.map((row) => row.id);
       if (ids.length === 0) return 0;
       await trx

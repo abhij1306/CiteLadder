@@ -1,24 +1,25 @@
-'use client';
-
-import { useId, type ComponentProps, type CSSProperties, type ReactNode } from 'react';
+import { useId, useRef, type ComponentProps, type CSSProperties, type ReactNode } from 'react';
 
 import { BusyBar } from '@/components/ui/progress-bar';
 import { cardClasses } from '@/components/ui/card';
-import { Checkbox } from '@/components/ui/checkbox';
+import {
+  DataTableColumns,
+  useFlexibleColumnCheck,
+  type DataTableColumn,
+  type DataTableSelection,
+} from '@/components/ui/data-table-columns';
+import { EmptyHeadingLevelContext, EmptyState } from '@/components/ui/empty-state';
 import { FilterBar, type FilterBarProps } from '@/components/ui/filter-bar';
 import { Pager } from '@/components/ui/pager';
 import { TABLE_PAGE_SIZE_OPTIONS } from '@/lib/config/tables';
 import { QueryState, type QueryStateProps } from '@/components/ui/query-state';
-import { HintedTableHead, SortableTableHead } from '@/components/ui/table-heads';
+import { ScrollEdgeFades, useScrollEdges } from '@/components/ui/scroll-edges';
 import {
   Table,
   TableBody,
   TableCell,
   TableCellLines,
   TableFillerRows,
-  TableHead,
-  TableHeader,
-  TableRow,
   TableTextLinesContext,
   TableTitleLinesContext,
   type TableMinWidth,
@@ -26,86 +27,19 @@ import {
 import { textRole } from '@/components/ui/typography';
 import { cn } from '@/lib/utils';
 
-/**
- * A column's width, by what the column holds — never a number a page picks.
- * The table is laid out fixed from these, so paging, filtering or a long
- * value never moves a column. `flex` takes what the others leave; give it to
- * the one text column that should absorb the width.
- */
-const COLUMN_WIDTH = {
-  flex: '',
-  /**
-   * The record's identity (a source, a page) in a table whose other columns
-   * are flexible figures: a quarter of the table, so the figures share the
-   * rest evenly whatever the viewport.
-   */
-  lead: 'w-1/4',
-  /** A row's ordinal on the page (#, rank). */
-  index: 'w-12',
-  /** A count, a rate or a short figure. */
-  figure: 'w-28',
-  /**
-   * A figure whose header names its unit ("AI referral sessions", "Longest
-   * receipt gap"): the figure role is too narrow for the label.
-   */
-  metric: 'w-40',
-  /** A status badge or a short label. */
-  status: 'w-32',
-  /** A category badge longer than a status ("Striking distance", a purpose). */
-  category: 'w-44',
-  /** A date or a date-time. */
-  date: 'w-40',
-  /** A second text column beside the flexible one (an engine, a role). */
-  name: 'w-56',
-  /** A row's trailing link or icon control. */
-  action: 'w-24',
-  /** One compact control under a one-word header ("Enabled", "Actions"). */
-  control: 'w-20',
-  /** A row's trailing buttons, up to two (`TableActionsCell`). */
-  rowActions: 'w-64',
-} as const;
-
-type DataTableColumnWidth = keyof typeof COLUMN_WIDTH;
-
-export type DataTableColumn = Readonly<{
-  key: string;
-  label: string;
-  width?: DataTableColumnWidth;
-  /** Centred figures, digits in the figure face, header included. */
-  numeric?: boolean;
-  /** Trailing row controls (`TableActionsCell`): the header ends on their edge. */
-  trailing?: boolean;
-  /** Keep the header for assistive technology only (an actions column). */
-  hideLabel?: boolean;
-  /** A sortable column: the header becomes the sort button. */
-  sort?: Readonly<{ active: boolean; descending: boolean; onSort: () => void }>;
-  /** A qualifier under the label, e.g. the comparison window. */
-  sublabel?: string;
-  /** The column's shared caveat, behind a tooltip on the header. */
-  hint?: string;
-  /**
-   * The narrow layout drops this column; the page's cells for it pass
-   * `desktopOnly` to `TableCell` too.
-   */
-  desktopOnly?: boolean;
-}>;
+export type { DataTableColumn, DataTableSelection };
 
 /** A table read's state when it has no rows to show: loading, error or empty. */
 export type DataTableState = Exclude<QueryStateProps, { inline: true }>;
 
-export type DataTablePager = Omit<ComponentProps<typeof Pager>, 'frame' | 'className'>;
-
 /**
- * Row selection: a leading checkbox column whose header box selects every
- * row on the page. Each row's first cell is a `TableSelectCell`.
+ * The one-line empty state (`QueryState` `inline`): one table row saying what
+ * is absent, for a small table whose block empty state would be taller than
+ * its rows ever are.
  */
-export type DataTableSelection = Readonly<{
-  /** Every row selected, some, or none. */
-  all: boolean | 'indeterminate';
-  onAllChange: (checked: boolean) => void;
-  /** What the rows are, for the header box's name: "Select all {noun}". */
-  noun: string;
-}>;
+type DataTableInlineEmpty = Extract<QueryStateProps, { inline: true }>;
+
+export type DataTablePager = Omit<ComponentProps<typeof Pager>, 'frame' | 'className'>;
 
 /**
  * DataTable — the record table organism: a header, the rows, the pager and
@@ -125,8 +59,10 @@ export type DataTableSelection = Readonly<{
  *            of a paged table is exactly `rowLines` tall: its text is cut to
  *            that many lines (the rest in a tooltip), so a page of long
  *            values is no taller than a page of short ones. Rows of two
- *            lines (`rowLines={2}`, cells on `TableCellLines`; 3 for a
- *            two-line title) are padded with blanks. A fixed list with `pageSize` and no
+ *            lines (`rowLines={2}`, cells on `TableCellLines`) are padded
+ *            with blanks. `rowLines={3}` lets a title wrap to two lines, and
+ *            only a row whose title wraps grows; a title that fits keeps its
+ *            row compact (owner, 2026-11-11). A fixed list with `pageSize` and no
  *            pager (top movers) always reserves its rows.
  *   pager  — the shared `Pager`, framed as the table's footer, drawn only
  *            while the rows run past one page: a table that fits on one page
@@ -134,6 +70,11 @@ export type DataTableSelection = Readonly<{
  *   state  — loading, read-error and empty render INSIDE the table body,
  *            under the same header row, in the footprint of a full page of
  *            rows while the table is paged (else the query-state height).
+ *            An `inline` empty state is one row instead (else the page's
+ *            footprint), so a small table never holds a tall empty block. A
+ *            block empty state's heading is an h3, under the table's own.
+ *   overflow — while a wide table scrolls sideways, a fade at each edge that
+ *            hides columns says so; it overlays the frame and moves nothing.
  *
  * Inside a box that already frames it (a card holding other content, a
  * dialog's preview of parsed rows) the table is `nested`: the same header,
@@ -175,8 +116,8 @@ export function DataTable({
   pageSize?: number;
   /** Lines per row: 2 for a caption under the value, 3 for a two-line title over it. */
   rowLines?: RowLines;
-  /** What to show instead of rows. */
-  state?: DataTableState;
+  /** What to show instead of rows; an `inline` empty state is one row. */
+  state?: DataTableState | DataTableInlineEmpty;
   pager?: DataTablePager;
   /** A background refetch while the current rows stay on screen. */
   busy?: Readonly<{ active: boolean; label: string }>;
@@ -208,26 +149,27 @@ export function DataTable({
   const naming = title
     ? { ariaLabelledBy: headingId, ariaLabel: undefined }
     : { ariaLabelledBy: undefined, ariaLabel: label };
+  useFlexibleColumnCheck({ columns, title, label });
   return (
     <section
       aria-labelledby={naming.ariaLabelledBy}
       aria-label={naming.ariaLabel}
       aria-busy={busy?.active || undefined}
       data-data-table=""
-      className={cn(fit, 'relative grid min-w-0 content-start gap-4')}
+      className={cn(fit, 'relative grid min-w-0 content-start gap-[var(--workspace-gap)]')}
     >
       {busy ? <BusyBar active={busy.active} label={busy.label} /> : null}
-      <DataTableHeader title={title} headingId={headingId} toolbar={toolbar} />
-      {description ? (
-        <p data-data-table-description="" className="text-caption text-ink-muted">
-          {description}
-        </p>
-      ) : null}
-      <Table
-        fixed
+      <DataTableHeader
+        title={title}
+        headingId={headingId}
+        toolbar={toolbar}
+        description={description}
+      />
+      <DataTableFrame
         minWidth={minWidth}
-        {...naming}
-        className={cn(pinFirstColumn && PINNED_FIRST_COLUMN)}
+        naming={naming}
+        pinFirstColumn={pinFirstColumn}
+        fullBleed={!nested}
       >
         <DataTableColumns columns={columns} selection={selection} />
         <TableTextLinesContext value={(pager || pageSize !== undefined) && rowLines === 1 ? 1 : 2}>
@@ -243,9 +185,53 @@ export function DataTable({
             </DataTableBody>
           </TableTitleLinesContext>
         </TableTextLinesContext>
-      </Table>
+      </DataTableFrame>
       <DataTableFoot footer={footer} pager={paging.pager} />
     </section>
+  );
+}
+
+/**
+ * The table in its scrolling frame, with the overflow fades laid over the
+ * frame's edges. The box is isolated, so the fades never paint over the
+ * page's sticky header. A pinned first column keeps the leading edge clear.
+ *
+ * In its own card the rows are full-bleed: the frame runs to the card's
+ * edges and the outer cells take the card's 16 inset, so a cell's text
+ * starts on the same line as the title above it and the row rules meet the
+ * card's border.
+ */
+function DataTableFrame({
+  minWidth,
+  naming,
+  pinFirstColumn,
+  fullBleed,
+  children,
+}: Readonly<{
+  minWidth?: TableMinWidth;
+  naming: { ariaLabelledBy?: string; ariaLabel?: string };
+  pinFirstColumn: boolean;
+  fullBleed: boolean;
+  children: ReactNode;
+}>) {
+  const frame = useRef<HTMLDivElement>(null);
+  const edges = useScrollEdges(frame);
+  return (
+    <div
+      data-data-table-frame=""
+      className={cn('relative isolate min-w-0', fullBleed && FULL_BLEED_FRAME)}
+    >
+      <Table
+        fixed
+        minWidth={minWidth}
+        {...naming}
+        wrapperRef={frame}
+        className={cn(pinFirstColumn && PINNED_FIRST_COLUMN)}
+      >
+        {children}
+      </Table>
+      <ScrollEdgeFades edges={edges} start={!pinFirstColumn} />
+    </div>
   );
 }
 
@@ -259,7 +245,7 @@ function DataTableFoot({
 }: Readonly<{ footer: ReactNode; pager: DataTablePager | undefined }>) {
   if (!pager && !footer) return null;
   return (
-    <div className="flex min-h-[var(--control-md)] min-w-0 flex-wrap items-center justify-between gap-4">
+    <div className="flex min-h-[var(--control-md)] min-w-0 flex-wrap items-center justify-between gap-2">
       {footer ? <div className="type-caption grid min-w-0 gap-1">{footer}</div> : null}
       {pager ? (
         <div className="ms-auto min-w-0">
@@ -304,67 +290,57 @@ function pagingLayout(
 }
 
 /**
- * The system's TableCard: the table sits inside the card's 24 inset, 16 below
- * the title row and 16 above the pager and footnote. Inside a box that
- * already frames it, there is no card of its own.
+ * The system's TableCard: the header (title, toolbar, description) in the
+ * card's 16 inset, the table 12 below it with full-bleed rows, and the pager
+ * and footnote 12 below the table. Inside a box that already frames it, there
+ * is no card of its own and the table keeps that box's inset.
  */
 const FITS = { card: cardClasses(), nested: undefined } as const;
+
+/** The frame out to the card's edges, its outer cells back on the card's inset. */
+const FULL_BLEED_FRAME =
+  '-mx-[var(--card-padding)] [&_:is(th,td):first-child]:ps-[var(--card-padding)] [&_:is(th,td):last-child]:pe-[var(--card-padding)]';
 
 /** The first column stays in view while a wide table scrolls in its frame. */
 const PINNED_FIRST_COLUMN =
   '[&_tr>:first-child]:sticky [&_tr>:first-child]:left-0 [&_tbody_tr>:first-child]:z-10 [&_tbody_tr>:first-child]:bg-surface [&_thead_tr>:first-child]:z-20';
 
-/** The column widths and the header row, with the select-all column first. */
-function DataTableColumns({
-  columns,
-  selection,
-}: Readonly<{ columns: readonly DataTableColumn[]; selection?: DataTableSelection }>) {
-  return (
-    <>
-      <colgroup>
-        {selection ? <col className="w-10" /> : null}
-        {columns.map((column) => (
-          <col
-            key={column.key}
-            className={cn(
-              COLUMN_WIDTH[column.width ?? 'flex'],
-              column.desktopOnly && 'hidden desktop:table-column',
-            )}
-          />
-        ))}
-      </colgroup>
-      <TableHeader>
-        <TableRow>
-          {selection ? <SelectAllHead selection={selection} /> : null}
-          {columns.map((column) => (
-            <ColumnHead key={column.key} column={column} />
-          ))}
-        </TableRow>
-      </TableHeader>
-    </>
-  );
-}
-
+/**
+ * The title row (the title at the card-title size, then the toolbar 8 along),
+ * with the description bound 4 under it as one fact.
+ */
 function DataTableHeader({
   title,
   headingId,
   toolbar,
-}: Readonly<{ title?: string; headingId: string; toolbar?: FilterBarProps }>) {
-  if (!title && !toolbar) return null;
+  description,
+}: Readonly<{
+  title?: string;
+  headingId: string;
+  toolbar?: FilterBarProps;
+  description?: ReactNode;
+}>) {
+  if (!title && !toolbar && !description) return null;
   return (
-    <header
-      data-data-table-header=""
-      className="flex min-h-[var(--control-md)] min-w-0 flex-wrap items-center gap-x-4 gap-y-2"
-    >
-      {title ? (
-        <h3 id={headingId} className={textRole('itemTitle', 'min-w-0 truncate')}>
-          {title}
-        </h3>
-      ) : null}
-      {toolbar ? (
-        <div className="min-w-0 flex-1">
-          <FilterBar {...toolbar} />
+    <header data-data-table-header="" className="grid min-w-0 gap-1">
+      {title || toolbar ? (
+        <div className="flex min-h-[var(--control-md)] min-w-0 flex-wrap items-center gap-2">
+          {title ? (
+            <h3 id={headingId} className={textRole('sectionTitle', 'min-w-0 truncate')}>
+              {title}
+            </h3>
+          ) : null}
+          {toolbar ? (
+            <div className="min-w-0 flex-1">
+              <FilterBar {...toolbar} />
+            </div>
+          ) : null}
         </div>
+      ) : null}
+      {description ? (
+        <p data-data-table-description="" className="type-caption">
+          {description}
+        </p>
       ) : null}
     </header>
   );
@@ -383,12 +359,32 @@ function DataTableBody({
   children,
 }: Readonly<{
   colSpan: number;
-  state?: DataTableState;
+  state?: DataTableState | DataTableInlineEmpty;
   pageSize?: number;
   rowCount?: number;
   rowLines: RowLines;
   children?: ReactNode;
 }>) {
+  if (state?.kind === 'empty' && state.inline) {
+    return (
+      <TableBody>
+        <tr data-table-state="">
+          <TableCell
+            colSpan={colSpan}
+            className="h-[calc(var(--data-table-rows)*var(--data-table-row))] align-top"
+            style={stateFootprint(pageSize ?? 1, rowLines)}
+          >
+            <EmptyState
+              variant="compact"
+              icon={state.icon}
+              title={state.message}
+              primary={state.action}
+            />
+          </TableCell>
+        </tr>
+      </TableBody>
+    );
+  }
   if (state) {
     return (
       <TableBody>
@@ -396,14 +392,12 @@ function DataTableBody({
           <TableCell
             colSpan={colSpan}
             className="h-[max(var(--query-state-height),calc(var(--data-table-rows)*var(--data-table-row)))] align-top"
-            style={
-              {
-                '--data-table-rows': pageSize ?? 0,
-                '--data-table-row': ROW_HEIGHT[rowLines],
-              } as CSSProperties
-            }
+            style={stateFootprint(pageSize ?? 0, rowLines)}
           >
-            <QueryState {...state} />
+            {/* Under the table's h3 title, a block empty state's heading is an h3. */}
+            <EmptyHeadingLevelContext value={3}>
+              <QueryState {...state} />
+            </EmptyHeadingLevelContext>
           </TableCell>
         </tr>
       </TableBody>
@@ -430,65 +424,19 @@ function DataTableBody({
  */
 const ROW_HEIGHT = {
   1: 'var(--table-row-height)',
-  2: 'calc(2*var(--table-cell-padding-y)+var(--text-body-sm--line-height)+var(--text-caption--line-height))',
-  3: 'calc(2*var(--table-cell-padding-y)+2*var(--text-body-sm--line-height)+var(--text-caption--line-height))',
+  2: 'calc(2*var(--table-cell-padding-y)+var(--text-body-sm--line-height)+var(--spacing)+var(--text-caption--line-height))',
+  3: 'calc(2*var(--table-cell-padding-y)+2*var(--text-body-sm--line-height)+var(--spacing)+var(--text-caption--line-height))',
 } as const satisfies Record<RowLines, string>;
 
 type RowLines = 1 | 2 | 3;
 
+/** The custom properties a state cell's height reads: `rows` rows of `rowLines`. */
+function stateFootprint(rows: number, rowLines: RowLines) {
+  return {
+    '--data-table-rows': rows,
+    '--data-table-row': ROW_HEIGHT[rowLines],
+  } as CSSProperties;
+}
+
 /** A non-breaking space: a blank line that still takes a line's height. */
 const BLANK = ' ';
-
-function SelectAllHead({ selection }: Readonly<{ selection: DataTableSelection }>) {
-  return (
-    <TableHead>
-      <Checkbox
-        aria-label={`Select all ${selection.noun}`}
-        checked={selection.all}
-        onCheckedChange={(checked) => selection.onAllChange(checked === true)}
-      />
-    </TableHead>
-  );
-}
-
-function ColumnHead({ column }: Readonly<{ column: DataTableColumn }>) {
-  if (column.sort) {
-    return (
-      <SortableTableHead
-        label={column.label}
-        numeric={column.numeric}
-        sublabel={column.sublabel}
-        hint={column.hint}
-        desktopOnly={column.desktopOnly}
-        {...column.sort}
-      />
-    );
-  }
-  if (column.hint) {
-    return (
-      <HintedTableHead
-        label={column.label}
-        hint={column.hint}
-        numeric={column.numeric}
-        desktopOnly={column.desktopOnly}
-      />
-    );
-  }
-  // The columns are fixed, so a label longer than its role wraps under
-  // itself instead of painting over the next header.
-  return (
-    <TableHead
-      numeric={column.numeric}
-      trailing={column.trailing}
-      desktopOnly={column.desktopOnly}
-      className="whitespace-normal"
-    >
-      {column.hideLabel ? <span className="sr-only">{column.label}</span> : column.label}
-      {column.sublabel ? (
-        <span className={textRole('caption', 'block truncate')} title={column.sublabel}>
-          {column.sublabel}
-        </span>
-      ) : null}
-    </TableHead>
-  );
-}

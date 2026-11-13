@@ -50,6 +50,18 @@ export type SiteEvidence = {
     finding_class: string;
   }[];
   urls: { site_url_id: string; normalized_url: string }[];
+  /**
+   * Issue-family defects (`SITE_ISSUE_FAMILY`), loaded apart from `issues` and
+   * never under its cap: each rule's exact affected page count and its first
+   * `COHORT_PAGES_MAX` owned pages in URL order, with their issues.
+   */
+  families: {
+    rule_id: string;
+    severity: string;
+    category: string;
+    page_count: number;
+    pages: { site_url_id: string; url: string; issue_ids: string[] }[];
+  }[];
   coverage: Record<string, unknown>;
   limitations: string[];
 };
@@ -63,6 +75,11 @@ export type DetectorHit = {
   source_metric_ids: string[];
   value_factor: number;
   gap_factor: number;
+  /**
+   * The severity and title this finding carries instead of its rule's: an
+   * issue family's are its own Site Health rule's. Absent for every other hit.
+   */
+  finding?: Readonly<{ severity: string; title: string }>;
 };
 type PageEntityEvidence = {
   entity_kind: string;
@@ -83,10 +100,8 @@ export type SourcePageEvidence = {
   snapshot_id: string | null;
   read_at: string | null;
   extracted_chars: number;
-  sufficient_coverage: boolean;
   title: string;
   entities: PageEntityEvidence[];
-  roster_current: boolean;
   recurrence_count: number;
   answer_count: number;
   /** Tracked prompts whose answers in this audit cited the page. */

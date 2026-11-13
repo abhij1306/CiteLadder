@@ -5,6 +5,7 @@ import { join, relative, sep } from 'node:path';
 import { z } from 'zod';
 import { policy } from '../config.ts';
 import { parseContentFormats, type ContentFormat } from '../config/skill-inputs.ts';
+import { contentRulesVersion } from '../page-documents/content-rules.ts';
 import { compareText } from '../text-order.ts';
 import type { Skill, SkillCatalog } from './contracts.ts';
 import { parseWorkflows, type WorkflowCatalog } from './workflows.ts';
@@ -91,6 +92,9 @@ export async function loadSkillCatalog(root: string): Promise<PackagedCatalog> {
     '\n',
   );
   digest.update('workflows.json').update('\0').update(workflowFile).update('\0');
+  // The content rule catalog is the page methodology's rule list, so a change to
+  // it asks a queued turn again like a skill change does.
+  digest.update('content-rules').update('\0').update(contentRulesVersion).update('\0');
   if (
     new Set(skills.map((skill) => skill.id)).size !== skills.length ||
     new Set(skills.map((skill) => skill.order)).size !== skills.length
@@ -111,4 +115,8 @@ export async function loadSkillCatalog(root: string): Promise<PackagedCatalog> {
 /** Kinds with content formats choose a format. */
 export function usesFormats(skill: Pick<Skill, 'outputKind'>) {
   return (p.format_kinds as readonly string[]).includes(skill.outputKind);
+}
+/** Kinds whose document is a fetched page: it starts from a page fetch, never from `save_document`. */
+export function fetchesPage(skill: Pick<Skill, 'outputKind'>) {
+  return (p.fetched_kinds as readonly string[]).includes(skill.outputKind);
 }

@@ -7,6 +7,7 @@ import { canonicalUrl } from './url-identity.ts';
 import { buildArchitecture, type ArchitecturePage } from './architecture-model.ts';
 import { architectureRules } from './architecture-rules.ts';
 import { persistIssueCatalog } from './issue-catalog.ts';
+import { landIssueStates } from './issue-states.ts';
 import { addArchitectureIssues } from './snapshot.ts';
 import type { Crawl } from './site-task.ts';
 
@@ -245,5 +246,7 @@ export async function persistArchitecture(db: Database, crawl: Crawl) {
   await addArchitectureIssues(db, crawl);
   // The findings are written current, so the persisted catalog takes them in now.
   await persistIssueCatalog(db, crawl);
+  // The root page's issue states take in the site-level findings judged on it.
+  await landIssueStates(db, crawl);
   return 1;
 }

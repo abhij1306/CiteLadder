@@ -143,8 +143,7 @@ export async function enqueueDuePulls(
       keyParts: [source.id, Math.floor(now.getTime() / interval)],
       maxAttempts: crawlLogs.task_max_attempts,
     };
-    // One source at a time keeps each enqueue inside the tick's admission budget.
-    await enqueueTask(db, task); // NOSONAR
+    await enqueueTask(db, task); // NOSONAR -- One source at a time keeps each enqueue inside the tick's admission budget.
   }
   return true;
 }

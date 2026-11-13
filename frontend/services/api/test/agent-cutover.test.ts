@@ -89,7 +89,8 @@ describe('served Agent cutover on PostgreSQL', () => {
         reply(long),
       ]);
     const { accepted, response } = await startTurn(scope.projectId, headers);
-    expect(response.headers.get('content-type')).toContain('text/event-stream');
+    expect(response.headers.get('content-type')).toBe('text/event-stream; charset=utf-8');
+    expect(response.headers.get('x-accel-buffering')).toBe('no');
     const events = (await response.text())
       .split('\n\n')
       .filter((frame) => frame.startsWith('data: '))

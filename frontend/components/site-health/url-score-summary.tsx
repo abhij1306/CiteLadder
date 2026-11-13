@@ -23,10 +23,10 @@ export function UrlScoreSummary({ detail }: Readonly<{ detail: PageDetail }>) {
           ),
         },
         {
-          title: 'AEO Checklist Completion',
+          title: 'AEO checklist completion',
           value:
             detail.aeo_measurement_coverage === null ? null : detail.aeo_measurement_coverage * 100,
-          valueUnit: 'percent',
+          valueUnit: 'plain-percent',
           icon: ICONS.reports,
           unavailable: scoreUnavailableState(
             detail.aeo_measurement_state,
@@ -47,7 +47,7 @@ function scoreUnavailableState(state: string, reason?: string) {
   }
   // The page's kind has no AEO checklist: a fact about the page, not a missing measurement.
   if (reason === 'unsupported_purpose_checklist') {
-    return <span className="type-caption">Unsupported purpose checklist</span>;
+    return <span className="type-caption">No AEO checklist for this page kind</span>;
   }
   return <UnavailableValue state="not_measured" />;
 }

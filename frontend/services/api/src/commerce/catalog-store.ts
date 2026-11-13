@@ -1,10 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import type { Insertable, Selectable } from 'kysely';
+import { sql, type Insertable, type Selectable } from 'kysely';
 
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import type { CommerceProducts, CommerceProductObservations } from '../generated/db-schema.ts';
-import { categoryKey, isCategoryName } from './projection-facts.ts';
+import { categoryKey, isCategoryName, UNCATEGORIZED_KEY } from './projection-facts.ts';
 import { commerceMissing, type CommerceScope } from './reads.ts';
 
 /**
@@ -43,6 +43,8 @@ export function newProduct(
       description: '',
       brand: '',
       price: null,
+      price_max: null,
+      image_url: '',
       currency: '',
       sku: null,
       gtin: null,
@@ -90,6 +92,63 @@ export async function categoryByName(db: Database, scope: CommerceScope, name: s
     .executeTakeFirstOrThrow();
 }
 
+/**
+ * Name `parentId` the category one level up of `childId`, both of this
+ * project. A parent that would close a cycle is never written. Crawl
+ * projection only fills a category that has no parent (`replace: false`); an
+ * applied import, an explicit decision, replaces it.
+ */
+export async function setCategoryParent(
+  db: Database,
+  scope: CommerceScope,
+  link: { childId: string; parentId: string; replace: boolean },
+) {
+  if (link.childId === link.parentId) return;
+  const ws = scope.workspaceId,
+    project = scope.projectId;
+  const { rows } = await sql<{ cycle: boolean }>`
+    WITH RECURSIVE up(id) AS (
+      SELECT ${link.parentId}::uuid
+      UNION
+      SELECT c.parent_category_id FROM commerce_categories c JOIN up ON c.id = up.id
+      WHERE c.workspace_id = ${ws} AND c.project_id = ${project}
+        AND c.parent_category_id IS NOT NULL
+    )
+    SELECT EXISTS (SELECT 1 FROM up WHERE id = ${link.childId}) AS cycle`.execute(db);
+  if (rows[0]?.cycle) return;
+  await db
+    .updateTable('commerce_categories')
+    .set({ parent_category_id: link.parentId, updated_at: new Date() })
+    .where('workspace_id', '=', ws)
+    .where('project_id', '=', project)
+    .where('id', '=', link.childId)
+    .where((eb) =>
+      link.replace
+        ? eb.or([
+            eb('parent_category_id', 'is', null),
+            eb('parent_category_id', '!=', link.parentId),
+          ])
+        : eb('parent_category_id', 'is', null),
+    )
+    .execute();
+}
+
+/**
+ * A product's category memberships joined to their categories (`m`, `c`),
+ * the platform's "Uncategorized" left out; the caller selects and orders.
+ */
+export function productCategories(db: Database, scope: CommerceScope, productId: string) {
+  return db
+    .selectFrom('commerce_product_categories as m')
+    .innerJoin('commerce_categories as c', (join) =>
+      join.onRef('c.id', '=', 'm.category_id').onRef('c.workspace_id', '=', 'm.workspace_id'),
+    )
+    .where('m.workspace_id', '=', scope.workspaceId)
+    .where('m.project_id', '=', scope.projectId)
+    .where('m.product_id', '=', productId)
+    .where('c.normalized_name', '!=', UNCATEGORIZED_KEY);
+}
+
 export async function addMembership(
   db: Database,
   scope: CommerceScope,
@@ -130,8 +189,17 @@ type Evidence = Pick<Insertable<CommerceProductObservations>, 'source_kind' | 'o
       | 'classifier_version'
       | 'importer_version'
       | 'projector_version'
+      | 'edit_version'
     >
   >;
+
+/** Whether an in-app edit owns this field now: crawl never replaces it. */
+export function editedField(sources: Record<string, unknown>, field: string) {
+  const source = sources[field];
+  return (
+    typeof source === 'object' && source !== null && 'kind' in source && source.kind === 'edit'
+  );
+}
 
 export async function appendObservation(
   db: Database,

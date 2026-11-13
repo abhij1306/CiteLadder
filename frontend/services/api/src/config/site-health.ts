@@ -31,7 +31,6 @@ const ruleVersion = 'sh-rules-1';
 export const siteHealthRuntime = {
   settings: {
     automatic_page_limit: settings.automatic_page_limit,
-    max_requested_page_limit: settings.max_requested_page_limit,
     max_attempts: settings.max_attempts,
     sample_discovery_url_cap: settings.sample_discovery_url_cap,
     sample_url_limit: settings.sample_url_limit,

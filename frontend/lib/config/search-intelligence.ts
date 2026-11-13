@@ -1,8 +1,14 @@
-/** Mirrors the Search Intelligence request bounds. */
+/**
+ * Search Intelligence screen config. Request bounds, default depths and the
+ * offered markets come from the API with readiness, never restated here.
+ */
 import { MARKET_COUNTRIES } from '@citeladder/contracts/markets';
-import type { SearchDatasetKind } from '@citeladder/contracts/search-intelligence';
+import type {
+  SearchDatasetKind,
+  searchReadinessSchema,
+} from '@citeladder/contracts/search-intelligence';
+import type { z } from 'zod';
 
-export const SEARCH_MAX_DEPTH = 1_000_000;
 export type SearchColumn = {
   field: string;
   label: string;
@@ -100,51 +106,27 @@ export const SEARCH_DATASET_LABELS: Readonly<Record<string, string>> = {
 /** A first analysis starts small: the owned site plus one competitor's keyword comparisons. */
 export const PRESET_OWNED_KINDS: readonly SearchDatasetKind[] = ['footprint', 'ranking_keywords'];
 
-export const SEARCH_DEFAULT_DEPTHS: Readonly<Record<SearchDatasetKind, number>> = {
-  footprint: 1,
-  ranking_keywords: 200,
-  keyword_suggestions: 150,
-  backlink_summary: 1,
-  referring_domains: 100,
-  destination_pages: 100,
-  missing_keywords: 100,
-  shared_keywords: 100,
-  organic_pages: 100,
-  backlinks: 100,
-  backlink_history: 13,
-};
-
 export function searchScopeLabel(scope?: string): string {
   return scope === 'domain_subdomains' ? 'Domain + subdomains' : 'Exact host';
 }
 
-// Mirrors the curated location codes in services/api/src/config/dataforseo.json.
-const SEARCH_LOCATION_COUNTRIES: Record<number, string> = {
-  2840: 'US',
-  2826: 'GB',
-  2036: 'AU',
-  2124: 'CA',
-  2356: 'IN',
-  2554: 'NZ',
-  2372: 'IE',
-  2702: 'SG',
-  2710: 'ZA',
-  2276: 'DE',
-  2250: 'FR',
-  2528: 'NL',
-  2784: 'AE',
-};
+/** The markets the server offers (readiness `markets`): country and location code. */
+type SearchMarkets = z.infer<typeof searchReadinessSchema>['markets'];
 
-export function searchMarketLabel(locationCode: number | null): string {
+/** A location code's country name, from the markets the server sent. */
+export function searchMarketLabel(locationCode: number | null, markets: SearchMarkets): string {
   if (locationCode === null) return 'Market not set';
-  const countryCode = SEARCH_LOCATION_COUNTRIES[locationCode];
+  const countryCode = markets.find((market) => market.location_code === locationCode)?.country_code;
   return (
     MARKET_COUNTRIES.find(({ value }) => value === countryCode)?.label ??
     `Location code ${locationCode}`
   );
 }
 
-export const SEARCH_MARKET_OPTIONS = Object.keys(SEARCH_LOCATION_COUNTRIES).map((value) => ({
-  value,
-  label: searchMarketLabel(Number(value)),
-}));
+/** The market picker's options: each offered market by name, keyed by location code. */
+export function searchMarketOptions(markets: SearchMarkets) {
+  return markets.map(({ location_code }) => ({
+    value: String(location_code),
+    label: searchMarketLabel(location_code, markets),
+  }));
+}

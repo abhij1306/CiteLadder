@@ -2,6 +2,7 @@ import { afterAll, afterEach, describe, expect, it } from 'vitest';
 import { testDatabase } from './support.ts';
 import { VisibilityFixtures } from './visibility-fixtures.ts';
 import { auditTenant } from './audit-fixtures.ts';
+import { prompt } from './prompt-fixtures.ts';
 import { auditRuntime } from '../src/audits/config.ts';
 import { auditInput } from '../src/audits/inputs.ts';
 import { createAudits } from '../src/audits/creation.ts';
@@ -69,6 +70,24 @@ describe('provider-free audit estimates and persisted exports', () => {
         .where('workspace_id', '=', t.workspaceId)
         .execute(),
     ).toEqual([]);
+  });
+  it('estimates only the prompts a launch runs, never archived ones', async () => {
+    const t = await auditTenant(db, fixtures);
+    await prompt(db, t.setId, 'An archived prompt', { status: 'archived' });
+    const input = estimateInput.parse({
+      project_id: t.projectId,
+      prompt_set_id: t.setId,
+      engines: ['chatgpt'],
+      repetitions: 1,
+    });
+    const estimate = await estimateAudit(db, t.workspaceId, input, runtime);
+    const [launched] = await createAudits(db, t.workspaceId, auditInput.parse(input), {}, runtime);
+    const tasks = await db
+      .selectFrom('audit_tasks')
+      .select('id')
+      .where('audit_id', '=', launched!)
+      .execute();
+    expect([estimate.prompt_count, estimate.execution_count, tasks.length]).toEqual([1, 1, 1]);
   });
   it('exports persisted scores and frozen unknown retrieval while neutralizing spreadsheet formulas', async () => {
     const t = await auditTenant(db, fixtures),

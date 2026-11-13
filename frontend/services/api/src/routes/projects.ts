@@ -1,15 +1,17 @@
-import { projectSchema } from '@citeladder/contracts/project';
+import { projectSchema, projectSummarySchema } from '@citeladder/contracts/project';
 import { commandCenterSchema } from '@citeladder/contracts/opportunities';
 import { projectMarketCreateSchema, projectMarketSchema } from '@citeladder/contracts/markets';
 import { z } from 'zod';
 
 import { budget, spendBudget } from '../abuse/usage.ts';
+import { COMPETITORS_WRITE } from '../commands/competitors.ts';
+import { routeActor } from '../commands/permission.ts';
 import { readBody } from '../http/body.ts';
 import { projectCreate, projectUpdate } from '../projects/inputs.ts';
 import {
   createProject,
   readProject,
-  listProjects,
+  listProjectSummaries,
   updateProject,
   deleteProject,
 } from '../projects/service.ts';
@@ -29,8 +31,8 @@ export const projectRoutes = [
     family,
     path: root,
     params: { path: {}, query: {} },
-    response: z.array(projectSchema),
-    handle: ({ c, db }) => listProjects(db, c.get('workspace').workspaceId),
+    response: z.array(projectSummarySchema),
+    handle: ({ c, db }) => listProjectSummaries(db, c.get('workspace').workspaceId),
   }),
   definePostRoute({
     family,
@@ -63,14 +65,15 @@ export const projectRoutes = [
     family,
     path: `${root}/{project_id}`,
     authorize: 'active-project',
-    capability: 'write',
+    permission: COMPETITORS_WRITE,
     params: { path: projectPath, query: {} },
     body: projectUpdate,
     response: projectSchema,
     async handle({ c, db }, { path }) {
       return updateProject(
         db,
-        { workspaceId: c.get('workspace').workspaceId, projectId: path.project_id },
+        routeActor(c, COMPETITORS_WRITE),
+        path.project_id,
         await readBody(c, projectUpdate),
       );
     },

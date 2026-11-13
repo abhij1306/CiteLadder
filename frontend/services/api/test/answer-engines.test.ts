@@ -1,9 +1,24 @@
 import { describe, expect, it } from 'vitest';
+import { z } from 'zod';
 import { providerPolicy, providerSettings } from '../src/providers/config.ts';
 import { answerRequestSchema, type AnswerRequest } from '../src/answer-engines/contracts.ts';
 import { answerPayload, executeAnswer } from '../src/answer-engines/execute.ts';
 import { parseAnswer, usageCount } from '../src/answer-engines/parse.ts';
 import { scoreExecution, scoringConfig } from '../src/analysis/scoring.ts';
+import { entityPassages } from '../src/perception/passages.ts';
+import recordedFinishes from './fixtures/answer-engines/finish-reasons.json' with { type: 'json' };
+
+/** Provider responses in their recorded shapes, one per finish reason, with the outcome each must produce. */
+const finishFixtures = z
+  .array(
+    z.strictObject({
+      name: z.string(),
+      engine: z.enum(['chatgpt', 'gemini', 'claude']),
+      payload: z.record(z.string(), z.unknown()),
+      expected: z.record(z.string(), z.unknown()),
+    }),
+  )
+  .parse(recordedFinishes);
 
 function request(engine: 'chatgpt' | 'gemini' | 'claude', retrieval = true): AnswerRequest {
   const route = providerPolicy.routes[engine];
@@ -463,7 +478,7 @@ describe('frozen answer-engine execution', () => {
       request('claude'),
     );
     expect(result).toMatchObject({
-      finish_reason: 'unknown',
+      finish_reason: 'paused',
       search_used: false,
       normalized_usage: {
         uncached_input_tokens: 15,
@@ -547,4 +562,63 @@ describe('frozen answer-engine execution', () => {
       expect(usageCount(value)).toBeNull();
     },
   );
+
+  it.each(finishFixtures.map((fixture) => [fixture.name, fixture] as const))(
+    'classifies the recorded %s exchange',
+    async (_name, fixture) => {
+      const outcome = await executeAnswer(
+        request(fixture.engine),
+        { secret: 'test-secret', base_url: '' },
+        providerSettings({}),
+        async () => Response.json(fixture.payload),
+      ).catch((failure: unknown) => failure);
+      expect(outcome).toMatchObject(fixture.expected);
+    },
+  );
+
+  it('rebuilds a Claude answer from its citation-split blocks without the search preamble', () => {
+    const result = parseAnswer(
+      {
+        stop_reason: 'end_turn',
+        content: [
+          { type: 'text', text: "I'll search for current running shoe reviews." },
+          { type: 'server_tool_use', id: 's1', name: 'web_search', input: { query: 'shoes' } },
+          {
+            type: 'web_search_tool_result',
+            tool_use_id: 's1',
+            content: [{ type: 'web_search_result', url: 'https://review.example/', title: 'R' }],
+          },
+          { type: 'text', text: 'For road running, ' },
+          {
+            type: 'text',
+            text: 'Acme Running lasts the longest',
+            citations: [
+              {
+                type: 'web_search_result_location',
+                url: 'https://review.example/',
+                cited_text: 'Acme Running lasted 800 km.',
+              },
+            ],
+          },
+          { type: 'text', text: ' in independent tests.\n\nRival is cheaper.' },
+        ],
+      },
+      request('claude'),
+    );
+    expect(result.answer_text).toBe(
+      'For road running, Acme Running lasts the longest in independent tests.\n\nRival is cheaper.',
+    );
+    expect(result.citations.map((citation) => citation.cited_text)).toEqual([
+      'Acme Running lasted 800 km.',
+    ]);
+    const [brand] = entityPassages({
+      answer: result.answer_text,
+      languageCode: 'en',
+      config: scoringConfig({ brand_name: 'Acme Running' }),
+      policy: { max_entities: 5, max_passage_chars_per_entity: 600 },
+    });
+    expect(brand?.spans.map((span) => span.text)).toEqual([
+      'For road running, Acme Running lasts the longest in independent tests.\n\nRival is cheaper.',
+    ]);
+  });
 });

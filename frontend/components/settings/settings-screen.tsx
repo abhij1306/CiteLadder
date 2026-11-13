@@ -1,5 +1,3 @@
-'use client';
-
 import { useMutation } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Trash2 } from 'lucide-react';
@@ -191,6 +189,7 @@ export function SettingsScreen() {
   return (
     <TabsRoot value={activeTab} onValueChange={setActiveTab}>
       <ListScreen
+        narrow
         tabs={{
           items: tabs.map((tab) => ({ value: tab.id, label: tab.label })),
           ariaLabel: 'Settings sections',

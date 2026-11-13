@@ -14,8 +14,9 @@
     },
     "app_env": {
       "env": ["APP_ENV"],
-      "type": "str",
-      "default": "development"
+      "type": "literal",
+      "values": ["development", "test", "production"],
+      "default": null
     },
     "database_url": {
       "env": ["DATABASE_URL"],
@@ -25,7 +26,7 @@
     "db_pool_size": {
       "env": ["DB_POOL_SIZE"],
       "type": "int",
-      "default": 20,
+      "default": 12,
       "minimum": 1,
       "maximum": 50
     },
@@ -81,6 +82,20 @@
       "minimum": 1000,
       "maximum": 300000
     },
+    "migration_lock_timeout_ms": {
+      "env": ["MIGRATION_LOCK_TIMEOUT_MS"],
+      "type": "int",
+      "default": 3000,
+      "minimum": 100,
+      "maximum": 30000
+    },
+    "migration_statement_timeout_ms": {
+      "env": ["MIGRATION_STATEMENT_TIMEOUT_MS"],
+      "type": "int",
+      "default": 300000,
+      "minimum": 1000,
+      "maximum": 600000
+    },
     "db_ssl_mode": {
       "env": ["DB_SSL_MODE"],
       "type": "literal",
@@ -93,5 +108,5 @@
       "default": ""
     }
   },
-  "development_env_names": ["", "dev", "development", "local", "test", "testing"]
+  "development_env_names": ["development", "test"]
 }

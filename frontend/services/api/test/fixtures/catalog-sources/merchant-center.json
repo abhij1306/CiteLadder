@@ -1,0 +1,20 @@
+{
+  "resources": [
+    {
+      "offerId": "SK-1",
+      "title": "Wool Sock",
+      "link": "https://shop.example/products/sock",
+      "imageLink": "https://cdn.example/sock.png",
+      "price": { "value": "12.00", "currency": "EUR" },
+      "brand": "Acme",
+      "productTypes": ["Accessories > Socks"]
+    },
+    {
+      "offerId": "HT-1",
+      "title": "Rain Hat",
+      "link": "https://shop.example/products/hat",
+      "price": { "value": "1,299.00", "currency": "EUR" },
+      "brand": "Acme"
+    }
+  ]
+}

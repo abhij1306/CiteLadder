@@ -1,5 +1,6 @@
 /**
- * Idempotency keys for Agent writes that start a paid turn.
+ * Idempotency keys for writes that start paid work: Agent turns and
+ * shopping-prompt generation.
  *
  * A retry of the SAME request after an ambiguous failure must reuse its key,
  * or a request the server already accepted runs a second time. A key is kept

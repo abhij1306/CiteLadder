@@ -18,6 +18,7 @@ import { mswServer } from '@/test/msw-server';
 import { renderWithProviders } from '@/test/render';
 import { makeProject } from '@/test/fixtures/project';
 import { DISPLAY_TIME_ZONE_COOKIE } from '@/lib/display-timezone';
+import { roles } from '@/services/api/src/config/workspaces.json';
 
 // Callback routes are mounted at their actual query-bearing React Router locations.
 let search = '';
@@ -42,8 +43,11 @@ const activeProject = makeProject({
   name: 'Example.com',
   brand_name: 'Example',
 });
+/** The capabilities the reader's role publishes; an Owner's unless a test says otherwise. */
+const granted = vi.hoisted(() => ({ role: 'owner' as 'owner' | 'member' }));
 vi.mock('@/lib/project/project-context', () => ({
-  useWorkspaceCapability: () => true,
+  useWorkspaceCapability: (capability: string) =>
+    (roles[granted.role] as readonly string[]).includes(capability),
   useActiveWorkspaceId: () => WS,
   useProjectContext: () => ({
     projects: [activeProject],
@@ -216,8 +220,13 @@ describe('IntegrationSettings — grant cards', () => {
 
     const msCard = screen.getByTestId('grant-card-microsoft');
     expect(within(msCard).getByText('Bing Webmaster Tools')).toBeInTheDocument();
-    // Needs reauth → warning alert + Sync now disabled (grant not connected).
-    expect(within(msCard).getByText(/requires renewed consent/i)).toBeInTheDocument();
+    // Needs reauth → plain-worded status and alert + Sync now disabled (grant not connected).
+    expect(within(msCard).getByTestId('grant-status-microsoft')).toHaveTextContent(
+      'Reconnect needed',
+    );
+    expect(within(msCard).getByText(/needs you to sign in again/)).toBeInTheDocument();
+    expect(within(msCard).getByText('Connection')).toBeInTheDocument();
+    expect(within(msCard).queryByText('OAuth grant')).not.toBeInTheDocument();
     expect(
       within(msCard).getByRole('button', { name: 'Sync Bing Webmaster Tools now' }),
     ).toBeDisabled();
@@ -279,6 +288,30 @@ describe('IntegrationSettings — grant cards', () => {
     const row = await screen.findByTestId('connection-row-gsc');
     await ue.click(within(row).getByRole('button', { name: 'Test Google Search Console' }));
     expect(await within(row).findByText('Connection succeeded.')).toBeInTheDocument();
+  });
+
+  it('lets a Member sync without offering the credential controls the Member lacks', async () => {
+    granted.role = 'member';
+    try {
+      mockList([gscConnection, ga4Connection]);
+      renderSettings();
+
+      const row = await screen.findByTestId('connection-row-gsc');
+      // The chosen property arrives with the mappings read; Sync needs it.
+      expect(await within(row).findByText('sc-domain:example.com')).toBeInTheDocument();
+      expect(
+        within(row).getByRole('button', { name: 'Sync Google Search Console now' }),
+      ).toBeEnabled();
+      expect(within(row).queryByRole('button', { name: /^Test / })).toBeNull();
+      expect(within(row).queryByRole('button', { name: /^Remove / })).toBeNull();
+      const googleCard = screen.getByTestId('grant-card-google');
+      expect(within(googleCard).queryByRole('button', { name: 'Reconnect' })).toBeNull();
+      expect(within(googleCard).queryByRole('button', { name: /^Disconnect/ })).toBeNull();
+      const msCard = screen.getByTestId('grant-card-microsoft');
+      expect(within(msCard).queryByRole('button', { name: 'Connect Bing' })).toBeNull();
+    } finally {
+      granted.role = 'owner';
+    }
   });
 });
 
@@ -430,7 +463,8 @@ describe('IntegrationSettings — OAuth callback notice (C2)', () => {
     // A success notice is a polite status; only failures are alerts.
     const notice = await screen.findByRole('status');
     expect(notice).toHaveTextContent('Google connected.');
-    expect(notice.textContent).toMatch(/shared OAuth grant/i);
+    expect(notice.textContent).toMatch(/linked through one Google connection/);
+    expect(notice.textContent).not.toMatch(/OAuth|grant/);
     await waitFor(() =>
       expect(replaceState).toHaveBeenCalledWith(null, '', '/settings?tab=integrations'),
     );

@@ -51,6 +51,34 @@ it('re-posts the run after a 429 once Retry-After passes and shows the streamed 
   expect(result.current?.connected).toBe(true);
 });
 
+it.each<[string, Record<string, string>]>([
+  ['22222222-2222-4222-8222-222222222211', {}],
+  ['22222222-2222-4222-8222-222222222212', { 'retry-after': '0' }],
+  ['22222222-2222-4222-8222-222222222213', { 'retry-after': 'soon' }],
+])(
+  'waits the default 15 seconds before re-posting run %s refused with headers %j',
+  async (run, headers) => {
+    vi.useFakeTimers();
+    const posts: number[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_url: string, init?: RequestInit) => {
+        posts.push(Date.now());
+        if (posts.length === 1)
+          return Promise.resolve(new Response('{}', { status: 429, headers }));
+        return Promise.resolve(openStream([], init?.signal));
+      }),
+    );
+    const start = Date.now();
+    startLiveTurn(CHAT, run, null);
+
+    await vi.advanceTimersByTimeAsync(14_999);
+    expect(posts.map((at) => at - start)).toEqual([0]);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(posts.map((at) => at - start)).toEqual([0, 15_000]);
+  },
+);
+
 it('closes a stream that sends no frame for twice the server heartbeat', async () => {
   vi.useFakeTimers();
   const run = '22222222-2222-4222-8222-222222222202';

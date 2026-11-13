@@ -31,7 +31,7 @@ export function Citation({
       {index === undefined ? null : (
         <span
           className={cn(
-            'inline-grid h-5 min-w-5 place-items-center rounded-full px-1 font-mono text-eyebrow tracking-normal',
+            'inline-grid h-5 min-w-5 place-items-center rounded-full px-1 font-mono text-eyebrow font-normal tracking-normal',
             own ? 'bg-surface text-accent-ink' : 'bg-surface-sunken text-ink-secondary',
           )}
         >
@@ -39,17 +39,17 @@ export function Citation({
         </span>
       )}
       <BrandMark name={host} logoUrl={favicon} websiteUrl={`https://${host}`} placement="inline" />
-      <span className="font-medium whitespace-nowrap">{host}</span>
+      <span className="whitespace-nowrap">{host}</span>
       {title ? <span className="text-ink-muted min-w-0 truncate">{title}</span> : null}
     </>
   );
   const classes = cn(
-    'text-ink shadow-xs inline-flex h-[var(--control-sm)] max-w-full items-center gap-1 rounded-sm ps-1 pe-3 align-middle text-body-sm no-underline',
+    'text-ink border-line border inline-flex h-[var(--control-sm)] max-w-full items-center gap-1 rounded-sm ps-1 pe-3 align-middle text-body-sm no-underline',
     own ? 'bg-accent-soft' : 'bg-surface',
     index === undefined && 'ps-2',
   );
   return href ? (
-    <ExternalHttpLink href={href} className={cn(classes, 'focus-ring hover:bg-surface-sunken')}>
+    <ExternalHttpLink href={href} className={cn(classes, 'focus-ring hover:overlay-hover')}>
       {content}
     </ExternalHttpLink>
   ) : (

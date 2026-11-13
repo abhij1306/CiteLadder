@@ -1,6 +1,12 @@
 /** Opportunity catalog: deterministic decisions over persisted evidence. */
 import type { ExpectedCheck } from '@citeladder/contracts/opportunities';
 
+/** What a per-product metric rule reads and the value that clears it. */
+type ProductMetricRule = Pick<
+  Extract<ExpectedCheck, { kind: 'product_metric' }>,
+  'metric' | 'comparison' | 'target' | 'min_samples'
+>;
+
 export const opportunities = {
   ANALYZER_VERSION: 'opp-analyzer-1',
   RULE_VERSION: 'opp-rules-1',
@@ -8,7 +14,6 @@ export const opportunities = {
   CODE_IMPLEMENTATION_IDEMPOTENCY_CONFLICT: 'implementation_idempotency_conflict',
   CODE_IMPLEMENTATION_TARGET_CONFLICT: 'implementation_target_conflict',
   CODE_OPPORTUNITY_ORDER_CONFLICT: 'opportunity_order_conflict',
-  RULE_PRODUCT_NOT_MENTIONED: 'product_not_mentioned',
   RULE_CITED_ALTERNATIVES: 'cited_alternatives_without_uploaded_presence',
   RULE_CATALOG_FIELDS_MISSING: 'catalog_fields_missing',
   // A confirmed decline already passed the audit's materiality and agreement
@@ -16,6 +21,10 @@ export const opportunities = {
   CONFIRMED_DECLINE_CONFIDENCE_FLOOR: 0.5,
   CONFIRMED_DECLINE_GAP_CAP: 2,
   DEMAND_SIGNAL_GAP_FACTOR: 2,
+  // A demand signal's value factor is its priority score over this scale,
+  // capped at 1 and never below the floor, so a zero score still ranks.
+  DEMAND_SIGNAL_PRIORITY_SCALE: 100,
+  DEMAND_SIGNAL_VALUE_FACTOR_FLOOR: 0.01,
   OPPORTUNITY_TYPE_VISIBILITY: 'visibility',
   OPPORTUNITY_TYPE_COMMERCE: 'commerce',
   OPPORTUNITY_TYPE_SITE: 'site',
@@ -136,11 +145,44 @@ export const opportunities = {
       enabled: true,
       opportunity_type: 'commerce',
       remediation:
-        "No answer engine mentioned this product anywhere in the latest audit. Add product-named prompts that mirror how buyers ask, and strengthen the product's owned pages with quotable specs, pricing, and comparisons so engines have a citable source.",
+        "No answer engine mentioned this product in any answer of the measured window. Add product-named prompts that mirror how buyers ask, and strengthen the product's owned pages with quotable specs, pricing, and comparisons so engines have a citable source.",
       rule_id: 'product_not_mentioned',
-      check_kind: null,
+      check_kind: 'product_metric',
       severity: 'high',
       title: 'Catalog product never mentioned by answer engines',
+    },
+    price_mismatch: {
+      action_path: 'owned',
+      enabled: true,
+      opportunity_type: 'commerce',
+      remediation:
+        'Answers quote a price for this product that differs from your catalog price. Make the current price explicit and consistent on the product page, its structured data and your feeds, so engines quote the price you sell at.',
+      rule_id: 'price_mismatch',
+      check_kind: 'product_metric',
+      severity: 'medium',
+      title: 'Answers quote a different price than your catalog',
+    },
+    losing_position: {
+      action_path: 'owned',
+      enabled: true,
+      opportunity_type: 'commerce',
+      remediation:
+        'Answers list this product but rarely first. Strengthen the product page with the comparisons, specs and proof that answers use to rank products, so engines have a reason to put it ahead of the alternatives.',
+      rule_id: 'losing_position',
+      check_kind: 'product_metric',
+      severity: 'medium',
+      title: 'Product is visible but rarely ranked first',
+    },
+    merchant_absent: {
+      action_path: 'owned',
+      enabled: true,
+      opportunity_type: 'commerce',
+      remediation:
+        'Answers send shoppers to other merchants for this product and never to your store. Make the product page on your own site clearly purchasable, with price, availability and structured data, so engines can link to it.',
+      rule_id: 'merchant_absent',
+      check_kind: 'product_metric',
+      severity: 'medium',
+      title: 'Answers send shoppers only to other merchants',
     },
     cited_alternatives_without_uploaded_presence: {
       action_path: 'owned',
@@ -263,6 +305,21 @@ export const opportunities = {
       severity: 'low',
       title: 'Page has weak internal-link authority',
     },
+    // One Site Health issue family across its pages (BL2): `SITE_ISSUE_FAMILY`.
+    // Severity and title are the family's own Site Health rule's.
+    site_issue_family: {
+      action_path: 'owned',
+      enabled: true,
+      opportunity_type: 'site',
+      remediation:
+        'This defect fails on many pages for one cause, usually a shared template or component. Fix that cause once, then let the next comparable crawl confirm every affected page passes.',
+      rule_id: 'site_issue_family',
+      check_kind: 'issue_family',
+      severity: 'high',
+      title: 'A Site Health defect repeats across pages',
+    },
+    // A site change is a field that moved between two crawls, not a Site
+    // Health rule a crawl evaluates, so no check can read it.
     site_change_potential_regression: {
       action_path: 'owned',
       enabled: true,
@@ -270,7 +327,7 @@ export const opportunities = {
       remediation:
         'Review the exact before/after evidence, restore the intended page signal, and verify it in a later comparable crawl.',
       rule_id: 'site_change_potential_regression',
-      check_kind: 'site_rule',
+      check_kind: null,
       severity: 'high',
       title: 'A crawl-observed page signal regressed',
     },
@@ -281,7 +338,7 @@ export const opportunities = {
       remediation:
         'Review the exact before/after evidence and restore the critical page signal before verifying it in a later comparable crawl.',
       rule_id: 'site_change_critical_regression',
-      check_kind: 'site_rule',
+      check_kind: null,
       severity: 'critical',
       title: 'A critical crawl-observed page signal regressed',
     },
@@ -292,7 +349,7 @@ export const opportunities = {
       remediation:
         'Review the inspected text change and update the modification date only when it accurately describes the published content.',
       rule_id: 'site_change_metadata_inconsistency',
-      check_kind: 'site_rule',
+      check_kind: null,
       severity: 'medium',
       title: 'Content change and modification date disagree',
     },
@@ -303,7 +360,7 @@ export const opportunities = {
       remediation:
         'Confirm whether non-text content changed; otherwise restore an accurate modification date.',
       rule_id: 'site_change_cosmetic_refresh',
-      check_kind: 'site_rule',
+      check_kind: null,
       severity: 'low',
       title: 'Modification date moved without inspected text change',
     },
@@ -317,6 +374,30 @@ export const opportunities = {
       check_kind: 'keyword_presence',
       severity: 'medium',
       title: 'Competitors rank for a search you do not',
+    },
+    // Content gaps from persisted content angles (content optimization section 2).
+    // Measured by `owned_url_cited`: an answer to the angle's prompts cites your page.
+    content_gap_improve_page: {
+      action_path: 'owned',
+      enabled: true,
+      opportunity_type: 'topic',
+      remediation:
+        'Answers to your tracked prompts cite competitor and editorial pages on this angle, and your matching page is not cited for those prompts. Improve the page so it covers the angle as directly as the cited pages do.',
+      rule_id: 'content_gap_improve_page',
+      check_kind: 'owned_url_cited',
+      severity: 'medium',
+      title: 'Cited content angle your page does not win',
+    },
+    content_gap_new_page: {
+      action_path: 'owned',
+      enabled: true,
+      opportunity_type: 'topic',
+      remediation:
+        'Answers to your tracked prompts cite competitor and editorial pages on this angle, and no matching page was found among your crawled content pages that were reviewed for it. Plan a page that answers the angle directly, or improve an existing page if one already covers it.',
+      rule_id: 'content_gap_new_page',
+      check_kind: 'owned_url_cited',
+      severity: 'medium',
+      title: 'Cited content angle you have no page for',
     },
     low_share_of_voice_theme: {
       action_path: 'owned',
@@ -386,6 +467,17 @@ export const opportunities = {
     'aeo.trust_path_present': 'citability_trust_incomplete',
     'aeo.product_brand_identity': 'citability_trust_incomplete',
   },
+  // Site Health defects whose rule id starts with `ISSUE_RULE_PREFIX` become one
+  // finding per rule across its affected pages, never one per page, so a shared
+  // component failing on 179 pages is one Action. The cohort lists at most
+  // `COHORT_PAGES_MAX` pages in URL order, which bounds what a declaration
+  // freezes and a crawl re-reads; the Agent reads at most `AGENT_PAGES_MAX`.
+  SITE_ISSUE_FAMILY: {
+    RULE_ID: 'site_issue_family',
+    ISSUE_RULE_PREFIX: 'web.',
+    COHORT_PAGES_MAX: 500,
+    AGENT_PAGES_MAX: 50,
+  },
   SEVERITY_WEIGHTS: {
     critical: 4,
     high: 3,
@@ -442,6 +534,60 @@ export const opportunities = {
     GAP_FACTOR_PER_EXTRA_COMPETITOR: 0.5,
     GAP_FACTOR_CAP: 3,
   },
+  // Content-gap priority (content optimization section 2). The raising
+  // thresholds are `min_citations` and `min_domains` in content optimization
+  // policy; these only rank what they let through. The model never scores.
+  CONTENT_GAP: {
+    RULE_IMPROVE_PAGE: 'content_gap_improve_page',
+    RULE_NEW_PAGE: 'content_gap_new_page',
+    // Each prompt beyond the first adds this much value, up to the cap.
+    VALUE_PER_EXTRA_PROMPT: 0.1,
+    VALUE_FACTOR_CAP: 2,
+    // 1 + log10(citations) + this × the share of cited domains that are competitors, capped.
+    COMPETITOR_SHARE_WEIGHT: 1,
+    GAP_FACTOR_CAP: 3,
+  },
+  // Commerce Actions from the per-product metrics (commerce improvement PR 9).
+  // Each rule names the metric it reads, the value that clears it and the
+  // fewest samples a reading needs: below that the product has too little data
+  // and fires nothing. A rule fires when a sufficient reading is not cleared;
+  // a declared Action is met when a later window's reading clears it.
+  PRODUCT_METRICS: {
+    // One of `policy.commerce.products.window_days`.
+    WINDOW_DAYS: 30,
+    PAGE_SIZE: 500,
+    RULES: {
+      // Samples: executions in the window. Cleared by one appearance.
+      product_not_mentioned: {
+        metric: 'appearances',
+        comparison: 'at_least',
+        target: 1,
+        min_samples: 5,
+      },
+      // Samples: quotes in the catalog currency. Cleared within 10% of the catalog price.
+      price_mismatch: {
+        metric: 'price_gap_share',
+        comparison: 'at_most',
+        target: 0.1,
+        min_samples: 2,
+      },
+      // Samples: ordered appearances. Cleared by a win rate of 20% or more.
+      losing_position: {
+        metric: 'win_rate',
+        comparison: 'at_least',
+        target: 0.2,
+        min_samples: 3,
+      },
+      // Samples: merchant mentions (answers per merchant domain). Cleared by
+      // one answer sending shoppers to your own store.
+      merchant_absent: {
+        metric: 'owned_merchant_answers',
+        comparison: 'at_least',
+        target: 1,
+        min_samples: 2,
+      },
+    } satisfies Record<string, ProductMetricRule>,
+  },
   GAP_COMPETITOR_WEIGHT: 1,
   GAP_COMPETITOR_CAP: 3,
   GAP_OWNED_CITATION_WEIGHT: 1,
@@ -461,7 +607,6 @@ export const opportunities = {
 export const opportunityDefaults = {
   refresh: {
     task_kind: 'opportunity_refresh',
-    evidence_crawl_statuses: ['completed', 'partially_completed', 'cancelled'],
     crawl_status_completed: 'completed',
   },
 };

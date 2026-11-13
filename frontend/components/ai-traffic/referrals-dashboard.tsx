@@ -37,18 +37,22 @@ export function AiReferralsDashboard({
         value={tab}
         onValueChange={setTab}
         ariaLabel="Referral views"
+        spaced
         items={[
           { value: 'overview', label: 'Overview' },
           { value: 'sources', label: 'Sources' },
           { value: 'landing', label: 'Landing pages' },
         ]}
       >
+        {/* The tab strip, the cards and the comparison are blocks: 12 apart. */}
         <TabPanel value="overview">
-          <Stack gap="workspace" className="desktop:grid-cols-2">
-            <ReferralVolumeCard data={data} />
-            <ReferralShareCard data={data} />
+          <Stack gap="workspace">
+            <Stack gap="workspace" className="desktop:grid-cols-2">
+              <ReferralVolumeCard data={data} />
+              <ReferralShareCard data={data} />
+            </Stack>
+            <ReferralComparison data={data} />
           </Stack>
-          <ReferralComparison data={data} />
         </TabPanel>
         <TabPanel value="sources">
           <SourceTotals data={data} />
@@ -141,9 +145,11 @@ function SourceTotals({ data }: Readonly<{ data: AiReferrals }>) {
       title="AI referral sources"
       description={
         <>
-          {formatCount(total)} identified sessions for {formatWindowDate(data.window_start)} –{' '}
-          {formatWindowDate(data.window_end)}. Shares use all GA4 source-report sessions as the
-          denominator.
+          {formatCount(total)} identified sessions
+          {data.window_start && data.window_end
+            ? ` for ${formatWindowDate(data.window_start)} – ${formatWindowDate(data.window_end)}`
+            : ''}
+          . Shares use all GA4 source-report sessions as the denominator.
         </>
       }
       columns={sourceColumns(data.currency_code)}

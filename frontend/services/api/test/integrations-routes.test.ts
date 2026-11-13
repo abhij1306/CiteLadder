@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
+import { sql } from 'kysely';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { createApp } from '../src/app.ts';
@@ -373,6 +374,114 @@ describe('integration connection routes', () => {
       ).status,
     ).toBe('active');
     await db.deleteFrom('integration_property_mappings').where('id', '=', mappingId).execute();
+  });
+
+  it('records a retired mapping in the integration audit trail once', async () => {
+    const mappingId = randomUUID();
+    await db
+      .insertInto('integration_property_mappings')
+      .values({
+        id: mappingId,
+        workspace_id: workspaceId,
+        connection_id: connectionId,
+        provider: 'ga4',
+        property_ref: '555555555',
+        project_id: projectId,
+        status: 'active',
+        created_at: new Date(),
+        updated_at: new Date(),
+      })
+      .execute();
+    const retire = async () =>
+      app.request(`/api/v1/integrations/mappings/${mappingId}`, {
+        method: 'DELETE',
+        headers: {
+          cookie: `${TEST_SESSION_COOKIE}=${await sessionToken({ sub: ownerId, ver: 0 })}`,
+          'x-workspace-id': workspaceId,
+        },
+      });
+    expect((await retire()).status).toBe(204);
+    expect((await retire()).status).toBe(204);
+    const events = await db
+      .selectFrom('integration_events')
+      .select(['event_type', 'connection_id', 'payload'])
+      .where('workspace_id', '=', workspaceId)
+      .where('event_type', '=', 'integration.mapping_retired')
+      .execute();
+    expect(events).toEqual([
+      {
+        event_type: 'integration.mapping_retired',
+        connection_id: connectionId,
+        payload: {
+          mapping_id: mappingId,
+          project_id: projectId,
+          provider: 'ga4',
+          property_ref: '555555555',
+        },
+      },
+    ]);
+    await db.deleteFrom('integration_property_mappings').where('id', '=', mappingId).execute();
+  });
+
+  it('records the mapping a new property choice replaces in the integration audit trail', async () => {
+    const replacedId = randomUUID();
+    await db
+      .insertInto('integration_property_mappings')
+      .values({
+        id: replacedId,
+        workspace_id: workspaceId,
+        connection_id: connectionId,
+        provider: 'gsc',
+        property_ref: 'sc-domain:replaced.example.test',
+        project_id: projectId,
+        status: 'active',
+        created_at: new Date(),
+        updated_at: new Date(),
+      })
+      .execute();
+    const saved = await app.request(`/api/v1/integrations/${connectionId}/mappings`, {
+      method: 'POST',
+      headers: {
+        cookie: `${TEST_SESSION_COOKIE}=${await sessionToken({ sub: ownerId, ver: 0 })}`,
+        'x-workspace-id': workspaceId,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        provider: 'gsc',
+        property_ref: 'https://example.test',
+        project_id: projectId,
+      }),
+    });
+    expect(saved.status).toBe(201);
+    const replaced = await db
+      .selectFrom('integration_property_mappings')
+      .select('status')
+      .where('id', '=', replacedId)
+      .executeTakeFirstOrThrow();
+    const events = await db
+      .selectFrom('integration_events')
+      .select(['event_type', 'connection_id', 'payload'])
+      .where('workspace_id', '=', workspaceId)
+      .where(sql<boolean>`payload->>'mapping_id' = ${replacedId}`)
+      .execute();
+    expect({ status: replaced.status, events }).toEqual({
+      status: 'disabled',
+      events: [
+        {
+          event_type: 'integration.mapping_retired',
+          connection_id: connectionId,
+          payload: {
+            mapping_id: replacedId,
+            project_id: projectId,
+            provider: 'gsc',
+            property_ref: 'sc-domain:replaced.example.test',
+          },
+        },
+      ],
+    });
+    const { id } = (await saved.json()) as { id: string };
+    await db.deleteFrom('integration_sync_runs').where('mapping_id', '=', id).execute();
+    await db.deleteFrom('integration_property_mappings').where('id', '=', replacedId).execute();
   });
 
   it('reports a saved mapping whose history enqueue failed and allows retry without duplication', async () => {

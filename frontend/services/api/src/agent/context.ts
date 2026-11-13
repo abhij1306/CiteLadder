@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import type { Database } from '../db/database.ts';
 import { jsonObject } from '../db/json.ts';
+import { targetAgentContext } from '../opportunities/targets/registry.ts';
+import { withContentRules } from '../page-documents/content-rules.ts';
 import { authorize } from './access.ts';
 import { agentPolicy, AgentError, type Scope, type Json } from './contracts.ts';
 
@@ -66,10 +68,17 @@ export async function buildManifest(
         .execute()
     : [];
   if (rows.length !== ids.length) throw new AgentError('agent_context_unavailable');
+  // What each Action's target kind adds, such as an issue family's pages and snippet.
+  const extras = new Map(
+    await Promise.all(
+      rows.map(async (row) => [row.id, await targetAgentContext(db, scope, row)] as const),
+    ),
+  );
   const actions = new Map(
     rows.map((row) => [
       row.id,
       actionSchema.parse({
+        ...extras.get(row.id),
         id: row.id,
         target_label: row.target_label,
         skill_id: row.skill_id,
@@ -90,11 +99,13 @@ export async function buildManifest(
     .orderBy('revision', 'desc')
     .limit(1)
     .executeTakeFirst();
+  const action = input.actionId ? (actions.get(input.actionId) ?? null) : null;
   return manifestSchema.parse({
     version: agentPolicy.context_manifest_version,
     refs: input.refs,
-    package: await read(db, scope, input.refs, input.request),
-    action: input.actionId ? actions.get(input.actionId) : null,
+    // A page turn's content rules are judged from this same manifest (`offeredRuleIds`).
+    package: withContentRules(await read(db, scope, input.refs, input.request), action),
+    action,
     mentions: input.mentionIds.map((id) => actions.get(id)),
     instructions: instructions ?? null,
   });
@@ -268,9 +279,11 @@ export function suppliedManifest(
     text: JSON.stringify(supplied),
     omissions,
     included: Object.keys(supplied.package.sections),
+    // Cited from what the model received: a trimmed mention or diagnosis is not a source.
+    citations: contextCitations(supplied),
   };
 }
-export function contextCitations(manifest: Pick<Manifest, 'action' | 'mentions'>): Set<string> {
+function contextCitations(manifest: Pick<Manifest, 'action' | 'mentions'>): Set<string> {
   // Other context blocks are working context, not a record citation grant.
   return new Set(
     [manifest.action, ...manifest.mentions].flatMap((action) => {

@@ -1,8 +1,7 @@
-'use client';
-
 import { Check } from 'lucide-react';
 import type { FormEvent, ReactNode } from 'react';
 
+import { Checkbox } from '@/components/ui/checkbox';
 import { Icon } from '@/components/ui/icon';
 import { Pressable } from '@/components/ui/pressable';
 import { Spinner } from '@/components/ui/spinner';
@@ -25,12 +24,13 @@ import { cn } from '@/lib/utils';
  * Layout (padding, gap, grid) stays with the caller: rows differ in anatomy,
  * not in state.
  */
-export function listRowClasses({ selected = false }: Readonly<{ selected?: boolean }> = {}) {
+function listRowClasses({ selected = false }: Readonly<{ selected?: boolean }> = {}) {
   return cn(
     'relative rounded-md transition-[background-color,color] duration-[var(--motion-fast)] ease-[var(--ease-standard)]',
+    // Three states, three overlays (D51): selected never looks hovered.
     selected
-      ? 'bg-surface-sunken text-ink active:bg-surface-sunken'
-      : 'text-ink-secondary hover:bg-surface-sunken hover:text-ink active:bg-surface-sunken',
+      ? 'overlay-selected text-ink'
+      : 'text-ink-secondary hover:overlay-hover hover:text-ink active:overlay-pressed',
   );
 }
 
@@ -82,6 +82,42 @@ export function OptionRow({
   );
 }
 
+/**
+ * A ledger list's row that opens its item (an issue's detail): an optional
+ * leading number, the title, the item's meta at the end of the same wrapping
+ * line, and an optional caption under it. The row owns its padding (8 across,
+ * 4 down), its gaps and the hover state; the caller passes the content.
+ */
+export function OpenRow({
+  number,
+  title,
+  meta,
+  caption,
+  onOpen,
+}: Readonly<{
+  number?: number;
+  title: ReactNode;
+  meta?: ReactNode;
+  caption?: ReactNode;
+  onOpen: () => void;
+}>) {
+  return (
+    <Pressable
+      onClick={onOpen}
+      className={cn(listRowClasses(), 'focus-ring grid min-w-0 gap-1 px-2 py-1 text-start')}
+    >
+      <span className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+        {number === undefined ? null : (
+          <span className="type-caption w-6 shrink-0 tabular-nums">{number}</span>
+        )}
+        <span className={textRole('itemTitle', 'min-w-0 flex-1')}>{title}</span>
+        {meta}
+      </span>
+      {caption ? <span className="type-caption">{caption}</span> : null}
+    </Pressable>
+  );
+}
+
 /** A tree list: its `TreeItem`s and `TreeItemForm`s, 2 apart. */
 export function TreeList({ label, children }: Readonly<{ label: string; children: ReactNode }>) {
   return (
@@ -126,6 +162,89 @@ export function TreeItem({
         <span className="type-caption shrink-0 font-mono">{count}</span>
       ) : null}
       {actions}
+    </li>
+  );
+}
+
+/** A tree option's indent per depth, 16 a level (category paths stop at six levels). */
+const TREE_INDENT = ['', 'ms-4', 'ms-8', 'ms-12', 'ms-16', 'ms-20'] as const;
+const treeIndent = (depth: number) => TREE_INDENT[Math.min(depth, TREE_INDENT.length - 1)];
+
+/**
+ * A tree list's row that is a box to tick (a proposed category to keep):
+ * the checkbox and its label, an optional badge after it, indented 16 a
+ * level of `depth`.
+ */
+export function TreeCheckOption({
+  label,
+  checked,
+  disabled = false,
+  depth = 0,
+  badge,
+  onCheckedChange,
+}: Readonly<{
+  label: string;
+  checked: boolean;
+  disabled?: boolean;
+  depth?: number;
+  badge?: ReactNode;
+  onCheckedChange: (checked: boolean) => void;
+}>) {
+  return (
+    <li
+      className={cn(
+        'flex min-h-[var(--nav-item-height)] min-w-0 items-center gap-2',
+        treeIndent(depth),
+      )}
+    >
+      <Checkbox
+        label={label}
+        checked={checked}
+        disabled={disabled}
+        onCheckedChange={(next) => onCheckedChange(next === true)}
+      />
+      {badge}
+    </li>
+  );
+}
+
+/**
+ * A tree list's row that is itself the choice (a category narrowing a table):
+ * one control tall, the label truncated and its count at the end, pressed to
+ * select, marked `aria-current` while selected. Each level of `depth` is
+ * indented 16 from its parent.
+ */
+export function TreeOption({
+  label,
+  count,
+  selected,
+  depth = 0,
+  onSelect,
+}: Readonly<{
+  label: string;
+  count?: string;
+  selected: boolean;
+  depth?: number;
+  onSelect: () => void;
+}>) {
+  return (
+    <li className={cn('min-w-0', treeIndent(depth))}>
+      <Pressable
+        type="button"
+        onClick={onSelect}
+        aria-current={selected ? 'true' : undefined}
+        className={cn(
+          listRowClasses({ selected }),
+          'focus-ring flex min-h-[var(--nav-item-height)] w-full min-w-0 items-center gap-2 ps-3 pe-2 text-start',
+        )}
+      >
+        <ClampText lines={1} className="type-control flex-1">
+          {label}
+        </ClampText>
+        {count === undefined ? null : (
+          <span className="type-caption shrink-0 tabular-nums">{count}</span>
+        )}
+      </Pressable>
     </li>
   );
 }

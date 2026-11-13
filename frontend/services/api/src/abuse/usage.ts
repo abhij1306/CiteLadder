@@ -3,12 +3,15 @@
  * case-folded subject.
  *
  * A request consumes its budget in its own committed transaction before the
- * work it guards starts, so a failed import still spends its attempt.
+ * work it guards starts, so a failed import still spends its attempt. Work that
+ * is one database write with no network I/O (an MCP client registration) may
+ * spend inside that write's transaction instead, so a refusal spends nothing.
  */
 import { createHash, randomUUID } from 'node:crypto';
 
 import { sql } from 'kysely';
 
+import { DAY_MS } from '../calendar-days.ts';
 import type { Database } from '../db/database.ts';
 import { ApiError } from '../errors.ts';
 import { abuse, budgets, type BudgetName, type BudgetSubject } from '../config/abuse.ts';
@@ -75,6 +78,38 @@ export async function spendBudget(
   return enforceSubjectRequest(db, kind, subject, { ...limit, amount }, at);
 }
 
+/**
+ * Count `amount` units for `subject` without refusing: a threshold budget,
+ * read by `budgetReached`, that changes how a request is handled rather than
+ * whether it is admitted.
+ */
+export async function countUse(
+  db: Database,
+  { subject: kind, operation, windowSeconds }: Budget,
+  subject: string,
+  { amount = 1, at = new Date() }: { amount?: number; at?: Date } = {},
+): Promise<void> {
+  await addToWindow(db, kind, subject, { operation, windowSeconds, amount }, at);
+}
+
+/** Whether `subject` has used all of `budget` in the current window. */
+export async function budgetReached(
+  db: Database,
+  { subject: kind, operation, limit, windowSeconds }: Budget,
+  subject: string,
+  at: Date = new Date(),
+): Promise<boolean> {
+  const row = await db
+    .selectFrom('usage_windows')
+    .select('count')
+    .where('subject_kind', '=', kind)
+    .where('subject_hash', '=', subjectHash(subject))
+    .where('operation', '=', operation)
+    .where('window_started_at', '=', windowOf(windowSeconds, at).started)
+    .executeTakeFirst();
+  return (row?.count ?? 0) >= limit;
+}
+
 /** Forget every window of one subject's named budget (a proven owner resets their failures). */
 export async function releaseBudget(
   db: Database,
@@ -125,9 +160,36 @@ async function enforceSubjectRequest(
   if (![limit, windowSeconds, amount].every((value) => Number.isInteger(value) && value > 0)) {
     throw new Error('Usage limit, window and amount must be positive integers');
   }
-  const { started, expires } = windowOf(windowSeconds, now);
+  const { expires } = windowOf(windowSeconds, now);
   if (amount > limit) throw throttled(subjectKind, operation, expires, now);
-  const consumed = await db
+  const admitted = await addToWindow(
+    db,
+    subjectKind,
+    subjectValue,
+    { operation, windowSeconds, amount, limit },
+    now,
+  );
+  if (!admitted) throw throttled(subjectKind, operation, expires, now);
+}
+
+/**
+ * Add `amount` to the subject's current window in one atomic upsert. With a
+ * `limit`, an addition that would pass it changes nothing and returns false.
+ */
+async function addToWindow(
+  db: Database,
+  subjectKind: BudgetSubject,
+  subjectValue: string,
+  {
+    operation,
+    windowSeconds,
+    amount,
+    limit,
+  }: Pick<Budget, 'operation' | 'windowSeconds'> & { amount: number; limit?: number },
+  now: Date,
+): Promise<boolean> {
+  const { started, expires } = windowOf(windowSeconds, now);
+  const added = await db
     .insertInto('usage_windows')
     .values({
       id: randomUUID(),
@@ -140,15 +202,49 @@ async function enforceSubjectRequest(
       created_at: now,
       updated_at: now,
     })
-    .onConflict((conflict) =>
-      conflict
+    .onConflict((conflict) => {
+      const update = conflict
         .constraint('uq_usage_window_subject_operation_start')
-        .doUpdateSet({ count: sql`usage_windows.count + ${amount}`, updated_at: now })
-        .where(sql<boolean>`usage_windows.count + ${amount} <= ${limit}`),
-    )
+        .doUpdateSet({ count: sql`usage_windows.count + ${amount}`, updated_at: now });
+      return limit === undefined
+        ? update
+        : update.where(sql<boolean>`usage_windows.count + ${amount} <= ${limit}`);
+    })
     .returning('count')
     .executeTakeFirst();
-  if (consumed === undefined) throw throttled(subjectKind, operation, expires, now);
+  return added !== undefined;
+}
+
+/** Delete a bounded batch of security events older than the retention cutoff. */
+export async function pruneSecurityEvents(
+  db: Database,
+  now: Date,
+  { retentionDays, batch }: { retentionDays: number; batch: number },
+  canAdmit: () => boolean = () => true,
+): Promise<number> {
+  if (!canAdmit()) return 0;
+  const cutoff = new Date(now.getTime() - retentionDays * DAY_MS);
+  return await db.transaction().execute(async (trx) => {
+    const rows = await trx
+      .selectFrom('security_events')
+      .select('id')
+      .where('occurred_at', '<', cutoff)
+      .orderBy('occurred_at')
+      .limit(batch)
+      .forUpdate()
+      .skipLocked()
+      .execute();
+    if (!rows.length) return 0;
+    const deleted = await trx
+      .deleteFrom('security_events')
+      .where(
+        'id',
+        'in',
+        rows.map((row) => row.id),
+      )
+      .executeTakeFirst();
+    return Number(deleted.numDeletedRows);
+  });
 }
 
 /** Delete a bounded batch of expired windows; live windows are never touched. */

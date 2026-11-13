@@ -1,5 +1,3 @@
-'use client';
-
 import {
   useEffect,
   useLayoutEffect,
@@ -107,10 +105,12 @@ export function CommandField({
   const menuKey = (event: KeyboardEvent<HTMLTextAreaElement>): boolean => {
     if (!open) return false;
     const count = state.options.length;
-    if (event.key in MOVES) setActive((state.selected + MOVES[event.key]! + count) % count);
-    else if ((event.key === 'Enter' && !event.shiftKey) || event.key === 'Tab')
-      pick(state.options[state.selected]!);
-    else if (event.key === 'Escape') setDismissed(tokenKey(state.token));
+    const move = MOVES[event.key];
+    if (move !== undefined) setActive((state.selected + move + count) % count);
+    else if ((event.key === 'Enter' && !event.shiftKey) || event.key === 'Tab') {
+      const option = state.options[state.selected];
+      if (option) pick(option);
+    } else if (event.key === 'Escape') setDismissed(tokenKey(state.token));
     else return false;
     event.preventDefault();
     return true;

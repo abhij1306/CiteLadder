@@ -11,11 +11,12 @@ import { z } from 'zod';
 
 import { namesAlias } from '../analysis/aliases.ts';
 import { policy } from '../config.ts';
+import { jaccard } from '../lists.ts';
 import { getLogger } from '../logging.ts';
 import { ModelError } from '../models/http.ts';
 import type { ModelGateway } from '../models/gateway.ts';
 import { sharedTokens } from './binding.ts';
-import { jaccard, promptTokens } from './generation-metrics.ts';
+import { promptTokens } from './generation-metrics.ts';
 
 const G = policy.prompts.generation;
 

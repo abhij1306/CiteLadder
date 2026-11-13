@@ -1,98 +1,41 @@
-'use client';
-
 import { useState } from 'react';
-import { useMutation, useQuery } from '@tanstack/react-query';
-import { useSearchParams } from 'react-router-dom';
 import type { InternalLink, InternalLinkAnalysis } from '@citeladder/contracts/site-health';
 
 import { ActionStatusBadge } from '@/components/agent/action-status-badge';
 import { Button } from '@/components/ui/button';
 import { Callout } from '@/components/ui/callout';
 import { MutationNotice } from '@/components/ui/mutation-notice';
-import { DisplayTime } from '@/components/ui/display-time';
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
-import { Inline, Stack } from '@/components/ui/layout';
-import type { FilterBarProps } from '@/components/ui/filter-bar';
+import { Stack } from '@/components/ui/layout';
 import { pageNumberControls, useTablePage } from '@/components/ui/pager';
 import { QueryState } from '@/components/ui/query-state';
-import { SearchField } from '@/components/ui/search-field';
-import { Select } from '@/components/ui/select';
 import { ClampText, TableCell, TableRow } from '@/components/ui/table';
 import { ACTION_STATUS_LABEL } from '@/lib/agent/vocabulary';
 import type { ActionStatus } from '@/lib/api/actions';
-import { httpErrorStatus } from '@/lib/api/errors';
 import { mutationNoticeForError } from '@/lib/api/mutation-notice';
-import { internalLinksMutations, internalLinksQueries } from '@/lib/api/site-health-internal-links';
-import type { UrlHistory } from '@/lib/navigation/url-state';
 import { TABLE_DEFAULT_PAGE_SIZE, isTablePageSize, type TablePageSize } from '@/lib/config/tables';
-import { downloadInternalLinksCsv } from '@/lib/site-health/internal-link-csv';
-import { useDisplayTimeZone } from '@/lib/display-timezone';
-import { formatCount, formatDisplayTimestamp, readableUrl } from '@/lib/format';
+import { MISSING_MARK, formatCount, readableUrl } from '@/lib/format';
 import { ICONS } from '@/lib/icons';
-import {
-  INTERNAL_LINK_STATES,
-  internalLinkStateNotice,
-  pollInternalLinks,
-} from '@/lib/site-health/status';
+import { internalLinkStateNotice } from '@/lib/site-health/status';
 import { useWorkspaceCapability } from '@/lib/project/project-context';
 import { InternalLinkReview } from './internal-link-review';
+import {
+  filterLinks,
+  isRunning,
+  useLinkParams,
+  type LinksRead,
+} from './internal-links-panel-bands';
 
-type Scope = Readonly<{ projectId: string; workspaceId: string }>;
-type ParamChange = (key: string, value: string, history?: UrlHistory) => void;
-const isRunning = (state: InternalLinkAnalysis['state']) => INTERNAL_LINK_STATES[state].active;
-
-function useInternalLinks(scope: Scope, update: ParamChange) {
-  const [params] = useSearchParams();
-  const analysisId = params.get('analysis') || undefined;
-  const query = useQuery({
-    ...internalLinksQueries.analysis(scope, analysisId),
-    refetchInterval: (current) => pollInternalLinks(current.state.data?.analysis?.state),
-  });
-  const denied = [401, 403, 404].includes(httpErrorStatus(query.error) ?? 0);
-  const data = denied ? undefined : query.data;
-  const [requestKey, setRequestKey] = useState(() => crypto.randomUUID());
-  const analyze = useMutation(internalLinksMutations.analyze(scope));
-  const cancel = useMutation(internalLinksMutations.cancel(scope, analysisId));
-  const startAnalysis = () =>
-    analyze.mutate(
-      { crawl_id: data!.crawl_id!, idempotency_key: requestKey },
-      {
-        onSuccess: (result) => {
-          setRequestKey(crypto.randomUUID());
-          if (result.analysis) update('analysis', result.analysis.id);
-        },
-      },
-    );
-  const cancelAnalysis = () => cancel.mutate(data!.analysis!.id);
-  return { data, query, analyze, cancel, startAnalysis, cancelAnalysis };
-}
-type LinksRead = ReturnType<typeof useInternalLinks>;
-
-function filterLinks(links: InternalLink[], search: string, status: string) {
-  const needle = search.toLocaleLowerCase();
-  return links.filter(
-    (link) =>
-      (!status || (link.action_status ?? '') === status) &&
-      `${link.source.title} ${link.source.url} ${link.target.title} ${link.target.url} ${link.anchor}`
-        .toLocaleLowerCase()
-        .includes(needle),
-  );
-}
-
-export function InternalLinksPanel(scope: Scope) {
-  const [params, setParams] = useSearchParams();
-  const update: ParamChange = (key, value, history = 'push') =>
-    setParams(
-      (previous) => {
-        const next = new URLSearchParams(previous);
-        if (value) next.set(key, value);
-        else next.delete(key);
-        if (key === 'analysis') next.delete('link');
-        return next;
-      },
-      { replace: history === 'replace' },
-    );
-  const read = useInternalLinks(scope, update);
+/**
+ * The Internal links tab's content. Its read, header actions and control band
+ * come from `useInternalLinksBands`, which the screen owns: this draws the
+ * notices, the suggestions and the review drawer.
+ */
+export function InternalLinksPanel({
+  read,
+  workspaceId,
+}: Readonly<{ read: LinksRead; workspaceId: string }>) {
+  const { params, update } = useLinkParams();
   const analysis = read.data?.analysis;
   const links = filterLinks(
     analysis?.recommendations ?? [],
@@ -102,14 +45,12 @@ export function InternalLinksPanel(scope: Scope) {
   const selected = analysis?.recommendations.find((link) => link.id === params.get('link'));
   return (
     <Stack gap="workspace" className="min-w-0">
-      <LinksHeader read={read} links={links} update={update} />
       <Notices read={read} />
       {analysis ? (
         <LinksResult
           analysis={analysis}
           links={links}
-          params={params}
-          update={update}
+          onSelect={(id) => update('link', id)}
           canAnalyze={Boolean(read.data?.crawl_id)}
         />
       ) : (
@@ -119,85 +60,13 @@ export function InternalLinksPanel(scope: Scope) {
         <InternalLinkReview
           link={selected}
           links={analysis.recommendations}
-          workspaceId={scope.workspaceId}
+          workspaceId={workspaceId}
           crawlId={analysis.crawl_id}
           stale={analysis.stale}
           onClose={() => update('link', '')}
         />
       ) : null}
     </Stack>
-  );
-}
-
-/** One line: what was analyzed and when, plus the controls that act on it. */
-function analysisSummary(analysis: InternalLinkAnalysis): string {
-  const parts = [
-    `${formatCount(analysis.recommendations.length)} suggestions`,
-    `${formatCount(analysis.page_count)} pages`,
-  ];
-  const summary = analysis.diagnostics;
-  if (summary && !isRunning(analysis.state))
-    parts.push(
-      `${formatCount(summary.candidates)} page pairs checked in ${Math.round(summary.elapsed_seconds)}s`,
-    );
-  if (analysis.omitted_pages)
-    parts.push(`${formatCount(analysis.omitted_pages)} pages over the limit`);
-  return parts.join(' · ');
-}
-
-function LinksHeader({
-  read,
-  links,
-  update,
-}: Readonly<{ read: LinksRead; links: InternalLink[]; update: ParamChange }>) {
-  const timeZone = useDisplayTimeZone();
-  const data = read.data;
-  const analysis = data?.analysis;
-  if (!data || !analysis) return null;
-  return (
-    <Inline gap="meta">
-      <output className="type-caption min-w-0 flex-1">
-        {analysisSummary(analysis)} · <DisplayTime value={analysis.created_at} />
-      </output>
-      {data.history.length > 1 ? (
-        <Select
-          ariaLabel="Saved analysis"
-          value={analysis.id}
-          onValueChange={(value) => update('analysis', value)}
-          options={data.history.map((run) => ({
-            value: run.id,
-            label: `${formatDisplayTimestamp(run.created_at, timeZone)} · ${INTERNAL_LINK_STATES[run.state].label}`,
-          }))}
-        />
-      ) : null}
-      {links.length ? (
-        <Button variant="secondary" onClick={() => downloadInternalLinksCsv(links)}>
-          Export CSV
-        </Button>
-      ) : null}
-      <RunControls read={read} running={isRunning(analysis.state)} />
-    </Inline>
-  );
-}
-
-function RunControls({ read, running }: Readonly<{ read: LinksRead; running: boolean }>) {
-  const canRun = useWorkspaceCapability('run');
-  if (!canRun) return null;
-  if (running)
-    return (
-      <Button variant="secondary" pending={read.cancel.isPending} onClick={read.cancelAnalysis}>
-        Cancel analysis
-      </Button>
-    );
-  return (
-    <Button
-      variant="primary"
-      disabled={!read.data?.crawl_id || read.query.isError}
-      pending={read.analyze.isPending}
-      onClick={read.startAnalysis}
-    >
-      Analyze again
-    </Button>
   );
 }
 
@@ -242,7 +111,7 @@ function StartState({ read }: Readonly<{ read: LinksRead }>) {
       kind="empty"
       icon={ICONS.site}
       heading="Find missing internal links"
-      description="Compare related pages from your latest crawl and suggest the contextual links each page is missing."
+      description="Find the contextual links each page is missing."
       action={
         canRun ? (
           <Button variant="primary" pending={read.analyze.isPending} onClick={read.startAnalysis}>
@@ -257,14 +126,12 @@ function StartState({ read }: Readonly<{ read: LinksRead }>) {
 function LinksResult({
   analysis,
   links,
-  params,
-  update,
+  onSelect,
   canAnalyze,
 }: Readonly<{
   analysis: InternalLinkAnalysis;
   links: InternalLink[];
-  params: URLSearchParams;
-  update: ParamChange;
+  onSelect: (id: string) => void;
   canAnalyze: boolean;
 }>) {
   const summary = analysis.diagnostics;
@@ -289,7 +156,7 @@ function LinksResult({
       {/* A run that could not check pairs has no result; never render it as empty. */}
       {['unavailable', 'failed', 'cancelled'].includes(analysis.state) &&
       !analysis.recommendations.length ? null : (
-        <LinksBody analysis={analysis} links={links} params={params} update={update} />
+        <LinksBody analysis={analysis} links={links} onSelect={onSelect} />
       )}
     </>
   );
@@ -298,13 +165,11 @@ function LinksResult({
 function LinksBody({
   analysis,
   links,
-  params,
-  update,
+  onSelect,
 }: Readonly<{
   analysis: InternalLinkAnalysis;
   links: InternalLink[];
-  params: URLSearchParams;
-  update: ParamChange;
+  onSelect: (id: string) => void;
 }>) {
   const summary = analysis.diagnostics;
   return (
@@ -315,39 +180,7 @@ function LinksBody({
           page pairs checked. Suggestions appear as they are found.
         </output>
       ) : null}
-      <LinksTable
-        links={links}
-        toolbar={
-          analysis.recommendations.length
-            ? {
-                search: (
-                  <SearchField
-                    value={params.get('links_q') ?? ''}
-                    onValueChange={(value) => update('links_q', value, 'replace')}
-                    placeholder="Search pages and anchors"
-                    aria-label="Search pages and anchors"
-                  />
-                ),
-                filters: (
-                  <Select
-                    ariaLabel="Action status"
-                    value={params.get('links_status') ?? ''}
-                    onValueChange={(value) => update('links_status', value)}
-                    options={[
-                      { value: '', label: 'All statuses' },
-                      ...Object.entries(ACTION_STATUS_LABEL).map(([value, label]) => ({
-                        value,
-                        label,
-                      })),
-                    ]}
-                  />
-                ),
-              }
-            : undefined
-        }
-        emptyReason={emptyReason(analysis)}
-        onSelect={(id) => update('link', id)}
-      />
+      <LinksTable links={links} emptyReason={emptyReason(analysis)} onSelect={onSelect} />
     </>
   );
 }
@@ -371,12 +204,10 @@ function emptyReason(analysis: InternalLinkAnalysis): string {
 
 function LinksTable({
   links,
-  toolbar,
   emptyReason,
   onSelect,
 }: Readonly<{
   links: InternalLink[];
-  toolbar?: FilterBarProps;
   emptyReason: string;
   onSelect: (id: string) => void;
 }>) {
@@ -386,7 +217,6 @@ function LinksTable({
   return (
     <DataTable
       label="Internal link suggestions"
-      toolbar={toolbar}
       columns={LINK_COLUMNS}
       // A table of more than one page reserves a full page, so the pager stays put.
       pageSize={links.length > pageSize ? pageSize : undefined}
@@ -427,11 +257,7 @@ function LinksTable({
           </TableCell>
           <TableCell>{link.anchor}</TableCell>
           <TableCell className="whitespace-nowrap">
-            {link.action_status && link.action_status in ACTION_STATUS_LABEL ? (
-              <ActionStatusBadge status={link.action_status as ActionStatus} />
-            ) : (
-              <span className="type-caption">No Action yet</span>
-            )}
+            <LinkActionStatus status={link.action_status} />
           </TableCell>
           <TableCell>
             <Button
@@ -445,6 +271,26 @@ function LinksTable({
         </TableRow>
       ))}
     </DataTable>
+  );
+}
+
+/** The link's Action status; a status this build does not know is not "no Action". */
+function LinkActionStatus({ status }: Readonly<{ status: string | null }>) {
+  if (status === null) return <NoAction />;
+  if (status in ACTION_STATUS_LABEL) return <ActionStatusBadge status={status as ActionStatus} />;
+  return <>Unknown status</>;
+}
+
+/**
+ * A suggestion no Action tracks yet: the shared missing mark rather than the
+ * same words on every row, still named for assistive technology.
+ */
+function NoAction() {
+  return (
+    <span className="value-placeholder">
+      <span aria-hidden>{MISSING_MARK}</span>
+      <span className="sr-only">No Action yet</span>
+    </span>
   );
 }
 

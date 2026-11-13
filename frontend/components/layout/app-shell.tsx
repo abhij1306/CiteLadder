@@ -1,5 +1,3 @@
-'use client';
-
 import { useMemo, useState, type ReactNode } from 'react';
 import { useLocation } from 'react-router-dom';
 
@@ -23,7 +21,7 @@ import { useRouteAnnouncement } from './use-route-announcement';
 /**
  * AppShell — the authenticated application chrome: the system's AppSidebar
  * (project switcher, Dashboard | Agent, destinations, account; no logo, per
- * decision D11) beside the page on `paper`. From 900px to 1280px the sidebar
+ * decision D11) on its own `sidebar` fill beside the page on `paper` (D59). From 900px to 1280px the sidebar
  * is the icon rail (decision D3); below 900px the page header's menu button
  * opens the same sidebar, labelled, in a left drawer that closes when the
  * route changes (owner, 2026-11-06). There is no top bar.
@@ -44,6 +42,7 @@ export function AppShell({ children }: Readonly<{ children: ReactNode }>) {
   const shell = useMemo(
     () => ({
       navDrawer: { open: drawerOpen, onOpen: () => setDrawerLocation(location.key) },
+      searchTrigger: <CommandPaletteTrigger />,
       agentTrigger: <AgentPanelTrigger />,
     }),
     [drawerOpen, location.key],
@@ -77,8 +76,8 @@ function AppSidebar() {
       controls={
         <>
           <ModeSwitch />
-          {/* ⌘K opens the palette at every width; the field shows beside labels only. */}
-          <CommandPaletteTrigger className="labelled:flex hidden" />
+          {/* The search is in the top bar from 900px (D62); below it, in the drawer. */}
+          <CommandPaletteTrigger className="hidden [[data-nav-drawer]_&]:flex" />
         </>
       }
       nav={<SidebarNav />}

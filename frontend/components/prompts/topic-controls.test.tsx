@@ -6,7 +6,10 @@ import type { ComponentProps } from 'react';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import type { Topic } from '@citeladder/contracts';
 
-import { AddTopicDialog, ManageTopicsDialog, TopicFilter } from './topic-controls';
+import { AllFilters } from '@/components/ui/all-filters';
+import { chooseFilterOption, openFilterOptions } from '@/test/all-filters';
+
+import { AddTopicDialog, ManageTopicsDialog, topicFilter } from './topic-controls';
 
 function makeTopic(overrides: Partial<Topic> = {}): Topic {
   return {
@@ -30,15 +33,18 @@ const child = makeTopic({
   active_count: 1,
 });
 
-function renderFilter(props: Partial<ComponentProps<typeof TopicFilter>> = {}) {
+function renderFilter(props: Partial<Parameters<typeof topicFilter>[0]> = {}) {
   return render(
-    <TopicFilter
-      topics={[child, parent]}
-      selectedTopicId={null}
-      onSelect={() => {}}
-      onAdd={() => {}}
-      onManage={() => {}}
-      {...props}
+    <AllFilters
+      filters={[
+        topicFilter({
+          topics: [child, parent],
+          selectedTopicId: null,
+          onSelect: () => {},
+          manage: { onAdd: () => {}, onManage: () => {} },
+          ...props,
+        }),
+      ]}
     />,
   );
 }
@@ -71,20 +77,20 @@ function renderAdd(props: Partial<ComponentProps<typeof AddTopicDialog>> = {}) {
   );
 }
 
-describe('TopicFilter', () => {
+describe('topicFilter', () => {
   it('lists every topic with its prompt count, a subtopic named with its parent, and filters by it', async () => {
     const user = userEvent.setup();
     const onSelect = vi.fn();
     renderFilter({ onSelect });
 
-    const trigger = screen.getByRole('button', { name: 'Topic: All topics' });
-    await user.click(trigger);
-    expect(screen.getAllByRole('menuitemradio').map((item) => item.textContent)).toEqual([
+    await openFilterOptions(user, 'Topic', 'All topics');
+    expect((await screen.findAllByRole('menuitemradio')).map((item) => item.textContent)).toEqual([
       'All topics',
       'Footwear (3)',
       'Footwear › Trail (1)',
     ]);
-    await user.click(screen.getByRole('menuitemradio', { name: /^Footwear › Trail/ }));
+    await user.keyboard('{Escape}');
+    await chooseFilterOption(user, 'Topic', /^Footwear › Trail/);
     expect(onSelect).toHaveBeenCalledWith(child.id);
   });
 
@@ -93,8 +99,8 @@ describe('TopicFilter', () => {
     const onSelect = vi.fn();
     renderFilter({ selectedTopicId: parent.id, onSelect });
 
-    await user.click(screen.getByRole('button', { name: 'Topic: Footwear' }));
-    await user.click(screen.getByRole('menuitemradio', { name: 'All topics' }));
+    expect(screen.getByRole('button', { name: 'All filters (1)' })).toBeInTheDocument();
+    await chooseFilterOption(user, 'Topic', 'All topics');
     expect(onSelect).toHaveBeenCalledWith(null);
   });
 
@@ -102,14 +108,22 @@ describe('TopicFilter', () => {
     const user = userEvent.setup();
     const onAdd = vi.fn();
     const onManage = vi.fn();
-    renderFilter({ onAdd, onManage });
+    renderFilter({ manage: { onAdd, onManage } });
 
-    await user.click(screen.getByRole('button', { name: 'Topic: All topics' }));
-    await user.click(screen.getByRole('menuitem', { name: 'Add topic' }));
+    await chooseFilterOption(user, 'Topic', 'Add topic', 'menuitem');
     expect(onAdd).toHaveBeenCalledTimes(1);
-    await user.click(screen.getByRole('button', { name: 'Topic: All topics' }));
-    await user.click(screen.getByRole('menuitem', { name: 'Manage topics…' }));
+    await chooseFilterOption(user, 'Topic', 'Manage topics…', 'menuitem');
     expect(onManage).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers only topic selection to a reader who may not edit topics', async () => {
+    const user = userEvent.setup();
+    renderFilter({ manage: undefined });
+
+    await openFilterOptions(user, 'Topic');
+    expect(await screen.findByRole('menuitemradio', { name: 'All topics' })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Add topic' })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: 'Manage topics…' })).toBeNull();
   });
 });
 

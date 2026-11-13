@@ -1,13 +1,13 @@
 /**
  * Durable, deterministic frontier admission. A batch of candidates is ordered
- * by value then document position, persisted to the crawl's frontier, and
- * admitted up to the requested and frontier budgets: each admission upserts
- * the URL identity, its crawl observation, any system membership the
- * automatic or sample allowance grants, and the child discover task. Callers
- * hold the workspace runtime lock (the first rung of the Site Health lock
- * order) and own the transaction.
+ * by value tier then URL hash and persisted to the crawl's frontier. A full
+ * crawl admits from it only while it walks HTML links (its site has no
+ * sitemap), up to the walk bound, queueing each admission's discover task; a
+ * sample admits directly and selects within its allowance. Callers hold the
+ * workspace runtime lock (the first rung of the Site Health lock order) and
+ * own the transaction.
  */
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { sql, type Selectable } from 'kysely';
 
 import { policy } from '../config.ts';
@@ -15,12 +15,11 @@ import { resolveSettingSpec, type SettingSource } from '../config/settings.ts';
 import type { Database } from '../db/database.ts';
 import { record } from '../db/json.ts';
 import type { WorkspaceSiteHealthRuntime } from '../generated/db-schema.ts';
-import { compareText } from '../text-order.ts';
-import { classifyUrlAdmission, type Admission, type Scope } from './url-admission.ts';
+import { classifyUrlAdmission, hardExcluded, type Admission, type Scope } from './url-admission.ts';
 import { canonicalIdentity, hostTwinHash } from './url-identity.ts';
-import { expectedTaskFailure } from './coverage.ts';
 import type { Crawl } from './site-task.ts';
 import { taskOutcome } from './task-outcome.ts';
+import { orderedUnique, trackWalkedPage } from './tracked-set.ts';
 import {
   activateMemberships,
   candidateObservation,
@@ -90,47 +89,26 @@ export function candidate(
 
 export function crawlScope(crawl: Crawl): Scope {
   const config = record(crawl.configuration);
-  const list = (value: unknown) =>
-    Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : null;
   return {
     domain:
       typeof config.root_registrable_domain === 'string' ? config.root_registrable_domain : '',
-    include: list(config.include_globs),
-    exclude: list(config.exclude_globs),
   };
 }
 
 /**
- * Value tier first, then a per-crawl seeded shuffle: the sample within a tier is
- * random but reproducible from the crawl, never biased to header and footer links.
+ * The page fetch's `admit` for this crawl: the page and every redirect hop pass
+ * the same admission and scope as a link, so neither discovery nor analysis
+ * follows a redirect off the site. Without a recorded scope only the hard
+ * exclusions apply.
  */
-const seededRank = (seed: string, hash: string) =>
-  createHash('sha256').update(`${seed}${hash}`).digest('hex');
-/** One candidate per URL, and one of each www/apex twin pair. */
-export function orderedUnique(candidates: Candidate[], seed: string) {
-  // One hash per candidate, not two per comparison.
-  const rank = new Map(candidates.map((item) => [item.hash, seededRank(seed, item.hash)]));
-  const byOrder = (a: Candidate, b: Candidate) =>
-    b.priority - a.priority ||
-    compareText(rank.get(a.hash) ?? '', rank.get(b.hash) ?? '') ||
-    compareText(a.hash, b.hash);
-  const unique = new Map<string, Candidate>();
-  for (const item of candidates.toSorted(byOrder)) {
-    const twin = hostTwinHash(item.url);
-    if (!unique.has(item.hash) && !(twin && unique.has(twin))) unique.set(item.hash, item);
-  }
-  return [...unique.values()];
+export function crawlAdmit(crawl: Crawl): (hop: URL) => boolean {
+  const scope = crawlScope(crawl);
+  if (!scope.domain) return (hop) => !hardExcluded(hop);
+  return (hop) => classifyUrlAdmission(hop.href, scope).accepted;
 }
-const PAGE_KIND_OF_VALUE: Record<string, string> = crawlPolicy.value_kind_page_kinds;
-function allowed(item: Candidate, crawl: Crawl, settings: Settings) {
-  if (!classifyUrlAdmission(item.url, crawlScope(crawl)).accepted || item.depth > settings.maxDepth)
-    return false;
-  const kinds = record(crawl.configuration).page_kinds;
-  const selected = Array.isArray(kinds) ? kinds : [];
-  // Value tiers are finer than page kinds (about and contact are both `about_contact`).
-  const pageKind = PAGE_KIND_OF_VALUE[item.valueKind] ?? item.valueKind;
-  return !selected.length || ['root', 'other', ...selected].includes(pageKind);
-}
+
+const allowed = (item: Candidate, crawl: Crawl, settings: Settings) =>
+  classifyUrlAdmission(item.url, crawlScope(crawl)).accepted && item.depth <= settings.maxDepth;
 
 const requestedTarget = (crawl: Crawl, settings: Settings) =>
   crawl.discovery_requested_count ||
@@ -171,7 +149,7 @@ export async function addAutomaticRoot(trx: Database, crawl: Crawl, runtime: Run
 }
 
 /** An admitted page's analysis, boosted above the discovery that found it. */
-function analyzeSeed(
+export function analyzeSeed(
   siteUrlId: string,
   page: Pick<Candidate, 'url' | 'hash' | 'depth' | 'priority' | 'referrerId'>,
 ) {
@@ -198,17 +176,18 @@ async function sampleRemaining(trx: Database, crawl: Crawl, runtime: Runtime | u
 }
 
 /**
- * How many more URLs this crawl may select for analysis: null when it has no
- * automatic allowance (a full crawl analyzes only what the user monitors).
- * Counted from this crawl's membership admissions, not its analyze tasks,
- * since a discovered URL's task arrives only after its fetch.
+ * How many more URLs a sample crawl may select for analysis. A full crawl
+ * selects nothing at admission (null): its tracked set fills from the sitemap,
+ * or after a walked page's discovery. Counted from this crawl's membership
+ * admissions, not its analyze tasks, since a sample's task arrives with them.
  */
 async function automaticRemaining(trx: Database, crawl: Crawl, runtime: Runtime | undefined) {
+  if (!crawl.sample_mode) return null;
   const requested =
     Number(record(crawl.configuration)[crawlPolicy.automatic_monitor_limit_key]) || 0;
-  if (requested <= 0) return crawl.sample_mode ? sampleRemaining(trx, crawl, runtime) : null;
+  if (requested <= 0) return sampleRemaining(trx, crawl, runtime);
   if (!runtime) return 0;
-  const limit = crawl.sample_mode ? runtime.sample_url_limit : runtime.monitored_url_limit;
+  const limit = runtime.sample_url_limit;
   const active = await trx
     .selectFrom('monitored_site_urls')
     .select((eb) => eb.fn.countAll<string>().as('count'))
@@ -239,10 +218,7 @@ async function storeFrontier(
   settings: Settings,
 ) {
   // Filter before choosing a twin, so a too-deep twin never displaces an admissible one.
-  const eligible = orderedUnique(
-    candidates.filter((item) => allowed(item, crawl, settings)),
-    crawl.id,
-  );
+  const eligible = orderedUnique(candidates.filter((item) => allowed(item, crawl, settings)));
   if (!eligible.length) return;
   const existing = await trx
     .selectFrom('site_discovery_frontier')
@@ -332,7 +308,10 @@ async function addReferrers(trx: Database, crawl: Crawl, seen: Candidate[]) {
       .execute();
 }
 
-/** The next pending frontier rows under the remaining requested budget, rebuilt as candidates. */
+/**
+ * The next pending frontier rows under the remaining walk bound, rebuilt as
+ * candidates, in the stable order the pending index already holds.
+ */
 async function pendingFrontier(trx: Database, crawl: Crawl, settings: Settings, target: number) {
   const remaining = Math.max(0, target - crawl.admitted_url_count);
   if (!remaining) return [];
@@ -343,7 +322,6 @@ async function pendingFrontier(trx: Database, crawl: Crawl, settings: Settings, 
     .where('crawl_id', '=', crawl.id)
     .where('status', '=', crawlPolicy.frontier_statuses.pending)
     .orderBy('value_priority', 'desc')
-    .orderBy(sql`sha256(convert_to(${crawl.id} || url_hash, 'UTF8'))`)
     .orderBy('url_hash')
     .limit(Math.min(remaining, settings.batch))
     .forUpdate()
@@ -380,15 +358,16 @@ export type AdmissionResult = {
   siteUrlIds: Map<string, string>;
 };
 type AdmissionOptions = {
-  enqueueChildren?: boolean;
   sourceArtifactId?: string;
   settings?: Settings;
-  /** URLs released in this transaction whose failed task is not settled yet. */
-  releasing?: number;
 };
 type Entry = { frontierId: string | null; item: Candidate };
 
-/** A sample admits its candidates directly; a full crawl persists them and takes the frontier's best. */
+/**
+ * A sample admits its candidates directly. A full crawl discovers only when it
+ * walks HTML links (site setup found no sitemap): it persists the candidates
+ * and takes the frontier's best.
+ */
 async function admissionBatch(
   trx: Database,
   crawl: Crawl,
@@ -397,34 +376,11 @@ async function admissionBatch(
   target: number,
 ): Promise<Entry[]> {
   if (crawl.sample_mode)
-    return orderedUnique(
-      candidates.filter((item) => allowed(item, crawl, settings)),
-      crawl.id,
-    )
+    return orderedUnique(candidates.filter((item) => allowed(item, crawl, settings)))
       .slice(0, settings.batch)
       .map((item) => ({ frontierId: null, item }));
   await storeFrontier(trx, crawl, candidates, settings);
   return pendingFrontier(trx, crawl, settings, target);
-}
-
-/**
- * Admitted URLs of the crawl that proved to be no page (excluded, gone or not
- * HTML). Their selection was released, so their slots go back to the frontier
- * and the crawl still reaches its requested page count. The root never counts:
- * its failure is the crawl's own.
- */
-async function releasedCount(trx: Database, crawl: Crawl) {
-  const row = await trx
-    .selectFrom('site_crawl_tasks')
-    .select(sql<number>`count(distinct url_hash)::int`.as('count'))
-    .where('workspace_id', '=', crawl.workspace_id)
-    .where('crawl_id', '=', crawl.id)
-    .where('task_kind', 'in', ['discover', 'analyze'])
-    .where('status', '=', 'failed')
-    .where('url_hash', '!=', canonicalIdentity(crawl.root_url).hash)
-    .where(expectedTaskFailure)
-    .executeTakeFirstOrThrow();
-  return row.count;
 }
 
 /** One admitted URL and the writes its admission implies. */
@@ -481,11 +437,11 @@ function planAdmission(
   crawl: Crawl,
   batch: Entry[],
   known: AdmissionState,
-  options: { ceiling: number; remaining: number | null; enqueueChildren: boolean },
+  options: { ceiling: number; remaining: number | null },
 ) {
   const ledger = new AdmissionLedger(known, options.remaining);
   const sample = crawl.sample_mode;
-  const discover = !sample && options.enqueueChildren;
+  const discover = !sample;
   const planned: Planned[] = [];
   for (const [position, entry] of batch.entries()) {
     if (crawl.admitted_url_count + ledger.admitted >= options.ceiling) break;
@@ -504,7 +460,7 @@ function planAdmission(
       position,
       selected,
       observe,
-      analyze: selected && (sample || !options.enqueueChildren),
+      analyze: selected && sample,
       discover,
       seen,
     });
@@ -517,7 +473,7 @@ async function writeAdmission(
   trx: Database,
   crawl: Crawl,
   planned: Planned[],
-  options: { source: string; artifactId: string | null; enqueueChildren: boolean },
+  options: { source: string; artifactId: string | null },
 ) {
   const ids = await upsertSiteUrls(
     trx,
@@ -570,17 +526,15 @@ async function writeAdmission(
     planned.flatMap((entry) => (entry.frontierId ? [entry.frontierId] : [])),
     crawlPolicy.frontier_statuses.admitted,
   );
-  let admitted = planned.length;
-  if (crawl.sample_mode) admitted = observedNew;
-  else if (options.enqueueChildren) admitted = discoverNew;
-  return { ids, admitted };
+  return { ids, admitted: crawl.sample_mode ? observedNew : discoverNew };
 }
 
 /**
- * Admit one batch. A full crawl persists it to the frontier and admits the
- * frontier's best pending rows, queueing child discovery; a sample crawl
- * admits directly until its workspace-wide allowance is spent. Callers hold the
- * workspace runtime lock and add `admitted` to the crawl's count.
+ * Admit one batch. A walking full crawl persists it to the frontier and admits
+ * the frontier's best pending rows up to its walk bound, queueing child
+ * discovery; a sample crawl admits directly until its workspace-wide allowance
+ * is spent. Callers hold the workspace runtime lock and add `admitted` to the
+ * crawl's count.
  */
 export async function admitCandidates(
   trx: Database,
@@ -599,12 +553,8 @@ export async function admitCandidates(
     .where('workspace_id', '=', crawl.workspace_id)
     .executeTakeFirstOrThrow();
   const current = { ...crawl, admitted_url_count: live.admitted_url_count };
-  const enqueueChildren = options.enqueueChildren ?? true;
   const remaining = await automaticRemaining(trx, current, runtime);
-  const released = current.sample_mode
-    ? 0
-    : (await releasedCount(trx, current)) + (options.releasing ?? 0);
-  const target = requestedTarget(current, settings) + released;
+  const target = requestedTarget(current, settings);
   const ceiling = Math.min(target, frontierLimit(current, settings));
   const batch = await admissionBatch(trx, current, candidates, settings, target);
   const known = await readAdmissionState(
@@ -612,13 +562,12 @@ export async function admitCandidates(
     current,
     batch.flatMap((entry) => [entry.item.hash, hostTwinHash(entry.item.url) ?? '']).filter(Boolean),
   );
-  const plan = planAdmission(current, batch, known, { ceiling, remaining, enqueueChildren });
+  const plan = planAdmission(current, batch, known, { ceiling, remaining });
   const automatic =
     Number(record(current.configuration)[crawlPolicy.automatic_monitor_limit_key]) || 0;
   const { ids, admitted } = await writeAdmission(trx, current, plan.planned, {
     source: current.sample_mode && automatic <= 0 ? 'free_sample' : 'bootstrap',
     artifactId: options.sourceArtifactId ?? null,
-    enqueueChildren,
   });
   return {
     admitted,
@@ -628,7 +577,12 @@ export async function admitCandidates(
   };
 }
 
-/** Queue analysis for a URL whose discover artifact now exists, if it is still an active member. */
+/**
+ * Queue analysis for a URL whose discover artifact shows a page, if it is an
+ * active member. A walking full crawl first adds the page to the tracked set
+ * while the set is below the crawl's target, so only a fetched page, never a
+ * dead link, a document or an alias, joins it.
+ */
 export async function enqueueDiscoveredAnalysis(
   trx: Database,
   crawl: Crawl,
@@ -653,6 +607,7 @@ export async function enqueueDiscoveredAnalysis(
         .executeTakeFirst()
     )?.id;
   if (!siteUrlId) return null;
+  if (!crawl.sample_mode) await trackWalkedPage(trx, crawl, siteUrlId);
   const member = await trx
     .selectFrom('monitored_site_urls')
     .select('id')
@@ -671,7 +626,7 @@ export async function enqueueDiscoveredAnalysis(
   return row?.id ?? null;
 }
 
-/** A fetched document is inventory only: it frees any system-managed analysis allowance. */
+/** A fetched document is inventory only: it frees any sample analysis allowance. */
 export async function markInventoryDocument(trx: Database, crawl: Crawl, hash: string) {
   const url = await trx
     .updateTable('site_urls')
@@ -691,9 +646,9 @@ export async function markInventoryDocument(trx: Database, crawl: Crawl, hash: s
 
 /**
  * A final fetch that shows the URL is no page to analyze (excluded, gone, or
- * not HTML) frees its system-managed selection, as a document does, so it is
- * never counted as a selected page left unanalyzed. The root keeps its slot:
- * its failure is the crawl's own. Returns whether the URL was released.
+ * not HTML) frees a sample's selection, as a document does. A tracked page
+ * stays tracked (SH-B8): only a lowered limit removes one. The root keeps its
+ * slot: its failure is the crawl's own. Returns whether the URL was released.
  *
  * Discovery, holding the runtime lock and not yet the crawl's, also records
  * why the URL left the corpus. Analysis already holds the crawl lock, which
@@ -734,6 +689,7 @@ export async function releaseNonPage(
   return true;
 }
 
+/** Release sample memberships; a tracked page (one with a fill position) never leaves this way. */
 export async function deactivateSystemMemberships(
   trx: Database,
   crawl: Crawl,
@@ -748,6 +704,6 @@ export async function deactivateSystemMemberships(
     .where('project_id', '=', crawl.project_id)
     .where('site_url_id', 'in', siteUrlIds)
     .where('active', '=', true)
-    .where('selection_source', '!=', 'user')
+    .where('fill_order', 'is', null)
     .execute();
 }

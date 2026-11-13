@@ -1,14 +1,14 @@
-'use client';
-
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 
 import { DateRangeDialog } from './date-range-dialog';
 import {
-  GranularitySelect,
+  granularityFilter,
   PerformanceActions,
   PerformanceToolbar,
+  PerformanceWindowCaption,
   performanceNotices,
+  ProjectionFailure,
 } from './performance-chrome';
 import { Ga4SummaryRow, MetricCards } from './metric-cards';
 import { PerformanceBreakdowns } from './performance-breakdowns';
@@ -22,13 +22,19 @@ import { ListScreen, RESERVED_CONTROLS } from '@/components/layout/page-shell';
 import { Stack } from '@/components/ui/layout';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import type { ChartTone } from '@/components/ui/chart';
+import type { FilterBarProps } from '@/components/ui/filter-bar';
 import { QueryState } from '@/components/ui/query-state';
 import { readErrorProps } from '@/components/ui/read-error';
 import { StatusLine } from '@/components/ui/status-line';
 import { formatCount, formatWindowDate } from '@/lib/format';
 import { ChartNoAxesColumn } from 'lucide-react';
 import { integrationsQueries } from '@/lib/api/integrations';
-import { performanceQueries, type PerformanceDashboard } from '@/lib/api/performance';
+import {
+  performanceQueries,
+  type PerformanceDashboard,
+  type PerformanceGranularity,
+  type ProjectReadiness,
+} from '@/lib/api/performance';
 import { retainPreviousDataForScope } from '@/lib/api/query-client';
 import { useProjectScope } from '@/lib/project/active-project-scope';
 import {
@@ -84,8 +90,14 @@ function compareLabel(selection: RangeSelection): string {
   );
 }
 
-function evidenceAvailability(data: PerformanceDashboard) {
+/**
+ * What the selected snapshot can show. A connected Bing (readiness
+ * `providers`) that measured nothing still has its panel, stating zero rows,
+ * while a project without one never shows it.
+ */
+function evidenceAvailability(data: PerformanceDashboard, readiness: ProjectReadiness | undefined) {
   const { totals, snapshot_id: snapshotId } = data.selected;
+  const bingConnected = readiness?.providers.includes('bing') ?? false;
   const hasSearchConsoleTotals = totals.clicks !== null || totals.impressions !== null;
   const hasSearchConsoleDimensions = [
     data.dimension_counts.query,
@@ -99,7 +111,7 @@ function evidenceAvailability(data: PerformanceDashboard) {
   const hasGa4 = totals.sessions !== null || totals.key_events !== null;
   const hasBing =
     snapshotId !== null &&
-    (data.dimension_counts.bing_query > 0 || data.dimension_counts.bing_page > 0);
+    (bingConnected || data.dimension_counts.bing_query > 0 || data.dimension_counts.bing_page > 0);
   return {
     hasSearchConsoleTotals,
     hasSearchConsoleBreakdowns,
@@ -123,11 +135,9 @@ function hasQualityFlags(quality: PerformanceDashboard['coverage']['analytics_qu
   return Object.values(quality).some((days) => days.some((day) => day.flags.length > 0));
 }
 
-/** The status line at rest: the history the dashboard can draw from. */
-function coverageSummary(coverage: PerformanceDashboard['coverage']): string {
-  // The extent spans the imported metric rows, so no dates means no rows —
-  // which is not the same as no import having run.
-  if (!coverage.earliest_date || !coverage.latest_date) return 'No imported search rows yet.';
+/** The status line at rest: the history the dashboard can draw from, or nothing before any rows. */
+function coverageSummary(coverage: PerformanceDashboard['coverage']): string | null {
+  if (!coverage.earliest_date || !coverage.latest_date) return null;
   return `Imported history ${formatWindowDate(coverage.earliest_date)} – ${formatWindowDate(
     coverage.latest_date,
   )} · ${formatCount(coverage.covered_days)} days`;
@@ -136,7 +146,10 @@ function coverageSummary(coverage: PerformanceDashboard['coverage']): string {
 function PerformanceEmptyState({
   data,
   projecting,
-}: Readonly<{ data: PerformanceDashboard; projecting: boolean }>) {
+  failed,
+}: Readonly<{ data: PerformanceDashboard; projecting: boolean; failed: boolean }>) {
+  // A failed build is reported by `ProjectionFailure`, never as "no evidence".
+  if (failed) return null;
   if (projecting) {
     return (
       <QueryState
@@ -147,17 +160,14 @@ function PerformanceEmptyState({
       />
     );
   }
-  const firstUse = data.coverage.covered_days === 0 && data.selected.snapshot_id === null;
+  // Before any import the setup card above says what to do.
+  if (data.coverage.covered_days === 0 && data.selected.snapshot_id === null) return null;
   return (
     <QueryState
       kind="empty"
       icon={ChartNoAxesColumn}
-      heading={firstUse ? 'No search performance evidence yet' : 'No performance evidence here'}
-      description={
-        firstUse
-          ? 'Your numbers appear here as soon as the first import lands.'
-          : 'Choose a range inside the imported history, or sync the missing dates.'
-      }
+      heading="No performance evidence here"
+      description="Choose a range inside the imported history, or sync the missing dates."
     />
   );
 }
@@ -232,6 +242,47 @@ function Ga4Workspace({
 }
 
 /**
+ * The page's control row: the range is its most used control, so it leads as
+ * the view; the chart interval waits in All filters while there is a chart,
+ * and the window it covers closes the row.
+ */
+function performanceControls({
+  selection,
+  onSelectRange,
+  onOpenDialog,
+  onReset,
+  hasChart,
+  granularity,
+  onGranularityChange,
+  windowLabel,
+}: Readonly<{
+  selection: RangeSelection;
+  onSelectRange: (selection: RangeSelection) => void;
+  onOpenDialog: (tab: 'filter' | 'compare') => void;
+  onReset: () => void;
+  /** The chart interval is a filter only while there is a chart to draw. */
+  hasChart: boolean;
+  granularity: PerformanceGranularity;
+  onGranularityChange: (next: PerformanceGranularity) => void;
+  windowLabel: string;
+}>): FilterBarProps {
+  return {
+    view: (
+      <PerformanceToolbar
+        selection={selection}
+        onOpenRange={() => onOpenDialog('filter')}
+        onOpenCompare={() => onOpenDialog('compare')}
+        onSelectRange={onSelectRange}
+        comparing={selection.compare !== 'none'}
+        onReset={onReset}
+      />
+    ),
+    filters: hasChart ? [granularityFilter(granularity, onGranularityChange)] : undefined,
+    status: <PerformanceWindowCaption label={windowLabel} />,
+  };
+}
+
+/**
  * The first load holds the control band the loaded page draws its range
  * toolbar in, so the work starts on the same line before and after.
  */
@@ -244,16 +295,14 @@ function PerformanceLoading() {
 }
 
 /**
- * The chart's bucket size is a control of what is shown, so it rides the one
- * control band, not the KPI card's header (2026-11-03 review), at its end so
- * it does not read as part of the range. Absent while there is no chart.
+ * Only an answered, empty list is "no connections". While the read is pending
+ * or after it failed the server decides: the sync itself says "nothing to
+ * sync" when there is nothing.
  */
-function granularityAction(
-  shown: boolean,
-  value: PerformanceDashboard['granularity'],
-  onChange: (value: PerformanceDashboard['granularity']) => void,
-) {
-  return shown ? <GranularitySelect value={value} onChange={onChange} /> : undefined;
+function answeredNoConnections(
+  read: Readonly<{ isSuccess: boolean; data: readonly unknown[] | undefined }>,
+): boolean {
+  return read.isSuccess && read.data?.length === 0;
 }
 
 export function PerformanceScreen() {
@@ -318,7 +367,7 @@ export function PerformanceScreen() {
   const selectedLabel = describeWindow(selectedWindow);
   const comparisonLabel = compareLabel(selection);
   const series = chartSeries(selectedWindow, comparisonWindow, activeMetrics);
-  const evidence = evidenceAvailability(data);
+  const evidence = evidenceAvailability(data, readiness.data);
   const hasEvidence = evidence.hasSearchConsoleBreakdowns || evidence.hasGa4 || evidence.hasBing;
   const coverage = performanceCoverage(data, hasEvidence);
 
@@ -327,37 +376,29 @@ export function PerformanceScreen() {
       actions={
         <PerformanceActions
           latestDate={data.coverage.latest_date}
-          hasConnections={Boolean(connections.data?.length)}
+          noConnections={answeredNoConnections(connections)}
           sync={sync}
         />
       }
-      controls={{
-        actions: granularityAction(evidence.hasSearchConsoleTotals, granularity, setGranularity),
-        filters: (
-          <PerformanceToolbar
-            selection={selection}
-            selectedLabel={selectedLabel}
-            onOpenRange={() => {
-              setDialogTab('filter');
-              setDialogOpen(true);
-            }}
-            onOpenCompare={() => {
-              setDialogTab('compare');
-              setDialogOpen(true);
-            }}
-            onSelectRange={setSelection}
-            comparing={selection.compare !== 'none'}
-            onReset={resetFilters}
-          />
-        ),
-      }}
+      controls={performanceControls({
+        selection,
+        onSelectRange: setSelection,
+        onOpenDialog: (tab) => {
+          setDialogTab(tab);
+          setDialogOpen(true);
+        },
+        onReset: resetFilters,
+        hasChart: evidence.hasSearchConsoleTotals,
+        granularity,
+        onGranularityChange: setGranularity,
+        windowLabel: selectedLabel,
+      })}
     >
       <Stack gap="workspace">
         <DataSourceSetup
           required={['gsc']}
           optional={['ga4', 'bing']}
           title="Connect Search Console"
-          description="Performance reads this project's own search data. Connect Google and use the property for this site; Analytics and Bing are optional."
         />
         {readiness.isError ? null : (
           <ReadinessLadder
@@ -372,6 +413,7 @@ export function PerformanceScreen() {
           messages={performanceNotices({
             sync,
             projecting: projection.projecting,
+            projectionFailed: projection.failure !== null,
             selectedMissing: coverage.selectedMissing,
             comparisonMissing: coverage.comparisonMissing,
             qualityFlagged: hasQualityFlags(data.coverage.analytics_quality),
@@ -379,8 +421,13 @@ export function PerformanceScreen() {
           })}
         />
 
+        <ProjectionFailure failure={projection.failure} />
         {!hasEvidence ? (
-          <PerformanceEmptyState data={data} projecting={projection.projecting} />
+          <PerformanceEmptyState
+            data={data}
+            projecting={projection.projecting}
+            failed={projection.failure !== null}
+          />
         ) : (
           <>
             {/* One card holds the strip and the plot it drives: selecting a card
@@ -418,8 +465,8 @@ export function PerformanceScreen() {
               selectedLabel={selectedLabel}
               compareLabel={comparisonLabel}
               hasSearchConsole={evidence.hasSearchConsoleBreakdowns}
-              // Only when a Bing connection exists: Bing's panel states "measured
-              // nothing", which is not what an absent connection means.
+              // Only when Bing is connected or has rows: Bing's panel states
+              // "measured nothing", which is not what an absent connection means.
               hasBing={evidence.hasBing}
             />
           </>

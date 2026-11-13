@@ -4,17 +4,16 @@ import { sql } from 'kysely';
 import { policy } from '../config.ts';
 import { inTransaction, type Database } from '../db/database.ts';
 import type { RecordScope } from '../db/workspace-scope.ts';
-import { resolveOwnedPages } from '../demand/page-equivalence.ts';
 import { ApiError } from '../errors.ts';
 import { asApiErrorCode } from '@citeladder/contracts/error-codes';
 import { epochMicros, isoformat, parseDatetime, toUtc } from '../http/datetimes.ts';
-import { parseUuid } from '../http/uuid.ts';
 import { record } from '../db/json.ts';
 import { acquireProjectLock } from '../prompts/locks.ts';
-import { actionMembers, recordStatus, requireAction, type ActionRow } from './actions.ts';
-import { rules } from '../analysis/opportunities/detectors.ts';
+import { currentSiteCrawlQuery } from '../site-health/reads/crawl.ts';
+import { declarableMembers, recordStatus, requireAction, type ActionRow } from './actions.ts';
 import { declarationChecks } from './declaration-checks.ts';
 import { ruleCheckKind } from './checks/registry.ts';
+import { declarationTargets } from './targets/registry.ts';
 import { enqueueImplementationVerification } from './enqueue.ts';
 import { DASHBOARD_AUDIT_STATUSES } from './sources.ts';
 import type { OpportunityRow } from './projection.ts';
@@ -31,6 +30,8 @@ export type DeclarationInput = {
   recommendation_ids?: string[];
   output_revision_id: string | null;
   declared_implemented_at: string;
+  /** What shipped it (a release, pull request or commit); null when none was given. */
+  deployment_reference?: string | null;
 };
 
 async function replay(
@@ -54,6 +55,7 @@ async function replay(
     (row.project_id !== action.project_id ||
       row.action_id !== action.id ||
       row.output_revision_id !== input.output_revision_id ||
+      row.deployment_reference !== (input.deployment_reference ?? null) ||
       // Unreadable stored checks are unknown, never an empty selection.
       !Array.isArray(row.expected_checks) ||
       JSON.stringify(
@@ -88,58 +90,19 @@ async function checkedRevision(db: Database, action: ActionRow, revisionId: stri
   if (!revision) throw declarationConflict('The output revision does not belong to this Action');
 }
 
+/** The pages the declaration covers, as its Action's target kind resolves them; a 409 when it cannot. */
 async function targets(
   db: Database,
   action: ActionRow,
   members: OpportunityRow[],
   website: string,
 ) {
-  if (
-    action.target_kind === a.TARGET_EARNED_PAGE ||
-    members.some(
-      (member) =>
-        rules[member.rule_id]?.action_path === policy.opportunity.earned_actions.ACTION_PATH_EARNED,
-    )
-  ) {
-    if (!action.target_url) throw declarationConflict('Implementation target is unresolved');
-    return { target_site_url_ids: [], target_external_url: action.target_url };
-  }
-  const ids = [
-    ...new Set(
-      members.flatMap((member) => {
-        const raw = record(member.evidence).site_url_id;
-        const id = typeof raw === 'string' ? parseUuid(raw) : null;
-        return id ? [id] : [];
-      }),
-    ),
-  ];
-  const owned = ids.length
-    ? await db
-        .selectFrom('site_urls')
-        .select('id')
-        .where('workspace_id', '=', action.workspace_id)
-        .where('project_id', '=', action.project_id)
-        .where('id', 'in', ids)
-        .execute()
-    : [];
-  const allowed = new Set(owned.map((row) => row.id));
-  const selected = ids.filter((id) => allowed.has(id));
-  if (action.target_kind === a.TARGET_PAGE && !selected.length && action.target_url) {
-    const pages = await resolveOwnedPages(
-      db,
-      action.workspace_id,
-      action.project_id,
-      [action.target_url],
-      website,
-    );
-    const resolved = pages.get(action.target_url);
-    if (!resolved?.site_url_id || !['exact', 'resolved'].includes(resolved.outcome))
-      throw declarationConflict('Implementation target is ambiguous or unresolved');
-    selected.push(resolved.site_url_id);
-  }
-  if (selected.length > o.IMPLEMENTATION_TARGETS_MAX)
-    throw declarationConflict('Too many implementation targets');
-  return { target_site_url_ids: selected, target_external_url: null };
+  const resolved = await declarationTargets(db, action, members, website);
+  if (!resolved.resolved) throw declarationConflict(resolved.reason);
+  return {
+    target_site_url_ids: resolved.target_site_url_ids,
+    target_external_url: resolved.target_external_url,
+  };
 }
 
 /**
@@ -168,15 +131,11 @@ async function verifyExistingEvidence(
   declaredAt: string,
 ) {
   const after = sql<Date>`${declaredAt}::timestamptz`;
-  const crawl = await trx
-    .selectFrom('site_crawls')
+  // The current crawl among those that finished after go-live, a partial one included.
+  const crawl = await currentSiteCrawlQuery(trx, row.workspace_id, row.project_id, {
+    completedAfter: declaredAt,
+  })
     .select('id')
-    .where('workspace_id', '=', row.workspace_id)
-    .where('project_id', '=', row.project_id)
-    .where('status', '=', policy.opportunity.refresh.crawl_status_completed)
-    .where('completed_at', '>', after)
-    .orderBy('completed_at', 'desc')
-    .limit(1)
     .executeTakeFirst();
   const audit = await trx
     .selectFrom('audits')
@@ -218,9 +177,30 @@ async function verifyExistingEvidence(
         ]
       : [],
   );
-  // The declaration transaction runs one statement at a time.
-  for (const trigger of triggers) await enqueueImplementationVerification(trx, trigger); // NOSONAR
+  for (const trigger of triggers) await enqueueImplementationVerification(trx, trigger); // NOSONAR -- The declaration transaction runs one statement at a time.
 }
+
+/**
+ * The refresh that resolved every finding of an Action, when it committed at
+ * or before go-live; null when the findings were still live then, so the first
+ * reading after go-live decides them. Action sync stamps the clearing
+ * snapshot on the Action and leaves an already-cleared row untouched.
+ */
+async function resolvedBeforeGoLive(trx: Database, action: ActionRow, declaredAt: string) {
+  if (!action.opportunity_snapshot_id) return null;
+  const clearing = await trx
+    .selectFrom('opportunity_snapshots')
+    .select('id')
+    .where('workspace_id', '=', action.workspace_id)
+    .where('project_id', '=', action.project_id)
+    .where('id', '=', action.opportunity_snapshot_id)
+    .where('created_at', '<=', sql<Date>`${declaredAt}::timestamptz`)
+    .executeTakeFirst();
+  return clearing?.id ?? null;
+}
+
+const isContextualLink = (member: { rule_id: string }) =>
+  ruleCheckKind(member.rule_id) === 'contextual_link';
 
 export function declareAction(
   db: Database,
@@ -238,6 +218,7 @@ export function declareAction(
         actionId,
         input.output_revision_id,
         declaredAt,
+        input.deployment_reference ?? null,
         (input.recommendation_ids ?? []).toSorted((left, right) => left.localeCompare(right)),
       ]),
     )
@@ -255,39 +236,54 @@ export function declareAction(
     if (action.status !== a.ACTION_STATUS_OPEN)
       throw declarationConflict('Only an open Action can be declared implemented');
     await checkedRevision(trx, action, input.output_revision_id);
-    const members = await actionMembers(trx, action);
-    if (!members.length) throw declarationConflict('No current finding targets this Action');
+    const { members, resolved: membersResolved } = await declarableMembers(trx, action);
+    if (!members.length) throw declarationConflict('No finding targets this Action');
+    // The baseline is what was known when the change went live; none is unavailable.
     const snapshot = await trx
       .selectFrom('opportunity_snapshots')
-      .selectAll()
+      .select(['id', 'audit_id'])
       .where('workspace_id', '=', workspaceId)
       .where('project_id', '=', action.project_id)
+      .where('created_at', '<=', sql<Date>`${declaredAt}::timestamptz`)
       .orderBy('created_at', 'desc')
       .orderBy('id', 'desc')
       .limit(1)
       .executeTakeFirst();
-    if (!snapshot) throw declarationConflict('No current opportunity snapshot');
+    const resolvedBefore = membersResolved
+      ? await resolvedBeforeGoLive(trx, action, declaredAt)
+      : null;
     const project = await trx
       .selectFrom('projects')
       .select('website_url')
       .where('workspace_id', '=', workspaceId)
       .where('id', '=', action.project_id)
       .executeTakeFirstOrThrow();
-    const checks = await declarationChecks(
-      trx,
-      { workspaceId, projectId: action.project_id },
-      members,
-      {
-        auditId: snapshot.audit_id,
-        declaredDay: declaredAt.slice(0, 10),
-      },
-      input.recommendation_ids ?? [],
-    );
-    // Every finding is declared; contextual links only as far as selected.
-    const linked = new Set(checks.map(({ member }) => member.id));
-    const declaredMembers = members.filter(
-      (member) => ruleCheckKind(member.rule_id) !== 'contextual_link' || linked.has(member.id),
-    );
+    // Findings resolved before go-live freeze no check: a later reading would
+    // credit this deployment with an outcome that predates it.
+    if (resolvedBefore && input.recommendation_ids?.length)
+      throw declarationConflict('The selected links were resolved before the change went live');
+    // A cleared Action's link suggestions left with its findings, so none can
+    // be selected: those findings are declared and freeze no link check.
+    const unselectable = membersResolved && !input.recommendation_ids?.length;
+    const measured = unselectable ? members.filter((member) => !isContextualLink(member)) : members;
+    const checks = resolvedBefore
+      ? []
+      : await declarationChecks(
+          trx,
+          { workspaceId, projectId: action.project_id },
+          measured,
+          {
+            auditId: snapshot?.audit_id ?? null,
+            declaredAt,
+            outputRevisionId: input.output_revision_id,
+          },
+          input.recommendation_ids ?? [],
+        );
+    // Every finding is declared; selectable contextual links only as far as selected.
+    const linked = new Set(checks.flatMap(({ member }) => (member ? [member.id] : [])));
+    const declaredMembers = unselectable
+      ? members
+      : members.filter((member) => !isContextualLink(member) || linked.has(member.id));
     const resolved = await targets(trx, action, declaredMembers, project.website_url);
     const row = await trx
       .insertInto('opportunity_implementation_events')
@@ -298,12 +294,14 @@ export function declareAction(
         action_id: action.id,
         actor_user_id: userId,
         output_revision_id: input.output_revision_id,
-        opportunity_snapshot_id: snapshot.id,
+        opportunity_snapshot_id: snapshot?.id ?? null,
+        resolved_before_snapshot_id: resolvedBefore,
         member_opportunity_ids: JSON.stringify(declaredMembers.map((member) => member.id)),
         ...resolved,
         target_site_url_ids: JSON.stringify(resolved.target_site_url_ids),
         expected_checks: JSON.stringify(checks.map(({ check }) => check)),
         declared_implemented_at: sql<Date>`${declaredAt}::timestamptz`,
+        deployment_reference: input.deployment_reference ?? null,
         created_at: new Date(),
         idempotency_key: key,
         request_fingerprint: fingerprint,
@@ -319,7 +317,8 @@ export function declareAction(
       return { row: stored, created: false };
     }
     await recordStatus(trx, action, a.ACTION_STATUS_IMPLEMENTED, userId);
-    await verifyExistingEvidence(trx, row, declaredAt);
+    // Nothing reads a declaration resolved before go-live.
+    if (!resolvedBefore) await verifyExistingEvidence(trx, row, declaredAt);
     return { row, created: true };
   });
 }

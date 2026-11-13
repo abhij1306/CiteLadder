@@ -1,8 +1,7 @@
 /**
  * Prompts domain endpoints: prompt-set CRUD, individual prompt edits,
- * import of browser-parsed CSV rows, AI generation via the
- * app-level default agent, and bulk review-status transitions, with their
- * query and mutation descriptors. Every response passes through
+ * import of browser-parsed CSV rows and AI generation via the
+ * app-level default agent, with their query and mutation descriptors. Every response passes through
  * `strictValidate`.
  */
 import { z } from 'zod';
@@ -22,7 +21,6 @@ import {
   promptSetSchema,
 } from '@citeladder/contracts/project';
 import type {
-  PromptBulkStatusRequest,
   PromptCandidateReviewRequest,
   PromptCreateRequest,
   PromptGenerateRequest,
@@ -50,10 +48,6 @@ export const promptsApi = {
       options,
     );
     return strictValidate(promptSetListSchema, res, 'prompts.listPromptSets');
-  },
-  getPromptSet: async (promptSetId: string, options?: ApiRequestOptions) => {
-    const res = await apiClient.get<PromptSet>(`/prompt-sets/${promptSetId}`, options);
-    return strictValidate(promptSetSchema, res, 'prompts.getPromptSet');
   },
   createPromptSet: async (input: PromptSetCreateRequest, options?: ApiRequestOptions) => {
     const res = await apiClient.post<PromptSet>('/prompt-sets', input, options);
@@ -137,19 +131,6 @@ export const promptsApi = {
       options,
     );
     return strictValidate(promptCandidateReviewResponseSchema, res, 'prompts.reviewCandidates');
-  },
-  /** Bulk review transition (accept-all / archive-selected). */
-  bulkStatus: async (
-    promptSetId: string,
-    input: PromptBulkStatusRequest,
-    options?: ApiRequestOptions,
-  ) => {
-    const res = await apiClient.post<PromptSet>(
-      `/prompt-sets/${promptSetId}/prompts/bulk-status`,
-      input,
-      options,
-    );
-    return strictValidate(promptSetSchema, res, 'prompts.bulkStatus');
   },
 };
 

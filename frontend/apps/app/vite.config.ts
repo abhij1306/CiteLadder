@@ -124,7 +124,7 @@ export default defineConfig(({ command, mode }): ViteUserConfig => {
       // The support matrix `package.json` already declares. Without this the
       // build used Vite's own default and the browserslist was decorative —
       // the two could disagree and nothing would say so.
-      target: ['chrome111', 'edge111', 'firefox128', 'safari16.4'],
+      target: ['chrome120', 'edge120', 'firefox128', 'safari17.4'],
       rolldownOptions: {
         output: {
           codeSplitting: {

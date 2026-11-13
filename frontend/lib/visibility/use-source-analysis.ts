@@ -1,5 +1,3 @@
-'use client';
-
 import { useQuery } from '@tanstack/react-query';
 
 import { retainPreviousDataForScope } from '@/lib/api/query-client';
@@ -57,17 +55,6 @@ export function selectionParams(
 /** Whether a selection reads anything: a range with no runs reads nothing. */
 export function selectionEnabled(queries: SourceQueries): boolean {
   return Boolean(queries.activeRunId && queries.selectedRunIds?.length !== 0);
-}
-
-/**
- * Whether the selection has settled on no run at all. A source read waits on
- * the selection's run, so until one resolves its query is disabled with no
- * data: that is "no run" once the selection has settled, and still loading
- * before then, never an empty finding.
- */
-export function selectionHasNoRun(queries: SourceQueries): boolean {
-  if (queries.selectedRunIds?.length === 0) return true;
-  return !queries.visibilityQuery.isPending && !queries.activeRunId;
 }
 
 /**

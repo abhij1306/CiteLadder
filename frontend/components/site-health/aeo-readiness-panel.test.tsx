@@ -167,6 +167,43 @@ describe('AEO Readiness', () => {
     expect(screen.queryByText(/evidence link/i)).toBeNull();
   });
 
+  it('opens a pillar from anywhere on its row, without an actions column', async () => {
+    stubReadiness({
+      dimensions: DIMENSIONS.map(([key, label], index) => {
+        const base = dimension(key, label, index === 0);
+        return index === 1 ? { ...base, score: 95 } : base;
+      }),
+    });
+    renderWithProviders(<AeoReadinessPanel projectId={PROJECT} crawlId={CRAWL} />);
+
+    const table = await screen.findByRole('table', { name: 'Readiness dimensions' });
+    expect(
+      within(table)
+        .getAllByRole('columnheader')
+        .map((head) => head.textContent),
+    ).toEqual(['Dimension', 'Score', 'Coverage', 'State']);
+    // Two bands, two tones: "Nearly there" no longer reads as "Needs work".
+    expect(within(table).getByText('Needs work')).toHaveAttribute('data-badge-tone', 'warning');
+    const nearly = within(table).getByText('Nearly there');
+    expect(nearly).toHaveAttribute('data-badge-tone', 'info');
+
+    await userEvent.click(nearly);
+    const drawer = await screen.findByRole('dialog', { name: 'Structure evidence' });
+    // A check's state is a status badge, not a bare caption.
+    expect(within(drawer).getByText('Passing')).toHaveAttribute('data-badge-tone', 'positive');
+  });
+
+  it('opens a pillar from the keyboard through its named row button', async () => {
+    stubReadiness();
+    const user = userEvent.setup();
+    renderWithProviders(<AeoReadinessPanel projectId={PROJECT} crawlId={CRAWL} />);
+
+    const trigger = await screen.findByRole('button', { name: 'Answerability evidence' });
+    trigger.focus();
+    await user.keyboard('{Enter}');
+    expect(await screen.findByRole('dialog', { name: 'Answerability evidence' })).toBeVisible();
+  });
+
   it('uses singular grammar when one checked page needs work', async () => {
     stubReadiness({
       dimensions: DIMENSIONS.map(([key, label], index) => {
@@ -176,9 +213,7 @@ describe('AEO Readiness', () => {
     });
     renderWithProviders(<AeoReadinessPanel projectId={PROJECT} crawlId={CRAWL} />);
 
-    await userEvent.click(
-      await screen.findByRole('button', { name: 'View details for Answerability' }),
-    );
+    await userEvent.click(await screen.findByRole('button', { name: 'Answerability evidence' }));
     expect(screen.getByText('1 page failed at least one check, worst first.')).toBeInTheDocument();
   });
 
@@ -186,9 +221,7 @@ describe('AEO Readiness', () => {
     stubReadiness();
     renderWithProviders(<AeoReadinessPanel projectId={PROJECT} crawlId={CRAWL} />);
 
-    await userEvent.click(
-      await screen.findByRole('button', { name: 'View details for Answerability' }),
-    );
+    await userEvent.click(await screen.findByRole('button', { name: 'Answerability evidence' }));
     expect(screen.getAllByText(/Answer is not stated first/)).toHaveLength(3);
     expect(screen.queryByText(/rule\.answerability\.0/)).toBeNull();
     expect(screen.queryByText(/^aeo\./)).toBeNull();
@@ -214,7 +247,7 @@ describe('AEO Readiness', () => {
     const row = (await screen.findByText('Answerability')).closest('tr');
     expect(within(row!).queryByText('Passing')).toBeNull();
     expect(within(row!).getByText('Nearly there')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'View details for Answerability' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Answerability evidence' }));
     expect(screen.getAllByText('Incomplete')).toHaveLength(1);
   });
 
@@ -232,9 +265,7 @@ describe('AEO Readiness', () => {
     stubReadiness({ dimensions });
     renderWithProviders(<AeoReadinessPanel projectId={PROJECT} crawlId={CRAWL} />);
 
-    await userEvent.click(
-      await screen.findByRole('button', { name: 'View details for Answerability' }),
-    );
+    await userEvent.click(await screen.findByRole('button', { name: 'Answerability evidence' }));
     expect(screen.getAllByText('Incomplete').length).toBeGreaterThan(0);
     expect(screen.queryByText('Did not apply')).not.toBeInTheDocument();
   });
@@ -243,9 +274,7 @@ describe('AEO Readiness', () => {
     stubReadiness();
     renderWithProviders(<AeoReadinessPanel projectId={PROJECT} crawlId={CRAWL} />);
 
-    await userEvent.click(
-      await screen.findByRole('button', { name: 'View details for Answerability' }),
-    );
+    await userEvent.click(await screen.findByRole('button', { name: 'Answerability evidence' }));
     expect(
       screen.getByText('Move the direct answer into the first paragraph.'),
     ).toBeInTheDocument();
@@ -255,9 +284,7 @@ describe('AEO Readiness', () => {
     stubReadiness();
     renderWithProviders(<AeoReadinessPanel projectId={PROJECT} crawlId={CRAWL} />);
 
-    await userEvent.click(
-      await screen.findByRole('button', { name: 'View details for Answerability' }),
-    );
+    await userEvent.click(await screen.findByRole('button', { name: 'Answerability evidence' }));
     const link = screen.getByRole('link', { name: 'acme.test/blogs/american-summer' });
     expect(link).toHaveAttribute('href', `/site/crawls/${CRAWL}/pages/${PAGE_A}`);
     // One row per page — the old drawer repeated the URL once per rule.
@@ -279,9 +306,7 @@ describe('AEO Readiness', () => {
     });
     renderWithProviders(<AeoReadinessPanel projectId={PROJECT} crawlId={CRAWL} />);
 
-    await userEvent.click(
-      await screen.findByRole('button', { name: 'View details for Answerability' }),
-    );
+    await userEvent.click(await screen.findByRole('button', { name: 'Answerability evidence' }));
     expect(screen.getByText(/Showing the 2 most affected of 140 pages/)).toBeInTheDocument();
   });
 
@@ -332,9 +357,7 @@ describe('AEO Readiness', () => {
     });
     renderWithProviders(<AeoReadinessPanel projectId={PROJECT} crawlId={CRAWL} />);
 
-    await userEvent.click(
-      await screen.findByRole('button', { name: 'View details for Answerability' }),
-    );
+    await userEvent.click(await screen.findByRole('button', { name: 'Answerability evidence' }));
     expect(screen.getAllByRole('button', { name: /Copy fix prompt/ }).length).toBeGreaterThan(0);
   });
 
@@ -342,9 +365,7 @@ describe('AEO Readiness', () => {
     stubReadiness();
     renderWithProviders(<AeoReadinessPanel projectId={PROJECT} crawlId={CRAWL} />);
 
-    await userEvent.click(
-      await screen.findByRole('button', { name: 'View details for Answerability' }),
-    );
+    await userEvent.click(await screen.findByRole('button', { name: 'Answerability evidence' }));
     expect(screen.getAllByRole('button', { name: /Copy fix prompt/ }).length).toBeGreaterThan(0);
   });
 });

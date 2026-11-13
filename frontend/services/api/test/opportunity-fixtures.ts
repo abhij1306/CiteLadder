@@ -3,6 +3,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import type { Insertable, RawBuilder } from 'kysely';
+import { plannedPageKey } from '../src/opportunities/targets/registry.ts';
 import type { Database } from '../src/db/database.ts';
 import type { Actions, Opportunities, OpportunitySnapshots } from '../src/generated/db-schema.ts';
 import { extractPageFacts, factSettings } from '../src/site-health/analysis/facts.ts';
@@ -117,6 +118,8 @@ async function issue(
       remediation: 'Fix it.',
       analyzer_version: 'v1',
       rule_version: 'v1',
+      // The finalized analysis names its evaluation, so the issue is current.
+      is_current: true,
       created_at: now,
     })
     .execute();
@@ -313,6 +316,139 @@ export function opportunityRow(
     updated_at: new Date(),
     ...values,
   };
+}
+
+/** One angle of a seeded content-angle run, with the citations its counts rest on. */
+export type AngleSeed = {
+  label: string;
+  /** Reuse a lineage of an earlier run; a new lineage otherwise. */
+  lineageId?: string;
+  /** The matched owned page; none when absent. */
+  siteUrlId?: string;
+  ownedCited?: boolean;
+  /** The angle's prompts; one id no prompt has when absent. */
+  promptIds?: string[];
+  /** One cited page per entry; each domain cited `citations` times. */
+  members: { url: string; title: string; competitor?: boolean; citations?: number }[];
+};
+
+/**
+ * A content-angle run as the `content_angle_refresh` task persists it, written
+ * directly: the run, any new lineages, its angles, members and owned matches.
+ * Returns the run id and each angle's lineage id, in angle order.
+ */
+export async function angleRun(
+  db: Database,
+  scope: { workspaceId: string; projectId: string },
+  options: {
+    outcome?: 'succeeded' | 'failed';
+    windowEnd?: Date;
+    angles?: AngleSeed[];
+    crawlId?: string | null;
+  } = {},
+) {
+  const now = new Date();
+  const runId = randomUUID();
+  const windowEnd = options.windowEnd ?? now;
+  const tenancy = { workspace_id: scope.workspaceId, project_id: scope.projectId };
+  await db
+    .insertInto('content_angle_runs')
+    .values({
+      id: runId,
+      ...tenancy,
+      trigger_kind: 'audit',
+      trigger_id: randomUUID(),
+      market_country: 'US',
+      market_language: 'en',
+      window_start: new Date(windowEnd.getTime() - 30 * 86_400_000),
+      window_end: windowEnd,
+      audit_ids: [],
+      crawl_id: options.crawlId ?? null,
+      cluster_key: randomUUID(),
+      match_key: randomUUID(),
+      aggregate_key: randomUUID(),
+      model_provider: 'openai_compatible',
+      model: 'test',
+      methodology_version: 'content-angles-1',
+      formula_version: 'content-gaps-1',
+      outcome: options.outcome ?? 'succeeded',
+      outcome_reason: options.outcome === 'failed' ? 'model_error:fixture' : null,
+      limitations: JSON.stringify([{ code: 'topicless_prompts', count: 1, total: 3 }]),
+      usage: null,
+      created_at: now,
+    })
+    .execute();
+  const lineages: string[] = [];
+  for (const angle of options.angles ?? []) {
+    const lineageId = angle.lineageId ?? randomUUID();
+    lineages.push(lineageId);
+    if (!angle.lineageId)
+      await db // NOSONAR -- Fixture rows insert in a fixed order.
+        .insertInto('content_angle_lineages')
+        .values({
+          id: lineageId,
+          ...tenancy,
+          topic_id: null,
+          // As the refresh creates a lineage: keyed by its first label.
+          planned_page_key: plannedPageKey(angle.label),
+          first_run_id: runId,
+          created_at: now,
+        })
+        .execute();
+    const angleId = randomUUID();
+    const counts = angle.members.map((member) => member.citations ?? 2);
+    await db // NOSONAR -- Fixture rows insert in a fixed order.
+      .insertInto('content_angles')
+      .values({
+        id: angleId,
+        ...tenancy,
+        run_id: runId,
+        lineage_id: lineageId,
+        topic_id: null,
+        label: angle.label,
+        citation_count: counts.reduce((sum, count) => sum + count, 0),
+        domain_count: new Set(angle.members.map((member) => new URL(member.url).hostname)).size,
+        competitor_count: angle.members.filter((member) => member.competitor).length,
+        prompt_ids: angle.promptIds ?? [randomUUID()],
+        engines: ['chatgpt'],
+        created_at: now,
+      })
+      .execute();
+    await db // NOSONAR -- Fixture rows insert in a fixed order.
+      .insertInto('content_angle_members')
+      .values(
+        angle.members.map((member, index) => ({
+          id: randomUUID(),
+          ...tenancy,
+          angle_id: angleId,
+          canonical_url: member.url,
+          url_hash: randomUUID(),
+          title: member.title,
+          domain: new URL(member.url).hostname,
+          classification: member.competitor ? 'competitor' : 'third_party',
+          matched_competitor: member.competitor ? new URL(member.url).hostname : null,
+          source_class: member.competitor ? 'competitor_owned' : 'editorial_third_party',
+          citation_count: counts[index]!,
+          citation_ids: Array.from({ length: counts[index]! }, () => randomUUID()),
+          created_at: now,
+        })),
+      )
+      .execute();
+    await db // NOSONAR -- Fixture rows insert in a fixed order.
+      .insertInto('content_angle_owned_matches')
+      .values({
+        id: randomUUID(),
+        ...tenancy,
+        angle_id: angleId,
+        site_url_id: angle.siteUrlId ?? null,
+        method: angle.siteUrlId ? 'model_pick' : 'none',
+        owned_cited: angle.ownedCited ?? false,
+        owned_citation_ids: angle.ownedCited ? [randomUUID()] : [],
+        created_at: now,
+      })
+      .execute();
+  }
+  return { runId, lineages };
 }
 
 export function actionRow(

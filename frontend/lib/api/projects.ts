@@ -23,6 +23,7 @@ import {
   brandProfileSchema,
   businessMapSchema,
   projectSchema,
+  projectSummarySchema,
 } from '@citeladder/contracts/project';
 import type {
   BrandFactCreateRequest,
@@ -40,15 +41,16 @@ import type {
   CommandCenter,
   Opportunity,
   Project,
+  ProjectSummary,
 } from '@citeladder/contracts';
 
-const projectListSchema = z.array(projectSchema);
+const projectSummaryListSchema = z.array(projectSummarySchema);
 const projectMarketListSchema = z.array(projectMarketSchema);
 
 export const projectsApi = {
   listProjects: async (options?: ApiRequestOptions) => {
-    const res = await apiClient.get<Project[]>('/projects', options);
-    return strictValidate(projectListSchema, res, 'projects.listProjects');
+    const res = await apiClient.get<ProjectSummary[]>('/projects', options);
+    return strictValidate(projectSummaryListSchema, res, 'projects.listProjects');
   },
   getProject: async (projectId: string, options?: ApiRequestOptions) => {
     const res = await apiClient.get<Project>(`/projects/${projectId}`, options);
@@ -223,23 +225,18 @@ export const projectQueries = {
         projectsApi.getOverviewLayout(scope.projectId, scoped(scope, signal)),
     }),
   /**
-   * One workspace's projects. Every listed project is the same authorized
-   * object its detail read returns, so the list seeds those entries: opening
-   * or switching to a listed project does not fetch it a second time.
+   * One workspace's projects as the switcher shows them. A summary is not a
+   * project view: the active project is its own detail read.
    */
   list: (workspaceId: string) =>
     queryOptions({
-      queryKey: queryKeys.projects.list(workspaceId),
-      queryFn: async ({ client, signal }) => {
-        const projects = await projectsApi.listProjects({
+      queryKey: queryKeys.projects.summaries(workspaceId),
+      queryFn: ({ signal }) =>
+        projectsApi.listProjects({
           signal,
           workspaceId,
           timeoutMs: getBootstrapReadTimeoutMs(),
-        });
-        for (const project of projects)
-          client.setQueryData(queryKeys.projects.detail(project.id), project);
-        return projects;
-      },
+        }),
     }),
   /** An explicit project, authorized from its path before any workspace is known. */
   detail: (projectId: string) =>
@@ -270,7 +267,7 @@ export function retryProjectShell(client: QueryClient) {
  * already in flight predates the project, so it is dropped rather than joined.
  */
 export async function refreshAfterProjectCreated(client: QueryClient, workspaceId: string) {
-  const listKey = queryKeys.projects.list(workspaceId);
+  const listKey = queryKeys.projects.summaries(workspaceId);
   await client.cancelQueries({ queryKey: listKey });
   void client.invalidateQueries({ queryKey: listKey });
 }
@@ -289,7 +286,7 @@ export function refreshBrandLogos(client: QueryClient, projectId: string, worksp
     .then((project) => {
       if (!project.brand.logo_url) return;
       return Promise.all([
-        client.invalidateQueries({ queryKey: queryKeys.projects.list(workspaceId) }),
+        client.invalidateQueries({ queryKey: queryKeys.projects.summaries(workspaceId) }),
         client.invalidateQueries({ queryKey: queryKeys.projects.detail(projectId) }),
       ]);
     })

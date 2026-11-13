@@ -84,9 +84,9 @@ describe('versioned audit aggregates', () => {
       config,
     );
     expect(metrics.avg_queries_per_execution).toBe(2);
-    expect(aggregateRun([execution('Acme', [], false)], config).avg_queries_per_execution).toBe(
-      null,
-    );
+    expect(
+      aggregateRun([execution('Acme', [], false)], config).avg_queries_per_execution,
+    ).toBeNull();
   });
   it('treats nobody named as not applicable for the competitive component, not a zero share', () => {
     const silent = aggregateRun([execution('Nothing tracked')], config).per_prompt[0]!;

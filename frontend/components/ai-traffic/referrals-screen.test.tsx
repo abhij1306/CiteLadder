@@ -4,6 +4,7 @@ import { http, HttpResponse } from 'msw';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vite-plus/test';
 
 import { mswServer } from '@/test/msw-server';
+import { chooseFilterOption } from '@/test/all-filters';
 import { renderWithProviders } from '@/test/render';
 import { makeProject } from '@/test/fixtures/project';
 
@@ -73,7 +74,7 @@ describe('AiReferralsScreen', () => {
     expect(
       await screen.findByRole('region', { name: 'Connect Google Analytics 4' }),
     ).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /^Range:/ })).toBeVisible();
+    expect(screen.getByRole('button', { name: /^All filters/ })).toBeVisible();
   });
 
   it('renders persisted referral measurement by source', async () => {
@@ -86,6 +87,56 @@ describe('AiReferralsScreen', () => {
     expect(screen.getByText('AI referral sources')).toBeInTheDocument();
     expect(screen.getByText('ChatGPT')).toBeInTheDocument();
     expect(screen.getByText('20.0%')).toBeInTheDocument();
+  });
+
+  it('says excluded landing rows are not available without an imported landing day, and counts them with one', async () => {
+    const day = {
+      revision: 1,
+      flags: [],
+      artifact_ids: [],
+      reporting_timezone: 'UTC',
+      currency_code: null,
+    };
+    mswServer.use(
+      http.get(endpoint, () =>
+        HttpResponse.json({
+          ...dashboard,
+          analytics_quality: {
+            ga4_landing_daily: [
+              { ...day, day: '2026-07-20', revision: null, flags: [], excluded_hosts: 0 },
+            ],
+          },
+        }),
+      ),
+    );
+    const view = renderWithProviders(<AiReferralsScreen />, {
+      projectSelection: { activeProject },
+    });
+    expect(
+      await screen.findByText(/Landing rows excluded for out-of-scope hosts: not available\./),
+    ).toBeVisible();
+    expect(screen.queryByText(/0 landing rows excluded/)).not.toBeInTheDocument();
+    view.unmount();
+
+    mswServer.use(
+      http.get(endpoint, () =>
+        HttpResponse.json({
+          ...dashboard,
+          analytics_quality: {
+            ga4_landing_daily: [
+              { ...day, day: '2026-07-20', excluded_hosts: 0 },
+              { ...day, day: '2026-07-21', excluded_hosts: 0 },
+              // A day never imported carries no count of its own.
+              { ...day, day: '2026-07-22', revision: null, excluded_hosts: 0 },
+            ],
+          },
+        }),
+      ),
+    );
+    renderWithProviders(<AiReferralsScreen />, { projectSelection: { activeProject } });
+    expect(
+      await screen.findByText(/0 landing rows excluded for out-of-scope hosts\./),
+    ).toBeVisible();
   });
 
   it('shows the honest measured-zero state without fabricating a source', async () => {
@@ -111,7 +162,7 @@ describe('AiReferralsScreen', () => {
     expect(
       await screen.findByText(/no sessions matched a known AI source in this window/i),
     ).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /^Range:/ })).toBeVisible();
+    expect(screen.getByRole('button', { name: /^All filters/ })).toBeVisible();
     expect(screen.queryByText('Other')).not.toBeInTheDocument();
   });
 
@@ -139,7 +190,27 @@ describe('AiReferralsScreen', () => {
     ).toBeInTheDocument();
   });
 
-  it('keeps the chart and keyboard focus while the interval refetches', async () => {
+  it('never says previous data is shown on a first load that has none', async () => {
+    let release: ((response: Response) => void) | undefined;
+    mswServer.use(
+      http.get(
+        endpoint,
+        () =>
+          new Promise<Response>((resolve) => {
+            release = resolve;
+          }),
+      ),
+    );
+    renderWithProviders(<AiReferralsScreen />, { projectSelection: { activeProject } });
+
+    await waitFor(() => expect(release).toBeTypeOf('function'));
+    expect(screen.queryByText('Updating data… Previous data shown.')).not.toBeInTheDocument();
+
+    release?.(HttpResponse.json(dashboard));
+    expect(await screen.findAllByText('3 days')).toHaveLength(2);
+  });
+
+  it('keeps the chart while the interval refetches', async () => {
     let releaseMonth: ((response: Response) => void) | undefined;
     mswServer.use(
       http.get(endpoint, ({ request }) => {
@@ -155,10 +226,8 @@ describe('AiReferralsScreen', () => {
     renderWithProviders(<AiReferralsScreen />, { projectSelection: { activeProject } });
 
     expect(await screen.findAllByText('3 days')).toHaveLength(2);
-    const month = screen.getByRole('radio', { name: 'Month' });
-    await user.click(month);
+    await chooseFilterOption(user, 'Chart interval', 'Month');
 
-    expect(month).toHaveFocus();
     expect(screen.getByRole('status')).toHaveTextContent('Updating data… Previous data shown.');
     expect(screen.getAllByText('3 days')).toHaveLength(2);
 

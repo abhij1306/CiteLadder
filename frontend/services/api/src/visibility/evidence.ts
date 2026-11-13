@@ -13,7 +13,6 @@ import type { z } from 'zod';
 
 import { executionFrozenProvenance } from '../analysis/provenance.ts';
 import { fanoutState, selectEvents } from '../analysis/fanout.ts';
-import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { wireUtcOf, wireUtcOrNull, utcText, utcTextOf } from '../db/timestamps.ts';
 import { fromEpochMicros, type ParsedDatetime } from '../http/datetimes.ts';
@@ -27,8 +26,8 @@ import { compareText } from '../text-order.ts';
 import {
   authorizedSelection,
   evidenceScope,
-  readsMarket,
   selectedCohorts,
+  selectedRuns,
   TrendQueryError,
   type RunSelection,
 } from './selection.ts';
@@ -138,32 +137,11 @@ export async function getVisibilityEvidence(
     '<=',
     sql<Date>`${asOf}::timestamptz`,
   );
-  let promptScope = db
-    .selectFrom('audit_prompt_snapshots as snapshot')
-    .innerJoin('audits as audit', 'audit.id', 'snapshot.audit_id')
-    .where('audit.workspace_id', '=', selection.workspaceId)
-    .where('audit.project_id', '=', selection.projectId)
-    .where('audit.status', 'in', policy.visibility.dashboard_audit_statuses)
+  // The filter offers the prompts of the runs the evidence reads: brand runs only.
+  const promptChoices = await selectedRuns(db, selection)
+    .innerJoin('audit_prompt_snapshots as snapshot', 'snapshot.audit_id', 'audit.id')
     .where('snapshot.cohort', 'in', [...selectedCohorts(selection.cohort)])
-    .where('snapshot.created_at', '<=', sql<Date>`${asOf}::timestamptz`);
-  if (selection.auditId) promptScope = promptScope.where('audit.id', '=', selection.auditId);
-  if (selection.auditIds?.length)
-    promptScope = promptScope.where('audit.id', 'in', selection.auditIds);
-  if (readsMarket(selection))
-    promptScope = promptScope.where('audit.market_id', 'is not distinct from', selection.marketId);
-  if (selection.fromAt)
-    promptScope = promptScope.where(
-      'audit.completed_at',
-      '>=',
-      sql<Date>`${wireUtcOf(selection.fromAt)}::timestamptz`,
-    );
-  if (selection.toAt)
-    promptScope = promptScope.where(
-      'audit.completed_at',
-      '<=',
-      sql<Date>`${wireUtcOf(selection.toAt)}::timestamptz`,
-    );
-  const promptChoices = await promptScope
+    .where('snapshot.created_at', '<=', sql<Date>`${asOf}::timestamptz`)
     .select([
       sql<string>`coalesce(snapshot.prompt_id, snapshot.id)`.as('identity'),
       'snapshot.text',

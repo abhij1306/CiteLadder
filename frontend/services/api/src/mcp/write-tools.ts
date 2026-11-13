@@ -6,7 +6,6 @@
  * sees this catalogue.
  */
 import { randomUUID } from 'node:crypto';
-import { sql } from 'kysely';
 import { z } from 'zod';
 import { logicalEngineSchema } from '@citeladder/contracts/providers';
 import { promptCohortSchema } from '@citeladder/contracts/project';
@@ -40,7 +39,7 @@ import { promptInput, scopedPrompts, screenPrompts } from '../prompts/prompts.ts
 import { listTopics, topicConfirm, topicCreate } from '../prompts/topics.ts';
 import { confirmChange, issueConfirmation } from './confirmations.ts';
 import { preparedChanges, type ConfirmedKind, type PreparedChange } from './confirmed-changes.ts';
-import { writeActor } from './data.ts';
+import { promptSetOf, requireNamed, writeActor } from './data.ts';
 import { appLink } from './links.ts';
 import { argumentProblem, inputSchema } from './tools.ts';
 import { McpInputError, type Evidence, type McpPrincipal } from './types.ts';
@@ -133,45 +132,6 @@ function direct<S extends z.ZodObject<{ project_id: typeof uuid }>, P extends Pe
         return { state: 'changed', change: kind, ...outcome };
       }),
   };
-}
-
-/** A project's topic or competitor by its name, which is unique ignoring case. */
-async function requireNamed(
-  db: Database,
-  kind: 'topic' | 'competitor',
-  name: string,
-  projectId: string,
-) {
-  const row = await db
-    .selectFrom(kind === 'topic' ? 'topics' : 'competitors')
-    .select(['id', 'name'])
-    .where('project_id', '=', projectId)
-    .where(sql`lower(${sql.ref('name')})`, '=', name.toLowerCase())
-    .executeTakeFirst();
-  if (!row) throw new McpInputError(`No ${kind} named "${name}" was found in this project`);
-  return row;
-}
-
-/** The named prompt set, or the project's only one. */
-async function promptSetOf(db: Database, projectId: string, requested: string | null | undefined) {
-  const sets = await db
-    .selectFrom('prompt_sets')
-    .select(['id', 'name'])
-    .where('project_id', '=', projectId)
-    .orderBy('created_at')
-    .execute();
-  if (requested) {
-    const set = sets.find((item) => item.id === requested);
-    if (!set) throw new McpInputError('The prompt set was not found in this project');
-    return set;
-  }
-  const [only, ...others] = sets;
-  if (!only) throw new McpInputError('This project has no prompt set yet');
-  if (others.length)
-    throw new McpInputError(
-      `This project has several prompt sets (${sets.map((set) => set.name).join(', ')}); pass prompt_set_id from read_prompt_portfolio`,
-    );
-  return only;
 }
 
 /** A new prepared change's identity, before its rehearsal. */
@@ -320,7 +280,11 @@ const writeDefinitions = {
     }),
     annotations: hints(true, false),
     run: async (trx, actor, args) => {
-      const competitor = await requireNamed(trx, 'competitor', args.name, args.project_id);
+      const competitor = await requireNamed(trx, actor, {
+        kind: 'competitor',
+        name: args.name,
+        projectId: args.project_id,
+      });
       await removeCompetitor(trx, actor, args.project_id, competitor.id);
       return { summary: `Stopped tracking ${competitor.name}.` };
     },
@@ -368,7 +332,11 @@ const writeDefinitions = {
     }),
     annotations: hints(true, false),
     run: async (trx, actor, args) => {
-      const topic = await requireNamed(trx, 'topic', args.name, args.project_id);
+      const topic = await requireNamed(trx, actor, {
+        kind: 'topic',
+        name: args.name,
+        projectId: args.project_id,
+      });
       await deleteTopic(trx, actor, args.project_id, topic.id);
       return {
         summary: `Deleted the topic "${topic.name}"; its prompts are kept without a topic.`,
@@ -387,7 +355,10 @@ const writeDefinitions = {
         PROMPTS_RUN,
       );
       const preview = await previewTopics(context.db, actor, args.project_id);
-      const existing = await listTopics(context.db, args.project_id);
+      const existing = await listTopics(context.db, {
+        workspaceId: actor.workspaceId,
+        projectId: args.project_id,
+      });
       return {
         state: 'proposed',
         existing_topics: existing.map(({ id, name }) => ({ id, name })),
@@ -463,7 +434,7 @@ const writeDefinitions = {
         await writeActor(context.db, context.principal, projectId),
         PROMPTS_RUN,
       );
-      const set = await promptSetOf(context.db, projectId, setId);
+      const set = await promptSetOf(context.db, actor, { projectId, setId });
       const result = await startGeneration(
         context.db,
         actor,
@@ -507,7 +478,7 @@ const writeDefinitions = {
               .nullish(),
             cohort: promptCohortSchema
               .describe(
-                'core prompts are scored (the default); comparison prompts name competitors and are reported separately.',
+                'core prompts are scored; comparison prompts name competitors and are reported separately. Omit it to file the prompt as CiteLadder does: one naming the brand files under comparison when it also names a competitor, otherwise brand_diagnostic, and any other prompt under core.',
               )
               .nullish(),
           }),
@@ -523,13 +494,17 @@ const writeDefinitions = {
         await writeActor(context.db, context.principal, args.project_id),
         preparedChanges.add_prompts.permission,
       );
-      const set = await promptSetOf(context.db, args.project_id, args.prompt_set_id);
+      const set = await promptSetOf(context.db, actor, {
+        projectId: args.project_id,
+        setId: args.prompt_set_id,
+      });
       const inputs = args.prompts.map((item) =>
         promptInput.parse({
           text: item.text,
           topic_id: item.topic_id ?? null,
           intent: item.intent ?? '',
-          cohort: item.cohort ?? 'core',
+          // An omitted cohort stays omitted: creation files it by brand naming.
+          ...(item.cohort ? { cohort: item.cohort } : {}),
         }),
       );
       const screened = await screenPrompts(
@@ -649,7 +624,12 @@ const writeDefinitions = {
       const promptIds = args.prompt_ids ?? [];
       const setId = promptIds.length
         ? null
-        : (await promptSetOf(context.db, args.project_id, args.prompt_set_id)).id;
+        : (
+            await promptSetOf(context.db, actor, {
+              projectId: args.project_id,
+              setId: args.prompt_set_id,
+            })
+          ).id;
       const request = {
         prompt_set_id: setId,
         prompt_ids: promptIds,
@@ -722,7 +702,10 @@ const writeDefinitions = {
         await writeActor(context.db, context.principal, args.project_id),
         preparedChanges.schedule.permission,
       );
-      const set = await promptSetOf(context.db, args.project_id, args.prompt_set_id);
+      const set = await promptSetOf(context.db, actor, {
+        projectId: args.project_id,
+        setId: args.prompt_set_id,
+      });
       const change = newChange(args.project_id);
       const { payload } = await preparedChanges.schedule.rehearse(
         context.db,

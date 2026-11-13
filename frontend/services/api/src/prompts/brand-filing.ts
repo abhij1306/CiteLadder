@@ -17,32 +17,40 @@ import { namesEntity } from '../analysis/aliases.ts';
 import { entityKey, projectEntityMatching } from '../analysis/entity-matching.ts';
 import { strings } from '../db/json.ts';
 import type { DB } from '../generated/db-schema.ts';
+import type { ProjectScope } from '../projects/brand-profile.ts';
 
 type Cohort = z.infer<typeof promptCohortSchema>;
 
 /** The cohort a prompt without an explicit one files under. */
 export type CohortFiling = (text: string) => Cohort;
 
-export async function brandFiling(db: Kysely<DB>, projectId: string): Promise<CohortFiling> {
+export async function brandFiling(
+  db: Kysely<DB>,
+  { workspaceId, projectId }: ProjectScope,
+): Promise<CohortFiling> {
   const [project, brand, competitors, profile] = await Promise.all([
     db
       .selectFrom('projects')
       .select('brand_name')
       .where('id', '=', projectId)
+      .where('workspace_id', '=', workspaceId)
       .executeTakeFirstOrThrow(),
     db
       .selectFrom('brands')
       .select(['id', 'name'])
+      .where('workspace_id', '=', workspaceId)
       .where('project_id', '=', projectId)
       .executeTakeFirst(),
     db
       .selectFrom('competitors')
       .select(['name', 'aliases'])
+      .where('workspace_id', '=', workspaceId)
       .where('project_id', '=', projectId)
       .execute(),
     db
       .selectFrom('brand_profiles')
       .select(['business_context', 'products_services'])
+      .where('workspace_id', '=', workspaceId)
       .where('project_id', '=', projectId)
       .executeTakeFirst(),
   ]);
@@ -51,6 +59,7 @@ export async function brandFiling(db: Kysely<DB>, projectId: string): Promise<Co
         await db
           .selectFrom('brand_aliases')
           .select('alias')
+          .where('workspace_id', '=', workspaceId)
           .where('brand_id', '=', brand.id)
           .execute()
       ).map((row) => row.alias)

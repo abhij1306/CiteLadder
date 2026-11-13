@@ -3,8 +3,8 @@
  * source-page inspector already committed.
  *
  * Each page is judged on its latest successful reading, so a later failed or
- * in-flight read never discards what was already learned. Presence verdicts
- * count only when judged against the roster in force now.
+ * in-flight read never discards what was already learned, by the same gap
+ * rule as the URLs table (`analysis/listing-gap.ts`).
  */
 import { sql } from 'kysely';
 
@@ -21,7 +21,6 @@ import { WorkspaceScope } from '../db/workspace-scope.ts';
 import {
   latestReadings,
   pageEntities,
-  projectRoster,
   readAt,
   readingPresences,
   type Reading,
@@ -91,12 +90,10 @@ function pageEvidence(
     presences: Map<string, ReadingPresence[]>;
     answers: ReturnType<typeof answerIndex>;
     analysisIds: Set<string>;
-    roster: string;
   },
 ): SourcePageEvidence {
   const latest = context.snapshot;
   const rows = latest ? (context.presences.get(latest.id) ?? []) : [];
-  const extracted = latest?.extracted_chars ?? 0;
   return {
     url_hash: page.url_hash,
     canonical_url: page.canonical_url,
@@ -106,11 +103,9 @@ function pageEvidence(
     source_class: page.source_class,
     snapshot_id: latest?.id ?? null,
     read_at: latest ? readAt(latest) : null,
-    extracted_chars: extracted,
-    sufficient_coverage: extracted >= s.SOURCE_PAGE_MIN_COVERAGE_CHARS,
+    extracted_chars: latest?.extracted_chars ?? 0,
     title: scalarText(record(latest?.page_facts).title),
     entities: latest ? pageEntities(latest, rows) : [],
-    roster_current: rows.length > 0 && rows.every((row) => row.roster_version === context.roster),
     recurrence_count: page.recurrence_count,
     answer_count: context.analysisIds.size,
     ...context.answers(context.analysisIds),
@@ -121,7 +116,7 @@ function pageEvidence(
 export async function earnedPageHits(
   db: Database,
   scope: { workspaceId: string; projectId: string },
-  audit: { id: string; configuration: unknown },
+  audit: { id: string },
   visibility: VisibilityEvidence,
 ): Promise<DetectorHit[]> {
   const workspace = new WorkspaceScope(scope.workspaceId);
@@ -167,7 +162,6 @@ export async function earnedPageHits(
     ])
     .where('project_id', '=', scope.projectId)
     .executeTakeFirstOrThrow();
-  const roster = projectRoster(audit.configuration ?? {});
   const answers = answerIndex(visibility);
   return detectEarnedPageOpportunities({
     pages: pages.map((page) =>
@@ -176,7 +170,6 @@ export async function earnedPageHits(
         presences: verdicts,
         answers,
         analysisIds: cited.get(page.url_hash) ?? new Set(),
-        roster,
       }),
     ),
     eligible_answers: visibility.analyses.length,

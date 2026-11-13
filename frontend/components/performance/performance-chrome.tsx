@@ -1,16 +1,21 @@
-'use client';
-
 import { ChevronDown, RefreshCw, RotateCcw } from 'lucide-react';
 
-import { INITIAL_SELECTION, type RangeSelection } from '@/lib/performance/performance';
+import {
+  INITIAL_GRANULARITY,
+  INITIAL_SELECTION,
+  type RangeSelection,
+} from '@/lib/performance/performance';
 import type { usePerformanceSync } from './use-performance-sync';
 import { Icon } from '@/components/ui/icon';
 import { Button } from '@/components/ui/button';
 import type { StatusMessage } from '@/components/ui/status-line';
-import { FilterField } from '@/components/ui/filter-bar';
+import { QueryState } from '@/components/ui/query-state';
+import type { useRangeProjection } from './use-range-projection';
+import { choiceFilter, type FilterDefinition } from '@/components/ui/all-filters';
 import { SegmentedAction, SegmentedControl } from '@/components/ui/tabs';
-import { Select } from '@/components/ui/select';
 import type { PerformanceGranularity } from '@/lib/api/performance';
+import { formatWindowDate } from '@/lib/format';
+import { useWorkspaceCapability } from '@/lib/project/project-context';
 import {
   DIALOG_RANGE_OPTIONS,
   GRANULARITY_OPTIONS,
@@ -24,9 +29,8 @@ type QuickRange = (typeof QUICK_RANGE_OPTIONS)[number]['value'];
  * The Performance surface's chrome: the control bar above the cards, the
  * chart's bucket-size select, and the notice stack.
  *
- * Split from `performance-screen.tsx` to keep that module inside the 500-LOC
- * budget. These are presentation only — every piece of state they render is
- * owned by the screen and passed in.
+ * Split from `performance-screen.tsx`. These are presentation only — every
+ * piece of state they render is owned by the screen and passed in.
  */
 
 function getMoreLabel(selection: RangeSelection, comparing: boolean): string {
@@ -53,10 +57,18 @@ function quickRangeValue(selection: RangeSelection, comparing: boolean): QuickRa
   return selection.range as QuickRange;
 }
 
-/** The dashboard's control bar: resolved range, imported coverage, and sync. */
+/**
+ * The resolved window, as the control band's caption: it describes what the
+ * range controls selected, so it reads as a note beside them, not as one more
+ * filter.
+ */
+export function PerformanceWindowCaption({ label }: Readonly<{ label: string }>) {
+  return <span data-testid="performance-window">{label}</span>;
+}
+
+/** The dashboard's range controls, leading its control row as its view: the quick windows, More, and Reset. */
 export function PerformanceToolbar({
   selection,
-  selectedLabel,
   onOpenRange,
   onOpenCompare,
   onSelectRange,
@@ -64,7 +76,6 @@ export function PerformanceToolbar({
   onReset,
 }: Readonly<{
   selection: RangeSelection;
-  selectedLabel: string;
   onOpenRange: () => void;
   onOpenCompare: () => void;
   onSelectRange: (next: RangeSelection) => void;
@@ -78,8 +89,8 @@ export function PerformanceToolbar({
   return (
     // `contents`: the control band owns the row's height and its rule.
     <div className="contents">
-      {/* Day, Week and Month are the three choices; More opens the dialog that
-          holds 3 months, 6 months, Last synced, Custom and Compare.
+      {/* The last day, 7 days and 28 days are the three choices; More opens
+          the dialog that holds 90 and 180 days, Last synced, Custom and Compare.
 
           This was a hand-built <fieldset> of aria-pressed toggles wrapped around
           Pressable, which is the ROW affordance — it forced w-full and text-left
@@ -104,10 +115,6 @@ export function PerformanceToolbar({
           </SegmentedAction>
         }
       />
-
-      <span className="type-body" data-testid="performance-window">
-        {selectedLabel}
-      </span>
       {/* Reset belongs to the comparison: it is what returns "Compare" to
           "More". With no comparison active there is nothing it would undo. */}
       {comparing ? (
@@ -127,58 +134,54 @@ export function PerformanceToolbar({
  */
 export function PerformanceActions({
   latestDate,
-  hasConnections,
+  noConnections,
   sync,
 }: Readonly<{
   latestDate: string | null;
-  hasConnections: boolean;
+  /** The connections read answered with none; unknown is not none. */
+  noConnections: boolean;
   sync: ReturnType<typeof usePerformanceSync>;
 }>) {
+  // Syncing is a run; a role without it reads the imported history only.
+  const canRun = useWorkspaceCapability('run');
   return (
     <>
       <span className="type-caption">
-        {latestDate ? `Data through ${latestDate}` : 'No imported history'}
+        {latestDate ? `Data through ${formatWindowDate(latestDate)}` : 'No imported history'}
       </span>
-      <Button
-        variant="secondary"
-        onClick={sync.start}
-        disabled={!hasConnections}
-        pending={sync.syncing || sync.mutation.isPending}
-        pendingLabel="Syncing…"
-        data-testid="sync-now-button"
-      >
-        <Icon icon={RefreshCw} />
-        Sync now
-      </Button>
+      {canRun ? (
+        <Button
+          variant="secondary"
+          onClick={sync.start}
+          disabled={noConnections}
+          pending={sync.syncing || sync.mutation.isPending}
+          pendingLabel="Syncing…"
+          data-testid="sync-now-button"
+        >
+          <Icon icon={RefreshCw} />
+          Sync now
+        </Button>
+      ) : null}
     </>
   );
 }
 
 /**
- * The chart's bucket-size control, at the end of the control band.
- *
- * Apart from the range quick-selects at the band's start: the range picks
- * which window is charted, this picks how that window is bucketed, and
- * putting the two side by side invites reading them as the same control
- * (they even share the words day/week/month).
+ * The chart's bucket size, in All filters (D57): it changes how the window is
+ * read, like AI Traffic's chart interval, while the range leads the row.
  */
-export function GranularitySelect({
-  value,
-  onChange,
-}: Readonly<{
-  value: PerformanceGranularity;
-  onChange: (next: PerformanceGranularity) => void;
-}>) {
-  return (
-    <FilterField>
-      <Select
-        value={value}
-        onValueChange={onChange}
-        options={GRANULARITY_OPTIONS}
-        ariaLabel="Chart bucket size"
-      />
-    </FilterField>
-  );
+export function granularityFilter(
+  value: PerformanceGranularity,
+  onChange: (next: PerformanceGranularity) => void,
+): FilterDefinition {
+  return choiceFilter({
+    id: 'granularity',
+    label: 'Chart interval',
+    value,
+    defaultValue: INITIAL_GRANULARITY,
+    groups: [{ options: GRANULARITY_OPTIONS }],
+    onChange,
+  });
 }
 
 /**
@@ -204,6 +207,23 @@ function missingCoverageNotice(
   return null;
 }
 
+/** A failed range build: what happened, and Retry for exactly that window. */
+export function ProjectionFailure({
+  failure,
+}: Readonly<{ failure: ReturnType<typeof useRangeProjection>['failure'] }>) {
+  if (!failure) return null;
+  return (
+    <QueryState
+      kind="error"
+      title="Couldn't build this range"
+      error={failure.error}
+      fallback="Building this range from imported data failed."
+      onRetry={failure.retry}
+      pending={failure.pending}
+    />
+  );
+}
+
 /**
  * The screen's notices, most important first, for its one `StatusLine`:
  * they swap in place rather than stacking banners above the chart.
@@ -211,6 +231,7 @@ function missingCoverageNotice(
 export function performanceNotices({
   sync,
   projecting,
+  projectionFailed,
   selectedMissing,
   comparisonMissing,
   qualityFlagged,
@@ -218,6 +239,8 @@ export function performanceNotices({
 }: Readonly<{
   sync: ReturnType<typeof usePerformanceSync>;
   projecting: boolean;
+  /** Building the missing window failed: a failure with Retry, not "no imported data". */
+  projectionFailed: boolean;
   selectedMissing: boolean;
   comparisonMissing: boolean;
   /** Some imported days of a mapped provider are missing, flagged or on a prior revision. */
@@ -253,12 +276,20 @@ export function performanceNotices({
       busy: true,
       text: 'Building this range from imported data…',
     });
+  if (projectionFailed)
+    messages.push({
+      key: 'projection-failed',
+      tone: 'warning',
+      text: "Couldn't build this range from imported data. Retry to build it again.",
+    });
   // Coverage is ONE notice, not one per window: the selected and comparison
   // ranges are routinely both uncovered, and which windows are affected is
-  // the only part that differs, so that is the part the sentence varies.
-  const coverageNotice = projecting
-    ? null
-    : missingCoverageNotice(selectedMissing, comparisonMissing);
+  // the only part that differs, so that is the part the sentence varies. A
+  // failed build is not missing data, so it never claims nothing covers it.
+  const coverageNotice =
+    projecting || projectionFailed
+      ? null
+      : missingCoverageNotice(selectedMissing, comparisonMissing);
   if (coverageNotice) messages.push({ key: 'coverage', tone: 'info', text: coverageNotice });
   if (qualityFlagged)
     messages.push({

@@ -1,6 +1,7 @@
 import { sql } from 'kysely';
 import { auditSchema, executionSchema, auditMetricsSchema } from '@citeladder/contracts/audits';
 import { auditEventSchema } from '@citeladder/contracts/audit-events';
+import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { record, strings } from '../db/json.ts';
 import { utcText, utcTextOf, wireUtc, wireUtcOrNull } from '../db/timestamps.ts';
@@ -35,14 +36,21 @@ function frozenMarket(audit: { market_id: string | null; configuration: unknown 
     language_code: typeof config.language_code === 'string' ? config.language_code : '',
   };
 }
-async function auditResponses(db: Database, audits: Awaited<ReturnType<typeof authorizedAudit>>[]) {
+async function auditResponses(
+  db: Database,
+  workspaceId: string,
+  audits: Awaited<ReturnType<typeof authorizedAudit>>[],
+) {
   const routes = await engineSnapshots(
     db,
+    workspaceId,
     audits.map((audit) => audit.id),
   );
   return audits.map((audit) =>
     auditSchema.parse({
       ...audit,
+      // The same rule `cancelAudit` enforces, so the screen never restates it.
+      cancelable: policy.audits.constants.audit_active_statuses.includes(audit.status),
       engine_snapshots: routes.get(audit.id) ?? [],
       market: frozenMarket(audit),
       not_applicable_engines: strings(record(audit.configuration).not_applicable_engines),
@@ -56,7 +64,7 @@ async function auditResponses(db: Database, audits: Awaited<ReturnType<typeof au
 }
 export async function readAudit(db: Database, workspaceId: string, auditId: string) {
   return firstOf(
-    await auditResponses(db, [await authorizedAudit(db, workspaceId, auditId)]),
+    await auditResponses(db, workspaceId, [await authorizedAudit(db, workspaceId, auditId)]),
     'the response built for the loaded audit',
   );
 }
@@ -68,7 +76,7 @@ export async function readAudits(db: Database, workspaceId: string, auditIds: re
   const byId = new Map(rows.map((row) => [row.id, row]));
   const ordered = auditIds.map((id) => byId.get(id)).filter((row) => row !== undefined);
   if (ordered.length !== auditIds.length) throw notFound('Audit');
-  return auditResponses(db, ordered);
+  return auditResponses(db, workspaceId, ordered);
 }
 export async function listAudits(
   db: Database,
@@ -87,7 +95,7 @@ export async function listAudits(
     query = query.where(
       sql<boolean>`(audits.created_at, audits.id) < (SELECT anchor.created_at, anchor.id FROM audits AS anchor WHERE anchor.id = ${afterId} AND anchor.workspace_id = ${workspaceId} AND anchor.project_id = audits.project_id)`,
     );
-  return auditResponses(db, await query.execute());
+  return auditResponses(db, workspaceId, await query.execute());
 }
 /**
  * A run's executions as its table renders them, in dispatch order.

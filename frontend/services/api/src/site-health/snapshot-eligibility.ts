@@ -88,7 +88,7 @@ async function latestAttempts(db: Database, crawl: Crawl, taskIds: string[]) {
     .selectAll()
     .distinctOn('task_id')
     .where('workspace_id', '=', crawl.workspace_id)
-    .where('crawl_id', '=', crawl.id)
+    // Each task is the one of the audit the page's analysis came from.
     .where('task_id', '=', sql<string>`any(${taskIds}::uuid[])`)
     .orderBy('task_id')
     .orderBy('attempt_number', 'desc')

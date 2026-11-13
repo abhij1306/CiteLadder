@@ -19,8 +19,16 @@ import {
 } from '../crawl-logs/reads.ts';
 import type { CrawlScope } from '../crawl-logs/state.ts';
 import { citationCoverage, citationRuns, type CitationCoverage } from './citation-runs.ts';
-import { pageDataset, pageSorts, aiBots, type JoinedPage, type PageOptions } from './pages-data.ts';
-import { partitionQuality } from '../integrations/partitions.ts';
+import {
+  pageCount,
+  pageDataset,
+  pageSortKey,
+  pageSorts,
+  aiBots,
+  type JoinedPage,
+  type PageOptions,
+} from './pages-data.ts';
+import { observesZero, partitionQuality } from '../integrations/partitions.ts';
 import { strings, record } from '../db/json.ts';
 import { aiTraffic } from '../config/ai-traffic.ts';
 import {
@@ -30,7 +38,7 @@ import {
 } from '../http/keyset-cursor.ts';
 import { ApiError } from '../errors.ts';
 import { crawlLogs } from '../config/crawl-logs.ts';
-import { boundedExport } from '../http/table-export.ts';
+import { assertExportBound, keysetBatches } from '../http/table-export.ts';
 import { inventoryCrawlIds } from '../site-health/reads/crawl.ts';
 import { isoDateText } from '../db/timestamps.ts';
 import { compareText } from '../text-order.ts';
@@ -109,9 +117,7 @@ export async function pageContext(db: Database, scope: CrawlScope, input: CrawlR
     quality,
     ga4Connected: mapping,
     citations: citationCoverage(runs),
-    ga4Complete: quality.every(
-      (q) => q.revision !== null && q.flags.length === 0 && q.reporting_timezone !== null,
-    ),
+    ga4Complete: quality.every((q) => observesZero(q) && q.reporting_timezone !== null),
     crawlComplete: ['complete', 'declared_complete'].includes(crawl.coverage),
   };
 }
@@ -336,7 +342,7 @@ export async function pagesRead(db: Database, scope: CrawlScope, input: PageOpti
   ]);
   const items = data.rows.slice(0, limit).map((r) => pageRow(r, context, !!data.crawl));
   const last = data.rows[Math.min(data.rows.length, limit) - 1],
-    sort = filters.sort as keyof typeof pageSorts;
+    sort = pageSortKey(filters.sort);
   return aiTrafficPagesSchema.parse({
     window_start: w.start,
     window_end: w.end,
@@ -361,8 +367,9 @@ export async function pagesRead(db: Database, scope: CrawlScope, input: PageOpti
 }
 /**
  * Every Pages row for one export, in the paged read's order. The window,
- * pattern and context resolve once, then one dataset query bounded one past
- * the export cap; the cursor and page size of the request do not apply.
+ * pattern and context resolve once and the rows are counted and refused past
+ * the export cap; then keyset batches of the dataset stream. The cursor and
+ * page size of the request do not apply.
  */
 export async function pagesExport(db: Database, scope: CrawlScope, input: PageOptions = {}) {
   const { options, urlHashes } = await patternScope(
@@ -374,15 +381,30 @@ export async function pagesExport(db: Database, scope: CrawlScope, input: PageOp
   // the same window even if the reporting day rolls over between the reads.
   const w = crawlWindow(options),
     { cursor: _cursor, limit: _limit, ...rest } = options,
-    filters = { ...rest, range: null, start_date: w.start, end_date: w.end },
-    max = crawlLogs.max_export_rows;
-  const [data, context] = await Promise.all([
-    pageDataset(db, scope, { ...filters, url_hashes: urlHashes, dataset_limit: max + 1 }),
+    filters = { ...rest, range: null, start_date: w.start, end_date: w.end, url_hashes: urlHashes },
+    sort = pageSortKey(filters.sort);
+  const [count, context] = await Promise.all([
+    pageCount(db, scope, filters),
     pageContext(db, scope, filters),
   ]);
-  return aiTrafficPagesSchema.shape.items.parse(
-    boundedExport(data.rows, max).map((r) => pageRow(r, context, !!data.crawl)),
-  );
+  assertExportBound(count, crawlLogs.max_export_rows);
+  let hasInventory = false;
+  const batches = keysetBatches({
+    read: async (last: JoinedPage | undefined, take) => {
+      const after = last ? [String(last[pageSorts[sort]] ?? -1), last.url_hash] : [];
+      const data = await pageDataset(db, scope, { ...filters, after, dataset_limit: take });
+      hasInventory = !!data.crawl;
+      return data.rows;
+    },
+    size: crawlLogs.export_batch_rows,
+    max: crawlLogs.max_export_rows,
+  });
+  return (async function* () {
+    for await (const rows of batches)
+      yield aiTrafficPagesSchema.shape.items.parse(
+        rows.map((r) => pageRow(r, context, hasInventory)),
+      );
+  })();
 }
 export async function urlRead(
   db: Database,

@@ -1,5 +1,3 @@
-'use client';
-
 import { useInfiniteQuery } from '@tanstack/react-query';
 import type { VisibilityAdsResponse } from '@citeladder/contracts/visibility-ads';
 
@@ -43,5 +41,5 @@ export function useAds(filters: Pick<SourceFilters, 'engine' | 'cohort'>, querie
       ? (data, previous) => retainPreviousDataForScope(projectId, data, previous)
       : undefined,
   });
-  return { query, enabled };
+  return query;
 }

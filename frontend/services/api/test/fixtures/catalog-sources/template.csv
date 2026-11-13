@@ -1,0 +1,5 @@
+title,brand,description,price,currency,link,image_link,category,sku,gtin
+Trail Runner,Acme,"Grippy, light trail shoe",120.00,usd,https://shop.example/products/trail-runner,https://cdn.example/trail.png,Footwear > Running > Trail|Sale,TR-1,0012345678905
+Road Runner,Acme,,89.5 USD,,https://shop.example/products/road-runner,,Footwear > Running,RR-1,
+Wool Sock,Acme,,$12,,https://shop.example/products/sock,,Accessories,SK-1,
+,Acme,No title,10,USD,https://shop.example/products/untitled,,Accessories,UT-1,

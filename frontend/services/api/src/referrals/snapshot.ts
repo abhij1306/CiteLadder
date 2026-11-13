@@ -14,6 +14,7 @@ import { randomUUID } from 'node:crypto';
 import { sql } from 'kysely';
 
 import { policy } from '../config.ts';
+import { subjectXactLock } from '../db/advisory-lock.ts';
 import type { Database } from '../db/database.ts';
 import { isoDateText } from '../db/timestamps.ts';
 import { payloadWindow, requireProject, type Executor } from '../queue/executor.ts';
@@ -21,7 +22,12 @@ import { addDays } from '../calendar-days.ts';
 import { bucketStart, buildAiReferralsProjection, type ReferralFact } from './projection.ts';
 import { compareText, textSpan } from '../text-order.ts';
 import { isNonEmpty } from '../lists.ts';
-import { selectedPartition, partitionAnchor, partitionEpoch } from '../integrations/partitions.ts';
+import {
+  observesZero,
+  selectedPartition,
+  partitionAnchor,
+  partitionEpoch,
+} from '../integrations/partitions.ts';
 import { referralEvidence, referralExtras, replaceReferralLandings } from './landing.ts';
 import { insightsRefresh } from '../config/ai-traffic.ts';
 import { enqueueCoalesced } from '../queue/enqueue.ts';
@@ -119,9 +125,7 @@ export const refreshAiReferralsSnapshot: Executor = async (task, { db, checkCanc
   const projectId = requireProject(task);
   const { windowStart, windowEnd } = payloadWindow(task);
   await db.transaction().execute(async (trx) => {
-    await sql`select pg_advisory_xact_lock(hashtextextended(${task.workspace_id + ':' + projectId + ':referrals'},0))`.execute(
-      trx,
-    );
+    await subjectXactLock(trx, `${task.workspace_id}:${projectId}:referrals`);
     const anchor = await partitionAnchor(trx, task.workspace_id, projectId, SOURCE_MEDIUM);
     const epoch = await partitionEpoch(trx, { workspaceId: task.workspace_id, projectId });
     const windows = refreshWindows(windowStart, windowEnd, anchor);
@@ -195,7 +199,7 @@ export const refreshAiReferralsSnapshot: Executor = async (task, { db, checkCanc
                 const days = evidence.quality[SOURCE_MEDIUM]!.filter((q) =>
                   inBucket(q.day, point.date),
                 );
-                const bad = days.some((q) => q.flags.length > 0 || q.revision === null);
+                const bad = !days.every(observesZero);
                 let value = point.value;
                 if (bad && value === 0) value = null;
                 else if (

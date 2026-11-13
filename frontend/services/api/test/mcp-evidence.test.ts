@@ -7,13 +7,15 @@ import { fetchRecord } from '../src/mcp/retrieval.ts';
 import { agentTools } from '../src/agent/tool-adapters.ts';
 import type { McpPrincipal } from '../src/mcp/types.ts';
 import { prompt, promptSet, topic } from './prompt-fixtures.ts';
-import { testDatabase } from './support.ts';
+import { asOwner, testDatabase } from './support.ts';
 import { VisibilityFixtures, type Tenant } from './visibility-fixtures.ts';
 import { actionFixture, type ActionSeed } from './action-support.ts';
 import { attachOrCreateAction, updateActionStatus } from '../src/opportunities/actions.ts';
 import { getVisibility } from '../src/visibility/dashboard.ts';
-import { SiteFixtures, type SiteSeed } from './site-health-fixtures.ts';
+import { bodyFacts, SiteFixtures, type SiteSeed } from './site-health-fixtures.ts';
 import { seedImport } from './referral-fixtures.ts';
+import { refreshIssueCurrency } from '../src/site-health/issue-currency.ts';
+import { loadCrawl } from '../src/site-health/reads/crawl.ts';
 
 const db = testDatabase();
 const fixtures = new VisibilityFixtures(db);
@@ -261,6 +263,51 @@ it('keeps crawlability unavailable without a crawl, including business context',
   expect(context.crawlability).toMatchObject({ state: 'unavailable', reason: 'no_site_crawl' });
 });
 
+it('reads the current crawl, never a running one, a page rerun or another workspace', async () => {
+  const at = (minutes: number) => new Date(Date.UTC(2026, 0, 1, 12, minutes));
+  const seed = await siteFixtures.crawl('completed');
+  await db
+    .updateTable('site_crawls')
+    .set({ created_at: at(0), completed_at: at(30) })
+    .where('id', '=', seed.crawlId)
+    .execute();
+  // Created later, so current, though it completed before the first crawl.
+  const current = await siteFixtures.sibling(seed, {
+    status: 'partially_completed',
+    created_at: at(10),
+    completed_at: at(20),
+  });
+  // A later one-page rerun re-reads one page; it is never the site crawl.
+  await siteFixtures.sibling(seed, {
+    configuration: JSON.stringify({ page_rerun: true }),
+    created_at: at(35),
+    completed_at: at(36),
+  });
+  // Newest row, still running: a mid-turn read must not see it.
+  await siteFixtures.sibling(seed, { status: 'running', created_at: at(40), completed_at: null });
+  // Another workspace's later crawl is never read through this project.
+  await siteFixtures.crawl('completed');
+  const member = {
+    kind: 'member' as const,
+    userId: seed.userId,
+    workspaceId: seed.workspaceId,
+    projectId: seed.projectId,
+  };
+  const crawlability = (crawl_id?: string) =>
+    dispatchTool(
+      db,
+      member,
+      'read_ai_crawlability',
+      { project_id: seed.projectId, crawl_id },
+      origin,
+    );
+  expect(await crawlability()).toMatchObject({
+    crawl_id: current,
+    crawl_status: 'partially_completed',
+  });
+  expect(await crawlability(seed.crawlId)).toMatchObject({ crawl_id: seed.crawlId });
+});
+
 it('pages prompts stably while context includes only active prompts and foreign IDs cannot fetch', async () => {
   const set = await promptSet(db, tenant.projectId);
   const nets = await topic(db, tenant.projectId, 'Golf nets', 'Home practice');
@@ -465,6 +512,75 @@ it('fetches the exact page analysis after a newer analysis replaces it, with fac
       : JSON.parse(first.text);
     expect(whole.issues).toEqual(final.issues);
     expect(whole.evaluations).toEqual(final.evaluations);
+  } finally {
+    await db.deleteFrom('mcp_oauth_grants').where('id', '=', principal.grantId).execute();
+    await db.deleteFrom('workspaces').where('id', '=', seed.workspace_id).execute();
+    await db.deleteFrom('users').where('id', '=', seed.user_id).execute();
+  }
+});
+
+it('fetches a site page without the query string or fragment of any URL it carries', async () => {
+  const seed = await actionFixture<ActionSeed>('content');
+  try {
+    const page = await db
+      .selectFrom('site_page_analyses')
+      .select(['id', 'site_url_id', 'artifact_id'])
+      .where('crawl_id', '=', seed.crawl_id)
+      .orderBy('id')
+      .executeTakeFirstOrThrow();
+    const tokened = 'https://acme.example/pricing?token=s3cret#owner@acme.example';
+    await db
+      .updateTable('site_urls')
+      // A page titled by its own URL.
+      .set({ display_url: tokened, latest_title: tokened })
+      .where('id', '=', page.site_url_id)
+      .execute();
+    // Fetch artifacts are append-only for the application role.
+    await asOwner((owner) =>
+      owner
+        .updateTable('site_fetch_artifacts')
+        .set({
+          requested_url: tokened,
+          final_url: tokened,
+          normalized_facts: JSON.stringify({ canonical: tokened, h1: ['Which plan? Compare'] }),
+        })
+        .where('id', '=', page.artifact_id)
+        .execute(),
+    );
+    await db
+      .updateTable('site_issues')
+      .set({ evidence: JSON.stringify({ url: tokened }) })
+      .where('crawl_id', '=', seed.crawl_id)
+      .where('site_url_id', '=', page.site_url_id)
+      .execute();
+    principal.userId = seed.user_id;
+    await db
+      .updateTable('mcp_oauth_grants')
+      .set({ user_id: seed.user_id, workspace_ids: JSON.stringify([seed.workspace_id]) })
+      .where('id', '=', principal.grantId)
+      .execute();
+    const fetched = await fetchRecord(db, principal, `citeladder://site_page/${page.id}`, origin);
+    expect(fetched.title).toBe('https://acme.example/pricing');
+    expect(record(fetched)).toMatchObject({
+      display_url: 'https://acme.example/pricing',
+      artifact: {
+        requested_url: 'https://acme.example/pricing',
+        final_url: 'https://acme.example/pricing',
+        normalized_facts: {
+          canonical: 'https://acme.example/pricing',
+          h1: ['Which plan? Compare'],
+        },
+      },
+    });
+    expect(String(fetched.text)).not.toContain('s3cret');
+    // The issue URI the page hands out fetches the same evidence, stripped too.
+    const [issue] = (record(fetched) as { issues: { record_uri: string; evidence: unknown }[] })
+      .issues;
+    if (!issue) throw new Error('The fixture page has no current issue');
+    expect(issue.evidence).toEqual({ url: 'https://acme.example/pricing' });
+    expect(record(await fetchRecord(db, principal, issue.record_uri, origin)).evidence).toEqual({
+      url: 'https://acme.example/pricing',
+    });
   } finally {
     await db.deleteFrom('mcp_oauth_grants').where('id', '=', principal.grantId).execute();
     await db.deleteFrom('workspaces').where('id', '=', seed.workspace_id).execute();
@@ -783,8 +899,8 @@ it('serves ads in ChatGPT answers with the same numbers as the Ads read', async 
 });
 
 /** A finalized, measured page observed in the crawl. */
-async function sitePage(seed: SiteSeed, path: string) {
-  const page = await siteFixtures.page(seed, path, {}, { observed: true });
+async function sitePage(seed: SiteSeed, path: string, facts: Record<string, unknown> = {}) {
+  const page = await siteFixtures.page(seed, path, facts, { observed: true });
   await db
     .updateTable('site_page_analyses')
     .set({
@@ -930,6 +1046,158 @@ it("lists exactly the pages a Site Health rule affects, with each page's failing
       distinct_failing_target_count: 2,
     },
   ]);
+});
+
+it("keeps one redacted reference snippet per issue family from the first affected page, never another workspace's", async () => {
+  const seed = await siteFixtures.crawl();
+  // Created out of URL order: the snippet still comes from /a.
+  const later = await sitePage(
+    seed,
+    '/b',
+    bodyFacts('<form><p><select name="size"></select></p></form>'),
+  );
+  const first = await sitePage(
+    seed,
+    '/a',
+    bodyFacts(
+      '<form><div class="field"><span>Your email</span>' +
+        '<input type="email" name="email" value="jo@example.com" onchange="track()">' +
+        '<script>steal()</script></div></form>',
+    ),
+  );
+  await siteIssue(seed, later, 'web.accessibility_form_names');
+  await siteIssue(seed, first, 'web.accessibility_form_names');
+  await refreshIssueCurrency(db, await loadCrawl(db, seed.workspaceId, seed.crawlId));
+
+  const other = await siteFixtures.crawl();
+  const elsewhere = await sitePage(
+    other,
+    '/a',
+    bodyFacts('<form><span><textarea name="note"></textarea></span></form>'),
+  );
+  await siteIssue(other, elsewhere, 'web.accessibility_form_names');
+  await refreshIssueCurrency(db, await loadCrawl(db, other.workspaceId, other.crawlId));
+
+  const pages = (tenant: SiteSeed, args: Record<string, unknown> = {}) =>
+    dispatchTool(
+      db,
+      siteMember(tenant),
+      'read_site_pages',
+      { project_id: tenant.projectId, rule_id: 'web.accessibility_form_names', ...args },
+      origin,
+    );
+  expect((await pages(seed)).reference_snippet).toEqual({
+    page_url: 'https://example.test/a',
+    site_url_id: first.id,
+    html: '<div class="field"><span>[text]</span><input type="email" name="email" value="[redacted]"></div>',
+    truncated: false,
+  });
+  // One snippet for the family in the crawl's catalog, not one per affected page.
+  const catalogs = await db
+    .selectFrom('site_issue_catalogs')
+    .select('reference_snippets')
+    .where('workspace_id', '=', seed.workspaceId)
+    .where('crawl_id', '=', seed.crawlId)
+    .execute();
+  expect(
+    catalogs.flatMap((row) =>
+      (row.reference_snippets as { rule_id: string; page_url: string }[]).map((item) => [
+        item.rule_id,
+        item.page_url,
+      ]),
+    ),
+  ).toEqual([['web.accessibility_form_names', 'https://example.test/a']]);
+  // Each workspace reads only its own crawl's snippet.
+  expect((await pages(other)).reference_snippet).toEqual({
+    page_url: 'https://example.test/a',
+    site_url_id: elsewhere.id,
+    html: '<span><textarea name="note"></textarea></span>',
+    truncated: false,
+  });
+  await expect(pages(other, { crawl_id: seed.crawlId })).rejects.toThrow(
+    'Crawl was not found in this project',
+  );
+  // A rule without a kept snippet names none.
+  expect(await pages(seed, { rule_id: 'technical.title_present' })).not.toHaveProperty(
+    'reference_snippet',
+  );
+});
+
+it('hands the model page URLs without their query string or fragment, pages differing only by query kept apart by id', async () => {
+  const seed = await siteFixtures.crawl();
+  const form = '<form><span><textarea name="note"></textarea></span></form>';
+  const tokened = await sitePage(seed, '/p?token=abc&email=a@b.com#x', bodyFacts(form));
+  const other = await sitePage(seed, '/p?token=def', bodyFacts(form));
+  await siteIssue(seed, tokened, 'web.accessibility_form_names');
+  await siteIssue(seed, other, 'web.accessibility_form_names');
+  await siteIssue(seed, tokened, 'technical.title_present', {
+    pages: [
+      { url: 'https://example.test/p?token=abc&email=a@b.com#x' },
+      { url: 'https://example.test/p?token=def' },
+      { url: 'https://example.test/q#top' },
+    ],
+    count: 3,
+  });
+  await siteIssue(seed, tokened, 'technical.meta_description_present', {
+    canonical_url: 'https://example.test/p?token=abc&email=a@b.com#x',
+  });
+  await refreshIssueCurrency(db, await loadCrawl(db, seed.workspaceId, seed.crawlId));
+  const pages = (args: Record<string, unknown>) =>
+    dispatchTool(
+      db,
+      siteMember(seed),
+      'read_site_pages',
+      { project_id: seed.projectId, ...args },
+      origin,
+    );
+
+  const family = await pages({ rule_id: 'web.accessibility_form_names' });
+  expect(
+    (family.items as { site_url_id: string; url: string }[]).map((item) => [
+      item.site_url_id,
+      item.url,
+    ]),
+  ).toEqual([
+    [tokened.id, 'https://example.test/p'],
+    [other.id, 'https://example.test/p'],
+  ]);
+  expect((family.reference_snippet as { page_url: string }).page_url).toBe(
+    'https://example.test/p',
+  );
+  expect(
+    (await pages({ rule_id: 'technical.title_present' })).items as { rule_evidence: unknown }[],
+  ).toMatchObject([
+    {
+      rule_evidence: {
+        affected_pages: ['https://example.test/p', 'https://example.test/q'],
+        affected_page_count: 3,
+      },
+    },
+  ]);
+  expect(
+    (await pages({ rule_id: 'technical.meta_description_present' })).items as {
+      rule_evidence: unknown;
+    }[],
+  ).toMatchObject([{ rule_evidence: { canonical_url: 'https://example.test/p' } }]);
+
+  // A cursor names no URL, and still resumes on the next page.
+  const first = await pages({ rule_id: 'web.accessibility_form_names', limit: 1 });
+  const cursor = (first.pagination as { next_cursor: string }).next_cursor;
+  expect(Buffer.from(cursor, 'base64url').toString('utf8')).not.toContain('token');
+  const next = await pages({ rule_id: 'web.accessibility_form_names', limit: 1, cursor });
+  expect(
+    [first, next].flatMap((page) =>
+      (page.items as { site_url_id: string }[]).map((item) => item.site_url_id),
+    ),
+  ).toEqual([tokened.id, other.id]);
+
+  // The persisted evidence keeps the URL it observed.
+  const stored = await db
+    .selectFrom('site_urls')
+    .select('normalized_url')
+    .where('id', '=', tokened.id)
+    .executeTakeFirstOrThrow();
+  expect(stored.normalized_url).toContain('token=abc');
 });
 
 it("finds a crawled page by the address a person types and reads its copy, never another project's", async () => {
@@ -1096,6 +1364,75 @@ it('reads the internal links of several pages in one call, by page URL rather th
     extractor: policy.site_health.versions.extractor,
     formula: policy.site_health.link_metrics.formula_version,
   });
+});
+
+it('reads internal links with page, neighbor and anchor destination URLs stripped of query and fragment', async () => {
+  const seed = await siteFixtures.crawl();
+  const page = await sitePage(seed, '/p?token=abc&email=a@b.com#x');
+  await db
+    .insertInto('site_page_link_metrics')
+    .values({
+      id: randomUUID(),
+      workspace_id: seed.workspaceId,
+      project_id: seed.projectId,
+      crawl_id: seed.crawlId,
+      site_url_id: page.id,
+      inbound_count: 1,
+      outbound_count: 2,
+      main_content_inbound_count: 1,
+      main_content_outbound_count: 2,
+      nofollow_inbound_count: 0,
+      depth_from_home: 1,
+      source_page_count: 1,
+      authority_share: 0,
+      authority_rank: 1,
+      anchor_diagnostics: JSON.stringify([
+        {
+          kind: 'generic',
+          anchor_text: 'https://example.test/q?session=s1',
+          occurrences: 2,
+          destination_count: 2,
+          destinations: [
+            'https://example.test/q?session=s1',
+            'https://example.test/q?session=s2#y',
+          ],
+          regions: ['main'],
+          title_coverage: null,
+          h1_coverage: null,
+        },
+      ]),
+      top_inbound: JSON.stringify([
+        { url: 'https://example.test/in?email=a@b.com', anchor_count: 1 },
+      ]),
+      top_outbound: JSON.stringify([]),
+      extractor_version: policy.site_health.versions.extractor,
+      formula_version: policy.site_health.link_metrics.formula_version,
+      created_at: new Date(),
+    })
+    .execute();
+
+  const links = await dispatchTool(
+    db,
+    siteMember(seed),
+    'read_site_links',
+    { project_id: seed.projectId },
+    origin,
+  );
+  expect(links.items).toMatchObject([
+    {
+      site_url_id: page.id,
+      url: 'https://example.test/p',
+      top_inbound: [{ url: 'https://example.test/in', anchor_count: 1 }],
+      anchor_diagnostics: [
+        {
+          kind: 'generic',
+          anchor_text: 'https://example.test/q',
+          destination_count: 2,
+          destinations: ['https://example.test/q'],
+        },
+      ],
+    },
+  ]);
 });
 
 it('reports performance as not connected until a search source is connected, then as not projected', async () => {

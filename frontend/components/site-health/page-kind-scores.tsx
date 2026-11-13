@@ -1,5 +1,3 @@
-'use client';
-
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
 import { mutedWhenMissing, TableCell, TableRow } from '@/components/ui/table';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
@@ -55,7 +53,7 @@ export function PageKindScores({
   return (
     <div data-testid="page-kind-scores" className="grid min-w-0">
       <DataTable
-        title="Scores by Page Kind"
+        title="Scores by page kind"
         columns={COLUMNS}
         minWidth="md"
         footer="Mean scores across the analyzed pages of each type."
@@ -98,11 +96,11 @@ export function PageKindScores({
 }
 
 const COLUMNS: readonly DataTableColumn[] = [
-  { key: 'kind', label: 'Page Kind' },
+  { key: 'kind', label: 'Page kind' },
   { key: 'analyzed', label: 'Analyzed', width: 'figure', numeric: true },
   { key: 'web', label: 'Web Fundamentals', width: 'date', numeric: true },
   { key: 'aeo', label: 'AEO Readiness', width: 'status', numeric: true },
-  { key: 'coverage', label: 'AEO Coverage', width: 'status', numeric: true },
+  { key: 'coverage', label: 'AEO checklist completion', width: 'date', numeric: true },
 ];
 
 function MeasurementValue({

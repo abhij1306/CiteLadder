@@ -1,9 +1,11 @@
 /**
  * Brand and competitor name matching: `&` reads as "and", punctuation other
- * than underscores separates words, and a name matches on word boundaries including its
- * separator-free spelling ("Ace Hardware" names "acehardware"). Text in scripts
- * written without spaces (Chinese, Japanese, Thai) is word-segmented first, so
- * a name inside a sentence is still a whole-token run.
+ * than underscores separates words, and a name matches on word boundaries,
+ * including its separator-free spelling ("Ace Hardware" names "acehardware").
+ * Words join only through a configured alias (AR-6): separate words in the
+ * text never join to spell a name, so "your sales force" does not name
+ * Salesforce unless "Sales Force" is one of its aliases. Text in scripts written without spaces (Chinese, Japanese, Thai) is
+ * word-segmented first, so a name inside a sentence is still a whole-token run.
  *
  * An entity's matching policy can require context: under `context_required`
  * an occurrence counts only with a context term within the configured token
@@ -49,20 +51,51 @@ export function normalizeText(value: string): string {
 
 type Occurrence = { start: number; end: number; offset: number; codePoints: number };
 
-/** Every whole-token run of `tokens` spelling `compact`, with its offsets. */
-function* occurrences(tokens: readonly string[], compact: string): Generator<Occurrence> {
+/**
+ * The end of the token run from `start` that spells the alias `words`, or
+ * null. One token may spell several of the alias's words run together
+ * ("acehardware" for "Ace Hardware"), but separate tokens never join to spell
+ * one word ("sales force" is not "Salesforce"). The exception is a word in a
+ * space-free script, which may span the tokens segmentation split it into.
+ */
+function runEnd(tokens: readonly string[], start: number, words: readonly string[]) {
+  let index = start;
+  let word = 0;
+  while (word < words.length) {
+    const step = DENSE_SCRIPT.test(words[word]!)
+      ? segmentedWord(tokens, index, words[word]!)
+      : joinedWords(tokens[index], words, word);
+    if (!step) return null;
+    index += step.tokens;
+    word += step.words;
+  }
+  return index;
+}
+
+/** Tokens from `index` that segmentation split one space-free `word` into. */
+function segmentedWord(tokens: readonly string[], index: number, word: string) {
+  let candidate = '';
+  let next = index;
+  while (next < tokens.length && candidate.length < word.length) candidate += tokens[next++];
+  return candidate === word ? { tokens: next - index, words: 1 } : null;
+}
+
+/** The alias words from `word` that `token` spells, run together or alone. */
+function joinedWords(token: string | undefined, words: readonly string[], word: number) {
+  if (token === undefined) return null;
+  let candidate = '';
+  let next = word;
+  while (next < words.length && candidate.length < token.length) candidate += words[next++];
+  return candidate === token ? { tokens: 1, words: next - word } : null;
+}
+
+/** Every whole-token run of `tokens` spelling the alias `words`, with its offsets. */
+function* occurrences(tokens: readonly string[], words: readonly string[]): Generator<Occurrence> {
   let offset = 0,
     codePoints = 0;
   for (let start = 0; start < tokens.length; start++) {
-    let candidate = '';
-    for (let end = start; end < tokens.length; end++) {
-      candidate += tokens[end];
-      if (candidate === compact) {
-        yield { start, end: end + 1, offset, codePoints };
-        break;
-      }
-      if (candidate.length >= compact.length) break;
-    }
+    const end = runEnd(tokens, start, words);
+    if (end !== null) yield { start, end, offset, codePoints };
     offset += tokens[start]!.length + 1;
     codePoints += Array.from(tokens[start]!).length + 1;
   }
@@ -133,9 +166,9 @@ function firstOccurrence(
   const tokens = normalizedText.split(' ');
   let first: Occurrence | null = null;
   for (const alias of aliases) {
-    const compact = normalizeAlias(alias).replaceAll(' ', '');
-    if (!compact) continue;
-    for (const found of occurrences(tokens, compact)) {
+    const words = normalizeAlias(alias).split(' ').filter(Boolean);
+    if (!words.length) continue;
+    for (const found of occurrences(tokens, words)) {
       if (first && found.offset >= first.offset) break;
       if (occurrenceCounts(tokens, found, entity)) {
         first = found;
@@ -155,7 +188,7 @@ export function namesEntity(
   return firstOccurrence(normalizeText(text), aliases, entity) !== null;
 }
 
-/** Whether `text` names `name`; separator-free and spaced spellings are the same name. */
+/** Whether `text` names `name`; a spaced name also matches its separator-free spelling. */
 export function namesAlias(text: string, name: string): boolean {
   return namesEntity(text, [name]);
 }

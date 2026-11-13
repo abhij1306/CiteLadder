@@ -1,6 +1,10 @@
 import { randomUUID } from 'node:crypto';
 
-import { benchmarkModeSchema, projectSchema } from '@citeladder/contracts/project';
+import {
+  benchmarkModeSchema,
+  projectSchema,
+  projectSummarySchema,
+} from '@citeladder/contracts/project';
 import type { Insertable, Selectable } from 'kysely';
 import type { z } from 'zod';
 
@@ -19,6 +23,11 @@ import { promptSetView } from '../prompts/views.ts';
 import { acquireProjectLock } from '../prompts/locks.ts';
 import { cleanList, type ProjectCreate, type ProjectUpdate } from './inputs.ts';
 import { brandLogoUrl, competitorLogoUrl } from './logos.ts';
+import { saveCompetitorList } from './competitors.ts';
+import {
+  saveCompetitorList as saveCompetitorListCommand,
+  type CompetitorWriter,
+} from '../commands/competitors.ts';
 import type { ProjectScope } from './brand-profile.ts';
 import { firstOf } from '../lists.ts';
 import { searchContext } from '../search-surfaces/locations.ts';
@@ -50,22 +59,39 @@ async function views(
   const ids = rows.map((row) => row.id);
   const [brands, aliases, competitors, owned, unintended, profiles, sets, prompts] =
     await Promise.all([
-      db.selectFrom('brands').selectAll().where('project_id', 'in', ids).execute(),
+      db
+        .selectFrom('brands')
+        .selectAll()
+        .where('workspace_id', '=', workspaceId)
+        .where('project_id', 'in', ids)
+        .execute(),
       db
         .selectFrom('brand_aliases')
         .innerJoin('brands', 'brands.id', 'brand_aliases.brand_id')
         .selectAll('brand_aliases')
+        .where('brand_aliases.workspace_id', '=', workspaceId)
         .where('brands.project_id', 'in', ids)
         .execute(),
       db
         .selectFrom('competitors')
         .selectAll()
+        .where('workspace_id', '=', workspaceId)
         .where('project_id', 'in', ids)
         .orderBy('created_at')
         .orderBy('id')
         .execute(),
-      db.selectFrom('owned_domains').selectAll().where('project_id', 'in', ids).execute(),
-      db.selectFrom('unintended_domains').selectAll().where('project_id', 'in', ids).execute(),
+      db
+        .selectFrom('owned_domains')
+        .selectAll()
+        .where('workspace_id', '=', workspaceId)
+        .where('project_id', 'in', ids)
+        .execute(),
+      db
+        .selectFrom('unintended_domains')
+        .selectAll()
+        .where('workspace_id', '=', workspaceId)
+        .where('project_id', 'in', ids)
+        .execute(),
       db
         .selectFrom('brand_profiles')
         .select(['project_id', 'business_context', 'products_services'])
@@ -75,6 +101,7 @@ async function views(
       db
         .selectFrom('prompt_sets')
         .selectAll()
+        .where('workspace_id', '=', workspaceId)
         .where('project_id', 'in', ids)
         .orderBy('created_at')
         .orderBy('id')
@@ -106,7 +133,16 @@ async function views(
       [{ name: brandName, aliases: brandAliases }, ...rivals],
     );
     return {
-      ...row,
+      id: row.id,
+      workspace_id: row.workspace_id,
+      name: row.name,
+      website_url: row.website_url,
+      industry: row.industry,
+      subindustry: row.subindustry,
+      primary_market: row.primary_market,
+      country_code: row.country_code,
+      language_code: row.language_code,
+      default_repetitions: row.default_repetitions,
       benchmark_mode: benchmarkModeSchema.parse(row.benchmark_mode),
       brand_name: brandName,
       brand: {
@@ -144,6 +180,53 @@ export async function readProject(db: Database, scope: ProjectScope): Promise<Pr
   const result = await views(db, scope.workspaceId, [await projectRow(db, scope)]);
   return firstOf(result, 'the view built for the loaded project');
 }
+type ProjectSummaryView = z.input<typeof projectSummarySchema>;
+
+/**
+ * The workspace's projects as the switcher shows them: one read, newest
+ * first, with the brand entity's name and logo where it has them.
+ */
+export async function listProjectSummaries(
+  db: Database,
+  workspaceId: string,
+): Promise<ProjectSummaryView[]> {
+  const rows = await db
+    .selectFrom('projects')
+    .leftJoinLateral(
+      (eb) =>
+        eb
+          .selectFrom('brands')
+          .select(['brands.name', 'brands.logo_asset_id'])
+          .whereRef('brands.project_id', '=', 'projects.id')
+          .where('brands.workspace_id', '=', workspaceId)
+          .orderBy('brands.created_at')
+          .orderBy('brands.id')
+          .limit(1)
+          .as('brand'),
+      (join) => join.onTrue(),
+    )
+    .select([
+      'projects.id',
+      'projects.name',
+      'projects.brand_name',
+      'projects.website_url',
+      'brand.name as brand_entity_name',
+      'brand.logo_asset_id',
+    ])
+    .where('projects.workspace_id', '=', workspaceId)
+    .orderBy('projects.created_at', 'desc')
+    .orderBy('projects.id', 'desc')
+    .execute();
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    brand_name: row.brand_entity_name ?? row.brand_name,
+    website_url: row.website_url,
+    brand: { logo_url: row.logo_asset_id ? brandLogoUrl(row.id) : null },
+  }));
+}
+
+/** Full views of every project: the public API's list. */
 export async function listProjects(db: Database, workspaceId: string): Promise<ProjectView[]> {
   const rows = await db
     .selectFrom('projects')
@@ -211,7 +294,8 @@ export async function insertProject(
       updated_at: now,
     })
     .execute();
-  await replaceCollections(db, { workspaceId, projectId: id }, brandId, input, now);
+  await saveCollections(db, { workspaceId, projectId: id }, brandId, input, now);
+  await saveCompetitorList(db, { workspaceId, projectId: id }, input.competitors);
   const fields = {
     description: input.description,
     positioning: input.positioning,
@@ -254,62 +338,88 @@ export async function insertProject(
   return id;
 }
 
-async function replaceCollections(
+/** The brand aliases and the owned and unintended domains; competitors have their own owner. */
+async function saveCollections(
   db: Database,
-  { workspaceId, projectId }: { workspaceId: string; projectId: string },
+  { workspaceId, projectId }: ProjectScope,
   brandId: string,
-  input: ProjectUpdate,
+  input: Pick<ProjectUpdate, 'brand' | 'owned_domains' | 'unintended_domains'>,
   now: Date,
 ) {
   if (input.brand !== undefined) {
-    await db.deleteFrom('brand_aliases').where('brand_id', '=', brandId).execute();
+    await db
+      .deleteFrom('brand_aliases')
+      .where('workspace_id', '=', workspaceId)
+      .where('brand_id', '=', brandId)
+      .execute();
     const values = cleanList(input.brand.aliases).map((alias) => ({
       id: randomUUID(),
+      workspace_id: workspaceId,
       brand_id: brandId,
       alias,
       created_at: now,
     }));
     if (values.length) await db.insertInto('brand_aliases').values(values).execute();
   }
-  // One transaction connection: finish each delete before inserting its replacement rows.
+  // One transaction connection: each list's statements run in order.
   for (const [table, values] of [
     ['owned_domains', input.owned_domains],
     ['unintended_domains', input.unintended_domains],
   ] as const) {
-    if (values === undefined) continue;
+    if (values !== undefined)
+      await saveDomainList(db, table, { workspaceId, projectId }, cleanList(values), now); // NOSONAR -- One transaction: statements run in order.
+  }
+}
+
+/**
+ * Save a domain list as a diff: a submitted domain matching a stored one
+ * (case-insensitively) keeps its row and ID, new ones are added and the rest
+ * removed.
+ */
+async function saveDomainList(
+  db: Database,
+  table: 'owned_domains' | 'unintended_domains',
+  { workspaceId, projectId }: ProjectScope,
+  domains: readonly string[],
+  now: Date,
+) {
+  const stored = await db
+    .selectFrom(table)
+    .select(['id', 'domain'])
+    .where('workspace_id', '=', workspaceId)
+    .where('project_id', '=', projectId)
+    .execute();
+  const submitted = new Map(domains.map((domain) => [domain.toLowerCase(), domain]));
+  const kept = new Set<string>();
+  const removed: string[] = [];
+  for (const row of stored) {
+    const key = row.domain.toLowerCase();
+    const domain = kept.has(key) ? undefined : submitted.get(key);
+    if (domain === undefined) {
+      removed.push(row.id);
+      continue;
+    }
+    kept.add(key);
+    if (domain !== row.domain)
+      await db.updateTable(table).set({ domain }).where('id', '=', row.id).execute(); // NOSONAR -- One transaction: statements run in order.
+  }
+  if (removed.length)
     await db
       .deleteFrom(table)
       .where('workspace_id', '=', workspaceId)
       .where('project_id', '=', projectId)
-      .execute(); // NOSONAR -- One transaction: delete before its replacement rows.
-    const rows = cleanList(values).map((domain) => ({
+      .where('id', 'in', removed)
+      .execute();
+  const added = [...submitted]
+    .filter(([key]) => !kept.has(key))
+    .map(([, domain]) => ({
       id: randomUUID(),
       workspace_id: workspaceId,
       project_id: projectId,
       domain,
       created_at: now,
     }));
-    if (rows.length) await db.insertInto(table).values(rows).execute();
-  }
-  if (input.competitors !== undefined) {
-    await db
-      .deleteFrom('competitors')
-      .where('workspace_id', '=', workspaceId)
-      .where('project_id', '=', projectId)
-      .execute();
-    const values = input.competitors.map((item) => ({
-      id: randomUUID(),
-      workspace_id: workspaceId,
-      project_id: projectId,
-      name: item.name,
-      aliases: JSON.stringify(cleanList(item.aliases)),
-      domains: JSON.stringify(cleanList(item.domains)),
-      logo_asset_id: null,
-      created_at: now,
-      updated_at: now,
-    }));
-    if (values.length) await db.insertInto('competitors').values(values).execute();
-  }
+  if (added.length) await db.insertInto(table).values(added).execute();
 }
 
 export async function createProject(
@@ -380,7 +490,17 @@ async function replaceEntityMatching(
     .execute();
 }
 
-export async function updateProject(db: Database, scope: ProjectScope, input: ProjectUpdate) {
+/**
+ * The project editor's save. The competitor list goes through the competitor
+ * command as a diff, so the actor is checked against its permission.
+ */
+export async function updateProject(
+  db: Database,
+  actor: CompetitorWriter,
+  projectId: string,
+  input: ProjectUpdate,
+) {
+  const scope = { workspaceId: actor.workspaceId, projectId };
   await db.transaction().execute(async (trx) => {
     await acquireProjectLock(trx, scope.projectId);
     const row = await projectRow(trx, scope);
@@ -418,13 +538,15 @@ export async function updateProject(db: Database, scope: ProjectScope, input: Pr
         .set({ name: input.brand_name, updated_at: new Date() })
         .where('id', '=', brand.id)
         .execute();
-    await replaceCollections(
+    await saveCollections(
       trx,
-      { workspaceId: scope.workspaceId, projectId: row.id },
+      scope,
       brand.id,
-      { brand: brandInput, competitors, owned_domains, unintended_domains },
+      { brand: brandInput, owned_domains, unintended_domains },
       new Date(),
     );
+    if (competitors !== undefined)
+      await saveCompetitorListCommand(trx, actor, scope.projectId, competitors);
     if (entity_matching !== undefined) await replaceEntityMatching(trx, scope, entity_matching);
   });
   return readProject(db, scope);

@@ -6,6 +6,7 @@ import type {
   searchReadinessSchema,
   searchRunSchema,
 } from '@citeladder/contracts/search-intelligence';
+import { sql } from 'kysely';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import type { z } from 'zod';
 
@@ -352,6 +353,8 @@ describe('Search Intelligence readiness and preferences', () => {
       research_scope: si.default_research_scope,
       depths: si.default_depths,
     });
+    // The market picker offers the reviewed Labs countries, which name the saved one.
+    expect(body.markets).toContainEqual({ country_code: 'AU', location_code: 2036 });
     expect(body.latest_run?.id).toBe(latest);
     expect(new Map(body.datasets.map((row) => [row.id, row.research_scope]))).toEqual(
       new Map([
@@ -378,7 +381,8 @@ describe('Search Intelligence readiness and preferences', () => {
     const read = await call<Readiness>('');
     expect(read.body.preferences).toMatchObject({
       location_code: 2840,
-      depths: { backlinks: 500 },
+      // The saved depth, and the policy default for every dataset left unsaved.
+      depths: { backlinks: 500, ranking_keywords: 200 },
     });
 
     for (const body of [
@@ -628,6 +632,38 @@ describe('Search Intelligence citation matches', () => {
       expect([derived.body.unique_rows_saved, derived.body.coverage]).toEqual([0, coverage]);
     },
   );
+
+  it('saves more matches than one insert statement can bind', async () => {
+    const runId = await review(t, await connection(t));
+    const parent = await dataset(t, runId, { kind: 'referring_domains' });
+    await rows(t, parent, [{ domain: 'linker.example' }]);
+    const auditId = await fixtures.audit(t);
+    await fixtures.execution(t, {
+      auditId,
+      analysis: { citations: [{ url: 'https://linker.example/post' }] },
+    });
+    // 5,101 matches at 13 parameters each exceed PostgreSQL's 65,535 limit.
+    await sql`insert into citations (id, workspace_id, audit_id, analysis_id, artifact_id,
+        analyzer_version, ordinal, url, title, domain, classification, source_class, source_origin,
+        source_taxonomy_version, is_owned, is_unintended, matched_competitor, resolved_url,
+        canonical_url, url_hash, url_identity_method, url_identity_version, created_at)
+      select gen_random_uuid(), workspace_id, audit_id, analysis_id, artifact_id, analyzer_version,
+        ordinal + n, url || '?copy=' || n, title, domain, classification, source_class,
+        source_origin, source_taxonomy_version, is_owned, is_unintended, matched_competitor,
+        resolved_url, canonical_url, url_hash, url_identity_method, url_identity_version, created_at
+      from citations, generate_series(1, 5100) n where audit_id = ${auditId}::uuid`.execute(db);
+    const derived = await call<Dataset>('/citation-matches', {
+      method: 'POST',
+      body: { backlink_dataset_id: parent, audit_ids: [auditId] },
+    });
+    expect([derived.status, derived.body.unique_rows_saved]).toEqual([201, 5101]);
+    const saved = await db
+      .selectFrom('search_intelligence_rows')
+      .select(({ fn }) => fn.countAll<string>().as('count'))
+      .where('dataset_id', '=', derived.body.id)
+      .executeTakeFirstOrThrow();
+    expect(Number(saved.count)).toBe(5101);
+  });
 
   it('derives one dataset per exact selection, even under concurrent requests', async () => {
     const runId = await review(t, await connection(t));

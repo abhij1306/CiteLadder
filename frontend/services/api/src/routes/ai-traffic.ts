@@ -21,7 +21,7 @@ import {
   activityExport,
   coveragePage,
 } from '../crawl-logs/reads.ts';
-import { tableCsv } from '../http/table-export.ts';
+import { csvDownload } from '../http/table-export.ts';
 import { crawlLogs } from '../config/crawl-logs.ts';
 
 import { AiReferralsQueryError, getAiReferrals } from '../analytics/ai-referrals.ts';
@@ -112,7 +112,7 @@ export const aiTrafficRoutes = [
       response: z.string().meta({ format: 'binary' }),
       async handle({ c, db }, { path, query }) {
         const scope = { workspaceId: c.get('workspace').workspaceId, projectId: path.project_id };
-        const items: Record<string, unknown>[] =
+        const batches: AsyncIterable<Record<string, unknown>[]> =
           view === 'activity'
             ? await activityExport(db, scope, query)
             : await crawlerExport(db, scope, query);
@@ -144,13 +144,7 @@ export const aiTrafficRoutes = [
                 'folders',
                 'resources',
               ];
-        return new Response(tableCsv(columns, items), {
-          headers: {
-            'content-type': 'text/csv; charset=utf-8',
-            'content-disposition': 'attachment; filename="ai-traffic-' + view + '.csv"',
-            'cache-control': 'no-store',
-          },
-        });
+        return csvDownload('ai-traffic-' + view + '.csv', columns, batches);
       },
     }),
   ),

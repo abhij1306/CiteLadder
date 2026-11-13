@@ -1,10 +1,8 @@
-'use client';
-
 import { useRef, useState, type ComponentProps, type ReactNode, type RefObject } from 'react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { readCsvFileText } from '@/lib/csv/read-file-text';
+import { READ_FAILED_MESSAGE, readCsvFileText } from '@/lib/csv/read-file-text';
 
 /** A button-owned hidden picker that permits selecting the same file twice. */
 export function CsvImportTrigger({
@@ -45,49 +43,82 @@ export function CsvImportTrigger({
   );
 }
 
-/** Shared file-selection lifecycle; parsing remains owned by the importing feature. */
+/**
+ * Shared file-selection lifecycle; parsing remains owned by the importing
+ * feature. A file that cannot be read, or is not UTF-8, leaves nothing parsed
+ * and sets `readError`; only the latest selection lands.
+ */
 export function useCsvImportFile<T>(parse: (text: string) => T) {
   const [parsed, setParsed] = useState<T | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
+  const [readError, setReadError] = useState<string | null>(null);
+  const [reading, setReading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const selection = useRef(0);
 
   const reset = () => {
+    selection.current += 1;
     setParsed(null);
     setFileName(null);
+    setReadError(null);
+    setReading(false);
     if (inputRef.current) inputRef.current.value = '';
   };
 
   const selectFile = async (file: File | undefined) => {
     if (!file) return;
+    const current = ++selection.current;
     setFileName(file.name);
-    setParsed(parse(await readCsvFileText(file)));
+    setParsed(null);
+    setReadError(null);
+    setReading(true);
+    let text: string;
+    try {
+      text = await readCsvFileText(file);
+    } catch (cause) {
+      if (current !== selection.current) return;
+      setReadError(cause instanceof Error ? cause.message : READ_FAILED_MESSAGE);
+      setReading(false);
+      return;
+    }
+    if (current !== selection.current) return;
+    setParsed(parse(text));
+    setReading(false);
   };
 
-  return { fileName, inputRef, parsed, reset, selectFile };
+  return { fileName, inputRef, parsed, readError, reading, reset, selectFile };
 }
 
-/** The consistent CSV picker; feature-owned parsers receive the selected File. */
+/**
+ * The consistent file picker (a CSV by default; `label` and `accept` name
+ * another kind, such as a product feed); feature-owned parsers receive the
+ * selected File.
+ */
 export function CsvImportFileInput({
   inputRef,
   onSelect,
+  label = 'CSV file',
+  accept = '.csv,text/csv',
 }: Readonly<{
-  inputRef: RefObject<HTMLInputElement | null>;
+  inputRef?: RefObject<HTMLInputElement | null>;
   onSelect: (file: File | undefined) => void;
+  label?: string;
+  accept?: string;
 }>) {
   return (
     <label className="grid gap-2">
-      <span className="type-label">CSV file</span>
+      <span className="type-label">{label}</span>
       <input
         ref={inputRef}
         type="file"
-        accept=".csv,text/csv"
-        aria-label="CSV file"
+        accept={accept}
+        aria-label={label}
         onChange={(event) => {
           const file = event.currentTarget.files?.[0];
           onSelect(file);
           event.currentTarget.value = '';
         }}
-        className="focus-ring border-line bg-surface-sunken text-ink file:bg-surface-sunken file:text-ink type-body type-control-file block w-full rounded-md border px-2 py-2 file:me-2 file:rounded-md file:border-0 file:px-2 file:py-1"
+        className="focus-ring border-line bg-surface shadow-edge text-ink file:bg-surface-sunken file:text-ink type-body type-control-file block w-full rounded-md border px-2 py-2 file:me-2 file:rounded-md file:border-0 file:px-2 file:py-1"
       />
     </label>
   );
@@ -109,7 +140,7 @@ export function CsvImportPreview({
     <div className="grid gap-2">
       <div className="type-body flex items-center gap-3">
         <span>
-          Parsed <strong className="text-ink">{rowCount}</strong> row
+          Parsed <span className="text-ink">{rowCount}</span> row
           {rowCount === 1 ? '' : 's'}
           {fileName ? ` from ${fileName}` : ''}.
         </span>

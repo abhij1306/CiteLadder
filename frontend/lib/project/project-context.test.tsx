@@ -42,6 +42,27 @@ function project(id: string, name: string, workspaceId = WORKSPACE_A) {
   });
 }
 
+/** What the list carries for a project: the switcher's fields, never its full view. */
+function summary({ id, name, brand_name, website_url }: ReturnType<typeof project>) {
+  return { id, name, brand_name, website_url, brand: { logo_url: null } };
+}
+
+/**
+ * The workspace's projects as the API serves them: summaries on the list, each
+ * full view on its own detail read, and 404 for any other id.
+ */
+function served(...projects: ReturnType<typeof project>[]) {
+  return [
+    http.get('/api/v1/projects', () => HttpResponse.json(projects.map(summary))),
+    http.get('/api/v1/projects/:id', ({ params }) => {
+      const match = projects.find((item) => item.id === params.id);
+      return match
+        ? HttpResponse.json(match)
+        : HttpResponse.json({ error: { message: 'Project not found' } }, { status: 404 });
+    }),
+  ];
+}
+
 /** The default membership answer: one workspace, which is the shipped shape. */
 function workspaceList(...ids: string[]) {
   return http.get('/api/v1/workspaces', () =>
@@ -108,11 +129,7 @@ afterAll(() => mswServer.close());
 
 describe('ProjectProvider', () => {
   it('auto-selects the first project and stamps the workspace header', async () => {
-    mswServer.use(
-      http.get('/api/v1/projects', () =>
-        HttpResponse.json([project(PROJECT_1, 'Acme'), project(PROJECT_2, 'Globex')]),
-      ),
-    );
+    mswServer.use(...served(project(PROJECT_1, 'Acme'), project(PROJECT_2, 'Globex')));
 
     renderProvider();
 
@@ -126,8 +143,9 @@ describe('ProjectProvider', () => {
     mswServer.use(
       http.get('/api/v1/projects', ({ request }) => {
         headers.push(request.headers.get('x-workspace-id'));
-        return HttpResponse.json([project(PROJECT_1, 'Acme')]);
+        return HttpResponse.json([summary(project(PROJECT_1, 'Acme'))]);
       }),
+      ...served(project(PROJECT_1, 'Acme')),
     );
 
     renderProvider();
@@ -197,13 +215,8 @@ describe('ProjectProvider', () => {
     expect(headers.every((header) => header === WORKSPACE_B)).toBe(true);
   });
 
-  it('opens a listed project from the list it read, and reads nothing for other screens', async () => {
-    mswServer.use(
-      http.get('/api/v1/projects', () =>
-        HttpResponse.json([project(PROJECT_1, 'Acme'), project(PROJECT_2, 'Globex')]),
-      ),
-      http.get('/api/v1/projects/:id', () => HttpResponse.json(project(PROJECT_2, 'Globex'))),
-    );
+  it('reads the view of each project it opens, and nothing for other screens', async () => {
+    mswServer.use(...served(project(PROJECT_1, 'Acme'), project(PROJECT_2, 'Globex')));
     const paths: string[] = [];
     const record = ({ request }: { request: Request }) => {
       paths.push(new URL(request.url).pathname);
@@ -231,15 +244,17 @@ describe('ProjectProvider', () => {
 
     await waitFor(() => expect(screen.getByTestId('active')).toHaveTextContent('Globex'));
     mswServer.events.removeListener('request:start', record);
-    expect(paths).toEqual(['/api/v1/workspaces', '/api/v1/projects']);
+    // The list carries summaries, so each opened project is one detail read.
+    expect(paths.sort()).toEqual([
+      '/api/v1/projects',
+      `/api/v1/projects/${PROJECT_1}`,
+      `/api/v1/projects/${PROJECT_2}`,
+      '/api/v1/workspaces',
+    ]);
   });
 
   it('changes the active project on selection and persists it', async () => {
-    mswServer.use(
-      http.get('/api/v1/projects', () =>
-        HttpResponse.json([project(PROJECT_1, 'Acme'), project(PROJECT_2, 'Globex')]),
-      ),
-    );
+    mswServer.use(...served(project(PROJECT_1, 'Acme'), project(PROJECT_2, 'Globex')));
 
     renderProvider();
     await waitFor(() => expect(screen.getByTestId('active')).toHaveTextContent('Acme'));
@@ -252,11 +267,7 @@ describe('ProjectProvider', () => {
 
   it('restores a persisted selection when it still exists', async () => {
     window.localStorage.setItem(ACTIVE_PROJECT_STORAGE_KEY, PROJECT_2);
-    mswServer.use(
-      http.get('/api/v1/projects', () =>
-        HttpResponse.json([project(PROJECT_1, 'Acme'), project(PROJECT_2, 'Globex')]),
-      ),
-    );
+    mswServer.use(...served(project(PROJECT_1, 'Acme'), project(PROJECT_2, 'Globex')));
 
     renderProvider();
 
@@ -331,9 +342,7 @@ describe('ProjectProvider', () => {
     // The bound on device storage: an id left behind by a deleted project must
     // not hold the context on a dead id forever.
     window.localStorage.setItem(ACTIVE_PROJECT_STORAGE_KEY, PROJECT_2);
-    mswServer.use(
-      http.get('/api/v1/projects', () => HttpResponse.json([project(PROJECT_1, 'Acme')])),
-    );
+    mswServer.use(...served(project(PROJECT_1, 'Acme')));
 
     renderProvider();
 
@@ -351,6 +360,24 @@ describe('ProjectProvider', () => {
 
     // The shared retry policy makes two further attempts with backoff before
     // the failure is final, so this waits past that rather than racing it.
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('error'), {
+      timeout: 10_000,
+    });
+  });
+
+  it('offers retry when the list fails even though a stored project’s view answers', async () => {
+    // Only the list says what the workspace holds; the remembered project's
+    // own view answering must not leave pickers waiting on a list that failed.
+    window.localStorage.setItem(ACTIVE_PROJECT_STORAGE_KEY, PROJECT_1);
+    mswServer.use(
+      http.get('/api/v1/projects', () =>
+        HttpResponse.json({ error: { message: 'unavailable' } }, { status: 503 }),
+      ),
+      ...served(project(PROJECT_1, 'Acme')),
+    );
+
+    renderProvider();
+
     await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('error'), {
       timeout: 10_000,
     });

@@ -27,7 +27,7 @@ export function updateOrder(
       .selectFrom(trx, 'projects')
       .select('id')
       .where('id', '=', scope.projectId)
-      .forUpdate()
+      .forNoKeyUpdate()
       .executeTakeFirst();
     if (!project) throw notFound('Project');
     const ids = update.orderedIds;

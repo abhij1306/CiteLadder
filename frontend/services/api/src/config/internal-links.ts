@@ -25,6 +25,8 @@ export const internalLinks = {
   max_links_per_target: 5,
   job_deadline_seconds: 900,
   interactive_deadline_seconds: 180,
+  /** Attempts an `internal_link_judgment` task gets before it fails. */
+  task_max_attempts: 2,
   outcome_batch: 50,
   publish_every: 200,
   history_limit: 20,

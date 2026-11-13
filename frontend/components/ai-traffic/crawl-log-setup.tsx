@@ -1,11 +1,10 @@
-'use client';
 import {
   collectionPointLabel,
   COLLECTION_POINTS,
   LOG_FORMATS,
   logFormatLabel,
 } from '@/lib/ai-traffic/vocabulary';
-import type { useCrawlConnections } from '@/lib/ai-traffic/use-crawl-connections';
+import type { UploadProcessing, useCrawlConnections } from '@/lib/ai-traffic/use-crawl-connections';
 import {
   CLOUDFRONT_LOG_FIELDS,
   CRAWL_LOG_SETUPS,
@@ -35,12 +34,20 @@ const SETUP_STEPS: Partial<Record<(typeof CRAWL_LOG_SETUPS)[number]['value'], st
   custom:
     'Map timestamp, host, path, method, status and user_agent to the documented JSON fields. Batch at least 60 seconds apart; send empty heartbeat batches when no crawler requests occur.',
 };
+const UPLOAD_PROCESSING_COPY: Record<UploadProcessing, string> = {
+  processing:
+    'Upload complete. Results appear here once processing finishes, usually within a few minutes.',
+  delayed:
+    'Upload complete. Processing is taking longer than usual; reload this page later to see the results.',
+  processed: 'Upload processed. Coverage for these days is declared by the file.',
+};
 export function CrawlLogSetup({
   model,
 }: Readonly<{ model: ReturnType<typeof useCrawlConnections> }>) {
   const { setup, setSetup, origin, setOrigin, setSampling, setFilter, setPoint, mutation } = model;
-  const chosen = CRAWL_LOG_SETUPS.find((s) => s.value === setup)!;
-  const steps = SETUP_STEPS[chosen.value];
+  // `setup` is typed to the options' values; the first option is the default.
+  const chosen = CRAWL_LOG_SETUPS.find((s) => s.value === setup) ?? CRAWL_LOG_SETUPS[0];
+  const steps = SETUP_STEPS[setup];
   const firehose = setup === 'aws_firehose';
   const gcp = setup === 'gcp_pubsub_pull';
   // Without a reader service account (local development) the pull connector cannot run.
@@ -54,7 +61,8 @@ export function CrawlLogSetup({
         ariaLabel="Collection method"
         value={setup}
         onValueChange={(value) => {
-          const next = CRAWL_LOG_SETUPS.find((s) => s.value === value)!;
+          const next = CRAWL_LOG_SETUPS.find((s) => s.value === value);
+          if (!next) return;
           setSetup(next.value);
           setPoint(next.collectionPoint);
           setSampling(next.value === 'cloudflare_worker' ? 'filtered' : 'none');
@@ -78,7 +86,7 @@ export function CrawlLogSetup({
           };
         })}
       />
-      <Stack className={panelClasses({ tone: 'well' })}>
+      <Stack className={panelClasses()}>
         {steps ? <p className="type-body text-ink-secondary">{steps}</p> : null}
         {firehose ? <FirehoseSteps interval={model.bufferInterval} /> : null}
         {gcp ? <GcpSteps /> : null}
@@ -91,7 +99,7 @@ export function CrawlLogSetup({
         </Field>
         {fields}
       </Stack>
-      {mutation.isError ? (
+      {mutation.isError && mutation.variables.kind === 'create' ? (
         <MutationNotice
           notice={mutationNoticeForError(mutation.error, { action: 'set up the crawl-log source' })}
         />
@@ -222,8 +230,6 @@ export function CrawlLogCredential({
   model,
 }: Readonly<{ model: ReturnType<typeof useCrawlConnections> }>) {
   const { issued, sources } = model;
-  const route = issued?.setup === 'aws_firehose' ? 'firehose' : 'ingest';
-  const endpoint = `${CRAWL_INGEST_ORIGIN}/v1/crawl-logs/${route}/${issued?.id ?? ''}`;
   const pullSource =
     issued?.setup === 'gcp_pubsub_pull'
       ? sources.data?.items.find((source) => source.id === issued.id)
@@ -237,7 +243,17 @@ export function CrawlLogCredential({
         workspaceId={model.workspaceId}
       />
     );
-  return issued ? (
+  return issued ? <IssuedToken issued={issued} /> : null;
+}
+/** A newly issued or rotated token with the endpoint its setup sends to. */
+export function IssuedToken({
+  issued,
+}: Readonly<{
+  issued: Readonly<{ id: string; token: string | null; setup?: string }>;
+}>) {
+  const route = issued.setup === 'aws_firehose' ? 'firehose' : 'ingest';
+  const endpoint = `${CRAWL_INGEST_ORIGIN}/v1/crawl-logs/${route}/${issued.id}`;
+  return (
     <Callout tone="info">
       <Stack>
         {issued.token ? (
@@ -250,7 +266,7 @@ export function CrawlLogCredential({
         ) : null}
       </Stack>
     </Callout>
-  ) : null;
+  );
 }
 /** The dialog's one committing action, held in its footer. */
 export function CrawlLogSetupSubmit({
@@ -337,10 +353,8 @@ function UploadForm({ model }: Readonly<{ model: ReturnType<typeof useCrawlConne
         </output>
       ) : null}
       {upload.isSuccess ? (
-        <Callout tone={processing ? 'info' : 'positive'}>
-          {processing
-            ? 'Upload complete. Results appear here once processing finishes, usually within a few minutes.'
-            : 'Upload processed. Coverage for these days is declared by the file.'}
+        <Callout tone={processing === 'processed' ? 'positive' : 'info'}>
+          {UPLOAD_PROCESSING_COPY[processing ?? 'processed']}
         </Callout>
       ) : null}
       {upload.isError ? (

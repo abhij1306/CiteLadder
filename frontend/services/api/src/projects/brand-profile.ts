@@ -279,6 +279,7 @@ export function updateBrandProfile(
     const brand = await trx
       .selectFrom('brands')
       .select('id')
+      .where('workspace_id', '=', scope.workspaceId)
       .where('project_id', '=', scope.projectId)
       .executeTakeFirst();
     if (brand === undefined) throw notFound('Brand profile');

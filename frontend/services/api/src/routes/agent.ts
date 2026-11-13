@@ -8,6 +8,7 @@ import {
   agentRequestSchemas,
   agentChatDetailSchema,
   agentChatsPageSchema,
+  agentChatCreatedSchema,
   agentTurnAcceptedSchema,
   agentRunSchema,
   agentRevisionsPageSchema,
@@ -15,15 +16,23 @@ import {
   agentSkillCatalogSchema,
   agentInstructionsSchema,
   agentTurnEventSchema,
+  agentSuggestionsPageSchema,
+  agentSuggestionResultSchema,
+  agentSuggestionsAppliedSchema,
+  agentSuggestionsDismissedSchema,
 } from '@citeladder/contracts/agent';
+import { listSuggestions } from '../page-documents/suggestion-views.ts';
 import { asApiErrorCode } from '@citeladder/contracts/error-codes';
 import { readBody } from '../http/body.ts';
+import { eventStreamResponse } from '../http/event-stream.ts';
 import { agentBindings } from '../agent/bindings.ts';
 import { runAgentOnce } from '../agent/worker.ts';
 import type { TurnEvents } from '../agent/stream.ts';
 import { agentPolicy, AgentError, budgetSchema, type Scope } from '../agent/contracts.ts';
 import { interactiveSlots } from '../http/interactive-slots.ts';
 import { workspaceChat } from '../agent/messages.ts';
+import { changeIdleChat } from '../agent/outputs.ts';
+import { chooseOutputTarget } from '../agent/target-adapter.ts';
 import { readChat, listChats, listRevisions, runView, revisionView } from '../agent/reads.ts';
 import { defineGetRoute, definePostRoute, definePutRoute, defineDeleteRoute } from './define.ts';
 
@@ -41,6 +50,34 @@ const revisionPath = {
   ...outputPath,
   revision_id: { scalar: { kind: 'uuid' }, required: true },
 } as const;
+const suggestionPath = {
+  ...outputPath,
+  suggestion_id: { scalar: { kind: 'uuid' }, required: true },
+} as const;
+type SuggestionChange = 'apply' | 'dismiss' | 'revert';
+/** `POST …/suggestions/{suggestion_id}/{change}` against the revision the person saw. */
+function suggestionRoute(change: SuggestionChange) {
+  return definePostRoute({
+    family,
+    path: `/api/v1/agent/chats/{chat_id}/outputs/{output_id}/suggestions/{suggestion_id}/${change}`,
+    capability: 'run',
+    params: { path: suggestionPath, query: {} },
+    body: body.suggestion,
+    response: agentSuggestionResultSchema,
+    async handle({ db, c }, { path }) {
+      const input = await readBody(c, body.suggestion),
+        value = await chatScope(db, c, path.chat_id),
+        { suggestions } = await agentBindings(db);
+      const target = {
+        chatId: path.chat_id,
+        outputId: path.output_id,
+        suggestionId: path.suggestion_id,
+        baseId: input.base_revision_id,
+      };
+      return mapped(() => suggestions[change](value, target));
+    },
+  });
+}
 const headers = z.object({
   'Idempotency-Key': z.string().max(agentPolicy.idempotency_key_max_chars).nullish(),
 });
@@ -65,28 +102,50 @@ async function chatScope(db: Database, c: Context<AppEnv>, id: string): Promise<
 function workspaceOf(c: Context<AppEnv>) {
   return { workspaceId: c.get('workspace').workspaceId };
 }
-async function mapped<T>(action: () => Promise<T>) {
+/** An Agent store call with its refusals as HTTP errors; Analyze a page shares it. */
+export async function mapped<T>(action: () => Promise<T>) {
   try {
     return await action();
   } catch (error) {
     if (!(error instanceof AgentError)) throw error;
-    if (error.code === 'model_unavailable')
-      throw new ApiError(503, 'The Agent model is not configured', {
-        code: asApiErrorCode('agent_model_unavailable'),
-      });
-    if (error.code === 'model_changed')
-      throw new ApiError(409, 'The Agent model changed', {
-        code: asApiErrorCode('model_changed'),
-      });
-    if (error.code === 'access_revoked')
-      throw new ApiError(403, 'Agent run permission is unavailable');
-    if (error.code === 'agent_context_unavailable') throw notFound('Agent context');
-    if (error.code === 'agent_workflow_unavailable') throw notFound('Agent workflow');
-    throw new ApiError(409, 'Agent request conflicts with the current state', {
-      code: asApiErrorCode(conflictCode(error.code)),
-    });
+    throw agentHttpError(error.code);
   }
 }
+/** The HTTP error an Agent refusal answers with. */
+function agentHttpError(code: string) {
+  if (code === 'model_unavailable')
+    return new ApiError(503, 'The Agent model is not configured', {
+      code: asApiErrorCode('agent_model_unavailable'),
+    });
+  if (code === 'model_changed')
+    return new ApiError(409, 'The Agent model changed', {
+      code: asApiErrorCode('model_changed'),
+    });
+  if (code === 'access_revoked' || code === 'capability_unavailable')
+    return new ApiError(403, 'Agent run permission is unavailable');
+  if (code === 'agent_context_unavailable') return notFound('Agent context');
+  if (code === 'agent_workflow_unavailable') return notFound('Agent workflow');
+  if (code === 'agent_page_unavailable')
+    return new ApiError(422, 'Choose one of the content pages in your latest crawl', {
+      code: asApiErrorCode('validation_error'),
+    });
+  const suggestion = SUGGESTION_CONFLICTS[code];
+  if (suggestion)
+    return new ApiError(409, suggestion, { code: asApiErrorCode('agent_suggestion_conflict') });
+  return new ApiError(409, 'Agent request conflicts with the current state', {
+    code: asApiErrorCode(conflictCode(code)),
+  });
+}
+/** Why a suggestion change was refused, in words the person can act on. */
+const SUGGESTION_CONFLICTS: Readonly<Record<string, string>> = {
+  suggestion_not_open: 'This suggestion is no longer open.',
+  suggestion_not_ready:
+    'This suggestion has no text to apply: it needs a fact from you or is advice only.',
+  suggestion_not_revertible: 'Only an applied or dismissed suggestion can be reverted.',
+  suggestion_revert_refused:
+    'The text this suggestion changed was edited after it was applied, so reverting it would undo that edit.',
+  suggestion_too_long: 'Applying it would make the page longer than a document can be.',
+};
 function conflictCode(code: string) {
   if (code === 'output_conflict') return 'agent_output_conflict';
   if (code === 'agent_skill_unknown') return 'validation_error';
@@ -195,16 +254,7 @@ export const agentRoutes = [
         await execute();
         return c.json(await finished());
       }
-      return new Response(
-        turnStream(execute, finished, () => gone.abort()),
-        {
-          headers: {
-            'content-type': 'text/event-stream',
-            'cache-control': 'no-cache',
-            'x-accel-buffering': 'no',
-          },
-        },
-      );
+      return eventStreamResponse(turnStream(execute, finished, () => gone.abort()));
     },
   }),
   defineGetRoute({
@@ -283,13 +333,14 @@ export const agentRoutes = [
     params: { path: projectPath, query: {} },
     headers,
     body: body.create,
-    response: agentTurnAcceptedSchema,
+    response: agentChatCreatedSchema,
     status: 202,
     async handle({ db, c }, { path }) {
       const input = await readBody(c, body.create),
         { store } = await agentBindings(db);
-      const run = await mapped(() =>
-        store.enqueue(scope(c, path.project_id), {
+      // A page workflow answers with its chat and no turn until the page is read.
+      const created = await mapped(() =>
+        store.create(scope(c, path.project_id), {
           message: input.message,
           skillId: input.skill_id,
           workflowId: input.workflow_id ?? undefined,
@@ -305,7 +356,7 @@ export const agentRoutes = [
           key: key(c),
         }),
       );
-      return { chat_id: run.chat_id, run: runView(run) };
+      return { chat_id: created.chatId, run: created.run ? runView(created.run) : null };
     },
   }),
   defineGetRoute({
@@ -420,6 +471,76 @@ export const agentRoutes = [
         { outputs } = await agentBindings(db);
       return revisionView(
         await mapped(() => outputs.restore(value, path.chat_id, path.output_id, path.revision_id)),
+      );
+    },
+  }),
+  definePostRoute({
+    family,
+    path: '/api/v1/agent/chats/{chat_id}/outputs/{output_id}/target',
+    capability: 'run',
+    params: { path: outputPath, query: {} },
+    body: body.target,
+    response: agentChatDetailSchema,
+    async handle({ db, c }, { path }) {
+      const input = await readBody(c, body.target),
+        value = await chatScope(db, c, path.chat_id);
+      await mapped(() =>
+        changeIdleChat(db, value, path.chat_id, (trx, chat) =>
+          chooseOutputTarget(trx, value, chat, path.output_id, input.decision),
+        ),
+      );
+      return readChat(db, workspaceOf(c), path.chat_id);
+    },
+  }),
+  defineGetRoute({
+    family,
+    path: '/api/v1/agent/chats/{chat_id}/outputs/{output_id}/suggestions',
+    params: { path: outputPath, query: {} },
+    response: agentSuggestionsPageSchema,
+    async handle({ db, c }, { path }) {
+      return listSuggestions(db, workspaceOf(c), path.chat_id, path.output_id);
+    },
+  }),
+  suggestionRoute('apply'),
+  suggestionRoute('dismiss'),
+  suggestionRoute('revert'),
+  definePostRoute({
+    family,
+    path: '/api/v1/agent/chats/{chat_id}/outputs/{output_id}/suggestions/apply-all',
+    capability: 'run',
+    params: { path: outputPath, query: {} },
+    body: body.suggestion,
+    response: agentSuggestionsAppliedSchema,
+    async handle({ db, c }, { path }) {
+      const input = await readBody(c, body.suggestion),
+        value = await chatScope(db, c, path.chat_id),
+        { suggestions } = await agentBindings(db);
+      return mapped(() =>
+        suggestions.applyAll(value, {
+          chatId: path.chat_id,
+          outputId: path.output_id,
+          baseId: input.base_revision_id,
+        }),
+      );
+    },
+  }),
+  definePostRoute({
+    family,
+    path: '/api/v1/agent/chats/{chat_id}/outputs/{output_id}/suggestions/dismiss-all',
+    capability: 'run',
+    params: { path: outputPath, query: {} },
+    body: body.suggestion,
+    response: agentSuggestionsDismissedSchema,
+    async handle({ db, c }, { path }) {
+      const input = await readBody(c, body.suggestion),
+        value = await chatScope(db, c, path.chat_id),
+        { suggestions } = await agentBindings(db);
+      return mapped(() =>
+        suggestions.dismissAll(value, {
+          chatId: path.chat_id,
+          outputId: path.output_id,
+          baseId: input.base_revision_id,
+        }),
       );
     },
   }),

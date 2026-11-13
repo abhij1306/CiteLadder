@@ -1,5 +1,6 @@
 import { ApiError } from '@/lib/api/errors';
 import { mutationNoticeForError, type MutationNotice } from '@/lib/api/mutation-notice';
+import { SUGGESTION_CONFLICT_COPY } from '@/lib/agent/vocabulary';
 
 /** A refused Agent write as the shared failure notice, and whether a new chat helps. */
 export type AgentWriteFailure = MutationNotice & { startNewChat: boolean };
@@ -35,6 +36,9 @@ const CODED: {
 
 function agentCopy(error: unknown): AgentCopy | undefined {
   if (!(error instanceof ApiError)) return undefined;
+  // The server says why it refused this suggestion change; its words are the copy.
+  if (error.code === 'agent_suggestion_conflict')
+    return { message: error.message.trim() || SUGGESTION_CONFLICT_COPY, startNewChat: false };
   const coded = error.code ? CODED[error.code] : undefined;
   if (coded) return coded;
   if (error.status === 429)
@@ -43,6 +47,11 @@ function agentCopy(error: unknown): AgentCopy | undefined {
       startNewChat: false,
     };
   return undefined;
+}
+
+/** Whether a refused write means the page document moved on since it was read. */
+export function isOutputConflict(error: unknown): boolean {
+  return error instanceof ApiError && error.code === 'agent_output_conflict';
 }
 
 /**

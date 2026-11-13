@@ -69,19 +69,12 @@ export function OpportunityEvidenceSection({ detail }: Readonly<{ detail: Opport
     <Stack as="section">
       <Label>Evidence</Label>
       {promptText ? (
-        <blockquote className={panelClasses({ tone: 'well' })}>
+        <blockquote className={panelClasses()}>
           <p className="type-body text-ink">“{promptText}”</p>
         </blockquote>
       ) : null}
       {url ? (
-        <p
-          className={panelClasses(
-            { tone: 'tonal' },
-            'type-caption text-ink break-all tabular-nums',
-          )}
-        >
-          {url}
-        </p>
+        <p className={panelClasses('type-caption text-ink break-all tabular-nums')}>{url}</p>
       ) : null}
       {theme ? <OpportunityKvRow label="Topic" value={theme} /> : null}
       {competitors.length > 0 ? (

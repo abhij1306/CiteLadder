@@ -10,7 +10,9 @@ import { parseUuid } from '../http/uuid.ts';
 import { readProjectReadiness } from '../integrations/readiness.ts';
 import { getAction, listActions } from '../opportunities/actions.ts';
 import { listDifferentiationReports } from '../source-pages/differentiation-reads.ts';
-import { catalog, shelf } from '../commerce/reads.ts';
+import { productDetail } from '../commerce/product-detail.ts';
+import { productMetrics } from '../commerce/products.ts';
+import { catalog } from '../commerce/reads.ts';
 import { readiness, datasetPage } from '../search-intelligence/reads.ts';
 import { mcpPolicy } from './config.ts';
 import { appLink } from './links.ts';
@@ -91,33 +93,47 @@ export async function differentiationRead({ db, scope }: ProjectRead): Promise<E
   return { state: 'available', items };
 }
 
-/** Without a target, the catalog to choose from; with one, its persisted shelf. */
+/**
+ * The Products table's per-product metrics, or one product's page, from the
+ * same reads the app renders; no catalog and no catalog-selling business is
+ * unavailable, not an empty shelf.
+ */
 export async function shelfRead(
   { db, scope }: ProjectRead,
-  args: { target_kind?: 'category' | 'product' | null; target_id?: string | null },
+  args: Page & {
+    holder_id?: string | null;
+    source?: 'catalog' | 'all' | null;
+    category_id?: string | null;
+    window_days?: number | null;
+  },
 ): Promise<Evidence> {
-  if (args.target_kind && args.target_id)
-    return {
-      state: 'available',
-      ...(await shelf(db, scope, { kind: args.target_kind, id: args.target_id })),
-    };
-  if (args.target_kind || args.target_id)
-    throw new McpInputError('target_kind and target_id are given together');
-  const { products, product_total, categories, projection } = await catalog(db, scope);
+  const windowDays = args.window_days ?? policy.commerce.products.default_window_days;
+  if (!policy.commerce.products.window_days.includes(windowDays))
+    throw new McpInputError(
+      `window_days is one of ${policy.commerce.products.window_days.join(', ')}`,
+    );
+  const executions = { windowDays, engine: null, promptSet: null };
+  if (args.holder_id)
+    return { state: 'available', ...(await productDetail(db, scope, args.holder_id, executions)) };
+  const { product_total, categories, projection } = await catalog(db, scope);
   if (projection.applicability !== 'applicable' && !product_total)
     return unavailable('no_product_catalog');
-  const shown = products.slice(0, mcpPolicy.max_list_limit);
+  const products = await productMetrics(db, scope, {
+    ...executions,
+    source: args.source ?? 'catalog',
+    category: args.category_id ?? null,
+    q: null,
+    sort: 'visibility',
+    cursor: args.cursor ?? null,
+    limit: args.limit ?? policy.commerce.products.page_size,
+  });
   return {
     state: 'available',
     categories: categories.map(({ id, name, product_count }) => ({ id, name, product_count })),
-    products: shown.map(({ id, name, brand, canonical_url, category_ids }) => ({
-      id,
-      name,
-      brand,
-      url: canonical_url,
-      category_ids,
-    })),
-    products_omitted: product_total - shown.length,
+    window_days: products.window_days,
+    executions: products.executions,
+    products: products.items,
+    pagination: pagination(products.items, products.next_cursor, products.total),
   };
 }
 

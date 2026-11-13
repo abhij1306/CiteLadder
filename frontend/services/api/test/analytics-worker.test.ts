@@ -219,7 +219,8 @@ describe('referral chain', () => {
     ]);
     const [refresh] = await tasks('ai_referrals_snapshot_refresh');
     expect(refresh?.status).toBe('succeeded');
-    expect(refresh?.idempotency_key.endsWith(`:${seed.syncRunId}`)).toBe(true);
+    // The refresh rebuilds this import's revision.
+    expect(refresh?.payload).toMatchObject({ source_revision: seed.syncRunId });
 
     const snapshot = await db
       .selectFrom('ai_referrals_snapshots')
@@ -650,8 +651,10 @@ describe('analytics kind registry', () => {
         'bot_ip_range_refresh',
         'bot_request_retention_sweep',
         'classify_referrals',
+        'commerce_answer_matching',
         'commerce_catalog_projection',
         'commerce_competitor_discovery',
+        'content_angle_refresh',
         'crawl_log_pull',
         'crawl_log_rollup_refresh',
         'crawl_log_upload_abandon_sweep',
@@ -662,6 +665,7 @@ describe('analytics kind registry', () => {
         'internal_link_publish',
         'opportunity_refresh',
         'opportunity_verification',
+        'page_fetch',
         'performance_range_projection',
         'referral_retention_sweep',
         'search_intelligence_acquisition',

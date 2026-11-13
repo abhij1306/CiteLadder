@@ -5,19 +5,24 @@ import userEvent from '@testing-library/user-event';
 
 import { makeProject } from '@/test/fixtures/project';
 import { mswServer } from '@/test/msw-server';
-import { renderWithProviders as raw } from '@/test/render';
+import { renderWithProviders as raw, selectionAs, type TestRole } from '@/test/render';
 import type { ReactElement } from 'react';
 import { useLocation } from 'react-router-dom';
 import type { PageDetail } from '@citeladder/contracts';
 
+import { parseAgentHandoff } from '@/lib/agent/handoff';
 import { UrlDetail } from './url-detail';
+import {
+  CRAWL,
+  GROUP_H,
+  ISSUE_H,
+  ISSUE_L,
+  URL_ID,
+  pageDetail as detail,
+} from './url-detail.test-support';
 
-const CRAWL = '44444444-4444-4444-8444-444444444444';
 const NEW_CRAWL = '55555555-5555-4555-8555-555555555555';
 const TASK_ID = '66666666-6666-4666-8666-666666666666';
-const URL_ID = 'cccccccc-1111-4111-8111-111111111111';
-const ISSUE_H = 'aaaaaaaa-1111-4111-8111-111111111111';
-const ISSUE_L = 'bbbbbbbb-1111-4111-8111-111111111111';
 
 /** A resolved issue as the page's issue history lists it. */
 function resolvedIssue(id: string, title: string) {
@@ -50,6 +55,16 @@ async function openHistory(history: HttpResponseResolver) {
   return { user, drawer: await screen.findByRole('dialog', { name: 'Issue history' }) };
 }
 
+/** The "All issues" card, found by its heading. */
+function allIssues(heading: string): HTMLElement {
+  return screen.getByRole('heading', { name: heading }).closest('section')!;
+}
+
+/** The new chat a link would start, as the Agent reads it. */
+function handoffOf(link: HTMLElement) {
+  return parseAgentHandoff(new URL(link.getAttribute('href')!, 'http://x').searchParams);
+}
+
 function LocationDisplay() {
   const { pathname, search } = useLocation();
   return <output data-testid="location">{pathname + search}</output>;
@@ -58,6 +73,7 @@ function LocationDisplay() {
 function renderUrlDetail(
   ui: ReactElement,
   initialLocation = `/site/crawls/${CRAWL}/pages/${URL_ID}`,
+  role: TestRole = 'owner',
 ) {
   window.history.replaceState(null, '', initialLocation);
   return raw(
@@ -65,166 +81,8 @@ function renderUrlDetail(
       {ui}
       <LocationDisplay />
     </>,
-    { projectSelection: { activeProject: makeProject() } },
+    { projectSelection: { ...selectionAs(role), activeProject: makeProject() } },
   );
-}
-
-function detail(overrides: Partial<PageDetail> = {}): PageDetail {
-  return {
-    site_url_id: URL_ID,
-    crawl_id: CRAWL,
-    normalized_url: 'https://acme.com/',
-    display_url: 'https://acme.com/',
-    title: 'Acme Retail Online',
-    analysis_status: 'completed',
-    error_code: '',
-    linked_from: [],
-    field_cwv_available: false,
-    web_fundamentals_score: 46,
-    web_fundamentals_coverage: 1,
-    web_fundamentals_state: 'measured',
-    aeo_readiness_score: 64,
-    aeo_measurement_coverage: 0.8,
-    aeo_measurement_state: 'measured',
-    aeo_measurement_reason: '',
-    main_content_indexable: true,
-    issue_count: 2,
-    last_audited: '2026-07-16T00:00:00Z',
-    page_kind: 'product',
-    // A product page that also carries an FAQ: exactly the hybrid a single
-    // exclusive page_kind could not express.
-    page_traits: ['has_faq', 'has_variants'],
-    // Persisted classifier evidence (v2 P1) — a schema-conflict scenario:
-    // the path pattern chose Product while the markup declares Article.
-    page_kind_evidence: {
-      classifier_version: 'sh-classifier-1',
-      classified_by: 'path_pattern',
-      schema_suggested_type: 'article',
-      confidence: 'medium',
-      tier: 'route',
-      signals: [
-        {
-          signal: 'path_pattern',
-          page_kind: 'product',
-          tier: 'route',
-          detail: '^/(products?|p|shop)(/|$)',
-        },
-        {
-          signal: 'structured_data',
-          page_kind: 'article',
-          tier: 'semantic',
-          detail: 'Article',
-        },
-      ],
-    },
-    facts: {
-      title: 'Acme Retail Online',
-      meta_description: null,
-      canonical_url: null,
-      robots_directives: [],
-      h1_count: 1,
-      heading_count: 4,
-      image_count: 3,
-      image_missing_alt_count: 0,
-      word_count: 500,
-      internal_link_count: 10,
-      external_link_count: 2,
-      structured_data_types: [],
-    },
-    delivery: {
-      field_cwv_available: false,
-      status_code: 200,
-      ttfb_ms: 840,
-      wire_bytes: 40000,
-      decoded_bytes: 145408,
-      html_bytes: 145408,
-      http_version: 'HTTP/2',
-      compression: 'gzip',
-      cache_control: 'no-cache',
-      blocking_resource_count: 0,
-    },
-    internal_links: {
-      inbound_count: 12,
-      outbound_count: 30,
-      main_content_inbound_count: 4,
-      main_content_outbound_count: 9,
-      nofollow_inbound_count: 1,
-      depth_from_home: 2,
-      source_page_count: 7,
-      authority_share: 0.1275,
-      authority_rank: 3,
-      authority_scope: 'observed_crawl',
-      observed_crawl_incomplete: false,
-      anchor_diagnostics: [],
-      top_inbound: [
-        {
-          site_url_id: 'dddddddd-1111-4111-8111-111111111111',
-          url: 'https://acme.com/collections/bags',
-          anchor_count: 3,
-          main_content: true,
-          nofollow: false,
-          rel: [],
-        },
-      ],
-      top_outbound: [],
-      formula_version: 'sh-link-metrics-1',
-    },
-    issues: [
-      {
-        occurrence_id: ISSUE_L,
-        evaluation_id: 'eeeeeeee-1111-4111-8111-111111111111',
-        crawl_id: CRAWL,
-        rule_id: 'aeo.faq',
-        site_url_id: URL_ID,
-        normalized_url: 'https://acme.com/',
-        display_url: 'https://acme.com/',
-        title: 'Acme Retail Online',
-        page_kind: 'article',
-        dimension: 'aeo',
-        category: 'schema',
-        severity: 'low',
-        finding_class: 'defect',
-        issue_title: 'FAQ schema not present',
-        description: 'FAQ structured data is not present.',
-        remediation: '',
-        reason_code: 'expected_schema_absent',
-        evidence: { expected_types: ['FAQPage'], found_types: [] },
-        analyzer_version: 'a1',
-        rule_version: 'r1',
-        created_at: '2026-07-16T00:00:00Z',
-      },
-      {
-        occurrence_id: ISSUE_H,
-        evaluation_id: 'eeeeeeee-2222-4111-8111-111111111111',
-        crawl_id: CRAWL,
-        rule_id: 'aeo.website_schema',
-        site_url_id: URL_ID,
-        normalized_url: 'https://acme.com/',
-        display_url: 'https://acme.com/',
-        title: 'Acme Retail Online',
-        page_kind: 'homepage',
-        dimension: 'aeo',
-        category: 'schema',
-        severity: 'high',
-        finding_class: 'defect',
-        issue_title: 'WebSite schema is missing',
-        description: 'WebSite structured data is not present.',
-        remediation: '',
-        reason_code: 'expected_schema_absent',
-        evidence: { expected_types: ['WebSite'], found_types: ['Organization'] },
-        analyzer_version: 'a1',
-        rule_version: 'r1',
-        created_at: '2026-07-16T00:00:00Z',
-      },
-    ],
-    evaluations: [],
-    artifact_id: null,
-    extractor_version: 'e1',
-    analyzer_version: 'a1',
-    rule_version: 'r1',
-    scoring_version: 's1',
-    ...overrides,
-  };
 }
 
 beforeAll(() => mswServer.listen({ onUnhandledFrame: 'error' }));
@@ -353,13 +211,52 @@ describe('UrlDetail', () => {
     expect(screen.getByText('200')).toBeInTheDocument();
 
     // High-severity issue is ordered before the low-severity one.
-    const high = screen.getByText('WebSite schema is missing');
-    const low = screen.getByText('FAQ schema not present');
+    const list = allIssues('All issues (2)');
+    const high = within(list).getByText('WebSite schema is missing');
+    const low = within(list).getByText('FAQ schema not present');
     expect(high.compareDocumentPosition(low) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(
       screen.getByText('expected types WebSite, found types Organization'),
     ).toBeInTheDocument();
     expect(screen.queryByText('Observed evidence')).not.toBeInTheDocument();
+  });
+
+  it('offers re-audits only to a role that may run one', async () => {
+    mswServer.use(...handlers(detail()));
+    const { unmount } = renderUrlDetail(<UrlDetail crawlId={CRAWL} siteUrlId={URL_ID} />);
+    expect(await screen.findByRole('button', { name: 'Re-audit this page' })).toBeVisible();
+    expect(screen.getAllByRole('button', { name: 'Re-audit to verify' })).not.toHaveLength(0);
+    unmount();
+
+    renderUrlDetail(<UrlDetail crawlId={CRAWL} siteUrlId={URL_ID} />, undefined, 'viewer');
+    expect(
+      await screen.findByRole('heading', { name: 'Acme Retail Online', level: 1 }),
+    ).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Re-audit this page' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Re-audit to verify' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'History' })).toBeVisible();
+  });
+
+  it('opens as a page detail with a way back to Pages before its title', async () => {
+    mswServer.use(...handlers(detail()));
+    renderUrlDetail(<UrlDetail crawlId={CRAWL} siteUrlId={URL_ID} />);
+
+    const title = await screen.findByRole('heading', { name: 'Acme Retail Online', level: 1 });
+    const back = screen.getByRole('link', { name: 'Back to Pages' });
+    expect(back.getAttribute('href')).toMatch(/^\/site\?tab=pages/);
+    expect(back.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('says an unknown compression is not measured rather than "none"', async () => {
+    const known = detail().delivery;
+    mswServer.use(...handlers(detail({ delivery: { ...known, compression: null } })));
+    renderUrlDetail(<UrlDetail crawlId={CRAWL} siteUrlId={URL_ID} />);
+
+    await screen.findByRole('heading', { name: 'Acme Retail Online', level: 1 });
+    const compression = screen.getByText('Compression').closest('div');
+    expect(compression).toHaveTextContent('Not measured');
+    expect(compression).not.toHaveTextContent('none');
+    expect(screen.getByText('Response size').closest('div')).toHaveTextContent('142 KB');
   });
 
   it('renders a persisted unresolved-purpose state simply as not measured', async () => {
@@ -422,7 +319,7 @@ describe('UrlDetail', () => {
       );
       renderUrlDetail(<UrlDetail crawlId={CRAWL} siteUrlId={URL_ID} />);
       await screen.findByRole('heading', { name: 'Acme Retail Online', level: 1 });
-      const unsupported = screen.queryAllByText(/Unsupported purpose checklist/);
+      const unsupported = screen.queryAllByText('No AEO checklist for this page kind');
       expect(unsupported).toHaveLength(reason === 'unsupported_purpose_checklist' ? 2 : 0);
     },
   );
@@ -445,8 +342,11 @@ describe('UrlDetail', () => {
 
     await screen.findByRole('heading', { name: 'Acme Retail Online', level: 1 });
     const rings = ['Web Fundamentals score: 46', 'AEO Readiness score: 64'];
-    for (const ring of [...rings, 'AEO Checklist Completion: 75'])
+    for (const ring of rings)
       expect(screen.getByRole('img', { name: `${ring} out of 100` })).toBeInTheDocument();
+    // Completion is a share of the checklist, not a quality score: a plain figure, no ring.
+    expect(screen.getByText('75%')).toBeInTheDocument();
+    expect(screen.queryByRole('img', { name: /AEO checklist completion/ })).toBeNull();
   });
 
   it('preserves the AEO state when measurement coverage is unavailable', async () => {
@@ -523,49 +423,15 @@ describe('UrlDetail', () => {
     expect(screen.getByText('39.1 KB')).toBeInTheDocument();
   });
 
-  it('same-active-crawl rerun: polls in place through completed → pending → running → completed without navigating', async () => {
-    // The rerun response points at the SAME crawl/URL (created_new_crawl
-    // false), so the component must poll in place — never navigate.
-    //
-    // Sequence of `analysis_status` snapshots the GET handler serves on
-    // each successive request. The first GET (initial render) sees
-    // 'completed'. The rerun POST enqueues a fresh task, after which the
-    // *next* GETs must walk through 'pending' then 'running' before
-    // landing on a new 'completed' — proving polling doesn't stop on the
-    // stale cached terminal status right after the mutation resolves.
-    const statuses: PageDetail['analysis_status'][] = [
-      'completed',
-      'pending',
-      'running',
-      'completed',
-    ];
-    let getCallCount = 0;
-
+  it('tells the person to wait when a crawl is running, and stays on the page', async () => {
     mswServer.use(
-      http.get(`/api/v1/site-crawls/${CRAWL}/pages/${URL_ID}`, async () => {
-        const status = statuses[Math.min(getCallCount, statuses.length - 1)];
-        getCallCount += 1;
-        // Small artificial network delay so the mutation's own
-        // `invalidateQueries` refetch (triggered inside `onSuccess`) does
-        // not resolve synchronously before the next render — this
-        // reproduces the real race where React re-renders with
-        // `rerunPolling` newly `true` while the query cache still holds
-        // the *previous* terminal snapshot.
-        await new Promise((resolve) => {
-          setTimeout(resolve, 15);
-        });
-        return HttpResponse.json(detail({ analysis_status: status }));
-      }),
+      ...handlers(detail({ analysis_status: 'completed' })),
       http.post(`/api/v1/site-crawls/${CRAWL}/pages/${URL_ID}/rerun`, () =>
         HttpResponse.json(
           {
-            crawl_id: CRAWL,
-            site_url_id: URL_ID,
-            task_id: TASK_ID,
-            created_new_crawl: false,
-            analysis_status: 'pending',
+            error: { code: 'crawl_already_active', message: 'Project already has an active crawl' },
           },
-          { status: 202 },
+          { status: 409 },
         ),
       ),
     );
@@ -573,44 +439,17 @@ describe('UrlDetail', () => {
     const user = userEvent.setup();
     renderUrlDetail(<UrlDetail crawlId={CRAWL} siteUrlId={URL_ID} />);
 
-    // Initial fetch observes the prior run's terminal 'completed' snapshot.
     await screen.findByRole('heading', { name: 'Acme Retail Online', level: 1 });
-    expect(screen.getByRole('button', { name: 'Re-audit this page' })).toBeInTheDocument();
-    // A completed analysis carries no status badge; only an unfinished one does.
-    expect(screen.queryByText('Completed')).not.toBeInTheDocument();
-
     await user.click(screen.getByRole('button', { name: 'Re-audit this page' }));
 
-    // The status badge must actually be observed to reach 'Running' at
-    // some point (not just eventually land back on 'Completed', which the
-    // stale pre-rerun cache would already show without ever polling
-    // further).
-    await waitFor(() => expect(screen.getByText('Running')).toBeInTheDocument(), {
-      timeout: 15_000,
-    });
-
-    // Polling continues past 'running' until the freshly-enqueued task
-    // reaches its own terminal 'completed' snapshot.
-    await waitFor(() => expect(screen.queryByText('Running')).not.toBeInTheDocument(), {
-      timeout: 15_000,
-    });
-
-    await waitFor(() => expect(getCallCount).toBeGreaterThanOrEqual(statuses.length), {
-      timeout: 15_000,
-    });
-
-    await waitFor(
-      () => expect(screen.getByRole('button', { name: 'Re-audit queued' })).toBeInTheDocument(),
-      { timeout: 15_000 },
-    );
-
-    // A same-crawl rerun never navigates.
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('A crawl is running. Re-audit this page when it finishes.');
     expect(screen.getByTestId('location')).toHaveTextContent(
       `/site/crawls/${CRAWL}/pages/${URL_ID}`,
     );
-  }, 20_000);
+  });
 
-  it('created_new_crawl rerun: navigates to the fresh crawl identity detail route with ?rerun=1', async () => {
+  it('a rerun navigates to its own one-page crawl identity detail route with ?rerun=1', async () => {
     mswServer.use(
       ...handlers(detail({ analysis_status: 'completed' })),
       http.post(`/api/v1/site-crawls/${CRAWL}/pages/${URL_ID}/rerun`, () =>
@@ -619,7 +458,6 @@ describe('UrlDetail', () => {
             crawl_id: NEW_CRAWL,
             site_url_id: URL_ID,
             task_id: TASK_ID,
-            created_new_crawl: true,
             analysis_status: 'pending',
           },
           { status: 202 },
@@ -661,7 +499,7 @@ describe('UrlDetail', () => {
     // find the alert and assert on its text.
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent(
-      'This page is not in your monitored set — add it before re-auditing.',
+      'This page is not in your monitored set, so it can’t be re-audited.',
     );
   });
 
@@ -727,7 +565,7 @@ describe('UrlDetail', () => {
     expect(screen.getByText('Internal links not measured for this page.')).toBeVisible();
   });
 
-  it('leads with what to fix: defects worst first with their fix, advisories apart', async () => {
+  it('lists every issue worst first, each card with its fix, and advisories apart', async () => {
     const [low, high] = detail().issues;
     mswServer.use(
       ...handlers(
@@ -751,28 +589,88 @@ describe('UrlDetail', () => {
 
     renderUrlDetail(<UrlDetail crawlId={CRAWL} siteUrlId={URL_ID} />);
 
-    const heading = await screen.findByRole('heading', { name: 'Issues on this page (2)' });
-    const order = [
-      'WebSite schema is missing',
-      'FAQ schema not present',
-      'Missing meta description',
-    ].map((title) => screen.getByText(title));
-    for (const [earlier, later] of [
-      [order[0]!, order[1]!],
-      [order[1]!, order[2]!],
-    ] as const)
-      expect(earlier.compareDocumentPosition(later) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
-        Node.DOCUMENT_POSITION_FOLLOWING,
-      );
-    expect(screen.getByText('Add FAQPage markup to the questions.')).toBeInTheDocument();
+    await screen.findByRole('heading', { name: 'All issues (2)' });
+    const list = allIssues('All issues (2)');
+    expect(
+      within(list)
+        .getAllByRole('button')
+        .map((row) => row.textContent),
+    ).toEqual(['1WebSite schema is missingHighAEO', '2FAQ schema not presentLowAEO']);
+    // Each issue's card carries its fix and the scores it holds down.
+    const faq = screen.getByRole('region', { name: 'FAQ schema not present' });
+    expect(within(faq).getByText('Add FAQPage markup to the questions.')).toBeInTheDocument();
+    expect(within(faq).getByText('2/2')).toBeInTheDocument();
+    const website = screen.getByRole('region', { name: 'WebSite schema is missing' });
+    expect(
+      within(website)
+        .getAllByText(/^(AEO Readiness|Web Fundamentals)$/)
+        .map((badge) => badge.textContent),
+    ).toEqual(['AEO Readiness', 'Web Fundamentals']);
     expect(screen.getByText('Advisories (1)')).toBeInTheDocument();
     // The advisory is labelled as one, never with a severity.
     const advisory = screen.getByText('Missing meta description').closest('li')!;
     expect(within(advisory).getByText('Advisory')).toBeInTheDocument();
     expect(within(advisory).queryByText('Medium')).not.toBeInTheDocument();
-    // The scores come after the fixes.
+    // The page's scores lead, above its issues.
     const score = screen.getByRole('img', { name: 'Web Fundamentals score: 46 out of 100' });
-    expect(heading.compareDocumentPosition(score) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(score.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('hands the agent the page, or one issue on it, by id and never by evidence', async () => {
+    mswServer.use(...handlers(detail()));
+    renderUrlDetail(<UrlDetail crawlId={CRAWL} siteUrlId={URL_ID} />);
+    await screen.findByRole('heading', { name: 'Acme Retail Online', level: 1 });
+
+    const page = handoffOf(screen.getByRole('link', { name: 'Ask agent about this page' }));
+    expect(page.context).toEqual({ target_site_url_id: URL_ID, target_url: 'https://acme.com/' });
+    expect(page.prompt).toBe(
+      'Review the 2 Site Health issues on https://acme.com/, worst first, and propose exact page edits for each.',
+    );
+    const card = screen.getByRole('region', { name: 'WebSite schema is missing' });
+    const issue = handoffOf(within(card).getByRole('link', { name: 'Ask agent' }));
+    expect(issue.context).toEqual({
+      issue_group_reference: { crawl_id: CRAWL, group_id: GROUP_H, site_url_id: URL_ID },
+    });
+    expect(issue.skillId).toBe('technical_health');
+  });
+
+  it('asks the agent why a page’s audit did not finish, rather than how ready the page is', async () => {
+    mswServer.use(...handlers(detail({ analysis_status: 'error', issues: [] })));
+    renderUrlDetail(<UrlDetail crawlId={CRAWL} siteUrlId={URL_ID} />);
+    await screen.findByRole('heading', { name: 'Acme Retail Online', level: 1 });
+
+    const page = handoffOf(screen.getByRole('link', { name: 'Ask agent about this page' }));
+    expect(page.prompt).toMatch(/^The Site Health audit of https:\/\/acme\.com\/ did not complete/);
+  });
+
+  it('pages the issue cards two at a time and jumps to the one chosen in the list', async () => {
+    const [base] = detail().issues;
+    const issues = ['First', 'Second', 'Third', 'Fourth', 'Fifth', 'Sixth', 'Seventh'].map(
+      (name, index) => ({
+        ...base!,
+        occurrence_id: `ffffffff-${String(index).padStart(4, '0')}-4111-8111-111111111111`,
+        issue_title: `${name} issue`,
+      }),
+    );
+    mswServer.use(...handlers(detail({ issues })));
+    const user = userEvent.setup();
+    renderUrlDetail(<UrlDetail crawlId={CRAWL} siteUrlId={URL_ID} />);
+    await screen.findByRole('heading', { name: 'All issues (7)' });
+
+    const cardTitles = () =>
+      within(screen.getByRole('region', { name: 'Issue details' }))
+        .getAllByRole('heading', { level: 3 })
+        .map((heading) => heading.textContent);
+    expect(cardTitles()).toEqual(['First issue', 'Second issue']);
+    await user.click(screen.getByRole('button', { name: 'Next page' }));
+    expect(cardTitles()).toEqual(['Third issue', 'Fourth issue']);
+
+    // The list shows five until asked for all; choosing one brings its card up.
+    const list = allIssues('All issues (7)');
+    expect(within(list).queryByText('Seventh issue')).toBeNull();
+    await user.click(within(list).getByRole('button', { name: 'View all 7 issues' }));
+    await user.click(within(list).getByRole('button', { name: /Seventh issue/ }));
+    expect(cardTitles()).toEqual(['Seventh issue']);
   });
 
   it('says so plainly when a page has nothing to fix', async () => {
@@ -780,10 +678,9 @@ describe('UrlDetail', () => {
 
     renderUrlDetail(<UrlDetail crawlId={CRAWL} siteUrlId={URL_ID} />);
 
-    expect(
-      await screen.findByRole('heading', { name: 'Issues on this page (0)' }),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'All issues (0)' })).toBeInTheDocument();
     expect(screen.getByText('No issues found on this page.')).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Issue details' })).toBeNull();
   });
 
   it('does not call a page clean before its audit finishes', async () => {

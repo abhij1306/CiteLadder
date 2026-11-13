@@ -1,5 +1,4 @@
-'use client';
-
+import type { ReactNode } from 'react';
 import { Info } from 'lucide-react';
 
 import { Tooltip } from '@/components/ui/tooltip';
@@ -18,7 +17,7 @@ import { Tooltip } from '@/components/ui/tooltip';
  * is the 32px control target around the 12px glyph, with negative margin
  * so the larger hit area does not push the label beside it.
  */
-export function InfoHint({ label, children }: Readonly<{ label: string; children: string }>) {
+export function InfoHint({ label, children }: Readonly<{ label: string; children: ReactNode }>) {
   return (
     <Tooltip content={children}>
       <button

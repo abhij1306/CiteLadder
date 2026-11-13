@@ -1,5 +1,3 @@
-'use client';
-
 import { Stack } from '@/components/ui/layout';
 import { TabPanel, Tabs } from '@/components/ui/tabs';
 import { optionalStringUrlCodec, useUrlState } from '@/lib/navigation/url-state';

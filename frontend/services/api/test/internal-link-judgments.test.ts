@@ -38,7 +38,7 @@ beforeAll(async () => {
       root_host: 'example.test',
       root_url: 'https://example.test/',
       registrable_domain: 'example.test',
-      selection_version: 1,
+      selection_version: 0,
       created_at: now,
       updated_at: now,
     })
@@ -338,6 +338,15 @@ describe('internal link judgment execution', () => {
     expect((await linkRun(db, scope, runId)).analysis?.state).toBe('failed');
     // Admission now passes the live-run check and stops only at the crawl's own evidence.
     await expect(admit()).rejects.toThrow('The crawl captured too few pages to link');
+    // Only a usable site crawl is offered for linking: never a page rerun or a failed crawl.
+    const rerun = await siteFixtures.sibling(seed, {
+      configuration: JSON.stringify({ page_rerun: true }),
+    });
+    const failed = await siteFixtures.sibling(seed, { status: 'failed' });
+    for (const crawlId of [rerun, failed])
+      await expect(
+        admitLinkRun(db, scope, seed.userId, { crawl_id: crawlId, idempotency_key: randomUUID() }),
+      ).rejects.toThrow('Completed crawl not found');
   });
 
   it('terminal recovery settles unfinished pairs idempotently after lease sweep', async () => {

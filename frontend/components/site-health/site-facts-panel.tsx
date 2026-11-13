@@ -1,5 +1,5 @@
-'use client';
-import { Fragment, useState, type ReactNode } from 'react';
+import { Fragment, useState } from 'react';
+import { choiceFilter, type FilterDefinition } from '@/components/ui/all-filters';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Callout } from '@/components/ui/callout';
@@ -7,7 +7,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
 import { Disclosure } from '@/components/ui/disclosure';
 import { Inline, Stack } from '@/components/ui/layout';
-import { Select } from '@/components/ui/select';
 import { ClampText, TableCell, TableHead, TableRow } from '@/components/ui/table';
 import { textRole } from '@/components/ui/typography';
 import { ProjectLink } from '@/components/ui/project-link';
@@ -38,7 +37,7 @@ export function SiteFactsPanel({
     current
       ? {
           siteFacts: { crawlId: current.id },
-          prompt: 'Explain the selected crawl’s persisted AI crawlability and robots policy.',
+          prompt: 'Explain the selected crawl’s AI crawlability and robots policy.',
         }
       : null,
   );
@@ -62,7 +61,7 @@ function SiteFactsViewPanel({ crawl, view }: Readonly<{ crawl: SiteCrawl; view: 
               projectId={crawl.project_id}
               href={agentHandoffHref({
                 siteFacts: { crawlId: crawl.id },
-                prompt: `Explain the persisted AI crawlability and robots policy for crawl ${crawl.id}. Use read_ai_crawlability and distinguish robots permission from observed retrieval.`,
+                prompt: `Explain the AI crawlability and robots policy for crawl ${crawl.id}. Use read_ai_crawlability and distinguish robots permission from observed retrieval.`,
               })}
             >
               Ask agent
@@ -98,17 +97,21 @@ function SiteFactsViewPanel({ crawl, view }: Readonly<{ crawl: SiteCrawl; view: 
               view={view}
               purposes={purposes}
               purpose={purpose}
-              filter={
-                <Select
-                  ariaLabel="Filter crawlers by purpose"
-                  value={purpose}
-                  onValueChange={setPurpose}
-                  options={[
-                    { value: 'all', label: 'All purposes' },
-                    ...purposes.map((value) => ({ value, label: crawlerPurposeLabels[value] })),
-                  ]}
-                />
-              }
+              filter={choiceFilter({
+                id: 'purpose',
+                label: 'Purpose',
+                value: purpose,
+                defaultValue: 'all',
+                groups: [
+                  {
+                    options: [
+                      { value: 'all', label: 'All purposes' },
+                      ...purposes.map((value) => ({ value, label: crawlerPurposeLabels[value] })),
+                    ],
+                  },
+                ],
+                onChange: setPurpose,
+              })}
             />
           </Disclosure>
           <Disclosure title="robots.txt history" onOpenChange={setHistoryOpen}>
@@ -157,14 +160,14 @@ function CrawlerTable({
   view: SiteFactsView;
   purposes: CrawlerBot['purpose'][];
   purpose: string;
-  filter: ReactNode;
+  filter: FilterDefinition;
 }>) {
   return (
     <DataTable
       label="Crawler robots policy by purpose"
       columns={CRAWLER_COLUMNS}
       minWidth="md"
-      toolbar={{ filters: filter }}
+      toolbar={{ filters: [filter] }}
     >
       {purposes
         .filter((value) => purpose === 'all' || value === purpose)

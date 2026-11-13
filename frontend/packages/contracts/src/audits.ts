@@ -55,6 +55,8 @@ export const auditSchema = responseObject({
   project_id: uuid(),
   parent_audit_id: uuid().nullable().default(null),
   status: auditStatusSchema,
+  /** Whether a cooperative cancel is still accepted at this status. */
+  cancelable: z.boolean(),
   benchmark_mode: z.string(),
   audit_scope: z.enum(['brand', 'commerce']).default('brand'),
   model_provenance: z.array(modelProvenanceSchema).default([]),

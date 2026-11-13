@@ -8,8 +8,11 @@ import { engineLabel } from '../config/providers.ts';
 export const MISSING = '–';
 
 /** A 0–100 figure as the dashboard prints it: whole, or to one decimal. */
-export const figure = (value: number | null | undefined, suffix = '') =>
-  value == null ? MISSING : `${Number.isInteger(value) ? value : value.toFixed(1)}${suffix}`;
+export function figure(value: number | null | undefined, suffix = '') {
+  if (value == null) return MISSING;
+  const shown = Number.isInteger(value) ? String(value) : value.toFixed(1);
+  return `${shown}${suffix}`;
+}
 
 /** A 0–1 rate as a whole percent. */
 export const rate = (value: number | null | undefined) =>

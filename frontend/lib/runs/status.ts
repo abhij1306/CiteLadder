@@ -38,28 +38,6 @@ export const pollAudits = (statuses: AuditStatus | readonly AuditStatus[] | unde
   pollWhileActive(AUDIT_STATES, ACTIVE_RUN_POLL_MS, statuses);
 
 /**
- * Audit statuses at which a cooperative cancel is still meaningful. Mirrors the
- * API's `audit_active_statuses` (`services/api/src/config/audits.json`): `reporting` is
- * intentionally EXCLUDED — by then execution + analysis are done and the state
- * machine rejects REPORTING → CANCELLED, so the cancel button must be disabled.
- */
-const CANCELABLE_AUDIT_STATUSES: ReadonlySet<AuditStatus> = new Set<AuditStatus>([
-  'draft',
-  'validating',
-  'queued',
-  'running',
-  'analyzing',
-]);
-
-/**
- * True when the run can still be cancelled cooperatively. `reporting` and every
- * terminal status return false — the backend would reject the cancel.
- */
-export function isAuditCancelable(status: AuditStatus): boolean {
-  return CANCELABLE_AUDIT_STATUSES.has(status);
-}
-
-/**
  * Every execution/queue status. Succeeded is success; failed/cancelled are
  * danger; the wait states are warning; everything in flight is info.
  * Executions are never polled on their own (the run's progress re-reads
@@ -117,6 +95,8 @@ const FAILURE_REASONS: Record<string, string> = {
   truncated_before_answer:
     'The engine used its output allowance before writing an answer. Run it again.',
   empty_answer: 'The engine returned no answer text. Run it again.',
+  answer_unfinished:
+    'The engine reported that it failed, was cancelled or paused before finishing the answer. Run it again.',
   run_deadline_exceeded: 'The run reached its time limit before this answer finished.',
   poll_ceiling_exceeded: 'Google did not return a result within the polling limit.',
   submission_unreconciled: 'The provider result could not be matched to this answer.',

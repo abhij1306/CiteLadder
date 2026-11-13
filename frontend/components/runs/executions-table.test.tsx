@@ -1,5 +1,6 @@
 import { screen, within } from '@testing-library/react';
 
+import { chooseFilterOption } from '@/test/all-filters';
 import { renderWithProviders as render } from '@/test/render';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vite-plus/test';
@@ -158,6 +159,31 @@ describe('ExecutionsTable', () => {
     );
 
     expect(screen.getAllByRole('row')).toHaveLength(4); // header + three
+  });
+
+  it('pages the run ten at a time and narrows it to one engine or one status', async () => {
+    const user = userEvent.setup();
+    const rows = Array.from({ length: 12 }, (_, index) =>
+      execution({
+        id: `a1111111-1111-4111-8111-${String(index).padStart(12, '0')}`,
+        prompt_text: `Question ${index + 1}.`,
+        ...(index === 11 ? { logical_engine: 'chatgpt', status: 'failed' } : {}),
+      }),
+    );
+    render(<ExecutionsTable executions={rows} onSelectEvidence={vi.fn()} />);
+    const shown = () => screen.getAllByText(/^Question \d+\.$/u).map((cell) => cell.textContent);
+
+    expect(shown()).toEqual(rows.slice(0, 10).map((row) => row.prompt_text));
+    await user.click(screen.getByRole('button', { name: 'Next page' }));
+    expect(shown()).toEqual(['Question 11.', 'Question 12.']);
+
+    // A filter returns to the first page of what it leaves.
+    await chooseFilterOption(user, 'Status', 'Succeeded');
+    expect(shown()).toEqual(rows.slice(0, 10).map((row) => row.prompt_text));
+    await chooseFilterOption(user, 'Engine', /chatgpt/iu);
+    expect(screen.getByText('No executions match your filters')).toBeVisible();
+    await chooseFilterOption(user, 'Status', 'All statuses');
+    expect(shown()).toEqual(['Question 12.']);
   });
 
   it('renders only a header when the run has no executions yet', () => {

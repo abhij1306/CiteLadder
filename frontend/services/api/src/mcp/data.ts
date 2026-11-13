@@ -127,6 +127,53 @@ export async function writeActor(
     scopes: 'all',
   };
 }
+
+/**
+ * A project's topic or competitor by its name, which is unique ignoring case,
+ * inside the write actor's workspace.
+ */
+export async function requireNamed(
+  db: Database,
+  actor: Actor,
+  { kind, name, projectId }: { kind: 'topic' | 'competitor'; name: string; projectId: string },
+) {
+  const row = await db
+    .selectFrom(kind === 'topic' ? 'topics' : 'competitors')
+    .select(['id', 'name'])
+    .where('workspace_id', '=', actor.workspaceId)
+    .where('project_id', '=', projectId)
+    .where(sql`lower(${sql.ref('name')})`, '=', name.toLowerCase())
+    .executeTakeFirst();
+  if (!row) throw new McpInputError(`No ${kind} named "${name}" was found in this project`);
+  return row;
+}
+
+/** The named prompt set, or the project's only one, inside the write actor's workspace. */
+export async function promptSetOf(
+  db: Database,
+  actor: Actor,
+  { projectId, setId }: { projectId: string; setId: string | null | undefined },
+) {
+  const sets = await db
+    .selectFrom('prompt_sets')
+    .select(['id', 'name'])
+    .where('workspace_id', '=', actor.workspaceId)
+    .where('project_id', '=', projectId)
+    .orderBy('created_at')
+    .execute();
+  if (setId) {
+    const set = sets.find((item) => item.id === setId);
+    if (!set) throw new McpInputError('The prompt set was not found in this project');
+    return set;
+  }
+  const [only, ...others] = sets;
+  if (!only) throw new McpInputError('This project has no prompt set yet');
+  if (others.length)
+    throw new McpInputError(
+      `This project has several prompt sets (${sets.map((set) => set.name).join(', ')}); pass prompt_set_id from read_prompt_portfolio`,
+    );
+  return only;
+}
 export const encodeCursor = (...parts: unknown[]) =>
   Buffer.from(JSON.stringify(parts.map(String))).toString('base64url');
 export function decodeCursor(value: string, size: number): string[] {

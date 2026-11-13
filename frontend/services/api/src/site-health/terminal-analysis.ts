@@ -8,8 +8,14 @@ import { record } from '../db/json.ts';
 import { firstOf } from '../lists.ts';
 import type { SiteRuleEvaluations } from '../generated/db-schema.ts';
 import type { RuleEvaluation } from './analysis/rules.ts';
-import { appliedSiteChecks, crawlSiteChecks, scoreAnalysis } from './analysis/scoring.ts';
+import {
+  appliedSiteChecks,
+  crawlSiteChecks,
+  finalPageChecks,
+  scoreAnalysis,
+} from './analysis/scoring.ts';
 import { refreshIssueCurrency } from './issue-currency.ts';
+import { landIssueStates } from './issue-states.ts';
 import type { Crawl } from './site-task.ts';
 
 export function persistedEvaluation(row: Selectable<SiteRuleEvaluations>): RuleEvaluation {
@@ -35,7 +41,8 @@ export async function publishFinalPageAnalyses(db: Database, crawl: Crawl) {
     .orderBy('site_url_id')
     .orderBy('id')
     .execute();
-  if (!initials.length) return;
+  // Pages that answered 404/410 still land: they have no analysis to finalize.
+  if (!initials.length) return landIssueStates(db, crawl);
   const ids = initials.map((row) => row.id);
   const evaluations = await db
     .selectFrom('site_rule_evaluations')
@@ -59,6 +66,14 @@ export async function publishFinalPageAnalyses(db: Database, crawl: Crawl) {
     .where('crawl_id', '=', crawl.id)
     .where('id', '=', sql<string>`any(${ids}::uuid[])`)
     .execute();
+  // A crawl-finalize check finalization never wrote is judged from the page's own facts.
+  const artifacts = await db
+    .selectFrom('site_fetch_artifacts')
+    .select(['id', 'normalized_facts'])
+    .where('workspace_id', '=', crawl.workspace_id)
+    .where('id', '=', sql<string>`any(${initials.map((row) => row.artifact_id)}::uuid[])`)
+    .execute();
+  const factsOf = new Map(artifacts.map((row) => [row.id, record(row.normalized_facts)]));
   // Site checks score on every page, so each page's manifest names the site evaluations it used.
   const siteSources = evaluations.filter(
     (row) => appliedSiteChecks([persistedEvaluation(row)]).length > 0,
@@ -70,7 +85,11 @@ export async function publishFinalPageAnalyses(db: Database, crawl: Crawl) {
   const revisions = initials.map((initial) => {
     const own = (byAnalysis.get(initial.id) ?? []).filter((row) => row.scope !== 'site');
     const sources = [...own, ...siteSources];
-    const scores = scoreAnalysis(own.map(persistedEvaluation), initial.page_kind, site);
+    const scores = scoreAnalysis(
+      finalPageChecks(own.map(persistedEvaluation), factsOf.get(initial.artifact_id) ?? {}),
+      initial.page_kind,
+      site,
+    );
     const byRule = new Map(sources.map((row) => [row.rule_id, row.id]));
     return {
       ...initial,

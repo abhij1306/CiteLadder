@@ -6,7 +6,7 @@
  * migrations (`migrations/`) are the only schema author; this module holds
  * generated types, never DDL.
  */
-import { Kysely, PostgresDialect } from 'kysely';
+import { Kysely, PostgresDialect, sql } from 'kysely';
 import pg from 'pg';
 
 import type { ServiceConfig } from '../config.ts';
@@ -22,16 +22,35 @@ export type Database = Kysely<DB>;
 export function inTransaction<T>(db: Database, work: (trx: Database) => Promise<T>): Promise<T> {
   return db.isTransaction ? work(db) : db.transaction().execute(work);
 }
+
+/**
+ * Logs the current database's on-disk size, so a log-based alert can watch
+ * disk usage. Returns the size in bytes.
+ */
+export async function observeDatabaseSize(db: Database): Promise<number> {
+  const { rows } = await sql<{
+    size_bytes: string;
+  }>`select pg_database_size(current_database())::text as size_bytes`.execute(db);
+  const sizeBytes = Number(rows[0]?.size_bytes);
+  getLogger('db').info('database_size_observed', { size_bytes: sizeBytes });
+  return sizeBytes;
+}
+
 export type DatabaseConfig = Pick<ServiceConfig, 'database' | 'databaseUrl' | 'appName'> & {
   execution?: Pick<ServiceConfig['execution'], 'poolSize'>;
 };
 
-export function poolOptions(config: DatabaseConfig): pg.PoolConfig {
+type PoolUse = { execution?: boolean };
+
+export function poolOptions(config: DatabaseConfig, use: PoolUse = {}): pg.PoolConfig {
   const db = config.database;
   return {
     connectionString: config.databaseUrl,
-    // pool_size + max_overflow concurrent connections.
-    max: db.poolSize + db.maxOverflow,
+    // A runner execution holds `RUNNER_DB_POOL_SIZE` connections. Every other
+    // process, the API that starts runner jobs included, holds its own
+    // pool_size + max_overflow.
+    max:
+      use.execution && config.execution ? config.execution.poolSize : db.poolSize + db.maxOverflow,
     maxLifetimeSeconds: db.poolRecycleSeconds,
     // node-postgres applies one bound to both waiting for a pooled client and
     // opening a new one, so the larger of the pool and connect timeouts applies.
@@ -48,14 +67,8 @@ export function poolOptions(config: DatabaseConfig): pg.PoolConfig {
   };
 }
 
-export function createDatabase(
-  config: DatabaseConfig,
-  options: { execution?: boolean } = {},
-): Database {
-  const pool = new pg.Pool({
-    ...poolOptions(config),
-    ...(options.execution ? { max: config.execution?.poolSize } : {}),
-  });
+export function createDatabase(config: DatabaseConfig, use: PoolUse = {}): Database {
+  const pool = new pg.Pool(poolOptions(config, use));
   // An idle client that loses its connection (a database restart) is dropped
   // by the pool; without a listener its 'error' event would crash the process.
   pool.on('error', (error) => getLogger('db').exception('database_idle_client_lost', error));

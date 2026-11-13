@@ -19,6 +19,9 @@ import { sql } from 'kysely';
 
 import type { Database } from '../db/database.ts';
 import { persistIssueCatalog } from './issue-catalog.ts';
+import { landIssueStates } from './issue-states.ts';
+import { foldingSiteCrawl } from './reads/crawl.ts';
+import { refreshSiteSnapshot } from './snapshot.ts';
 import type { Crawl } from './site-task.ts';
 
 /** Recompute the flag for every issue of the crawl, writing only the rows that change. */
@@ -44,4 +47,13 @@ export async function refreshIssueCurrency(db: Database, crawl: Crawl): Promise<
     where i.id = c.id and i.workspace_id = ${crawl.workspace_id}
       and i.is_current is distinct from c.current`.execute(db);
   await persistIssueCatalog(db, crawl);
+  // The crawl's current issues are what its audit found (`issue-states.ts`).
+  await landIssueStates(db, crawl);
+  // A page rerun moves its page in the site crawl that shows it (SH-B9): that
+  // crawl's catalog, snapshot and score summary follow, in this transaction.
+  const site = await foldingSiteCrawl(db, crawl);
+  if (site) {
+    await persistIssueCatalog(db, site);
+    await refreshSiteSnapshot(db, site);
+  }
 }

@@ -56,4 +56,29 @@ describe('CompetitorSuggestions', () => {
     // competitor leaves the list.
     await waitFor(() => expect([facts, suggestions].map(stale)).toEqual([true, true]));
   });
+
+  it('reports a failed suggestions read without also claiming there are none', () => {
+    const projectId = '11111111-1111-4111-8111-111111111111';
+    const failed = {
+      data: undefined,
+      error: new Error('Gateway timeout'),
+      isError: true,
+      isSuccess: false,
+      isFetching: false,
+      refetch: vi.fn(),
+    } as never;
+    const answered = { data: [], isError: false, isSuccess: true } as never;
+
+    const { unmount } = renderWithProviders(
+      <CompetitorSuggestions projectId={projectId} suggestionsQuery={failed} />,
+    );
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeVisible();
+    expect(screen.queryByText('No repeated citation candidates yet.')).toBeNull();
+    unmount();
+
+    renderWithProviders(
+      <CompetitorSuggestions projectId={projectId} suggestionsQuery={answered} />,
+    );
+    expect(screen.getByText('No repeated citation candidates yet.')).toBeVisible();
+  });
 });

@@ -3,26 +3,9 @@ import type { Database } from '../db/database.ts';
 import { enqueueCoalesced } from '../queue/enqueue.ts';
 import { crawlLogs } from '../config/crawl-logs.ts';
 import { strings } from '../db/json.ts';
+import { reportingDay } from '../calendar-days.ts';
 
 export type CrawlScope = { workspaceId: string; projectId: string };
-const dayFormats = new Map<string, Intl.DateTimeFormat>();
-export function reportingDay(at: Date, timeZone: string) {
-  if (timeZone === 'UTC') return at.toISOString().slice(0, 10);
-  let format = dayFormats.get(timeZone);
-  if (!format) {
-    format = new Intl.DateTimeFormat('en-CA', {
-      timeZone,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    });
-    dayFormats.set(timeZone, format);
-  }
-  const parts = format.formatToParts(at);
-  return ['year', 'month', 'day']
-    .map((type) => parts.find((part) => part.type === type)!.value)
-    .join('-');
-}
 function affectedDays(now: Date, timeZone: string, first?: Date | null, last?: Date | null) {
   const days = [
     reportingDay(now, timeZone),

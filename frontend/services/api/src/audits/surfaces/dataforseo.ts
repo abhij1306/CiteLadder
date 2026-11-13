@@ -5,7 +5,7 @@
  */
 import { z } from 'zod';
 import { record } from '../../db/json.ts';
-import { getLogger } from '../../logging.ts';
+import { failureFacts, getLogger } from '../../logging.ts';
 import { ProviderError } from '../../providers/errors.ts';
 import { ownedAuditTask, type AuditTask } from '../../queue/audit-queue.ts';
 import {
@@ -146,34 +146,64 @@ async function poll(
     });
     return;
   }
+  let payload: unknown;
   try {
-    const payload = await client.retrieve(observedEngine(task), taskId);
-    if ((await surface.settle(deps, context, payload, taskId)) === 'still_pending')
-      await persistSurfaceExchange(
-        deps.db,
-        task,
-        deps.owner,
-        { poll: true, delaySeconds: c.poll_interval_seconds },
-        deps.now(),
-      );
+    payload = await client.retrieve(observedEngine(task), taskId);
   } catch (error) {
     const safe = error instanceof ProviderError ? error : new ProviderError('parse_error');
-    if (safe.retryable)
-      await persistSurfaceExchange(
-        deps.db,
-        task,
-        deps.owner,
-        { error: safe, poll: true, delaySeconds: c.poll_interval_seconds },
-        deps.now(),
-      );
-    else
-      await failObserved(surface, deps, task, context, {
-        code: 'provider_error',
-        exchange: 'unpaid',
-        error: safe,
-      });
-    if (safe.code === 'rate_limit') throw safe;
+    await pollFailed(surface, deps, context, safe);
+    return;
   }
+  let settled: Awaited<ReturnType<ObservedSurface['settle']>>;
+  try {
+    settled = await surface.settle(deps, context, payload, taskId);
+  } catch (error) {
+    // Parsing refuses a malformed payload with a ProviderError. Anything else
+    // failed saving the paid answer (database, derivation): the result stays
+    // retrievable for free, so poll again instead of writing the submission off.
+    if (!(error instanceof ProviderError))
+      logger.warning('surface_result_unsaved', { task_id: task.id, ...failureFacts(error) });
+    await pollFailed(
+      surface,
+      deps,
+      context,
+      error instanceof ProviderError ? error : new ProviderError(c.error_result_unsaved, true),
+    );
+    return;
+  }
+  if (settled === 'still_pending')
+    await persistSurfaceExchange(
+      deps.db,
+      task,
+      deps.owner,
+      { poll: true, delaySeconds: c.poll_interval_seconds },
+      deps.now(),
+    );
+}
+
+/** A failed retrieval or save: retryable failures poll again, others end the task. */
+async function pollFailed(
+  surface: ObservedSurface,
+  deps: PhaseDeps,
+  context: ExecutionContext,
+  error: ProviderError,
+) {
+  const task = context.task;
+  if (error.retryable)
+    await persistSurfaceExchange(
+      deps.db,
+      task,
+      deps.owner,
+      { error, poll: true, delaySeconds: searchPolicy.constants.poll_interval_seconds },
+      deps.now(),
+    );
+  else
+    await failObserved(surface, deps, task, context, {
+      code: 'provider_error',
+      exchange: 'unpaid',
+      error,
+    });
+  if (error.code === 'rate_limit') throw error;
 }
 
 async function submit(

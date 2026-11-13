@@ -169,21 +169,7 @@ describe('siteHealthOverviewSchema scored-cohort movement', () => {
     current_page_count_by_kind: { homepage: 1, product: 2 },
   };
 
-  it('accepts cohort-composition change context on trend and change summaries', () => {
-    const trend = strictValidate(
-      siteHealthOverviewSchema.shape.trend,
-      {
-        state: 'measured',
-        reason: 'cohort_composition_changed',
-        metric: 'aeo_readiness_score',
-        series: [
-          { label: 'Previous', value: 70 },
-          { label: 'Current', value: 74 },
-        ],
-        cohort_composition: cohortComposition,
-      },
-      'overview.trend',
-    );
+  it('accepts cohort-composition change context on the change summary', () => {
     const change = strictValidate(
       siteHealthOverviewSchema.shape.change_summary,
       {
@@ -195,25 +181,24 @@ describe('siteHealthOverviewSchema scored-cohort movement', () => {
       'overview.change_summary',
     );
 
-    expect(trend.cohort_composition.added_page_kinds).toEqual(['product']);
+    expect(change.cohort_composition.added_page_kinds).toEqual(['product']);
     expect(change.cohort_composition.previous_page_count_by_kind.article).toBe(3);
   });
 
   it('accepts Other as part of the scored cohort composition', () => {
     const parsed = strictValidate(
-      siteHealthOverviewSchema.shape.trend,
+      siteHealthOverviewSchema.shape.change_summary,
       {
         state: 'measured',
         reason: 'cohort_composition_changed',
-        metric: 'aeo_readiness_score',
-        series: [],
+        metrics: [],
         cohort_composition: {
           ...cohortComposition,
           added_page_kinds: ['other'],
           current_page_count_by_kind: { homepage: 1, product: 2, other: 1 },
         },
       },
-      'overview.trend',
+      'overview.change_summary',
     );
 
     expect(parsed.cohort_composition.added_page_kinds).toEqual(['other']);

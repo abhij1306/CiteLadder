@@ -25,8 +25,9 @@ export function enqueueClassifyReferrals(
 
 /**
  * An AI Referrals snapshot rebuild for one sync window. The key carries the
- * data revision, so a re-sync of a projected window re-fires the refresh
- * while a same-revision duplicate still dedupes.
+ * data revision and the classified artifact, so a re-sync of a projected window
+ * re-fires the refresh, each referral artifact of one run gets its own refresh
+ * after its classification, and only a repeat for the same artifact dedupes.
  */
 export function enqueueAiReferralsSnapshotRefresh(
   db: Database,
@@ -35,8 +36,8 @@ export function enqueueAiReferralsSnapshotRefresh(
     projectId: string;
     windowStart: string;
     windowEnd: string;
-    resyncSeq: number;
     sourceRevision: string;
+    artifactId: string;
     maxAttempts: number;
   },
 ): Promise<string | null> {
@@ -49,13 +50,8 @@ export function enqueueAiReferralsSnapshotRefresh(
       window_end: options.windowEnd,
       source_revision: options.sourceRevision,
     },
-    keyParts: [
-      options.projectId,
-      options.windowStart,
-      options.windowEnd,
-      options.resyncSeq,
-      options.sourceRevision,
-    ],
+    // The run fixes the window and revision; the key stays within its column.
+    keyParts: [options.projectId, options.sourceRevision, options.artifactId],
     maxAttempts: options.maxAttempts,
   });
 }

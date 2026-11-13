@@ -4,6 +4,8 @@ import { compareText } from '../../text-order.ts';
 import { analysisPolicy } from './policy.ts';
 
 const HEADER_AGENTS = new Set(analysisPolicy.facts.search_robots_header_agents);
+/** The robots meta names that bind the search crawler: the generic one and its own. */
+const META_AGENTS = new Set(['robots', ...HEADER_AGENTS]);
 const COLON_DIRECTIVES = new Set([
   'max-snippet',
   'max-image-preview',
@@ -24,21 +26,27 @@ const tokens = (value: string) =>
     .map((token) => token.trim().toLowerCase())
     .filter(Boolean);
 
-/** Header directives; an agent prefix scopes the following ones to that agent. */
-function headerTokens(value: string) {
-  const directives = new Set<string>();
+/** One header line's directives; an agent prefix scopes the following ones to that agent. */
+function lineDirectives(line: string, directives: Set<string>) {
   let applies = true;
-  for (const token of tokens(value)) {
+  for (const token of tokens(line)) {
     const colon = token.indexOf(':');
     const prefix = colon === -1 ? token : token.slice(0, colon);
     if (colon !== -1 && !COLON_DIRECTIVES.has(prefix)) {
       applies = HEADER_AGENTS.has(prefix);
       const payload = token.slice(colon + 1).trim();
       if (applies && payload) directives.add(payload);
-      continue;
-    }
-    if (applies) directives.add(token);
+    } else if (applies) directives.add(token);
   }
+}
+
+/**
+ * Header directives, one header line per text line. Each new line starts
+ * generic again, so an agent-scoped line never swallows a generic one.
+ */
+function headerTokens(value: string) {
+  const directives = new Set<string>();
+  for (const line of value.split(/\r?\n/u)) lineDirectives(line, directives);
   return directives;
 }
 
@@ -70,7 +78,7 @@ function projection(found: Set<string>) {
 export function robotsMeta(root: HtmlNode) {
   const found = new Set<string>();
   for (const meta of elements(root, 'meta'))
-    if (['robots', 'googlebot'].includes(attribute(meta, 'name').toLowerCase()))
+    if (META_AGENTS.has(attribute(meta, 'name').toLowerCase()))
       for (const token of tokens(attribute(meta, 'content'))) found.add(token);
   return projection(found);
 }

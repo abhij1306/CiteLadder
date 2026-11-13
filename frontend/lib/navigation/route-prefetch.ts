@@ -45,21 +45,35 @@ const ROUTE_PREFETCHERS: Readonly<Partial<Record<AppRoutePath, RoutePrefetcher>>
     warmQuery(client, searchIntelligenceQueries.readiness(scope));
   },
   '/products': async (client, scope) => {
-    const { commerceQueries } = await import('@/lib/api/commerce');
-    // The screen always loads the catalog (its navigation), the competitors
-    // and the buyer prompts; the shelf waits for a selected target.
+    const [{ commerceQueries }, { DEFAULT_PRODUCT_FILTERS, productSearch }] = await Promise.all([
+      import('@/lib/api/commerce'),
+      import('@/lib/products/product-filters'),
+    ]);
+    // The catalog (header and categories) and the landing page of the table.
     warmQuery(client, commerceQueries.catalog(scope));
-    warmQuery(client, commerceQueries.competitors(scope));
-    warmQuery(client, commerceQueries.buyerPrompts(scope));
+    warmQuery(
+      client,
+      commerceQueries.products(scope, productSearch(DEFAULT_PRODUCT_FILTERS), null),
+    );
+  },
+  '/products/overview': async (client, scope) => {
+    const [{ commerceQueries }, { DEFAULT_OVERVIEW_FILTERS, overviewSearch }] = await Promise.all([
+      import('@/lib/api/commerce'),
+      import('@/lib/products/product-filters'),
+    ]);
+    // The category filter's options and the landing window's overview.
+    warmQuery(client, commerceQueries.catalog(scope));
+    warmQuery(client, commerceQueries.overview(scope, overviewSearch(DEFAULT_OVERVIEW_FILTERS)));
   },
   // New chat: its recommended Actions are the screen's one project read.
   '/agent': async (client, scope) => {
     const { actionsQueries } = await import('@/lib/api/actions');
     warmQuery(client, actionsQueries.list(scope));
   },
+  // The grouped list's reads, one per group.
   '/agent/actions': async (client, scope) => {
     const { actionsQueries } = await import('@/lib/api/actions');
-    warmQuery(client, actionsQueries.list(scope));
+    for (const read of actionsQueries.groupPreviews(scope, {})) warmQuery(client, read);
   },
   '/agent/skills': async (client, { workspaceId }) => {
     const { agentQueries } = await import('@/lib/api/agent');
@@ -189,9 +203,9 @@ async function prefetchSiteHealth(client: QueryClient, scope: ProjectScope) {
  *
  * The catalog asks one crawl for its issues, and only the dashboard names the
  * crawl. A cached dashboard warms the catalog under its crawl directly;
- * otherwise the project-scoped read answers for the newest crawl (the one the
- * dashboard shows), beside the dashboard rather than after it, and its answer
- * is filed under the crawl it names.
+ * otherwise the project-scoped read answers for the current crawl (the one the
+ * dashboard shows unless a crawl is running), beside the dashboard rather than
+ * after it, and its answer is filed under the crawl it names.
  *
  * Only the DEFAULT page is warmed. A reader arriving with filters in the
  * address wants a different key, and warming this one would spend a request on
@@ -199,20 +213,27 @@ async function prefetchSiteHealth(client: QueryClient, scope: ProjectScope) {
  */
 async function prefetchIssues(client: QueryClient, scope: ProjectScope) {
   const { workspaceId } = scope;
-  const [{ siteHealthQueries }, { latestCrawlQueries }, { emptyIssueFilters, issueCatalogParams }] =
-    await Promise.all([
-      import('@/lib/api/site-health-queries'),
-      import('@/lib/api/site-health-latest-crawl'),
-      import('@/lib/site-health/issue-filters'),
-    ]);
+  const [
+    { siteHealthQueries },
+    { latestCrawlQueries },
+    { emptyIssueFilters, issueCatalogParams, ISSUE_PRIORITY_PARAMS },
+  ] = await Promise.all([
+    import('@/lib/api/site-health-queries'),
+    import('@/lib/api/site-health-latest-crawl'),
+    import('@/lib/site-health/issue-filters'),
+  ]);
   const dashboard = siteHealthQueries.dashboard(scope);
   const cachedCrawlId = client.getQueryData(dashboard.queryKey)?.crawl?.id;
   warmQuery(client, dashboard);
   // The identical params `IssuesCatalog` builds for an unfiltered first page.
   // Spelling them out differently here would warm a key nothing reads.
   const params = issueCatalogParams(emptyIssueFilters, null);
+  // The summary above the list reads the crawl's worst issues beside it.
+  const warmSummary = (crawlId: string) =>
+    warmQuery(client, siteHealthQueries.issues(workspaceId, crawlId, ISSUE_PRIORITY_PARAMS));
   if (cachedCrawlId) {
     warmQuery(client, siteHealthQueries.issues(workspaceId, cachedCrawlId, params));
+    warmSummary(cachedCrawlId);
     return;
   }
   const latest = await readFromIntent(client, latestCrawlQueries.issues(scope, params));
@@ -220,6 +241,7 @@ async function prefetchIssues(client: QueryClient, scope: ProjectScope) {
   const { crawl_id: crawlId, ...page } = latest;
   const key = siteHealthQueries.issues(workspaceId, crawlId, params).queryKey;
   if (client.getQueryData(key) === undefined) client.setQueryData(key, page);
+  warmSummary(crawlId);
 }
 
 /**

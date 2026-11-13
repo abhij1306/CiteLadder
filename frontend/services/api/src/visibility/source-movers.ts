@@ -87,13 +87,14 @@ export async function getSourceMovers(
     cohort: selection.cohort,
   });
   if (status !== 'comparable') return empty(status);
+  // The baseline runs bring their own market, as any named run set does.
   const baselineScope = evidenceScope(db, {
     ...selection,
     auditId: null,
-    auditIds: null,
+    auditIds: query.baselineAuditIds,
     fromAt: null,
     toAt: null,
-  }).where('ra.audit_id', 'in', query.baselineAuditIds);
+  });
   const previous = await shares(db, selection, baselineScope, query.dimension);
   if (!previous.answers) return empty('no_observations');
   const movers: Mover[] = [...new Set([...current.byKey.keys(), ...previous.byKey.keys()])].map(

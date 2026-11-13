@@ -1,5 +1,3 @@
-'use client';
-
 import type { ReactNode } from 'react';
 import { ProjectLink } from '@/components/ui/project-link';
 import { ArrowUpRight, ShieldCheck, Split } from 'lucide-react';
@@ -12,6 +10,7 @@ import { Drawer } from '@/components/ui/drawer';
 import { StatRow } from '@/components/ui/stat-row';
 import { TextLink } from '@/components/ui/text-link';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
+import type { DemandDetectorPolicy } from '@citeladder/contracts';
 import type { DemandSignal } from '@/lib/api/demand';
 import {
   competingPages,
@@ -31,23 +30,34 @@ import { ledgerClasses, ledgerItemClasses } from '@/components/ui/workspace';
 
 export function DemandEvidenceDrawer({
   signal,
+  policy,
   open,
   onOpenChange,
 }: Readonly<{
   signal: DemandSignal | null;
+  policy: DemandDetectorPolicy;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }>) {
   if (!signal) return null;
-  return <DemandEvidenceContent signal={signal} open={open} onOpenChange={onOpenChange} />;
+  return (
+    <DemandEvidenceContent
+      signal={signal}
+      policy={policy}
+      open={open}
+      onOpenChange={onOpenChange}
+    />
+  );
 }
 
 function DemandEvidenceContent({
   signal,
+  policy,
   open,
   onOpenChange,
 }: Readonly<{
   signal: DemandSignal;
+  policy: DemandDetectorPolicy;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }>) {
@@ -94,7 +104,7 @@ function DemandEvidenceContent({
           )}
         </Stack>
 
-        <SignalInsight signal={signal} />
+        <SignalInsight signal={signal} policy={policy} />
 
         <Stack as="section">
           <h3 className={textRole('label')}>Search Console performance</h3>
@@ -144,10 +154,12 @@ function DemandEvidenceContent({
               <Icon icon={Split} className="text-ink-muted" />
               Competing pages ({details.pages.length})
             </Inline>
-            <div className={ledgerClasses('boxed')}>
+            <div className={ledgerClasses()}>
               {details.pages.map((page) => (
                 <Stack key={page.url} gap="tight" className={ledgerItemClasses('type-caption')}>
-                  <div className={textRole('emphasis', 'text-ink break-all')}>{page.url}</div>
+                  <div className={textRole('emphasis', 'text-ink truncate')} title={page.url}>
+                    {page.url}
+                  </div>
                   <div className="type-caption flex items-center justify-between">
                     <span>{formatCount(page.impressions)} impressions</span>
                     <span className={textRole('emphasis', 'text-ink tabular-nums')}>
@@ -163,7 +175,7 @@ function DemandEvidenceContent({
         {details.cohortMedianCtr !== null && (
           <Stack as="section">
             <h3 className={textRole('label')}>Position benchmark</h3>
-            <Stack className={panelClasses({}, 'type-caption')}>
+            <Stack className={panelClasses('type-caption')}>
               <div className="flex justify-between">
                 <span className="text-ink-muted">Position band</span>
                 {details.positionBand !== null ? (
@@ -200,7 +212,7 @@ function DemandEvidenceContent({
             <Icon icon={ShieldCheck} className="text-ink-muted" />
             Provenance
           </Inline>
-          <Stack as="dl" className={panelClasses({ tone: 'well' }, 'type-caption')}>
+          <Stack as="dl" className={panelClasses('type-caption')}>
             <ProvenanceRow label="Search Console rows">
               <ProvenanceCount value={details.metricRowCount} />
             </ProvenanceRow>

@@ -7,7 +7,8 @@ import { auditRuntime } from '../src/audits/config.ts';
 import { createAudits } from '../src/audits/creation.ts';
 import { auditInput } from '../src/audits/inputs.ts';
 import { auditEvents } from '../src/audits/reads.ts';
-import { auditEventFrames, resumeCursor } from '../src/audits/events.ts';
+import { auditEventTail } from '../src/audits/events.ts';
+import { eventFrames } from '../src/http/event-stream.ts';
 import { auditEventSchema } from '@citeladder/contracts/audit-events';
 
 const config = testConfig({
@@ -86,6 +87,79 @@ describe('audit HTTP family cutover', () => {
     const [run] = (await created.json()) as [{ id: string }];
     expect((await request(t.userId, t.workspaceId, `/${run.id}/cancel`, 'POST')).status).toBe(200);
     expect((await request(t.userId, t.workspaceId, `/${run.id}/cancel`, 'POST')).status).toBe(409);
+  });
+  it('leaves an unscored answer empty in the CSV, never False or 0', async () => {
+    const t = await auditTenant(db, fixtures);
+    const [auditId] = await createAudits(
+      db,
+      t.workspaceId,
+      auditInput.parse({
+        project_id: t.projectId,
+        prompt_set_id: t.setId,
+        engines: ['chatgpt'],
+        repetitions: 2,
+      }),
+      {},
+      runtime,
+    );
+    const [scored, failed] = await db
+      .selectFrom('audit_tasks')
+      .select('id')
+      .where('audit_id', '=', auditId!)
+      .orderBy('repetition')
+      .execute();
+    await db
+      .updateTable('audit_tasks')
+      .set({
+        status: 'succeeded',
+        score: JSON.stringify({
+          search_query_count: 0,
+          brand_mentioned: false,
+          owned_domain_cited: false,
+          owned_citation_count: 0,
+          citation_count: 0,
+        }),
+      })
+      .where('id', '=', scored!.id)
+      .execute();
+    await db
+      .updateTable('audit_tasks')
+      .set({ status: 'failed', error_code: 'provider_timeout' })
+      .where('id', '=', failed!.id)
+      .execute();
+
+    const csv = await request(t.userId, t.workspaceId, `/${auditId}/export.csv`);
+    const [header, ...rows] = (await csv.text()).trim().split('\r\n');
+    const columns = header!.split(',');
+    const cells = (row: string) => {
+      // No cell in these rows holds a comma.
+      const values = row.split(',');
+      return Object.fromEntries(
+        [
+          'status',
+          'search_query_count',
+          'brand_mentioned',
+          'owned_citation_count',
+          'citation_count',
+        ].map((name) => [name, values[columns.indexOf(name)]]),
+      );
+    };
+    expect(rows.map(cells)).toEqual([
+      {
+        status: 'succeeded',
+        search_query_count: '0',
+        brand_mentioned: 'False',
+        owned_citation_count: '0',
+        citation_count: '0',
+      },
+      {
+        status: 'failed',
+        search_query_count: '',
+        brand_mentioned: '',
+        owned_citation_count: '',
+        citation_count: '',
+      },
+    ]);
   });
   it('drains terminal stream pages and uses the same validated envelopes and safe resume cursor as JSON', async () => {
     const t = await seed(),
@@ -191,21 +265,51 @@ describe('audit HTTP family cutover', () => {
     for (const stream of [...held, otherUser, admitted]) stream.abort.abort();
   });
 
+  it('closes an open stream once its caller is removed from the workspace', async () => {
+    const t = await seed();
+    // A running audit's stream would otherwise stay open for its full duration.
+    const recheckingApp = createApp(
+      testConfig({ AUDIT_SSE_POLL_SECONDS: '0.05', ABUSE_SSE_ACCESS_RECHECK_SECONDS: '1' }),
+      db,
+    );
+    const abort = new AbortController();
+    const response = await recheckingApp.request(`/api/v1/audits/${t.auditId}/events?stream=true`, {
+      headers: {
+        cookie: `${TEST_SESSION_COOKIE}=${await sessionToken({ sub: t.userId, ver: 0 })}`,
+        'x-workspace-id': t.workspaceId,
+      },
+      signal: abort.signal,
+    });
+    expect(response.status).toBe(200);
+    const reader = response.body!.getReader();
+    const first = await reader.read();
+    expect(new TextDecoder().decode(first.value)).toMatch(/^id: [0-9a-f-]{36}\nevent: /u);
+    await db
+      .deleteFrom('workspace_members')
+      .where('workspace_id', '=', t.workspaceId)
+      .where('user_id', '=', t.userId)
+      .execute();
+    const started = Date.now();
+    let next = await reader.read();
+    while (!next.done) next = await reader.read();
+    expect(Date.now() - started).toBeLessThan(3000);
+    abort.abort();
+  });
+
   it('stops a stream on cancellation without polling or retaining a transaction', async () => {
     const t = await seed(),
       signal = new AbortController();
-    const frames = auditEventFrames(
-      db,
-      t.workspaceId,
-      t.auditId,
-      undefined,
-      runtime,
+    const frames = eventFrames(
+      auditEventTail(
+        db,
+        { workspaceId: t.workspaceId, auditId: t.auditId, after: undefined },
+        runtime,
+      ),
       signal.signal,
     );
     expect((await frames.next()).done).toBe(false);
     signal.abort();
     expect((await frames.next()).done).toBe(true);
-    expect(resumeCursor(`{${t.auditId}}`)).toBe(t.auditId);
   });
 
   it('ends a running audit stream at its maximum duration', async () => {
@@ -215,12 +319,12 @@ describe('audit HTTP family cutover', () => {
       AUDIT_SSE_MAX_DURATION_SECONDS: '1',
       AUDIT_SSE_POLL_SECONDS: '5',
     });
-    const frames = auditEventFrames(
-      db,
-      t.workspaceId,
-      t.auditId,
-      undefined,
-      bounded,
+    const frames = eventFrames(
+      auditEventTail(
+        db,
+        { workspaceId: t.workspaceId, auditId: t.auditId, after: undefined },
+        bounded,
+      ),
       new AbortController().signal,
     );
     const started = Date.now();

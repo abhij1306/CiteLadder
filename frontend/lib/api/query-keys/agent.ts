@@ -10,6 +10,8 @@ const agent = scopedKeys('agent');
 const chatDetail = (chatId: string) => ['agent', 'chat', chatId] as const;
 /** Every output's revision list in one chat, in every workspace. */
 const chatRevisions = (chatId: string) => ['agent', 'revisions', chatId] as const;
+/** Every page document's suggestions in one chat, in every workspace. */
+const chatSuggestions = (chatId: string) => ['agent', 'suggestions', chatId] as const;
 
 export const agentKeys = {
   ...agent,
@@ -31,6 +33,24 @@ export const agentKeys = {
     outputId: string,
     latestRevisionId: string,
   ) => [...chatRevisions(chatId), workspaceId, outputId, latestRevisionId] as const,
+  chatSuggestions,
+  /**
+   * Keyed by the latest revision and the latest message too: a turn can add
+   * suggestions without writing a revision.
+   */
+  suggestions: (
+    workspaceId: string | null,
+    chatId: string,
+    outputId: string,
+    marker: Readonly<{ revisionId: string; messageId: string | null }>,
+  ) =>
+    [
+      ...chatSuggestions(chatId),
+      workspaceId,
+      outputId,
+      marker.revisionId,
+      marker.messageId,
+    ] as const,
   // The catalog the workspace's plan offers; never reused across workspaces.
   skills: (workspaceId: string | null) => ['agent', 'skills', workspaceId] as const,
 };

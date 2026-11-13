@@ -5,6 +5,7 @@ import type { Database } from '../db/database.ts';
 import { policy } from '../config.ts';
 import { definitions, dispatchTool, presentationTools } from '../mcp/tools.ts';
 import { parseRecordId } from '../mcp/retrieval.ts';
+import { stoppableReads } from './async.ts';
 import { ToolRegistry, toolDefinitions, type ReadTool } from './tools.ts';
 import { agentPolicy, type Json, type Scope } from './contracts.ts';
 
@@ -75,7 +76,8 @@ function agentPage(schema: z.ZodType | undefined) {
 }
 // The chat's project is fixed, and MCP App views render nothing in a chat.
 const NOT_FOR_AGENT = new Set(['list_projects', ...presentationTools]);
-function sharedTools(db: Database): ReadTool[] {
+/** The shared reads, each stopped by its signal: the read timeout and Stop end the work, not only the wait. */
+export function sharedReads(db: Database): ReadTool[] {
   return Object.entries(definitions)
     .filter(([name]) => !NOT_FOR_AGENT.has(name))
     .map(([name, definition]) => {
@@ -90,7 +92,8 @@ function sharedTools(db: Database): ReadTool[] {
         arguments: z.strictObject(page ? { ...fields, limit: page.schema } : fields) as z.ZodType<
           Record<string, Json>
         >,
-        read: async (scope: Scope, args: Record<string, Json>, _signal, maxChars) => {
+        read: async (scope: Scope, args: Record<string, Json>, signal, maxChars) => {
+          const reads = stoppableReads(db, signal);
           const input: Record<string, Json> = {
             ...args,
             ...(page ? { limit: args.limit ?? page.fallback } : {}),
@@ -98,7 +101,7 @@ function sharedTools(db: Database): ReadTool[] {
           };
           const dispatch = () =>
             dispatchTool(
-              db,
+              reads,
               {
                 kind: 'member',
                 userId: scope.userId,
@@ -133,7 +136,7 @@ function sharedTools(db: Database): ReadTool[] {
     });
 }
 export function agentTools(db: Database) {
-  const entries = sharedTools(db);
+  const entries = sharedReads(db);
   // The version fingerprints exactly what the model is offered.
   const catalog = JSON.stringify(toolDefinitions(entries));
   const version = `agent-tools-${createHash('sha256').update(catalog).digest('hex').slice(0, 16)}`;

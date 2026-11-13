@@ -1,11 +1,10 @@
-'use client';
-
 import type { ReactNode } from 'react';
 import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
 import * as ToastPrimitive from '@radix-ui/react-toast';
 import { AlertCircle, CheckCircle2, Info, X } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { FLOAT_FACE } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 
 type ToastTone = 'neutral' | 'positive' | 'negative';
@@ -34,7 +33,8 @@ const TONE_ICON = {
 
 /**
  * Toast — a brief message about something that just happened, bottom-right,
- * newest at the bottom: `surface`, `radius-lg`, `shadow-pop`, 400px. The tone
+ * newest at the bottom: the floating face (`surface`, 1px `line` border,
+ * `shadow-float`), `radius-lg`, 400px. The tone
  * shows only in the 16px icon plus a screen-reader word; negative toasts are
  * announced assertively and stay until dismissed.
  */
@@ -68,7 +68,10 @@ export function ToastProvider({ children }: Readonly<{ children: ReactNode }>) {
                 if (!open)
                   setMessages((current) => current.filter((item) => item.id !== message.id));
               }}
-              className="toast-panel bg-surface text-ink shadow-pop flex w-100 max-w-full items-start gap-3 rounded-lg py-3 ps-4 pe-3"
+              className={cn(
+                FLOAT_FACE,
+                'toast-panel flex w-100 max-w-full items-start gap-3 rounded-lg py-3 ps-4 pe-3',
+              )}
             >
               <span className={cn('inline-flex h-5 shrink-0 items-center', className)}>
                 <Icon className="size-4" aria-hidden />
@@ -92,7 +95,7 @@ export function ToastProvider({ children }: Readonly<{ children: ReactNode }>) {
                 ) : null}
               </div>
               <ToastPrimitive.Close
-                className="focus-ring text-ink-secondary not-disabled:hover:bg-surface-sunken not-disabled:hover:text-ink -m-1 grid size-[var(--control-sm)] shrink-0 place-items-center rounded-sm"
+                className="focus-ring text-ink-secondary not-disabled:hover:overlay-hover not-disabled:hover:text-ink -m-1 grid size-[var(--control-sm)] shrink-0 place-items-center rounded-sm"
                 aria-label="Dismiss notification"
               >
                 <X className="size-4" aria-hidden />

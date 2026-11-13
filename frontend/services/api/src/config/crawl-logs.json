@@ -129,6 +129,7 @@
   "task_max_attempts": 3,
   "pull_lease_ttl_seconds": 300,
   "max_export_rows": 100000,
+  "export_batch_rows": 2000,
   "worker_timeout_ms": 5000,
   "worker_flush_seconds": 60,
   "worker_batch_lines": 300

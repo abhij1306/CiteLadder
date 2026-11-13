@@ -1,5 +1,3 @@
-'use client';
-
 import { useState, type KeyboardEvent } from 'react';
 
 import {
@@ -19,12 +17,15 @@ import {
   type ChartTone,
 } from '@/components/ui/chart';
 import {
+  breakConnectors,
   isolatedPoints,
   labelledIndexes,
   linePoints,
   trendScale,
   type TrendScale,
 } from '@/components/ui/trend-geometry';
+import { LineEndLabels } from '@/components/ui/trend-line-labels';
+import { TrendTable } from '@/components/ui/trend-table';
 import { availabilityLabel } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
@@ -72,7 +73,9 @@ const defaultFormat = (value: number) => `${Math.round(value * 100) / 100}`;
  *
  * Width follows the container (the viewBox is measured pixels, so text stays
  * 12px); the height is a chart height role (`md`, 240, by default). A
- * missing value is a gap.
+ * missing value is a gap. A point not comparable with the one before it
+ * (`breakBefore`) breaks the solid line; a faint dashed segment bridges the
+ * break, so two runs either side of a method change still read as a line.
  */
 export function TrendChart({
   data,
@@ -86,7 +89,9 @@ export function TrendChart({
   yFormat = defaultFormat,
   format = yFormat,
   legend = true,
+  compact = false,
   eventsLabel,
+  directLabels = false,
 }: Readonly<{
   /** The first line, one entry per point; its labels and timestamps place every line. */
   data: readonly TrendPoint[];
@@ -106,8 +111,15 @@ export function TrendChart({
   /** A value in the legend, tooltip and table; defaults to `yFormat`. */
   format?: (value: number) => string;
   legend?: boolean;
+  /** Caption-size legend and hover card, where a long roster crowds the card. */
+  compact?: boolean;
   /** The legend's name for the event markers, e.g. "Marked implemented". */
   eventsLabel?: string;
+  /**
+   * Name each line at its latest point, so lines whose inks sit close (the
+   * comparison greys) are told apart by name rather than by shade alone.
+   */
+  directLabels?: boolean;
 }>) {
   const [plotRef, width] = useChartWidth<HTMLDivElement>();
   const [active, setActive] = useState<number | null>(null);
@@ -155,6 +167,7 @@ export function TrendChart({
       {legend ? (
         <ChartLegend
           line
+          compact={compact}
           markerLabel={events.length ? eventsLabel : undefined}
           entries={lines.map((line) => ({
             name: line.name,
@@ -192,6 +205,7 @@ export function TrendChart({
           height={height}
           active={active}
           yFormat={yFormat}
+          directLabels={directLabels && lines.length > 1}
         />
         {active === null ? null : (
           <ChartTip
@@ -205,6 +219,7 @@ export function TrendChart({
                 tone={line.tone}
                 name={line.name}
                 value={shown(line.values[active])}
+                compact={compact}
               />
             ))}
             {data[active]?.versionChange ? (
@@ -238,6 +253,7 @@ function TrendPlot({
   height,
   active,
   yFormat,
+  directLabels,
 }: Readonly<{
   data: readonly TrendPoint[];
   lines: readonly Line[];
@@ -247,9 +263,14 @@ function TrendPlot({
   height: number;
   active: number | null;
   yFormat: (value: number) => string;
+  directLabels: boolean;
 }>) {
   const breaks = data.map((point) => point.breakBefore === true);
-  const plotted = lines.map((line) => ({ line, points: linePoints(line.values, breaks, scale) }));
+  const plotted = lines.map((line) => ({
+    line,
+    points: linePoints(line.values, breaks, scale),
+    connectors: breakConnectors(line.values, breaks, scale),
+  }));
   const bottom = scale.padTop + scale.plotHeight;
   const latest = lines[0]?.values.at(-1);
   return (
@@ -308,7 +329,7 @@ function TrendPlot({
           className="stroke-line-control"
         />
       )}
-      {[...plotted].reverse().map(({ line, points }) => (
+      {[...plotted].reverse().map(({ line, points, connectors }) => (
         <g key={line.name} data-trend-line={line.tone}>
           <path
             d={chartPath(points)}
@@ -319,6 +340,21 @@ function TrendPlot({
             strokeLinejoin="round"
             className={CHART_STROKE[line.tone]}
           />
+          {/* Across a break the line goes on faint and dashed: the series
+              reads as one line, and the solid stroke never joins points
+              measured under different conditions. */}
+          {connectors.map(([from, to]) => (
+            <path
+              key={`${from[0]}-${to[0]}`}
+              data-trend-connector=""
+              d={chartPath([from, to])}
+              fill="none"
+              strokeWidth={1.5}
+              strokeDasharray="3 4"
+              strokeLinecap="round"
+              className={cn(CHART_STROKE[line.tone], 'opacity-40')}
+            />
+          ))}
           {isolatedPoints(points).map(([x, y]) => (
             <circle key={`${x}-${y}`} cx={x} cy={y} r={2.5} className={CHART_FILL[line.tone]} />
           ))}
@@ -327,6 +363,7 @@ function TrendPlot({
       {active === null && latest !== null && latest !== undefined ? (
         <TrendDot x={scale.x(data.length - 1)} y={scale.y(latest)} tone={1} />
       ) : null}
+      {directLabels ? <LineEndLabels lines={lines} scale={scale} bottom={bottom} /> : null}
       {active === null
         ? null
         : lines.map((line) => {
@@ -415,62 +452,6 @@ function placedEvents(
   return events.flatMap((event) => {
     const offset = event.timestamp - first;
     if (!Number.isFinite(offset) || offset < 0 || offset > span) return [];
-    return [{ event, x: scale.padLeft + (offset / span) * scale.plotWidth }];
+    return [{ event, x: scale.xAt(offset / span) }];
   });
-}
-
-/** Every value, and every drawn marker, for a reader who cannot see the plot. */
-function TrendTable({
-  label,
-  data,
-  lines,
-  events,
-  shown,
-}: Readonly<{
-  label: string;
-  data: readonly TrendPoint[];
-  lines: readonly Line[];
-  events: readonly TrendEvent[];
-  shown: (value: number | null | undefined) => string;
-}>) {
-  const notes = [
-    ...data.flatMap((point) =>
-      point.versionChange ? [`Method changed at ${point.label}: ${point.versionChange.note}`] : [],
-    ),
-    ...events.map((event) => event.label),
-  ];
-  return (
-    <div className="sr-only">
-      <table>
-        <caption>{label}</caption>
-        <thead>
-          <tr>
-            <th scope="col">Series</th>
-            {data.map((point, index) => (
-              <th key={`${point.label}-${index}`} scope="col">
-                {point.label}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {lines.map((line) => (
-            <tr key={line.name}>
-              <th scope="row">{line.name}</th>
-              {data.map((point, index) => (
-                <td key={`${point.label}-${index}`}>{shown(line.values[index])}</td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {notes.length ? (
-        <ul aria-label={`${label}: marked`}>
-          {notes.map((note) => (
-            <li key={note}>{note}</li>
-          ))}
-        </ul>
-      ) : null}
-    </div>
-  );
 }

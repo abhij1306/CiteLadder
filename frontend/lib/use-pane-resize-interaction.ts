@@ -1,5 +1,3 @@
-'use client';
-
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 
 type Bounds = { min: number; max: number };
@@ -8,7 +6,7 @@ const KEY_STEP = 16;
 const KEY_STEP_LARGE = 48;
 
 /**
- * Pointer and keyboard mechanics for `ResizableSplitPane`'s separator.
+ * Pointer and keyboard mechanics for the sidebar's resize separator.
  *
  * Keys: ← / → move 16px (Shift: 48px), Home → minimum, End → maximum.
  * Double-click restores the default. A cancelled pointer restores the width

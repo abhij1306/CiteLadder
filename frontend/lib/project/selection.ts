@@ -1,4 +1,4 @@
-import type { Project, Workspace } from '@citeladder/contracts';
+import type { Project, ProjectSummary, Workspace } from '@citeladder/contracts';
 
 /**
  * Pure selection algebra for the authenticated shell.
@@ -67,7 +67,7 @@ export type ProjectInputs = {
   /** This session's deliberate choice, seeded from device storage. */
   selectedProjectId: string | null;
   /** The current workspace's projects (empty while unknown). */
-  projects: readonly Project[];
+  projects: readonly ProjectSummary[];
   /** Whether `projects` is a settled answer rather than a stale/absent one. */
   listSettled: boolean;
 };
@@ -153,27 +153,29 @@ export function resolveStatus({
   if (hasResolvedProject) return 'ready';
   if (workspaceId === null || !listSettled) return 'resolving';
   if (activeProjectId === null) return 'empty';
-  // An id with no project object behind it is not something a screen can
-  // render against. Reachable only if a caller's pending flag disagrees with
-  // its resolved project, so it fails safe to the loader rather than claiming
-  // a readiness nothing can satisfy.
+  // An id with no project view behind it is not something a screen can
+  // render against: the list names the project, and its detail read is
+  // still in flight.
   return 'resolving';
 }
 
 /**
- * Pick the object for the resolved id.
+ * Pick the full view for the resolved id from the detail reads in hand.
  *
- * A directly-resolved project wins: it is authoritative for the id in the URL
- * and it lands a round trip before the list reconciles, which is what lets a
- * just-created project be usable the moment its destination mounts.
+ * The list holds summaries, so the active project is always a detail read:
+ * the one an explicit address requested, or the one the selection resolved
+ * to. A view from another workspace is never the active project — a stored
+ * selection is read before the list can confirm it, and a project the reader
+ * can open elsewhere must not be rendered against this workspace's scope.
  */
 export function pickActiveProject(
-  resolvedProject: Project | null,
-  projects: readonly Project[],
+  views: readonly (Project | null | undefined)[],
   activeProjectId: string | null,
+  workspaceId: string | null,
 ): Project | null {
-  if (resolvedProject?.id === activeProjectId) return resolvedProject;
-  return projects.find((project) => project.id === activeProjectId) ?? null;
+  return (
+    views.find((view) => view?.id === activeProjectId && view.workspace_id === workspaceId) ?? null
+  );
 }
 
 export type FailureInputs = {

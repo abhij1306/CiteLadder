@@ -43,4 +43,4 @@ export const UNCHANGED_COHORT_COMPOSITION = {
   removed_page_kinds: [],
   previous_page_count_by_kind: {},
   current_page_count_by_kind: {},
-} satisfies SiteHealthOverview['trend']['cohort_composition'];
+} satisfies SiteHealthOverview['change_summary']['cohort_composition'];

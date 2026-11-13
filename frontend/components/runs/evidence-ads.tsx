@@ -1,5 +1,3 @@
-'use client';
-
 import type { ExecutionAds } from '@citeladder/contracts/visibility-ads';
 
 import { Inline, Stack } from '@/components/ui/layout';
@@ -29,12 +27,7 @@ export function EvidenceAds({ ads }: Readonly<{ ads: ExecutionAds }>) {
       ) : (
         <Stack as="ul" gap="item">
           {ads.items.map((ad) => (
-            <Stack
-              as="li"
-              gap="tight"
-              key={ad.rank_absolute}
-              className={panelClasses({ tone: 'well' }, 'min-w-0')}
-            >
+            <Stack as="li" gap="tight" key={ad.rank_absolute} className={panelClasses('min-w-0')}>
               <Inline as="span" className="flex-wrap">
                 <span className={textRole('emphasis')}>{ad.title || 'Untitled ad'}</span>
                 <AdOwnershipChip ownership={ad.ownership} />

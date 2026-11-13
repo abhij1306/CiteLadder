@@ -25,16 +25,15 @@ function makePrompt(n: number, overrides: Partial<Prompt> = {}): Prompt {
 
 const TOPIC_ID = '22222222-2222-4222-8222-222222222222';
 
+const ANSWER = { auditId: '33333333-3333-4333-8333-333333333333', promptIndex: 0 };
+
+const NO_OP_ACTIONS = { onEdit: () => {}, onDelete: () => {}, onToggleEnabled: () => {} };
+
 function renderTable(prompts: Prompt[]) {
   return render(
     <MemoryRouter>
       <TooltipProvider>
-        <PromptTable
-          prompts={prompts}
-          onEdit={() => {}}
-          onDelete={() => {}}
-          onToggleEnabled={() => {}}
-        />
+        <PromptTable prompts={prompts} actions={NO_OP_ACTIONS} />
       </TooltipProvider>
     </MemoryRouter>,
   );
@@ -61,21 +60,51 @@ describe('PromptTable pagination', () => {
     scrollWidth.mockRestore();
   });
 
-  it('opens each question on its history and shows its measured rates', () => {
+  it('opens each question on its history and shows its measured rates and named brands', () => {
     const prompt = makePrompt(7);
+    const unnamed = makePrompt(8);
+    const brand = (name: string, kind: 'brand' | 'competitor') => ({
+      kind,
+      name,
+      responses: 1,
+      logo_url: null,
+      website: null,
+    });
     render(
       <MemoryRouter>
         <TooltipProvider>
           <PromptTable
-            prompts={[prompt]}
-            onEdit={() => {}}
-            onDelete={() => {}}
-            onToggleEnabled={() => {}}
+            prompts={[prompt, unnamed]}
+            actions={NO_OP_ACTIONS}
             measurements={
               new Map([
                 [
                   prompt.id,
-                  { visibilityRate: 0.5, ownedCitationRate: 0.25, change: null, position: null },
+                  {
+                    visibilityRate: 0.5,
+                    ownedCitationRate: 0.25,
+                    change: null,
+                    position: 2,
+                    answer: ANSWER,
+                    mentions: 4,
+                    brands: [
+                      brand('Acme', 'brand'),
+                      brand('Globex', 'competitor'),
+                      brand('Initech', 'competitor'),
+                    ],
+                  },
+                ],
+                [
+                  unnamed.id,
+                  {
+                    visibilityRate: 0,
+                    ownedCitationRate: 0,
+                    change: null,
+                    position: null,
+                    answer: ANSWER,
+                    mentions: 0,
+                    brands: [],
+                  },
                 ],
               ])
             }
@@ -88,15 +117,26 @@ describe('PromptTable pagination', () => {
       'href',
       '/prompts/00000000-0000-4000-8000-000000000007',
     );
-    const [header, row] = screen.getAllByRole('row');
+    const [header, row, unnamedRow] = screen.getAllByRole('row');
     const columns = within(header!)
       .getAllByRole('columnheader')
       .map((cell) => cell.textContent);
-    const cells = within(row!)
-      .getAllByRole('cell')
-      .map((cell) => cell.textContent);
-    expect(cells[columns.indexOf('Visibility')]).toBe('50%');
-    expect(cells[columns.indexOf('Owned citations')]).toBe('25%');
+    expect(columns.slice(0, 6)).toEqual([
+      'Prompt',
+      'Visibility',
+      expect.stringMatching(/^Mentions/),
+      expect.stringMatching(/^Citations/),
+      expect.stringMatching(/^Position/),
+      'Change',
+    ]);
+    const cells = within(row!).getAllByRole('cell');
+    expect(cells[1]!.textContent).toBe('50%');
+    // Three marks, each named for a screen reader, then the fourth as overflow.
+    expect(cells[2]).toHaveTextContent('AcmeAGlobexGInitechI+1 more');
+    expect(cells[3]!.textContent).toBe('25%');
+    expect(cells[4]!.textContent).toBe('#2');
+    // Measured, and no brand named: zero, not the "not measured" mark.
+    expect(within(unnamedRow!).getAllByRole('cell')[2]!.textContent).toBe('None');
   });
 
   it('pages through rows with the page indicator and ghost buttons', async () => {
@@ -146,12 +186,7 @@ describe('PromptTable pagination', () => {
     const { rerender } = render(
       <MemoryRouter>
         <TooltipProvider>
-          <PromptTable
-            prompts={prompts}
-            onEdit={() => {}}
-            onDelete={() => {}}
-            onToggleEnabled={() => {}}
-          />
+          <PromptTable prompts={prompts} actions={NO_OP_ACTIONS} />
         </TooltipProvider>
       </MemoryRouter>,
     );
@@ -169,12 +204,7 @@ describe('PromptTable pagination', () => {
     rerender(
       <MemoryRouter>
         <TooltipProvider>
-          <PromptTable
-            prompts={prompts.slice(0, 5)}
-            onEdit={() => {}}
-            onDelete={() => {}}
-            onToggleEnabled={() => {}}
-          />
+          <PromptTable prompts={prompts.slice(0, 5)} actions={NO_OP_ACTIONS} />
         </TooltipProvider>
       </MemoryRouter>,
     );
@@ -184,18 +214,33 @@ describe('PromptTable pagination', () => {
     expect(screen.queryByRole('button', { name: 'Next page' })).toBeNull();
   });
 
+  it('states the enabled state without offering a control when the reader may not edit', () => {
+    render(
+      <MemoryRouter>
+        <TooltipProvider>
+          <PromptTable prompts={[makePrompt(1), makePrompt(2, { enabled: false })]} />
+        </TooltipProvider>
+      </MemoryRouter>,
+    );
+
+    const [, first, second] = screen.getAllByRole('row');
+    expect(
+      within(first!)
+        .getAllByRole('cell')
+        .map((cell) => cell.textContent),
+    ).toEqual(['Prompt number 1', 'Yes']);
+    expect(within(second!).getAllByRole('cell')[1]!.textContent).toBe('No');
+    expect(screen.queryByRole('switch')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Prompt actions' })).toBeNull();
+  });
+
   it('keeps row actions wired on paginated rows', async () => {
     const user = userEvent.setup();
     const onToggleEnabled = vi.fn();
     render(
       <MemoryRouter>
         <TooltipProvider>
-          <PromptTable
-            prompts={[makePrompt(1)]}
-            onEdit={() => {}}
-            onDelete={() => {}}
-            onToggleEnabled={onToggleEnabled}
-          />
+          <PromptTable prompts={[makePrompt(1)]} actions={{ ...NO_OP_ACTIONS, onToggleEnabled }} />
         </TooltipProvider>
       </MemoryRouter>,
     );

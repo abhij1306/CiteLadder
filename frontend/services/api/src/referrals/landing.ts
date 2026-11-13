@@ -5,6 +5,7 @@ import type { Database } from '../db/database.ts';
 import { record } from '../db/json.ts';
 import { isoDateText } from '../db/timestamps.ts';
 import {
+  observesZero,
   selectedPartition,
   partitionQuality,
   type PartitionScope,
@@ -164,8 +165,7 @@ export function referralExtras(evidence: Evidence, start: string, end: string) {
       q.filter((d) => d.day >= start && d.day <= end),
     ]),
   );
-  const usable = (dataset: string) =>
-    quality[dataset]!.every((q) => q.revision !== null && q.flags.length === 0);
+  const usable = (dataset: string) => quality[dataset]!.every(observesZero);
   const measure = (counts: Counts, valid: boolean) => ({
     sessions: counts.sessions >= 0 && (valid || counts.sessions > 0) ? counts.sessions : null,
     key_events:
@@ -234,8 +234,7 @@ export async function replaceReferralLandings(
     .where('reporting_date', '<=', sql<Date>`${scope.end}::date`)
     .execute();
   for (let i = 0; i < extras.landing.length; i += policy.traffic.TRAFFIC_METRIC_ROW_BATCH_SIZE) {
-    // Chunks stay under the bind-parameter limit on one connection.
-    await db // NOSONAR
+    await db // NOSONAR -- Chunks stay under the bind-parameter limit on one connection.
       .insertInto('ai_referral_landing_daily')
       .values(
         extras.landing.slice(i, i + policy.traffic.TRAFFIC_METRIC_ROW_BATCH_SIZE).map((r) => ({

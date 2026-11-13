@@ -43,6 +43,15 @@ export function groupBy<T, K>(rows: Iterable<T>, key: (row: T) => K): Map<K, [T,
   return groups;
 }
 
+/** Jaccard overlap of two sets: shared items over all items; 0 when both are empty. */
+export function jaccard<T>(a: ReadonlySet<T>, b: ReadonlySet<T>): number {
+  const union = new Set([...a, ...b]).size;
+  if (!union) return 0;
+  let shared = 0;
+  for (const item of a) if (b.has(item)) shared += 1;
+  return shared / union;
+}
+
 // Bind parameters per statement stay far below PostgreSQL's 65,535 limit.
 const ID_CHUNK = 5000;
 

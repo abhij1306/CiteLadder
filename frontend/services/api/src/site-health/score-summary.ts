@@ -5,6 +5,7 @@ import type { Database } from '../db/database.ts';
 import { record } from '../db/json.ts';
 import { aggregateMeasurements, aggregateByPageKind } from './analysis/measurement-aggregation.ts';
 import { persistedEvaluation } from './terminal-analysis.ts';
+import { pageAuditsSql } from './reads/crawl.ts';
 import type { Crawl } from './site-task.ts';
 import { compareText, scalarText } from '../text-order.ts';
 
@@ -13,7 +14,17 @@ function classificationState(classified: number, expected: number) {
   return classified === expected ? 'complete' : 'partial';
 }
 
-export async function loadMeasurementProjection(db: Database, crawl: Crawl) {
+/**
+ * The selected pages' analyses, evaluations and tasks a score reads. A
+ * snapshot (`latest`) reads each page's latest audit as the crawl shows it
+ * (`pageAuditsSql`, SH-B9), each with the task of the crawl that audited it;
+ * an active crawl's provisional summary reads only its own analyses.
+ */
+export async function loadMeasurementProjection(
+  db: Database,
+  crawl: Crawl,
+  { latest }: { latest: boolean },
+) {
   await db
     .selectFrom('site_health_profiles')
     .select('id')
@@ -44,7 +55,11 @@ export async function loadMeasurementProjection(db: Database, crawl: Crawl) {
     .distinctOn('p.site_url_id')
     .where('p.workspace_id', '=', crawl.workspace_id)
     .where('p.project_id', '=', crawl.project_id)
-    .where('p.crawl_id', '=', crawl.id)
+    .where((eb) =>
+      latest
+        ? eb('p.id', 'in', sql<string>`(select v.analysis_id from (${pageAuditsSql(crawl)}) v)`)
+        : eb('p.crawl_id', '=', crawl.id),
+    )
     .where('p.status', '=', 'completed')
     .where('p.site_url_id', '=', sql<string>`any(${selectedIds}::uuid[])`)
     .orderBy('p.site_url_id')
@@ -68,20 +83,27 @@ export async function loadMeasurementProjection(db: Database, crawl: Crawl) {
       return evaluation ? [persistedEvaluation(evaluation)] : [];
     }),
   }));
-  // A page whose fetch failed never gets an analyze task; its discover task carries the outcome.
-  const tasks = await db
+  // A page whose fetch failed never gets an analyze task; its discover task
+  // carries the outcome. A page another audit decided reads that audit's task.
+  const auditedBy = new Map(rows.map((row) => [row.site_url_id, row.crawl_id]));
+  const crawlIds = [...new Set([crawl.id, ...auditedBy.values()])];
+  const candidates = await db
     .selectFrom('site_crawl_tasks')
     .selectAll()
-    .distinctOn('site_url_id')
+    .distinctOn(['crawl_id', 'site_url_id'])
     .where('workspace_id', '=', crawl.workspace_id)
-    .where('crawl_id', '=', crawl.id)
+    .where('crawl_id', '=', sql<string>`any(${crawlIds}::uuid[])`)
     .where('task_kind', 'in', ['analyze', 'discover'])
     .where('site_url_id', '=', sql<string>`any(${selectedIds}::uuid[])`)
+    .orderBy('crawl_id')
     .orderBy('site_url_id')
     .orderBy(sql`task_kind = 'analyze'`, 'desc')
     .orderBy('generation', 'desc')
     .orderBy('id', 'desc')
     .execute();
+  const tasks = candidates
+    .filter((row) => row.crawl_id === (auditedBy.get(row.site_url_id ?? '') ?? crawl.id))
+    .sort((a, b) => compareText(a.site_url_id ?? '', b.site_url_id ?? ''));
   const expected = tasks.filter((row) => row.classification_expected);
   const expectedByUrl = new Map(expected.map((row) => [row.site_url_id, row]));
   const completed = new Set<string>();

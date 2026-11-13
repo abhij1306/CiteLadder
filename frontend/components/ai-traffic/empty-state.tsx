@@ -13,7 +13,6 @@ export function AiReferralsEmptyState() {
     <DataSourceSetup
       required={['ga4']}
       title="Connect Google Analytics 4"
-      description="AI referrals come from this project's own GA4 sessions. Connect Google and choose the Analytics property for this site."
       whenReady={
         <QueryState
           kind="empty"

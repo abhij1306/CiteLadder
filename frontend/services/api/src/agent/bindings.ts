@@ -9,6 +9,7 @@ import { agentModels } from './models.ts';
 import { ModelCalls } from './model-calls.ts';
 import { AgentStore } from './store.ts';
 import { AgentOutputs } from './outputs.ts';
+import { PageSuggestions } from '../page-documents/suggestion-actions.ts';
 import { AgentQueue } from './queue.ts';
 import { AgentRuntime } from './runtime.ts';
 import { readAgentContext } from './context-adapter.ts';
@@ -42,6 +43,7 @@ export async function createAgentBindings(db: Database, env: SettingSource = pro
     models,
     settings,
     outputs: new AgentOutputs(db),
+    suggestions: new PageSuggestions(db),
     queue: new AgentQueue(db, settings.leaseSeconds),
   };
 }

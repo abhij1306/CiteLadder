@@ -1,5 +1,3 @@
-'use client';
-
 import { Search, Users } from 'lucide-react';
 import type { ReactNode } from 'react';
 

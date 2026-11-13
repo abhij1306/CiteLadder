@@ -20,6 +20,16 @@ function point(
 }
 
 describe('measurement history', () => {
+  it('keeps a bucket’s calendar day west of UTC and shows a run in the display zone', () => {
+    const bucket = { ...point(0.5, 'panel-a', '2026-11-01T00:00:00Z'), audit_id: null };
+    const run = {
+      ...point(0.5, 'panel-a', '2026-11-01T02:00:00Z'),
+      audit_id: '11111111-1111-4111-8111-111111111111',
+    };
+    const [day, instant] = toChartPoints([bucket, run], 'sov', 'America/New_York');
+    expect(day).toMatchObject({ label: 'Nov 1', dateLabel: 'Nov 1, 2026' });
+    expect(instant).toMatchObject({ label: 'Oct 31', dateLabel: 'Oct 31, 2026' });
+  });
   it('preserves precision and elapsed time', () => {
     const points = toChartPoints(
       [point(0.201), point(0.204, 'panel-a', '2026-07-04T00:00:00Z')],

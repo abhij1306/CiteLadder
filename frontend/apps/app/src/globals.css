@@ -32,8 +32,8 @@
 @custom-variant labelled (@media (min-width: 1280px), &:where([data-nav-drawer] *));
 
 @theme {
-  /* Faces. Cal Sans (display) sets headings and big numbers at weight 400
-     only; Geist (sans) everything people read and click; Geist Mono (mono)
+  /* Faces. The display face is defined but set on nothing in the app (D54);
+     the sans face sets everything people read and click; the mono face
      eyebrows, deltas, dates, citation numbers and code. index.html names the
      faces and their metric-matched fallbacks as `--font-face-*`. */
   --font-*: initial;
@@ -50,13 +50,23 @@
   --color-paper: #f4f4f4;
   --color-surface: #ffffff;
   --color-surface-sunken: #ececec;
+  /* The app's sidebar column (D59): its own step beside the page. The
+     system's value is the ground; the app rebinds it below. */
+  --color-sidebar: var(--color-paper);
+  /* States (D51): an ink overlay over whatever fill is beneath, so hover,
+     pressed and selected read the same on paper, surface and sunken and
+     never share one fill. Applied with the `overlay-*` utilities below. */
+  --color-state-hover: rgb(17 17 17 / 6%);
+  --color-state-pressed: rgb(17 17 17 / 8%);
+  --color-state-selected: rgb(17 17 17 / 10%);
   --color-line: #e5e5e5;
   --color-line-strong: #d4d4d4;
   --color-line-control: #858585;
   --color-ink: #111111;
   --color-ink-hover: #2a2a2a;
   --color-ink-secondary: #525252;
-  --color-ink-muted: #6b6b6b;
+  /* One grey on every surface (D49, D50): muted is the secondary ink. */
+  --color-ink-muted: var(--color-ink-secondary);
   --color-on-ink: #ffffff;
   --color-accent: #e8501a;
   --color-accent-ink: #b53a0c;
@@ -78,12 +88,11 @@
   --color-scrim: rgb(17 17 17 / 32%);
   --color-chart-grid: #ececec;
 
-  /* Type. Each role owns size, leading, weight and tracking. The display
-     roles (display-*, title, title-sm, stat) can pair with `font-display`,
-     but in the app only the page title and the setup card titles are Cal
-     Sans (D7, D37): its other
-     titles and figures set these sizes in Geist 500. The mono roles (eyebrow,
-     data, code) pair with `font-mono`, the rest are Geist, never above 500. */
+  /* Type. Each role owns size, leading, weight and tracking. The app sets no
+     display face (D54): its page title, setup card titles and other titles
+     and figures set these sizes in the sans face at 500. The mono roles
+     (eyebrow, data, code) pair with `font-mono`, the rest are the sans face,
+     never above 500. */
   --text-*: initial;
   --text-display-2xl: 44px;
   --text-display-2xl--line-height: 48px;
@@ -103,8 +112,13 @@
   --text-display-md--letter-spacing: -0.01em;
   --text-display-sm: 24px;
   --text-display-sm--line-height: 32px;
-  --text-display-sm--font-weight: 400;
+  --text-display-sm--font-weight: 500;
   --text-display-sm--letter-spacing: -0.01em;
+  /* The app's PageHeader title: 4px under display-sm (D58). */
+  --text-page-title: 20px;
+  --text-page-title--line-height: 28px;
+  --text-page-title--font-weight: 500;
+  --text-page-title--letter-spacing: -0.01em;
   --text-title: 22px;
   --text-title--line-height: 28px;
   --text-title--font-weight: 400;
@@ -113,7 +127,7 @@
   --text-title-sm--font-weight: 400;
   --text-stat: 28px;
   --text-stat--line-height: 36px;
-  /* Geist 500 since D7: an app number is never Cal Sans; 28 since D15. */
+  /* The sans face at 500 since D7: an app number is never the display face; 28 since D15. */
   --text-stat--font-weight: 500;
   --text-stat--letter-spacing: -0.02em;
   --text-lead: 20px;
@@ -136,9 +150,9 @@
   --text-label-lg--font-weight: 500;
   --text-heading: 16px;
   --text-heading--line-height: 24px;
-  /* Geist never sets above 500 (decision D6). */
+  /* The sans face never sets above 500 (decision D6). */
   --text-heading--font-weight: 500;
-  /* Dialog and drawer titles and the plan name: Geist 500 22/28 (D7). */
+  /* Dialog and drawer titles and the plan name: the sans face at 500, 22/28 (D7). */
   --text-heading-lg: 22px;
   --text-heading-lg--line-height: 28px;
   --text-heading-lg--font-weight: 500;
@@ -216,16 +230,14 @@
 :root {
   color-scheme: light;
 
-  /* Depth is quiet: a hairline ring plus a short, soft drop. xs on secondary
-     buttons, the selected tab and pills; card on app cards and
-     screens inside a frame; pop on menus, popovers, dialogs and toasts; press
-     on the primary button. Never two shadows on nested surfaces. edge is the
-     faint smudge, with no ring, under every soft field edge (decision D5). */
+  /* Depth is quiet. Nothing at rest has a shadow and an edge is always a
+     1px `line` border (D51): float is the drop under a floating surface
+     (menus, popovers, dialogs, drawers, toasts) and edge the faint smudge
+     under a control's soft edge (D5, D46); press is the primary button.
+     Never two shadows on nested surfaces. */
   --shadow-edge: 0 1px 2px rgba(17, 17, 17, 0.05);
   --shadow-xs: 0 0 0 1px rgb(17 17 17 / 8%), 0 1px 2px rgb(17 17 17 / 6%);
-  --shadow-card:
-    0 0 0 1px rgb(17 17 17 / 6%), 0 1px 2px rgb(17 17 17 / 4%),
-    0 6px 16px -4px rgb(17 17 17 / 6%);
+  --shadow-float: 0 2px 6px rgb(17 17 17 / 6%), 0 16px 40px -8px rgb(17 17 17 / 14%);
   --shadow-pop:
     0 0 0 1px rgb(17 17 17 / 8%), 0 2px 6px rgb(17 17 17 / 6%),
     0 16px 40px -8px rgb(17 17 17 / 14%);
@@ -243,10 +255,13 @@
   --control-lg: 48px;
   --row-app: 40px;
   --nav-height: 64px;
+  /* The labelled sidebar's default and narrowest width; the reader may drag
+     it wider (to 480px), and the shell then sets this variable inline from
+     the stored width (lib/sidebar-width.ts). */
   --sidebar-width: 248px;
-  /* The sidebar below 1280px: one control wide inside its 12px inset, plus
-     its 1px edge (61px, decision D3). */
-  --sidebar-rail-width: calc(var(--control-md) + 24px + 1px);
+  /* The sidebar below 1280px: one control wide inside its 12px inset (56px,
+     decision D3). One `line` rule divides the sidebar from the page (D12). */
+  --sidebar-rail-width: calc(var(--control-md) + 24px);
 
   /* Component geometry the components read. Each derives from a system token. */
   /* What sticks under the app's top bar starts below it (D12). */
@@ -316,13 +331,15 @@
   --color-paper: #0a0a0a;
   --color-surface: #151515;
   --color-surface-sunken: #1e1e1e;
+  --color-state-hover: rgb(244 244 244 / 6%);
+  --color-state-pressed: rgb(244 244 244 / 8%);
+  --color-state-selected: rgb(244 244 244 / 10%);
   --color-line: #2a2a2a;
   --color-line-strong: #3a3a3a;
   --color-line-control: #747474;
   --color-ink: #f4f4f4;
   --color-ink-hover: #d6d6d6;
   --color-ink-secondary: #a6a6a6;
-  --color-ink-muted: #8c8c8c;
   --color-on-ink: #111111;
   --color-accent: #ff6a33;
   --color-accent-ink: #ff9466;
@@ -342,11 +359,30 @@
   --color-chart-grid: #262626;
   --shadow-edge: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow-xs: 0 0 0 1px rgb(255 255 255 / 8%), 0 1px 2px rgb(0 0 0 / 50%);
-  --shadow-card: 0 0 0 1px rgb(255 255 255 / 7%), 0 1px 2px rgb(0 0 0 / 60%);
+  --shadow-float: 0 16px 40px rgb(0 0 0 / 60%);
   --shadow-pop: 0 0 0 1px rgb(255 255 255 / 10%), 0 16px 40px rgb(0 0 0 / 60%);
   --shadow-press:
     inset 0 1px 0 rgb(255 255 255 / 60%), inset 0 -2px 0 rgb(0 0 0 / 20%),
     0 1px 2px rgb(0 0 0 / 60%), 0 8px 24px -6px rgb(0 0 0 / 60%);
+}
+
+/* The app's dark (D58, D59): a clear ladder of fills, the sidebar darkest,
+   then the page, the card one step lighter and the inset a well inside it;
+   edges and hover are translucent white over whatever fill is beneath; the
+   primary ink 10% lower in contrast. It rebinds every colour the app's light
+   block below sets: that block follows the system's dark at the same
+   specificity, so it would otherwise win in the app's dark. */
+:root[data-theme='dark']:not([data-public-surface]) {
+  --color-paper: #111111;
+  --color-sidebar: #0a0a0a;
+  --color-surface: #1c1c1c;
+  --color-surface-sunken: #141414;
+  --color-state-hover: rgb(244 244 244 / 4%);
+  --color-line: rgb(255 255 255 / 8%);
+  --color-line-strong: rgb(255 255 255 / 14%);
+  --color-chart-grid: #2b2b2b;
+  --color-ink: #e8e8e8;
+  --color-ink-secondary: #9a9a9a;
 }
 
 /* Tailwind folds a theme shadow into its own variable at build time, which
@@ -357,14 +393,28 @@
 @utility shadow-xs {
   box-shadow: var(--shadow-xs);
 }
-@utility shadow-card {
-  box-shadow: var(--shadow-card);
+@utility shadow-float {
+  box-shadow: var(--shadow-float);
 }
 @utility shadow-pop {
   box-shadow: var(--shadow-pop);
 }
 @utility shadow-press {
   box-shadow: var(--shadow-press);
+}
+
+/* State layers (D51): the state's ink overlay painted as a background image,
+   so it tints an opaque control (a surface button) and a transparent row
+   alike without replacing their fill. A selected element takes no hover
+   overlay, so the two never compete. */
+@utility overlay-hover {
+  background-image: linear-gradient(var(--color-state-hover), var(--color-state-hover));
+}
+@utility overlay-pressed {
+  background-image: linear-gradient(var(--color-state-pressed), var(--color-state-pressed));
+}
+@utility overlay-selected {
+  background-image: linear-gradient(var(--color-state-selected), var(--color-state-selected));
 }
 
 /* Below the shell breakpoint the sidebar is the rail and the main gutter
@@ -378,7 +428,17 @@
 /* The app's density (decision D11): compact and technical, like GitHub or
    Claude Code, not airy. One value per role still holds inside the app: table and fact rows `row-app` (40), card and dialog padding 16,
    header → controls 16, the controls band's rows 8 apart, peers 12 apart. */
-:root {
+:root:not([data-public-surface]) {
+  /* The app's primary ink, 10% lower in contrast than the system's (D58). */
+  --color-ink: #1c1c1c;
+  /* The app's light fills and secondary ink (D59): a near-white page, the
+     sidebar one step off it, white cards and selected sidebar rows, and one
+     inset. The secondary ink is the lightest grey that still holds 4.5:1
+     under every state overlay on every one of those fills. */
+  --color-paper: #fcfcfc;
+  --color-sidebar: #fafafa;
+  --color-surface-sunken: #f4f4f5;
+  --color-ink-secondary: #61616b;
   --content-gutter: 24px;
   --page-section-gap: 16px;
   --workspace-gap: 12px;
@@ -478,34 +538,47 @@ body {
    page title display-md, section title, card title heading, default text
    body-sm, controls label, footnotes caption, numbers stat. They sit in the
    components layer so a status utility still overrides the ink where the
-   value's meaning is its colour. */
+   value's meaning is its colour.
+
+   Three text styles, never more (D49): heading (500, ink) for page, section,
+   card, dialog and drawer titles, buttons, the selected tab or nav item and
+   a metric's figure; primary (400, ink) for what is read first in a row or
+   sentence (titles, names, values, cells, prose); secondary (400, the app's
+   one grey) for what supports it (descriptions, labels, column heads, meta,
+   counts). Every role below is one of the three. */
 @layer components {
   .type-page-title {
-    font-family: var(--font-display);
-    font-size: var(--text-display-sm);
-    line-height: var(--text-display-sm--line-height);
-    font-weight: 400;
-    letter-spacing: var(--text-display-sm--letter-spacing);
-    color: var(--color-ink);
-  }
-  /* In the app Cal Sans is the page title's and the auth card title's alone
-     (decisions D7, D37): every other title and number is Geist, never above
-     500 (D6). */
-  .type-section-title {
     font-family: var(--font-sans);
-    font-size: var(--text-heading-lg);
-    line-height: var(--text-heading-lg--line-height);
-    font-weight: var(--text-heading-lg--font-weight);
-    letter-spacing: var(--text-heading-lg--letter-spacing);
+    font-size: var(--text-page-title);
+    line-height: var(--text-page-title--line-height);
+    font-weight: var(--text-page-title--font-weight);
+    letter-spacing: var(--text-page-title--letter-spacing);
     color: var(--color-ink);
   }
-  .type-item-title {
+  /* The app sets two families, the sans and mono faces (D54): every title and
+     number, the page title included, is the sans face, never above 500 (D6). The app's sizes are 12, 14 and 16; only the page title
+     (20, D58) and a metric's figure (24, D48) are larger. */
+  .type-section-title {
     font-family: var(--font-sans);
     font-size: var(--text-heading);
     line-height: var(--text-heading--line-height);
     font-weight: 500;
     letter-spacing: 0;
     color: var(--color-ink);
+  }
+  .type-item-title {
+    font-family: var(--font-sans);
+    font-size: var(--text-label);
+    line-height: var(--text-label--line-height);
+    font-weight: 400;
+    letter-spacing: 0;
+    color: var(--color-ink);
+  }
+  /* The same size set as a heading (a table's, a settings section's, a card
+     in a grid) is a heading, so it takes the heading weight; in a row, a
+     cell or a list it stays 400. */
+  :is(h1, h2, h3, h4, h5, h6).type-item-title {
+    font-weight: 500;
   }
   .type-body {
     font-family: var(--font-sans);
@@ -515,20 +588,25 @@ body {
     letter-spacing: 0;
     color: var(--color-ink-secondary);
   }
-  /* Buttons, navigation, tabs, links: the ink belongs to the control's state. */
+  /* Navigation, tabs, links and list rows: the ink belongs to the control's
+     state, and only a selected item steps up to 500 (its primitive sets it).
+     A button is 500 at rest (button.tsx); so is the file input's button. */
   .type-control,
   .type-control-file::file-selector-button {
     font-family: var(--font-sans);
     font-size: var(--text-label);
     line-height: var(--text-label--line-height);
-    font-weight: 500;
+    font-weight: 400;
     letter-spacing: 0;
+  }
+  .type-control-file::file-selector-button {
+    font-weight: 500;
   }
   .type-label {
     font-family: var(--font-sans);
     font-size: var(--text-label);
     line-height: var(--text-label--line-height);
-    font-weight: 500;
+    font-weight: 400;
     letter-spacing: 0;
     color: var(--color-ink-secondary);
   }
@@ -540,72 +618,62 @@ body {
     letter-spacing: 0;
     color: var(--color-ink-muted);
   }
-  /* The number in a Stat, a ScoreRing or a donut's centre: Geist 500 with
-     digits of one width. */
+  /* The number in a Stat or a ScoreRing's centre: the sans face at 500 at
+     24/32 (D48), digits of one width. */
   .type-figure {
     font-family: var(--font-sans);
-    font-size: var(--text-stat);
-    line-height: var(--text-stat--line-height);
+    font-size: var(--text-display-sm);
+    line-height: var(--text-display-sm--line-height);
     font-weight: 500;
-    letter-spacing: var(--text-stat--letter-spacing);
+    letter-spacing: var(--text-display-sm--letter-spacing);
     font-variant-numeric: tabular-nums;
     color: var(--color-ink);
   }
-  /* A number inside a row: the card-title size with digits of one width. */
-  /* The ScoreRing's and the DonutChart's centre: Geist 500 32/38 (D7). */
-  .type-figure-ring {
-    font-family: var(--font-sans);
-    font-size: var(--text-display-lg);
-    line-height: var(--text-display-lg--line-height);
-    font-weight: 500;
-    letter-spacing: var(--text-display-lg--letter-spacing);
-    font-variant-numeric: tabular-nums;
-    color: var(--color-ink);
-  }
-
+  /* A number inside a row: the body size with digits of one width. */
   .type-figure-sm {
     font-family: var(--font-sans);
-    font-size: var(--text-heading);
-    line-height: var(--text-heading--line-height);
-    font-weight: 500;
+    font-size: var(--text-label);
+    line-height: var(--text-label--line-height);
+    font-weight: 400;
     letter-spacing: 0;
     font-variant-numeric: tabular-nums;
     color: var(--color-ink);
   }
-  /* A change indicator: the mono data role; the caller's tone is the ink. */
+  /* A change indicator: mono at the caption size; the caller's tone is the ink. */
   .type-delta {
     font-family: var(--font-mono);
-    font-size: var(--text-data);
-    line-height: var(--text-data--line-height);
+    font-size: var(--text-caption);
+    line-height: var(--text-caption--line-height);
     font-weight: 400;
     letter-spacing: 0;
   }
-  /* A block of code or a copyable command: the mono code role. */
+  /* A block of code or a copyable command: mono at the caption size. */
   .type-code {
     font-family: var(--font-mono);
-    font-size: var(--text-code);
-    line-height: var(--text-code--line-height);
+    font-size: var(--text-caption);
+    line-height: var(--text-body-sm--line-height);
     font-weight: 400;
     letter-spacing: 0;
   }
-  /* Badges, chips, counts and key hints: caption size at label weight; the
-     badge's tone supplies the ink. */
+  /* Badges, chips, counts and key hints: the caption size; the badge's tone
+     supplies the ink. */
   .type-badge {
     font-family: var(--font-sans);
     font-size: var(--text-caption);
     line-height: var(--text-caption--line-height);
-    font-weight: 500;
+    font-weight: 400;
     letter-spacing: 0;
   }
-  /* Rendered Markdown (Agent output, evidence answers): body text, headings
-     in the title and heading roles, code on `surface-sunken` in Geist Mono.
-     Generated headings start at h2 (see markdown.tsx). */
+  /* Rendered Markdown (Agent output, evidence answers): reading text in the
+     primary ink, headings in the title and heading roles, code on
+     `surface-sunken` in the mono face. Generated headings start at h2 (see
+     markdown.tsx). */
   .prose-content {
     font-family: var(--font-sans);
-    font-size: var(--text-body);
-    line-height: var(--text-body--line-height);
+    font-size: var(--text-body-sm);
+    line-height: var(--text-body-sm--line-height);
     font-weight: 400;
-    color: var(--color-ink-secondary);
+    color: var(--color-ink);
   }
   .prose-content > :last-child { margin-bottom: 0; }
   .prose-content :where(h2, h3, h4, h5, h6) {
@@ -616,11 +684,8 @@ body {
     margin: 1.5rem 0 0.75rem;
   }
   .prose-content > :where(h2, h3, h4, h5, h6):first-child { margin-top: 0; }
-  .prose-content h2 {
-    font-size: var(--text-title);
-    line-height: var(--text-title--line-height);
-  }
-  .prose-content h3 { font-size: var(--text-heading); line-height: var(--text-heading--line-height); }
+  .prose-content h2 { font-size: var(--text-heading); line-height: var(--text-heading--line-height); }
+  .prose-content h3 { font-size: var(--text-label); line-height: var(--text-label--line-height); }
   .prose-content :where(h4, h5, h6) { font-size: var(--text-label); line-height: var(--text-label--line-height); }
   .prose-content :where(p, ul, ol, pre, table, blockquote) { margin: 0 0 1rem; }
   .prose-content :where(ul, ol) { margin-left: 1.5rem; }
@@ -642,8 +707,8 @@ body {
   }
   .prose-content code {
     font-family: var(--font-mono);
-    font-size: var(--text-data);
-    line-height: var(--text-data--line-height);
+    font-size: var(--text-caption);
+    line-height: var(--text-caption--line-height);
     padding: 0.125rem 0.25rem;
     border-radius: var(--radius-xs);
     background: var(--color-surface-sunken);
@@ -655,8 +720,8 @@ body {
     border-radius: var(--radius-md);
     background: var(--color-surface-sunken);
     font-family: var(--font-mono);
-    font-size: var(--text-code);
-    line-height: var(--text-code--line-height);
+    font-size: var(--text-caption);
+    line-height: var(--text-body-sm--line-height);
   }
   .prose-content pre code { padding: 0; background: transparent; font-size: inherit; line-height: inherit; }
   .prose-content .prose-table-frame {
@@ -682,10 +747,10 @@ body {
     text-align: left;
     font-size: var(--text-label);
     line-height: var(--text-label--line-height);
-    font-weight: 500;
+    font-weight: 400;
     color: var(--color-ink-muted);
     background: var(--color-surface-sunken);
-    border-bottom: 1px solid var(--color-line);
+    border-bottom: 1px solid var(--color-line-strong);
   }
   .prose-content td {
     padding: 0.75rem 1rem;
@@ -707,9 +772,10 @@ body {
   .prose-compact pre { padding: 0.75rem; }
   .prose-compact :is(th, td) { padding: 0.5rem 0.75rem; }
 
-  /* Modifier: a value or name inside text that owns its size. */
+  /* Modifier: a value or name inside text that owns its size. The primary
+     ink sets it apart from the grey around it; the weight stays 400. */
   .type-emphasis {
-    font-weight: 500;
+    font-weight: 400;
     color: var(--color-ink);
   }
 
@@ -718,7 +784,7 @@ body {
     font-family: var(--font-mono);
     font-size: var(--text-eyebrow);
     line-height: var(--text-eyebrow--line-height);
-    font-weight: 500;
+    font-weight: 400;
     letter-spacing: var(--text-eyebrow--letter-spacing);
     text-transform: uppercase;
     color: var(--color-ink-muted);
@@ -734,9 +800,90 @@ body {
   }
 }
 
+/* The page workspace's editor (CodeMirror with live preview, E2): the page
+   reads as an article in the prose ladder; headings, bold, italics and links
+   render styled while their Markdown marks hide off the cursor's line. A
+   suggestion's text is underlined in the info tint when it is ready to apply
+   and the warning tint when it needs a fact. Unlayered and scoped under
+   `.page-editor .cm-editor`, because CodeMirror injects its base theme
+   (monospace, its own padding, a dotted focus outline) as unlayered rules at
+   run time. Its text field keeps the shared ring, drawn inside the pane so
+   the scroller never clips it. */
+.page-editor {
+  min-height: 100%;
+}
+.page-editor .cm-editor {
+  min-height: 100%;
+  background: transparent;
+  color: var(--color-ink);
+}
+.page-editor .cm-editor.cm-focused {
+  outline: none;
+}
+.page-editor .cm-editor .cm-scroller {
+  font-family: var(--font-sans);
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm--line-height);
+}
+.page-editor .cm-editor .cm-content {
+  padding: var(--card-padding) 0;
+  caret-color: var(--color-ink);
+}
+.page-editor .cm-editor .cm-content:focus-visible {
+  outline-offset: -2px;
+}
+.page-editor .cm-editor .cm-line {
+  padding: 0 var(--card-padding);
+}
+.page-editor .cm-editor .page-editor-h1 {
+  font-size: var(--text-display-sm);
+  line-height: var(--text-display-sm--line-height);
+}
+.page-editor .cm-editor .page-editor-h2 {
+  font-size: var(--text-title);
+  line-height: var(--text-title--line-height);
+}
+.page-editor .cm-editor .page-editor-h3 {
+  font-size: var(--text-heading);
+  line-height: var(--text-heading--line-height);
+}
+.page-editor .cm-editor :is(.page-editor-h1, .page-editor-h2, .page-editor-h3) {
+  padding-top: 0.5rem;
+}
+.page-editor
+  .cm-editor
+  :is(.page-editor-h1, .page-editor-h2, .page-editor-h3, .page-editor-h4, .page-editor-h5, .page-editor-h6),
+.page-editor .cm-editor .page-editor-strong {
+  font-weight: 500;
+}
+.page-editor .cm-editor .page-editor-em {
+  font-style: italic;
+}
+.page-editor .cm-editor .page-editor-link {
+  color: var(--color-accent-ink);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.page-editor .cm-editor .page-editor-suggestion {
+  background: var(--color-info-soft);
+  color: var(--color-ink);
+  border-bottom: 2px solid var(--color-info);
+  cursor: pointer;
+}
+.page-editor .cm-editor .page-editor-suggestion-needs_input {
+  background: var(--color-warning-soft);
+  border-bottom-color: var(--color-warning);
+}
+/* The card of the highlight the reader pressed: its edge in the focus ink,
+   over the panel's own border utility. */
+.suggestion-card[aria-current='true'] {
+  border-color: var(--color-focus);
+}
+
 @layer base {
-  /* Headings are Geist at the heading weight unless a display role sets Cal
-     Sans: Cal Sans is opt-in, so it never lands under 18px by default. */
+  /* Headings are the sans face at the heading weight unless a display role
+     sets the display face, which is opt-in, so it never lands under 18px by
+     default. */
   h1,
   h2,
   h3,
@@ -756,9 +903,13 @@ body {
   }
 
   strong,
-  b,
-  th {
+  b {
     font-weight: 500;
+  }
+
+  /* A column or row head names its cells: 400, never the browser's bold. */
+  th {
+    font-weight: 400;
   }
 
   /* Lucide icons draw at one stroke, 1.75, at every size. */
@@ -812,6 +963,18 @@ a.focus-ring:active .type-caption {
   outline-offset: 2px;
 }
 
+/* After a press (`data-input-modality="pointer"`, kept by
+   components/ui/input-modality.ts) nothing but a text field draws the ring:
+   browsers ring a clicked tab by heuristic, a menu row a script focused as
+   the pointer moved, and the element whose focus they restore when the
+   reader returns to the tab. The next key brings the ring back. A row whose
+   submenu is open never rings: focus is in the submenu, or the pointer
+   opened it. */
+[data-input-modality='pointer'] :focus-visible:not(input, textarea, select, [contenteditable]),
+[role='menuitem'][data-state='open']:focus-visible {
+  outline: none;
+}
+
 /* A whole-row control inside a bordered list that clips its corners: the
    same ring, drawn 2px inside the row. */
 .focus-ring-inset:focus-visible {
@@ -828,14 +991,90 @@ a.focus-ring:active .type-caption {
     0 0 0 4px var(--color-line);
 }
 
-/* A bare table's boundary: the `line` ring. A table inside a card or dialog
-   shares that container's edge instead. */
+/* Containers (D51). A container is a card, a panel or a dialog or drawer:
+   `surface` with one 1px `line` border. What sits inside one never draws a
+   second edge (a table drops its frame) and an inset inside one is the
+   sunken fill. On the ground there is no inset (sunken on paper is 1.07:1),
+   so an inset placed there (`.surface-inset`: a neutral callout, an inline
+   empty state) becomes a bordered container instead. */
 .table-frame {
-  box-shadow: 0 0 0 1px var(--color-line);
+  border: 1px solid var(--color-line);
 }
 
-:where(.surface-card, [role='dialog']) .table-frame {
-  box-shadow: none;
+:where(.surface-card, .surface-panel, [role='dialog']) .table-frame {
+  border: 0;
+}
+
+.surface-inset {
+  border: 1px solid var(--color-line);
+  background: var(--color-surface);
+}
+
+:where(.surface-card, .surface-panel, [role='dialog']) .surface-inset {
+  border-color: transparent;
+  background: var(--color-surface-sunken);
+}
+
+/* A Panel that lands inside a container is a sunken inset, so it takes the
+   inset's 12 down and 16 across rather than a container's 16 all round. */
+:where(.surface-card, .surface-panel, [role='dialog']) .surface-panel.surface-inset {
+  padding-block: calc(var(--spacing) * 3);
+}
+
+/* A card composed inside a dialog or drawer (settings sections in the
+   account-security dialog, a framed table in an evidence drawer) steps down
+   to the inset too, so an overlay never shows a box drawn inside a box. */
+:where(.surface-card, .surface-panel, [role='dialog']) .surface-card {
+  border-color: transparent;
+  background: var(--color-surface-sunken);
+}
+
+/* Sideways overflow cues. Each overlays or paints behind the region, so it
+   never moves anything, and each is absent while nothing overflows. */
+@layer components {
+  /* A wide table's frame (`ScrollEdgeFades`): a 24px fade to the ground at
+     each edge that hides more columns, over the rows and the header band. */
+  .scroll-edge-fade {
+    position: absolute;
+    inset-block: 0;
+    z-index: 30;
+    width: 24px;
+    pointer-events: none;
+    --scroll-edge-ground: var(--color-surface);
+  }
+  .scroll-edge-fade[data-scroll-edge='start'] {
+    inset-inline-start: 0;
+    background: linear-gradient(to right, var(--scroll-edge-ground), transparent);
+  }
+  .scroll-edge-fade[data-scroll-edge='end'] {
+    inset-inline-end: 0;
+    background: linear-gradient(to left, var(--scroll-edge-ground), transparent);
+  }
+
+  /* A segmented track that scrolls with its scrollbar hidden (`TAB_TRACK`):
+     a soft ink shade at each edge with segments beyond it. The covers in the
+     track's own fill scroll with the segments (`local`) and hide each shade
+     while its end is in view; the shades stay on the edges (`scroll`). */
+  /* The track is a pressed-state tint of the fill beneath it, mixed opaque so
+     the covers can hide the shades: over paper on the ground, over surface
+     inside a container (D51). */
+  .scroll-shade-x {
+    --scroll-shade-ground: color-mix(in srgb, var(--color-ink) 8%, var(--color-paper));
+    --scroll-shade-ink: color-mix(in srgb, var(--color-ink) 16%, transparent);
+    background:
+      linear-gradient(to right, var(--scroll-shade-ground) 40%, transparent) left / 24px 100%
+        no-repeat local,
+      linear-gradient(to left, var(--scroll-shade-ground) 40%, transparent) right / 24px 100%
+        no-repeat local,
+      linear-gradient(to right, var(--scroll-shade-ink), transparent) left / 12px 100% no-repeat
+        scroll,
+      linear-gradient(to left, var(--scroll-shade-ink), transparent) right / 12px 100% no-repeat
+        scroll,
+      var(--scroll-shade-ground);
+  }
+  :where(.surface-card, .surface-panel, [role='dialog']) .scroll-shade-x {
+    --scroll-shade-ground: color-mix(in srgb, var(--color-ink) 8%, var(--color-surface));
+  }
 }
 
 /* Inside a card a query state shares the card's surface and its padding

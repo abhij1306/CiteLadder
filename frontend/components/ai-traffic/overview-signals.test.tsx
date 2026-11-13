@@ -1,7 +1,7 @@
 import { screen } from '@testing-library/react';
-import { expect, it } from 'vite-plus/test';
+import { expect, it, onTestFinished } from 'vite-plus/test';
 import { renderWithProviders } from '@/test/render';
-import { CitationSignal, CrawlSignalPanel } from './overview-signals';
+import { CitationSignal, CrawlSignalPanel, ReferralSignal } from './overview-signals';
 
 const projectId = '88888888-8888-4888-8888-888888888888';
 const crawl = {
@@ -72,6 +72,53 @@ it('shows a measured zero as 0 and a window with no completed run as not availab
     />,
   );
   expect(screen.getByText('No AI Visibility run completed in this window.')).toBeVisible();
-  expect(screen.getAllByText('Not available yet').length).toBe(2);
+  expect(screen.getAllByText('Not available yet')).toHaveLength(2);
   expect(screen.queryByText('0')).not.toBeInTheDocument();
+});
+
+it('offers Connect GA4 until a referral snapshot exists, then says it synced', () => {
+  const referrals = {
+    project_id: projectId,
+    window_start: null,
+    window_end: null,
+    granularity: 'day' as const,
+    referral_volume: [],
+    referral_share: [],
+    sources: [],
+    analyzer_version: '1',
+    formula_version: '1',
+    scope: 'property-wide' as const,
+    reporting_timezone: null,
+    currency_code: null,
+    analytics_quality: {},
+    unattributed_landing: null,
+    source_measures: [],
+    channel_comparison: [],
+    landing_pages: [],
+  };
+  const view = renderWithProviders(<ReferralSignal data={referrals} />);
+  expect(screen.getByText('GA4 · Not synced')).toBeVisible();
+  expect(screen.getByRole('link', { name: 'Connect GA4' })).toBeVisible();
+  expect(screen.queryByText('GA4 · Synced')).not.toBeInTheDocument();
+
+  // The report day keeps its calendar date in a display zone west of UTC.
+  document.cookie = 'citeladder-display-timezone=America%2FNew_York; path=/';
+  onTestFinished(() => {
+    document.cookie = 'citeladder-display-timezone=; path=/; max-age=0';
+  });
+  view.rerender(
+    <ReferralSignal
+      data={{
+        ...referrals,
+        window_start: '2026-07-20',
+        window_end: '2026-07-22',
+        referral_volume: [{ date: '2026-07-22', value: 0 }],
+        referral_share: [{ date: '2026-07-22', value: 0 }],
+      }}
+    />,
+  );
+  expect(screen.getByText('GA4 · Synced')).toBeVisible();
+  expect(screen.getByText('0')).toBeVisible();
+  expect(screen.getByText('Jul 22, 2026')).toBeVisible();
+  expect(screen.queryByRole('link', { name: 'Connect GA4' })).not.toBeInTheDocument();
 });

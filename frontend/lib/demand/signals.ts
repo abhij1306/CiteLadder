@@ -5,6 +5,7 @@
  * counts, KPI cards), each free to drift from the others. Every grouping,
  * label, and metric read now derives from the maps here.
  */
+import type { DemandDetectorPolicy } from '@citeladder/contracts';
 import { agentHandoffHref } from '@/lib/agent/handoff';
 import type { DemandSignal } from '@/lib/api/demand';
 import { parseAbsoluteHttpUrl } from '@/lib/safe-http-url';
@@ -47,12 +48,15 @@ export const FILTER_TABS: readonly { tab: FilterTab; label: string }[] = [
 
 type SignalTone = 'info' | 'warning' | 'danger' | 'success' | 'neutral';
 
+/** A definition that states a detector threshold reads it from the snapshot's policy. */
+type Definition = string | ((policy: DemandDetectorPolicy) => string);
+
 /**
  * Each signal type's chip label and its one-sentence definition. The screen
  * explains a type once, in its legend, rather than repeating prose per row.
  */
 const SIGNAL_TYPE_META: Readonly<
-  Record<SignalType, { label: string; tone: SignalTone; definition: string }>
+  Record<SignalType, { label: string; tone: SignalTone; definition: Definition }>
 > = {
   striking_distance: {
     label: 'Striking distance',
@@ -78,12 +82,14 @@ const SIGNAL_TYPE_META: Readonly<
   emerging_query: {
     label: 'Emerging',
     tone: 'neutral',
-    definition: 'Impressions rose across the last two 14-day windows.',
+    definition: ({ trends }) =>
+      `Impressions rose across the last two ${trends.window_days}-day windows.`,
   },
   declining_query: {
     label: 'Declining',
     tone: 'neutral',
-    definition: 'Impressions fell across the last two 14-day windows.',
+    definition: ({ trends }) =>
+      `Impressions fell across the last two ${trends.window_days}-day windows.`,
   },
   branded_query_performance: {
     label: 'Branded',
@@ -93,9 +99,9 @@ const SIGNAL_TYPE_META: Readonly<
   },
 };
 
-const FALLBACK_TYPE_META = {
+const FALLBACK_TYPE_META: { label: string; tone: SignalTone; definition: Definition } = {
   label: 'Demand signal',
-  tone: 'neutral' as SignalTone,
+  tone: 'neutral',
   definition: 'A Search Console gap identified by demand analysis.',
 };
 
@@ -104,6 +110,12 @@ export function signalTypeMeta(signalType: string) {
     (SIGNAL_TYPE_META as Record<string, typeof FALLBACK_TYPE_META>)[signalType] ??
     FALLBACK_TYPE_META
   );
+}
+
+/** A signal type's one-sentence definition, with the detector thresholds it states. */
+export function signalDefinition(signalType: string, policy: DemandDetectorPolicy): string {
+  const { definition } = signalTypeMeta(signalType);
+  return typeof definition === 'string' ? definition : definition(policy);
 }
 
 export function matchesTab(signal: DemandSignal, tab: FilterTab): boolean {
@@ -151,7 +163,7 @@ export function signalTargetKind(signal: DemandSignal): 'Page' | 'Query' {
  * put in an `href` unvalidated.
  */
 export function safePageUrl(pageUrl: string | null | undefined): string | null {
-  return parseAbsoluteHttpUrl(pageUrl) ? pageUrl!.trim() : null;
+  return pageUrl && parseAbsoluteHttpUrl(pageUrl) ? pageUrl.trim() : null;
 }
 
 export type CompetingPage = { url: string; impressions: number; share: number };

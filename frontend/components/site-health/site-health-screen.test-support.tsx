@@ -11,7 +11,7 @@ import {
 } from '@/test/site-health-fixtures';
 import { makeSiteCrawl } from '@/test/fixtures/site-health';
 import { ProjectProvider } from '@/lib/project/project-context';
-import type { SiteHealthDashboard } from '@citeladder/contracts';
+import type { CrawlSchedule, SiteHealthDashboard } from '@citeladder/contracts';
 import { SiteHealthScreen } from './site-health-screen';
 
 function setSearch(value: string) {
@@ -23,6 +23,20 @@ const PROJECT = '11111111-1111-4111-8111-111111111111';
 const CRAWL = '22222222-2222-4222-8222-222222222222';
 
 const project = makeProject({ id: PROJECT, workspace_id: WORKSPACE });
+
+/** The project's crawl schedule; by default one that was never turned on. */
+function crawlSchedule(overrides: Partial<CrawlSchedule> = {}): CrawlSchedule {
+  return {
+    project_id: PROJECT,
+    enabled: false,
+    cadence: 'weekly',
+    next_run_at: null,
+    last_run_at: null,
+    last_outcome: null,
+    last_crawl_id: null,
+    ...overrides,
+  };
+}
 
 /** A crawl that discovered its three pages but failed the analysis pass. */
 function crawl(overrides: Record<string, unknown> = {}) {
@@ -81,6 +95,7 @@ function inventoryRow(id: string, url: string) {
     aeo_measurement_state: 'not_measured',
     aeo_measurement_reason: '',
     main_content_indexable: null,
+    robots_excluded: false,
     last_audited: null,
     page_kind: null,
   };
@@ -125,13 +140,7 @@ function overview(crawlId = CRAWL) {
     aeo_dimensions: [],
     top_issues: [],
     web_fundamentals: EMPTY_WEB_FUNDAMENTALS,
-    trend: {
-      state: 'unavailable',
-      reason: 'no_comparable_snapshot',
-      metric: 'aeo_readiness_score',
-      series: [],
-      cohort_composition: UNCHANGED_COHORT_COMPOSITION,
-    },
+    open_issue_trend: [],
     change_summary: {
       state: 'unavailable',
       reason: 'no_comparable_snapshot',
@@ -148,6 +157,7 @@ function mockRoutes(
 ) {
   mswServer.use(
     http.get('/api/v1/projects', () => HttpResponse.json([project])),
+    http.get(`/api/v1/projects/${PROJECT}`, () => HttpResponse.json(project)),
     http.get('/api/v1/audits', () => HttpResponse.json([])),
     http.post('/api/v1/projects/:id/logos/refresh', () => HttpResponse.json(project)),
     http.post('/api/v1/site-crawls/:id/run', ({ params }) =>
@@ -164,10 +174,12 @@ function mockRoutes(
         root_errors: [],
       }),
     ),
+    http.get(`/api/v1/projects/${PROJECT}/crawl-schedule`, () =>
+      HttpResponse.json(crawlSchedule()),
+    ),
     http.get(`/api/v1/projects/${PROJECT}/monitored-urls`, () =>
       HttpResponse.json({
         project_id: PROJECT,
-        selection_version: 1,
         monitored_urls: [],
         quota: { used: 0, limit: 50 },
       }),
@@ -207,6 +219,7 @@ export {
   CRAWL,
   PROJECT,
   crawl,
+  crawlSchedule,
   inventoryRow,
   mockRoutes,
   overview,

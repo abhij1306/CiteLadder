@@ -34,11 +34,14 @@ export function ReadError({
   fallback,
   onRetry,
   pending = false,
+  title,
 }: Readonly<{
   error: unknown;
   fallback: string;
   onRetry: () => void;
   pending?: boolean;
+  /** Names what failed to load ("Couldn't load the business map"); the error's message follows it. */
+  title?: string;
 }>) {
   const detail = humanizeApiError(error, fallback);
   const accessFailure = detail.status === 401 || detail.status === 403;
@@ -52,7 +55,7 @@ export function ReadError({
     );
   }
   return (
-    <Callout tone="negative" action={action}>
+    <Callout tone="negative" title={title} action={action}>
       <p>{detail.message}</p>
       {accessFailure ? <p>Check your workspace access, then try again.</p> : null}
       {detail.requestId ? <p className="text-caption">Reference: {detail.requestId}</p> : null}

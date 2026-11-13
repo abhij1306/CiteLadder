@@ -1,5 +1,3 @@
-'use client';
-
 import { useCallback, useState } from 'react';
 
 import { TABLE_DEFAULT_PAGE_SIZE, type TablePageSize, isTablePageSize } from '@/lib/config/tables';

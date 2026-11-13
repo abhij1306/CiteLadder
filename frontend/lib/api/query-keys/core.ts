@@ -33,12 +33,8 @@ const projects = scopedKeys('projects');
 export const projectKeys = {
   ...projects,
   /**
-   * Prefix over every workspace's project list. Use it to INVALIDATE from a
-   * caller that has no workspace in hand; never as a query key.
-   */
-  lists: () => ['projects', 'list'] as const,
-  /**
-   * One workspace's projects.
+   * One workspace's project summaries: the switcher's list, never a full
+   * project view (that is `detail`).
    *
    * The workspace is part of the key because the response IS workspace-scoped
    * — the backend reads `X-Workspace-Id` to decide what to return. Keyed
@@ -46,7 +42,7 @@ export const projectKeys = {
    * showed the previous one's projects until a refetch landed, and a request
    * issued for workspace A could be answered from B's payload.
    */
-  list: (workspaceId: string) => ['projects', 'list', workspaceId] as const,
+  summaries: (workspaceId: string) => ['projects', 'summaries', workspaceId] as const,
   detail: (projectId: string) => ['projects', 'detail', projectId] as const,
   /** Whether a key is a project's detail read (the read that resolves the project itself). */
   isDetail: (key: readonly unknown[]) => key[0] === 'projects' && key[1] === 'detail',

@@ -1,10 +1,11 @@
 /** The terminal snapshot and matching crawl summary publish in one transaction. */
 import { randomUUID } from 'node:crypto';
-import { isTerminalCrawl } from '@citeladder/contracts/site-health';
+import { isTerminalCrawl, USABLE_CRAWL_STATUSES } from '@citeladder/contracts/site-health';
 import { sql } from 'kysely';
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { numberRecord } from '../db/json.ts';
+import { sameScope } from './change-snapshot.ts';
 import { cohortComposition } from './cohort-composition.ts';
 import { crawlCoverage } from './coverage.ts';
 import {
@@ -12,6 +13,7 @@ import {
   scoreSummary,
   type MeasurementProjection,
 } from './score-summary.ts';
+import { isPageRerun, pageRerunSql } from './page-rerun.ts';
 import { readinessDiagnostic, webDiagnostic } from './snapshot-diagnostics.ts';
 import { snapshotEligibility } from './snapshot-eligibility.ts';
 import { snapshotIssues } from './snapshot-issues.ts';
@@ -37,100 +39,101 @@ function direction(delta: number | null) {
   return delta < 0 ? 'decreased' : 'unchanged';
 }
 
-async function history(db: Database, crawl: Crawl, projection: MeasurementProjection, now: Date) {
-  const rows = await db
-    .selectFrom('site_health_snapshots')
-    .selectAll()
-    .where('workspace_id', '=', crawl.workspace_id)
-    .where('project_id', '=', crawl.project_id)
-    .where('crawl_id', '!=', crawl.id)
-    .where('analyzer_version', '=', crawl.analyzer_version || policy.site_health.versions.analyzer)
-    .where('scoring_version', '=', crawl.scoring_version || reads.scoring_version)
-    .where('profile_version', '=', versions.profile)
-    .where('schema_contract_version', '=', versions.schema_contract)
-    .where('presentation_version', '=', versions.presentation)
-    .where('coverage_formula_version', '=', reads.coverage_formula_version)
-    .where('classification_formula_version', '=', reads.classification_formula_version)
-    .orderBy('created_at', 'desc')
-    .orderBy('id', 'desc')
-    .limit(reads.overview_trend_point_limit - 1)
+/**
+ * The change since the newest earlier snapshot of a usable, non-empty site crawl
+ * under the same versions and scope. A failed or empty crawl, or a page rerun,
+ * is never compared; with none left it reports no comparable snapshot.
+ */
+async function changeSummary(db: Database, crawl: Crawl, projection: MeasurementProjection) {
+  const candidates = await db
+    .selectFrom('site_health_snapshots as s')
+    .innerJoin('site_crawls as c', (join) =>
+      join.onRef('c.id', '=', 's.crawl_id').onRef('c.workspace_id', '=', 's.workspace_id'),
+    )
+    .selectAll('s')
+    .select(['c.root_url', 'c.configuration'])
+    .where('s.workspace_id', '=', crawl.workspace_id)
+    .where('s.project_id', '=', crawl.project_id)
+    // Only crawls created before this one, so a late publication never compares
+    // with a newer crawl (Changes picks its predecessor the same way).
+    .where('c.created_at', '<', crawl.created_at)
+    .where('c.status', 'in', USABLE_CRAWL_STATUSES)
+    .where('c.analyzed_url_count', '>', 0)
+    .where(sql<boolean>`not ${pageRerunSql}`)
+    .where(
+      's.analyzer_version',
+      '=',
+      crawl.analyzer_version || policy.site_health.versions.analyzer,
+    )
+    .where('s.scoring_version', '=', crawl.scoring_version || reads.scoring_version)
+    .where('s.profile_version', '=', versions.profile)
+    .where('s.schema_contract_version', '=', versions.schema_contract)
+    .where('s.presentation_version', '=', versions.presentation)
+    .where('s.coverage_formula_version', '=', reads.coverage_formula_version)
+    .where('s.classification_formula_version', '=', reads.classification_formula_version)
+    .orderBy('c.created_at', 'desc')
+    .orderBy('c.id', 'desc')
+    // Scope is compared in code, so search as many earlier crawls as Changes does.
+    .limit(policy.site_health.change_intel.max_crawl_candidates)
     .execute();
-  rows.reverse();
-  const previous = rows.at(-1);
+  const previous = candidates.find((row) => sameScope(row, crawl));
   const { changed, composition } = cohortComposition({
     previous: numberRecord(previous?.scored_page_count_by_kind),
     current: projection.classification.scored_page_count_by_kind,
     shareShiftPoints: reads.overview_cohort_share_shift_points,
   });
-  const common = {
+  return {
     state: previous ? 'measured' : 'unavailable',
     reason: comparisonReason(Boolean(previous), changed),
     cohort_composition: composition,
-  };
-  return {
-    trend: {
-      ...common,
-      metric: 'aeo_readiness_score',
-      series: [
-        ...rows.map((row) => ({
-          label: new Date(row.created_at).toISOString().slice(0, 10),
-          value: row.aeo_readiness_score,
-        })),
-        { label: now.toISOString().slice(0, 10), value: projection.aggregate.aeo_readiness_score },
-      ],
-    },
-    change_summary: {
-      ...common,
-      metrics: metrics.map(([key, label]) => {
-        const before = previous?.[key] ?? null;
-        const current = projection.aggregate[key];
-        const delta =
-          before === null || current === null
-            ? null
-            : Math.round((current - before) * 10000) / 10000;
-        return {
-          key,
-          label,
-          previous: before,
-          current,
-          delta,
-          direction: direction(delta),
-        };
-      }),
-    },
+    metrics: metrics.map(([key, label]) => {
+      const before = previous?.[key] ?? null;
+      const current = projection.aggregate[key];
+      const delta =
+        before === null || current === null ? null : Math.round((current - before) * 10000) / 10000;
+      return {
+        key,
+        label,
+        previous: before,
+        current,
+        delta,
+        direction: direction(delta),
+      };
+    }),
   };
 }
 
-export async function persistCrawlSnapshot(db: Database, crawl: Crawl, persistEmpty = false) {
-  const projection = await loadMeasurementProjection(db, crawl);
-  if (
-    !persistEmpty &&
-    !projection.rows.length &&
-    !projection.classification.classification_expected_page_count
-  )
-    return false;
-  const evaluationIds = projection.evaluations.map((row) => row.id);
-  const issues = await snapshotIssues(db, crawl, evaluationIds);
-  const eligibility = await snapshotEligibility(db, crawl, projection);
-  const coverage = await crawlCoverage(db, crawl);
+/** How many scored checks the pages measured, of those they expected. */
+function checkCounts(projection: MeasurementProjection) {
   const expected = projection.evaluations.filter(
     (row) => row.score_roles?.length && row.outcome !== 'not_applicable',
   );
   const measured = expected.filter((row) => ['satisfied', 'missing'].includes(row.outcome));
-  const now = new Date();
-  const trends = await history(db, crawl, projection, now);
+  return { measured_check_count: measured.length, expected_check_count: expected.length };
+}
+
+/**
+ * Every snapshot column the pages' latest audits decide: scores,
+ * classification, eligibility, issue rollups, the change summary and
+ * their exact sources. Coverage and discovery stay the crawl's own.
+ */
+async function pageColumns(
+  db: Database,
+  crawl: Crawl,
+  projection: MeasurementProjection,
+  evaluationIds: string[],
+) {
+  const issues = await snapshotIssues(db, crawl, evaluationIds);
+  const eligibility = await snapshotEligibility(db, crawl, projection);
   const {
     readiness_dimensions: dimensions,
     scoring_version: _scoring,
     ...aggregate
   } = projection.aggregate;
-  const inserted = await db
-    .insertInto('site_health_snapshots')
-    .values({
-      id: randomUUID(),
-      workspace_id: crawl.workspace_id,
-      project_id: crawl.project_id,
-      crawl_id: crawl.id,
+  return {
+    issues,
+    eligibility,
+    columns: {
       selected_url_count: projection.selectedIds.length,
       ...aggregate,
       ...projection.classification,
@@ -148,18 +151,63 @@ export async function persistCrawlSnapshot(db: Database, crawl: Crawl, persistEm
       status_counts: JSON.stringify(eligibility.status_counts),
       ...issueColumns(issues),
       web_fundamentals: JSON.stringify(webDiagnostic(projection)),
-      trend: JSON.stringify(trends.trend),
-      change_summary: JSON.stringify(trends.change_summary),
-      coverage_state: coverage.state,
-      coverage_evidence: JSON.stringify({
-        ...coverage.evidence,
-        measured_check_count: measured.length,
-        expected_check_count: expected.length,
-      }),
-      coverage_formula_version: reads.coverage_formula_version,
+      change_summary: JSON.stringify(await changeSummary(db, crawl, projection)),
       source_analysis_ids: projection.rows.map((row) => row.id),
       source_artifact_ids: projection.rows.map((row) => row.artifact_id),
       source_evaluation_ids: evaluationIds,
+    },
+  };
+}
+
+/** The crawl summary a snapshot publishes beside itself. */
+async function publishScoreSummary(
+  db: Database,
+  crawl: Crawl,
+  projection: MeasurementProjection,
+  published: Pick<Awaited<ReturnType<typeof pageColumns>>, 'issues' | 'eligibility'>,
+) {
+  await db
+    .updateTable('site_crawls')
+    .set({
+      score_summary: JSON.stringify({
+        ...scoreSummary(projection, published.issues.issue_count),
+        search_eligibility: published.eligibility.search_eligibility,
+      }),
+    })
+    .where('id', '=', crawl.id)
+    .where('workspace_id', '=', crawl.workspace_id)
+    .execute();
+}
+
+/**
+ * A page rerun re-reads one page: it writes no project snapshot and keeps no
+ * site score summary, so it never becomes a compared snapshot or a one-page score.
+ * A site crawl's snapshot reads each tracked page's latest audit (SH-B9).
+ */
+export async function persistCrawlSnapshot(db: Database, crawl: Crawl, persistEmpty = false) {
+  if (isPageRerun(crawl)) return false;
+  const projection = await loadMeasurementProjection(db, crawl, { latest: true });
+  if (
+    !persistEmpty &&
+    !projection.rows.length &&
+    !projection.classification.classification_expected_page_count
+  )
+    return false;
+  const evaluationIds = projection.evaluations.map((row) => row.id);
+  const now = new Date();
+  const published = await pageColumns(db, crawl, projection, evaluationIds);
+  const coverage = await crawlCoverage(db, crawl);
+  const inserted = await db
+    .insertInto('site_health_snapshots')
+    .values({
+      id: randomUUID(),
+      workspace_id: crawl.workspace_id,
+      project_id: crawl.project_id,
+      crawl_id: crawl.id,
+      ...published.columns,
+      coverage_state: coverage.state,
+      coverage_evidence: JSON.stringify({ ...coverage.evidence, ...checkCounts(projection) }),
+      coverage_formula_version: reads.coverage_formula_version,
       analyzer_version: crawl.analyzer_version || policy.site_health.versions.analyzer,
       scoring_version: crawl.scoring_version || reads.scoring_version,
       profile_version: versions.profile,
@@ -171,17 +219,62 @@ export async function persistCrawlSnapshot(db: Database, crawl: Crawl, persistEm
     .returning('id')
     .executeTakeFirst();
   if (!inserted) return false;
+  await publishScoreSummary(db, crawl, projection, published);
+  return true;
+}
+
+/** The architecture evaluations the crawl's snapshot folds in (`addArchitectureIssues`). */
+async function architectureEvaluationIds(db: Database, crawl: Crawl) {
+  const rows = await db
+    .selectFrom('site_rule_evaluations as e')
+    .innerJoin('site_observed_architectures as a', (join) =>
+      join
+        .onRef('a.id', '=', 'e.source_architecture_id')
+        .onRef('a.workspace_id', '=', 'e.workspace_id'),
+    )
+    .select('e.id')
+    .where('a.workspace_id', '=', crawl.workspace_id)
+    .where('a.project_id', '=', crawl.project_id)
+    .where('a.crawl_id', '=', crawl.id)
+    .orderBy('e.id')
+    .execute();
+  return rows.map((row) => row.id);
+}
+
+/**
+ * A page rerun landed in this site crawl (SH-B9): its snapshot's page columns
+ * and its score summary are recomputed in place, in the rerun's landing
+ * transaction, from each tracked page's latest audit. Coverage and discovery
+ * stay the crawl's own; the snapshot keeps its id and time, so the change
+ * summary's current values move with the latest audits. A crawl without a
+ * snapshot has nothing to refresh.
+ */
+export async function refreshSiteSnapshot(db: Database, crawl: Crawl) {
+  if (isPageRerun(crawl)) return false;
+  const snapshot = await db
+    .selectFrom('site_health_snapshots')
+    .select(['id', 'created_at'])
+    .where('workspace_id', '=', crawl.workspace_id)
+    .where('project_id', '=', crawl.project_id)
+    .where('crawl_id', '=', crawl.id)
+    .forUpdate()
+    .executeTakeFirst();
+  if (!snapshot) return false;
+  const projection = await loadMeasurementProjection(db, crawl, { latest: true });
+  const own = projection.evaluations.map((row) => row.id);
+  const architecture = await architectureEvaluationIds(db, crawl);
+  const evaluationIds = [...new Set([...own, ...architecture])];
+  const published = await pageColumns(db, crawl, projection, evaluationIds);
   await db
-    .updateTable('site_crawls')
+    .updateTable('site_health_snapshots')
     .set({
-      score_summary: JSON.stringify({
-        ...scoreSummary(projection, issues.issue_count),
-        search_eligibility: eligibility.search_eligibility,
-      }),
+      ...published.columns,
+      coverage_evidence: sql`coverage_evidence || ${JSON.stringify(checkCounts(projection))}::jsonb`,
     })
-    .where('id', '=', crawl.id)
+    .where('id', '=', snapshot.id)
     .where('workspace_id', '=', crawl.workspace_id)
     .execute();
+  await publishScoreSummary(db, crawl, projection, published);
   return true;
 }
 
@@ -202,19 +295,9 @@ function issueColumns(issues: Awaited<ReturnType<typeof snapshotIssues>>) {
  * Replay-safe: the manifest is a set and the rollups are recomputed from it.
  */
 export async function addArchitectureIssues(db: Database, crawl: Crawl) {
-  const architectureEvaluations = await db
-    .selectFrom('site_rule_evaluations as e')
-    .innerJoin('site_observed_architectures as a', (join) =>
-      join
-        .onRef('a.id', '=', 'e.source_architecture_id')
-        .onRef('a.workspace_id', '=', 'e.workspace_id'),
-    )
-    .select('e.id')
-    .where('a.workspace_id', '=', crawl.workspace_id)
-    .where('a.project_id', '=', crawl.project_id)
-    .where('a.crawl_id', '=', crawl.id)
-    .orderBy('e.id')
-    .execute();
+  const architectureEvaluations = (await architectureEvaluationIds(db, crawl)).map((id) => ({
+    id,
+  }));
   if (!architectureEvaluations.length) return false;
   const snapshot = await db
     .selectFrom('site_health_snapshots')
@@ -250,7 +333,9 @@ export async function addArchitectureIssues(db: Database, crawl: Crawl) {
 }
 
 export async function refreshLiveScoreSummary(db: Database, crawl: Crawl) {
-  const projection = await loadMeasurementProjection(db, crawl);
+  if (isPageRerun(crawl)) return;
+  // A provisional summary scores the crawl's own analyzed pages (invariant 6).
+  const projection = await loadMeasurementProjection(db, crawl, { latest: false });
   if (!projection.rows.length) return;
   const issues = await snapshotIssues(
     db,

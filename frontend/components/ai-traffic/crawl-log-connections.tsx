@@ -1,5 +1,6 @@
-'use client';
 import { useState } from 'react';
+import { useMutation } from '@tanstack/react-query';
+import { aiTrafficMutations } from '@/lib/api/ai-traffic';
 import { useProjectContext, useWorkspaceCapability } from '@/lib/project/project-context';
 import {
   useCrawlConnections,
@@ -17,7 +18,12 @@ import { Stack } from '@/components/ui/layout';
 import { DisplayTime } from '@/components/ui/display-time';
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
 import { TableActionsCell, TableCell, TableCellLines, TableRow } from '@/components/ui/table';
-import { CrawlLogSetup, CrawlLogSetupSubmit, CrawlLogCredential } from './crawl-log-setup';
+import {
+  CrawlLogSetup,
+  CrawlLogSetupSubmit,
+  CrawlLogCredential,
+  IssuedToken,
+} from './crawl-log-setup';
 import { CrawlLogAvailabilityNotice } from './crawl-log-availability';
 import {
   collectionPointLabel,
@@ -70,6 +76,7 @@ function Connections({
   const model = useCrawlConnections(input);
   const { sources, canManage, open, setOpen, setIssued, mutation } = model;
   const [revoking, setRevoking] = useState<z.infer<typeof crawlSourceSchema> | null>(null);
+  const [rotating, setRotating] = useState<z.infer<typeof crawlSourceSchema> | null>(null);
   const showHeader = headerWhenEmpty || Boolean(sources.data?.items.length);
   const { setupAvailable, unavailable } = setupState(sources);
   const connect = unavailable ? undefined : (
@@ -96,10 +103,7 @@ function Connections({
         <SourceDiagnostics
           items={sources.data.items}
           canManage={canManage}
-          onRotate={(id) => {
-            setOpen(true);
-            model.issueSource({ kind: 'rotate', id });
-          }}
+          onRotate={setRotating}
           onRevoke={setRevoking}
           onSetup={(id) => {
             setIssued({ id, token: null, setup: 'gcp_pubsub_pull' });
@@ -120,6 +124,12 @@ function Connections({
         mutation={mutation}
         onRevoke={(id, onSettled) => model.issueSource({ kind: 'revoke', id }, onSettled)}
         onClose={() => setRevoking(null)}
+      />
+      <RotateTokenDialog
+        source={rotating}
+        projectId={input.projectId}
+        workspaceId={input.workspaceId}
+        onClose={() => setRotating(null)}
       />
       {mutation.isError && !open ? (
         <MutationNotice
@@ -217,7 +227,7 @@ function SourceDiagnostics({
 }: Readonly<{
   items: z.infer<typeof crawlSourceSchema>[];
   canManage: boolean;
-  onRotate: (id: string) => void;
+  onRotate: (source: z.infer<typeof crawlSourceSchema>) => void;
   onRevoke: (source: z.infer<typeof crawlSourceSchema>) => void;
   /** Reopen a Google Cloud source's setup commands and subscription check. */
   onSetup: (id: string) => void;
@@ -274,12 +284,7 @@ function SourceDiagnostics({
             {canManage && s.status === 'active' ? (
               <>
                 {s.kind === 'webhook' ? (
-                  <Button
-                    variant="secondary"
-                    onClick={() => {
-                      onRotate(s.id);
-                    }}
-                  >
+                  <Button variant="secondary" onClick={() => onRotate(s)}>
                     Rotate token
                   </Button>
                 ) : null}
@@ -305,6 +310,65 @@ function SourceDiagnostics({
         </TableRow>
       ))}
     </DataTable>
+  );
+}
+type RotateTokenProps = Readonly<{
+  source: z.infer<typeof crawlSourceSchema>;
+  projectId: string;
+  workspaceId: string;
+  onClose: () => void;
+}>;
+/** Each rotation starts fresh: a new source remounts the dialog and its mutation. */
+function RotateTokenDialog({
+  source,
+  ...props
+}: Omit<RotateTokenProps, 'source'> & Readonly<{ source: RotateTokenProps['source'] | null }>) {
+  return source ? <RotateToken key={source.id} source={source} {...props} /> : null;
+}
+/**
+ * Rotation has its own dialog and mutation: it shows only the rotation, its
+ * failure with a retry, and the new token, never the new-source form.
+ */
+function RotateToken({ source, projectId, workspaceId, onClose }: RotateTokenProps) {
+  const rotate = useMutation(aiTrafficMutations.source({ workspaceId, projectId }));
+  const run = () => rotate.mutate({ kind: 'rotate', id: source.id });
+  return (
+    <Dialog
+      open
+      onOpenChange={(next) => {
+        if (!next && !rotate.isPending) onClose();
+      }}
+      title="Rotate token"
+      description={`Issue a new token for ${source.host}? The current token stops working.`}
+      footer={
+        rotate.isSuccess ? (
+          <Button variant="primary" onClick={onClose}>
+            Done
+          </Button>
+        ) : (
+          <>
+            <Button variant="secondary" onClick={onClose} disabled={rotate.isPending}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              pending={rotate.isPending}
+              pendingLabel="Rotating…"
+              onClick={run}
+            >
+              {rotate.isError ? 'Rotate again' : 'Rotate token'}
+            </Button>
+          </>
+        )
+      }
+    >
+      {rotate.isError ? (
+        <MutationNotice
+          notice={mutationNoticeForError(rotate.error, { action: 'rotate the token' })}
+        />
+      ) : null}
+      {rotate.isSuccess ? <IssuedToken issued={{ ...rotate.data, setup: source.setup }} /> : null}
+    </Dialog>
   );
 }
 /** Revoking stops ingestion for a host, so it is confirmed by name. */

@@ -2,13 +2,13 @@ import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { Route, Routes } from 'react-router-dom';
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vite-plus/test';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vite-plus/test';
 
+import { actionsPage } from '@/test/fixtures/actions';
 import { mswServer } from '@/test/msw-server';
 import { makeProject } from '@/test/fixtures/project';
 import { renderWithProviders } from '@/test/render';
 
-import { ActionDetailScreen } from './action-detail-screen';
 import { ActionsScreen } from './actions-screen';
 
 const PROJECT = '11111111-1111-4111-8111-111111111111';
@@ -25,13 +25,44 @@ const action = {
   origin: 'evidence',
   status: 'open',
   priority_score: 82.5,
+  priority_band: 'high',
   families: ['site_health', 'search_console'],
   approach: 'improve_existing',
+  group: 'own_pages',
   skill_id: 'gsc_optimize',
   member_count: 1,
+  declarable_member_count: 1,
+  page_count: null,
+  handoff: { context: 'action', message: 'Work on https://acme.test/pricing.' },
   evidence_cleared_at: null,
   created_at: NOW,
   updated_at: NOW,
+};
+
+/** `count` own-page Actions after the first, each a page of its own. */
+const ownPages = (count: number) =>
+  Array.from({ length: count }, (_, index) => ({
+    ...action,
+    id: `33333333-3333-4333-8333-33333333333${index}`,
+    target_label: `acme.test/page-${index}`,
+    target_url: `https://acme.test/page-${index}`,
+    status: index === 0 ? 'in_progress' : 'open',
+    priority_score: 10,
+    priority_band: 'low',
+  }));
+
+/** One Site Health defect across 179 pages: one Action, not 179. */
+const fix = {
+  ...action,
+  id: '44444444-4444-4444-8444-444444444444',
+  target_kind: 'issue_family',
+  target_label: 'Missing viewport meta tag',
+  target_url: null,
+  page_count: 179,
+  approach: 'fix_technical',
+  group: 'fix_site',
+  priority_band: 'medium',
+  families: ['site_health'],
 };
 
 const selection = {
@@ -40,117 +71,147 @@ const selection = {
   status: 'ready' as const,
 };
 
+/**
+ * The project's Actions as the API answers each read: seven own-page Actions
+ * and one site fix, under every status but Dismissed (none). Every read is
+ * recorded as its query string.
+ */
+function serveActions(reads: string[]) {
+  const own = [action, ...ownPages(6)];
+  mswServer.use(
+    http.get(`/api/v1/projects/${PROJECT}/actions`, ({ request }) => {
+      const params = new URL(request.url).searchParams;
+      reads.push(params.toString());
+      const dismissed = params.get('status') === 'dismissed';
+      const rows = dismissed ? [] : [...own, fix];
+      const counts = {
+        status_counts: { open: 7, in_progress: 1, dismissed: 0 },
+        group_counts: dismissed ? {} : { own_pages: own.length, fix_site: 1 },
+      };
+      const group = params.get('group');
+      const limit = Number(params.get('limit'));
+      const matching = rows.filter((row) => !group || row.group === group);
+      return HttpResponse.json(actionsPage(matching.slice(0, limit), counts));
+    }),
+  );
+}
+
 beforeAll(() => mswServer.listen({ onUnhandledFrame: 'error' }));
+beforeEach(() => window.history.replaceState(null, '', '/agent/actions'));
 afterEach(() => mswServer.resetHandlers());
 afterAll(() => mswServer.close());
 
+const renderActions = () =>
+  renderWithProviders(
+    <Routes>
+      <Route path="/agent/actions" element={<ActionsScreen />} />
+      <Route path="/agent/actions/:actionId" element={<p>Action detail</p>} />
+    </Routes>,
+    { initialEntries: ['/agent/actions'], projectSelection: selection },
+  );
+
 describe('Actions', () => {
-  it('lists the work queue by default and filters by status through the API', async () => {
-    const searches: string[] = [];
-    mswServer.use(
-      http.get(`/api/v1/projects/${PROJECT}/actions`, ({ request }) => {
-        const params = new URL(request.url).searchParams;
-        // Every read is recorded: the status counts ride the table's own
-        // first page, so the default view is one request, not two.
-        searches.push(`${params.get('status') ?? 'queue'}:${params.get('limit')}`);
-        const items = params.get('status') === 'dismissed' ? [] : [action];
-        return HttpResponse.json({
-          items,
-          next_cursor: null,
-          status_counts: { open: 1, in_progress: 2, dismissed: 0 },
-        });
-      }),
-    );
+  it('groups the work queue, top five per group by priority, then Show all narrows to the group', async () => {
+    const reads: string[] = [];
+    serveActions(reads);
     const user = userEvent.setup();
-    renderWithProviders(<ActionsScreen />, {
-      initialEntries: ['/agent/actions'],
-      projectSelection: selection,
-    });
+    renderActions();
 
-    const row = await screen.findByRole('link', { name: 'https://acme.test/pricing' });
+    const own = await screen.findByRole('button', { name: 'Improve your own pages, 7' });
+    expect(own).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('button', { name: 'Fix how AI reads your site, 1' })).toBeVisible();
+    // A group with nothing in it is left out.
+    expect(screen.queryByRole('button', { name: /Get mentioned elsewhere/ })).toBeNull();
+    // One read per group, at the preview size, in the list's order.
+    expect(reads).toEqual([
+      'group=fix_site&limit=5',
+      'group=own_pages&limit=5',
+      'group=earned&limit=5',
+      'group=products&limit=5',
+    ]);
+
+    const row = screen.getByRole('link', { name: 'https://acme.test/pricing' });
     expect(row).toHaveAttribute('href', `/agent/actions/${ACTION}?project=${PROJECT}`);
-    // The score ranks the queue; the reader sees its band, never the raw number.
-    const priority = within(row.closest('tr')!).getByText('High');
-    expect(priority).toBeVisible();
-    // Priority is an order, never the error red (owner, 2026-11-06).
-    expect(priority).toHaveAttribute('data-badge-tone', 'accent');
+    const cells = within(row.closest('tr')!);
+    // The band, never the raw score; priority is an order, not the error red.
+    expect(cells.getByText('High')).toHaveAttribute('data-badge-tone', 'accent');
     expect(screen.queryByText('82.5')).not.toBeInTheDocument();
+    expect(cells.getByText('Page · 1 finding in Site Health, Search Console')).toBeVisible();
+    expect(cells.getByText('Improve the existing page')).toBeVisible();
+    expect(cells.getByText('Site Health, Search Console')).toBeVisible();
+    // An Open row in the queue names no status; one in progress does.
+    expect(cells.queryByText('Open')).not.toBeInTheDocument();
+    const started = screen.getByRole('link', { name: 'acme.test/page-0' });
+    expect(within(started.closest('tr')!).getByText('In progress')).toBeVisible();
+    expect(screen.getAllByRole('columnheader').map((cell) => cell.textContent)).toEqual([
+      'Action',
+      'Priority',
+      'Action type',
+      'Source',
+    ]);
+    // Five of the seven, then the way to the rest.
+    expect(screen.queryByRole('link', { name: 'acme.test/page-4' })).toBeNull();
 
-    // The counts sit in the menu beside each status; the trigger names the
-    // status alone, so loading or dropping the counts never resizes it.
-    const status = screen.getByRole('combobox', { name: 'Status' });
-    expect(status.textContent).toBe('Open and in progress');
-    await user.click(status);
-    expect(
-      await screen.findByRole('option', { name: 'Open and in progress', description: '3' }),
-    ).toBeVisible();
-    await user.click(screen.getByRole('option', { name: 'Dismissed', description: '0' }));
+    // A header folds its group's rows.
+    await user.click(own);
+    expect(own).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('link', { name: 'https://acme.test/pricing' })).toBeNull();
+    await user.click(own);
 
-    expect(await screen.findByText('No Actions match these filters')).toBeVisible();
-    expect(searches).toEqual(['queue:10', 'dismissed:10']);
-    expect(status.textContent).toBe('Dismissed');
-
-    // Counts cover every target type, so a target filter drops them.
-    await user.click(screen.getByRole('combobox', { name: 'Target type' }));
-    await user.click(await screen.findByRole('option', { name: 'Page' }));
-    await user.click(status);
-    expect(await screen.findByRole('option', { name: 'Dismissed', description: '' })).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Show all 7 in Improve your own pages' }));
+    expect(await screen.findByRole('link', { name: 'acme.test/page-5' })).toBeVisible();
+    expect(window.location.search).toBe('?group=own_pages');
+    expect(reads.at(-1)).toBe('group=own_pages&limit=10');
+    expect(screen.queryByRole('link', { name: 'Missing viewport meta tag' })).toBeNull();
   });
 
-  it('dismisses an Action from its detail and links Work on this to a new chat', async () => {
-    const patches: unknown[] = [];
-    let current = { ...action };
-    mswServer.use(
-      http.get(`/api/v1/actions/${ACTION}`, () =>
-        HttpResponse.json({
-          ...current,
-          diagnosis: {
-            approach: 'improve_existing',
-            donts: ['Do not create another URL for a target that already has a page.'],
-            measure_with: ['next_crawl'],
-          },
-          members: [],
-          member_measurement: {},
-          declarable_since: '2026-01-01T00:00:00Z',
-          declaration: null,
-        }),
-      ),
-      http.patch(`/api/v1/actions/${ACTION}`, async ({ request }) => {
-        patches.push(await request.json());
-        current = { ...current, status: 'dismissed' };
-        return HttpResponse.json(current);
-      }),
-      http.get(`/api/v1/projects/${PROJECT}/agent/chats`, () =>
-        HttpResponse.json({ items: [], next_cursor: null }),
-      ),
-    );
+  it('lists an issue family in Fix how AI reads your site with its page count', async () => {
+    serveActions([]);
+    renderActions();
+    const row = (await screen.findByRole('link', { name: 'Missing viewport meta tag' })).closest(
+      'tr',
+    )!;
+    expect(
+      within(row).getByText('Issue across pages · 179 pages · 1 finding in Site Health'),
+    ).toBeVisible();
+  });
+
+  it('sets every filter from All filters as URL state and reads the list through it', async () => {
+    const reads: string[] = [];
+    serveActions(reads);
     const user = userEvent.setup();
-    renderWithProviders(
-      <Routes>
-        <Route path="/agent/actions/:actionId" element={<ActionDetailScreen />} />
-      </Routes>,
-      { initialEntries: [`/agent/actions/${ACTION}`], projectSelection: selection },
-    );
+    renderActions();
+    await screen.findByRole('button', { name: 'Improve your own pages, 7' });
+    // The separate selects are gone: one menu holds every filter.
+    expect(screen.queryByRole('combobox')).toBeNull();
 
-    expect(
-      await screen.findByRole('heading', { level: 1, name: 'https://acme.test/pricing' }),
-    ).toBeVisible();
-    // The target opens in a new tab, and its accessible name says so.
-    expect(
-      screen.getByRole('link', { name: 'https://acme.test/pricing (opens in a new tab)' }),
-    ).toBeVisible();
-    const summary = screen.getByRole('region', { name: 'Summary' });
-    expect(within(summary).getByText('High')).toBeVisible();
-    expect(within(summary).getByText('Site Health, Search Console')).toBeVisible();
-    expect(screen.getByText('The next crawl of this page')).toBeVisible();
-    expect(screen.getByRole('link', { name: 'Work on this' })).toHaveAttribute(
-      'href',
-      `/agent?action_id=${ACTION}&project=${PROJECT}`,
-    );
+    const pick = async (filterIndex: number, optionIndex: number) => {
+      await user.click(screen.getByRole('button', { name: /^All filters/ }));
+      await user.keyboard(
+        `${'{ArrowDown}'.repeat(filterIndex + 1)}{ArrowRight}${'{ArrowDown}'.repeat(optionIndex)}{Enter}`,
+      );
+    };
+    // Priority (the fourth filter): High.
+    await pick(3, 1);
+    expect(await screen.findByRole('button', { name: 'All filters (1)' })).toBeVisible();
+    expect(window.location.search).toBe('?priority=high');
+    expect(reads.at(-1)).toBe('priority=high&group=products&limit=5');
 
-    await user.click(screen.getByRole('button', { name: 'Dismiss' }));
+    // Status (the first): Dismissed, which holds nothing here.
+    await pick(0, 6);
+    expect(await screen.findByText('No Actions match these filters')).toBeVisible();
+    expect(window.location.search).toBe('?priority=high&status=dismissed');
+    expect(screen.getByRole('button', { name: 'All filters (2)' })).toBeVisible();
+  });
 
-    expect(await screen.findByRole('button', { name: 'Reopen' })).toBeVisible();
-    expect(patches).toEqual([{ status: 'dismissed' }]);
+  it('opens the Action detail from anywhere on its row', async () => {
+    serveActions([]);
+    const user = userEvent.setup();
+    renderActions();
+    const row = (await screen.findByRole('link', { name: 'Missing viewport meta tag' })).closest(
+      'tr',
+    )!;
+    await user.click(within(row).getByText('Fix a technical issue'));
+    expect(await screen.findByText('Action detail')).toBeVisible();
   });
 });

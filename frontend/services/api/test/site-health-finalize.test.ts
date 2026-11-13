@@ -4,6 +4,7 @@ import {
   entitySetEvaluation,
   hreflangConflict,
   sitemapOrphan,
+  sitemapPresent,
 } from '../src/site-health/analysis/finalize.ts';
 import {
   aggregateByPageKind,
@@ -166,6 +167,21 @@ describe('terminal checks from persisted evidence', () => {
     expect(duplicateContent({ kind: 'excluded', reason: 'canonicalized_elsewhere' }).outcome).toBe(
       'not_applicable',
     );
+  });
+
+  it('raises "No sitemap" only for a full crawl whose setup read no sitemap document', () => {
+    const outcome = (sampleMode: boolean, sitemap: Record<string, unknown>) =>
+      sitemapPresent({ sampleMode, sitemap }).outcome;
+    expect(outcome(false, { fetched: false, files: [], unread_count: 0 })).toBe('missing');
+    // A document that timed out or answered 5xx is no evidence the site has none.
+    expect(outcome(false, { fetched: false, files: [], unread_count: 1 })).toBe('unknown');
+    expect(outcome(false, { fetched: true, files: ['https://a.test/sitemap.xml'] })).toBe(
+      'satisfied',
+    );
+    // A sample never reads sitemaps; setup that never finished is no evidence of absence.
+    expect(outcome(true, { fetched: false, files: [] })).toBe('not_applicable');
+    expect(outcome(false, { fetched: false, files: [], pending: true })).toBe('unknown');
+    expect(outcome(false, {})).toBe('unknown');
   });
 
   it('keeps incomplete target coverage unknown and observed failures actionable', () => {
@@ -503,7 +519,7 @@ describe('crawl-wide canonical alias resolution', () => {
     ).toEqual(['a']);
   });
 
-  it('never excludes a user selection or aliases toward an unfetched or inactive target', () => {
+  it('never excludes a protected page or aliases toward an unfetched or inactive target', () => {
     expect(resolveDuplicateAliases(graph([['a', 'b']], ['a', 'b'], ['a']))).toEqual([]);
     expect(resolveDuplicateAliases(graph([['a', 'b']], ['a', 'b'], [], ['a']))).toEqual([]);
     expect(resolveDuplicateAliases(graph([['a', 'b']], ['a']))).toEqual([]);
@@ -512,7 +528,6 @@ describe('crawl-wide canonical alias resolution', () => {
 
 const signals = (changes: Partial<CoverageSignals> = {}): CoverageSignals => ({
   sampleMode: false,
-  inputMode: 'auto',
   cancelled: false,
   discoveryStatus: 'completed',
   requestedPageLimit: 50,
@@ -536,13 +551,43 @@ describe('crawl coverage', () => {
     });
   });
 
+  it('is complete when a site with exactly the requested page limit exhausted its frontier', () => {
+    expect(assessCoverage(signals({ admittedUrlCount: 50 }))).toMatchObject({
+      state: 'complete',
+      evidence: { reasons: ['frontier_exhausted'] },
+    });
+  });
+
+  it('covers a sitemap crawl only when it read the whole sitemap and observed every URL it lists', () => {
+    const sitemap = (discovered: number, observed: number, short = {}) =>
+      assessCoverage(
+        signals({
+          discoveryTaskCount: 0,
+          sitemap: { discovered, observed, limitReached: false, unreadDocuments: 0, ...short },
+        }),
+      );
+    expect(sitemap(3, 3)).toMatchObject({
+      state: 'complete',
+      evidence: { reasons: ['sitemap_exhausted'] },
+    });
+    expect(sitemap(10, 3).evidence.reasons).toEqual(['tracked_pages_below_site']);
+    // A ceiling and an unread document are different reasons the count is a lower bound.
+    expect(sitemap(3, 3, { limitReached: true }).evidence.reasons).toEqual([
+      'sitemap_limit_reached',
+    ]);
+    expect(sitemap(3, 3, { unreadDocuments: 1 }).evidence.reasons).toEqual([
+      'sitemap_documents_unread',
+    ]);
+  });
+
   it('is partial when a limit, pending frontier or explicit bound cut discovery short', () => {
-    expect(assessCoverage(signals({ admittedUrlCount: 50 })).state).toBe('partial');
+    expect(
+      assessCoverage(signals({ admittedUrlCount: 50, pendingFrontierCount: 4 })).evidence.reasons,
+    ).toEqual(['requested_page_limit_reached', 'frontier_not_exhausted']);
     expect(assessCoverage(signals({ pendingFrontierCount: 1 })).state).toBe('partial');
     expect(assessCoverage(signals({ cancelled: true })).evidence.reasons).toEqual([
       'discovery_bounded_or_stopped',
     ]);
-    expect(assessCoverage(signals({ inputMode: 'exact_urls' })).state).toBe('partial');
   });
 
   it('is unknown, not complete, when discovery failed or observed nothing', () => {

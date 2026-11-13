@@ -213,13 +213,20 @@ export const quality = {
   core_noul_questions: {
     names_a_business: {
       instructions:
-        'Would a good answer to `candidate.question` mainly name specific businesses, products, providers or places to buy from, for one concise buyer need? A yes/no question, a request for general advice or instructions, or a question stacking several requirements is not.',
+        'Would a good answer to `candidate.question` recommend specific, named products, services, brands or providers the asker could buy or hire, for one concise buyer need? An answer that is general advice, tips, ideas, buying guidance, or kinds, styles or types of things without naming specific options does not count. Neither does a yes/no answer, an explanation, or a question stacking several requirements.',
       criteria: {
-        true: 'One concise need, answered by naming businesses or products',
-        false: 'Answered with advice, a yes/no or an explanation, or it stacks several needs',
+        true: 'One concise need, answered by recommending specific named products, services, brands or providers',
+        false:
+          'Answered with advice, ideas, kinds or styles of things, a yes/no or an explanation, or it stacks several needs',
       },
     },
   },
+  /**
+   * The judge's intent choices that seek understanding or setup rather than
+   * something to buy: a core draft the judge places in one fails, whatever its
+   * own label said.
+   */
+  core_advice_intents: ['learn', 'implement'],
   intent_instructions: 'What does the person asking `candidate.question` want from the answer?',
   intent_descriptions: {
     learn: 'To understand a topic or how something works',

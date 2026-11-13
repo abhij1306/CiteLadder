@@ -126,7 +126,7 @@ export async function cancelAudit(
       .execute();
     await auditEvent(
       trx,
-      auditId,
+      { workspaceId, auditId },
       auditPolicy.constants.event_audit_cancelled,
       'audit cancelled',
       { status: 'cancelled' },

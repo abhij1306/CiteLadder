@@ -1,5 +1,3 @@
-'use client';
-
 import { Badge } from '@/components/ui/badge';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
 import { pageKindLabel } from '@/lib/site-health/page-kinds';

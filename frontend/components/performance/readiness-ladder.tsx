@@ -1,5 +1,3 @@
-'use client';
-
 import { useQuery } from '@tanstack/react-query';
 import { Circle, CircleCheck } from 'lucide-react';
 
@@ -123,7 +121,7 @@ export function ReadinessLadder({
     <Stack
       as="section"
       gap="compact"
-      className={panelClasses({ tone: 'panel' })}
+      className={panelClasses()}
       aria-label="Data readiness"
       data-testid="readiness-ladder"
     >

@@ -83,11 +83,22 @@ export const CRAWL_ONLY_TABS: ReadonlySet<string> = new Set(
 );
 /** How often the screen rechecks a source while an upload is being processed. */
 export const UPLOAD_PROCESSING_POLL_MS = 15000;
+/** How long the screen waits for an upload's processing before it stops rechecking. */
+export const UPLOAD_PROCESSING_MAX_WAIT_MS = 10 * 60 * 1000;
 export const TRAFFIC_RANGES = [
   { value: '30d', label: 'Last 30 days' },
   { value: '90d', label: 'Last 90 days' },
   { value: '1y', label: 'Last 12 months' },
 ] as const;
+/** The orders the AI Traffic pages table sorts by; the first is the default. */
+export const TRAFFIC_PAGE_SORTS = [
+  'requests_desc',
+  'sessions_desc',
+  'key_events_desc',
+  'citations_desc',
+  'url_asc',
+] as const;
+export type TrafficPagesSort = (typeof TRAFFIC_PAGE_SORTS)[number];
 export const VERIFICATION_OPTIONS = [
   { value: 'default', label: 'Verified + unverifiable' },
   { value: 'verified', label: 'Verified' },

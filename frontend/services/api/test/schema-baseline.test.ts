@@ -98,7 +98,7 @@ describe('a fresh database', () => {
       await client.query('CREATE TABLE public.stray_table (id uuid PRIMARY KEY)');
 
       await expect(applyMigrations(client)).rejects.toThrow(
-        /Migration 0001_baseline changed after this database applied it.*reset:db/u,
+        /Migration 0001_baseline changed after this database applied it.*new, empty database/u,
       );
       expect(await publicTables(client)).toContain('stray_table');
       const ledger = await client.query<{ checksum: string }>(

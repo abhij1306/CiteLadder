@@ -95,6 +95,13 @@ export function canLaunch(selection: LaunchSelection): boolean {
   );
 }
 
+/** Explicit prompts win over the prompt set; neither means nothing to launch. */
+function launchPrompts(selection: LaunchSelection) {
+  if (selection.promptIds?.length) return { prompt_ids: [...selection.promptIds] };
+  if (selection.promptSetId) return { prompt_set_id: selection.promptSetId };
+  return null;
+}
+
 /**
  * Build the `POST /audits` payload from a launchable selection. Throws if the
  * selection is not launchable — callers gate on `canLaunch` first.
@@ -103,14 +110,13 @@ export function buildLaunchPayload(
   selection: LaunchSelection,
   limits: RepetitionLimits,
 ): AuditLaunchRequest {
-  if (!canLaunch(selection)) {
+  const prompts = launchPrompts(selection);
+  if (!prompts || !canLaunch(selection)) {
     throw new Error('Cannot build a launch payload from an incomplete selection.');
   }
   return {
     project_id: selection.projectId,
-    ...(selection.promptIds?.length
-      ? { prompt_ids: [...selection.promptIds] }
-      : { prompt_set_id: selection.promptSetId! }),
+    ...prompts,
     engines: [...selection.engines],
     ...(selection.marketIds ? { market_ids: [...selection.marketIds] } : {}),
     repetitions: clampRepetitions(selection.repetitions, limits),

@@ -1,5 +1,3 @@
-'use client';
-
 import { useQuery } from '@tanstack/react-query';
 import { useParams } from 'react-router-dom';
 
@@ -13,7 +11,7 @@ import { TextLink } from '@/components/ui/text-link';
 import { TrendChart } from '@/components/ui/trend-chart';
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
 import { ClampText, TableCell, TableRow } from '@/components/ui/table';
-import { MarketFilter } from '@/components/visibility/visibility-toolbar';
+import { marketFilter } from '@/components/visibility/visibility-toolbar';
 import { useDisplayTimeZone } from '@/lib/display-timezone';
 import { formatDisplayDate } from '@/lib/format';
 import { formatWholePercent } from '@/lib/visibility/dashboard';
@@ -44,6 +42,8 @@ export function PromptDetailScreen() {
     }),
     enabled: Boolean(promptId),
   });
+  // A single market has nothing to choose, so the row is not drawn empty.
+  const marketChoice = marketFilter({ markets, market, onChangeMarket: setMarket });
 
   if (query.isError)
     return (
@@ -66,22 +66,9 @@ export function PromptDetailScreen() {
     <DetailScreen
       title={history.prompt.text}
       back={BACK}
-      // A single market has nothing to choose, so the band is not drawn empty.
-      controls={
-        markets.length > 1
-          ? {
-              filters: (
-                <MarketFilter
-                  markets={markets}
-                  market={market}
-                  onChangeMarket={(next) => setMarket(next)}
-                />
-              ),
-            }
-          : undefined
-      }
+      controls={marketChoice ? { filters: [marketChoice] } : undefined}
     >
-      <Stack gap="section" aria-busy={query.isFetching}>
+      <Stack gap="workspace" aria-busy={query.isFetching}>
         <HistoryCard history={history} />
         <Implementations history={history} />
         <PromptAnswerStates latest={history.latest} />
@@ -90,7 +77,7 @@ export function PromptDetailScreen() {
   );
 }
 
-/** Mention and owned-citation rates per run, with declared work marked. */
+/** Visibility and owned citation rate per run, with declared work marked. */
 function HistoryCard({ history }: Readonly<{ history: PromptHistory }>) {
   const timeZone = useDisplayTimeZone();
   const data = mentionRatePoints(history.points, timeZone);
@@ -106,8 +93,8 @@ function HistoryCard({ history }: Readonly<{ history: PromptHistory }>) {
       <CardContent>
         {data.length ? (
           <TrendChart
-            label="Mention rate over time"
-            name="Mention rate"
+            label="Visibility over time"
+            name="Visibility"
             data={data}
             series={[{ label: 'Owned citation rate', values: ownedCitationValues(history.points) }]}
             events={implementationEvents(history.implementations, timeZone)}
@@ -149,7 +136,7 @@ function Implementations({ history }: Readonly<{ history: PromptHistory }>) {
               <TextLink href={`/agent/actions/${item.action_id}`}>{item.title}</TextLink>
             </ClampText>
           </TableCell>
-          <TableCell>{formatDisplayDate(item.implemented_at, timeZone)}</TableCell>
+          <TableCell numeric>{formatDisplayDate(item.implemented_at, timeZone)}</TableCell>
           <TableCell>
             <ActionStatusBadge status={item.status} />
           </TableCell>
@@ -161,6 +148,6 @@ function Implementations({ history }: Readonly<{ history: PromptHistory }>) {
 
 const IMPLEMENTATION_COLUMNS: readonly DataTableColumn[] = [
   { key: 'action', label: 'Action' },
-  { key: 'live', label: 'Live from', width: 'date' },
+  { key: 'live', label: 'Live from', width: 'date', numeric: true },
   { key: 'status', label: 'Status', width: 'status' },
 ];

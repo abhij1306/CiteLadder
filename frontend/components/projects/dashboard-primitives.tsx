@@ -8,7 +8,8 @@ import type { ReorderItem } from '@/components/ui/reorder-list';
 import { TextLink } from '@/components/ui/text-link';
 import { MissingValue } from '@/components/ui/unavailable-value';
 import type { CommandCenter, Opportunity } from '@citeladder/contracts';
-import { availabilityLabel, readableUrl } from '@/lib/format';
+import { readableUrl } from '@/lib/format';
+import { formatWholePercent } from '@/lib/visibility/dashboard';
 import { severityLabel, severityPriority } from '@/lib/site-health/issues';
 import { textRole } from '@/components/ui/typography';
 
@@ -18,11 +19,14 @@ export const VS_PREVIOUS_RUN = {
   missingReason: 'No comparable run',
 } as const;
 
-export function metricValue(value: number | null, suffix = '') {
-  if (value === null) return availabilityLabel('not_measured');
-  const figure = Number.isInteger(value) ? value : value.toFixed(1);
-  return `${figure}${suffix}`;
-}
+/**
+ * The Command Center's rates arrive already in percent (0–100). They print as
+ * whole percents (`formatWholePercent`), the precision AI Visibility uses for
+ * the same metrics, so one run never reads 31.3% here and 31% there; a rank
+ * prints as AI Visibility prints it (`formatPosition`, "#3").
+ */
+export const percentFigure = formatWholePercent;
+export { formatPosition as rankFigure } from '@/lib/visibility/dashboard';
 
 /**
  * Each engine's brand mention rate in the previous and the current comparable
@@ -37,7 +41,7 @@ export function MovementChart({ movements }: Readonly<{ movements: CommandCenter
         <Stack key={row.label} gap="compact" className="min-w-0 content-start">
           <Inline className="justify-between">
             <span className={textRole('label', 'capitalize')}>{row.label}</span>
-            <Delta value={row.delta} {...VS_PREVIOUS_RUN} />
+            <Delta value={row.delta} unit=" pp" {...VS_PREVIOUS_RUN} />
           </Inline>
           <MovementMeter engine={row.label} period="Previous" value={row.previous} tone="neutral" />
           <MovementMeter
@@ -66,7 +70,7 @@ function MovementMeter({
   return (
     <MeterRow
       name={period}
-      figure={value === null ? <MissingValue /> : metricValue(value, '%')}
+      figure={value === null ? <MissingValue /> : percentFigure(value)}
       value={value}
       label={`${engine} ${period.toLowerCase()} mention rate`}
       tone={tone}

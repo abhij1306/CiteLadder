@@ -233,7 +233,7 @@ export async function uploadCrawlFile(input: {
     if (!scan.first)
       throw new Error(`No log lines from the last ${catalog.max_backdate_days} days to upload`);
     await flush();
-    await aiTrafficApi.completeUpload(
+    const completed = await aiTrafficApi.completeUpload(
       projectId,
       sourceId,
       upload.id,
@@ -245,8 +245,9 @@ export async function uploadCrawlFile(input: {
       },
       options,
     );
+    if (!completed.completed_at) throw new Error('Upload did not complete');
     input.onProgress({ uploadId: upload.id, scanned, matched });
-    return { uploadId: upload.id, scanned, matched };
+    return { uploadId: upload.id, scanned, matched, completedAt: completed.completed_at };
   } finally {
     await iterator.return?.();
   }

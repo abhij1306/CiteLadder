@@ -8,6 +8,7 @@ import type {
 } from '../generated/db-schema.ts';
 import { isoDateText } from '../db/timestamps.ts';
 import { record } from '../db/json.ts';
+import { currentSiteCrawlQuery } from '../site-health/reads/crawl.ts';
 import { CHECKS, isCheckKind } from './checks/registry.ts';
 
 const a = policy.opportunity.actions;
@@ -29,15 +30,8 @@ const empty = (leg: string): Leg => ({
 });
 
 async function crawlLeg(db: Database, row: Declaration, observations: Observation[]): Promise<Leg> {
-  const latest = await db
-    .selectFrom('site_crawls')
+  const latest = await currentSiteCrawlQuery(db, row.workspace_id, row.project_id)
     .select(['id', 'completed_at'])
-    .where('workspace_id', '=', row.workspace_id)
-    .where('project_id', '=', row.project_id)
-    .where('status', '=', policy.opportunity.refresh.crawl_status_completed)
-    .orderBy('completed_at', 'desc')
-    .orderBy('id', 'desc')
-    .limit(1)
     .executeTakeFirst();
   const observed = observations.findLast((item) => item.crawl_id !== null);
   return {

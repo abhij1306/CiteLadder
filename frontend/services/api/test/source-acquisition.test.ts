@@ -10,6 +10,7 @@ import {
 } from '../src/web-evidence/acquisition.ts';
 import { extractSourcePage } from '../src/source-pages/extract.ts';
 import { assessPage, urlFormat } from '../src/source-pages/assessment.ts';
+import { isListingGap } from '../src/analysis/listing-gap.ts';
 import {
   compareContent,
   ownedFacts,
@@ -20,7 +21,13 @@ import { pageIdentity } from '../src/source-pages/identity.ts';
 import { policy } from '../src/config.ts';
 import { organicResults } from '../src/source-pages/sync.ts';
 
-const settings = { ...acquisitionSettings({}), defaultDelay: 0, maxDelay: 1, timeout: 0.02 };
+const settings = {
+  ...acquisitionSettings({}),
+  defaultDelay: 0,
+  maxDelay: 1,
+  timeout: 0.02,
+  robotsBackoff: 0.001,
+};
 const options = {
   maxBytes: 10000,
   timeoutSeconds: 0.02,
@@ -80,6 +87,132 @@ it.each(['https://first.test/private', 'https://second.test/private'])(
     expect(sent).not.toContain(destination);
   },
 );
+/** A site whose robots.txt answers `robots` and whose pages answer 200 HTML. */
+function robotsSite(robots: { status: number; body: string }, sent: string[]) {
+  return createWebsiteFetcher(
+    async () => [{ address: '93.184.216.34', family: 4 }],
+    async (url) => {
+      sent.push(url.pathname);
+      return url.pathname === '/robots.txt'
+        ? { ...robots, location: undefined, type: 'text/plain', body: Buffer.from(robots.body) }
+        : { status: 200, location: undefined, type: 'text/html', body: Buffer.from('<p>ok</p>') };
+    },
+  );
+}
+it('fetches a disallowed page only when the caller ignores robots.txt; by default it respects it', async () => {
+  const sent: string[] = [];
+  const acquirer = new PageAcquirer(
+    async () => {},
+    robotsSite({ status: 200, body: 'User-agent: *\nDisallow: /private' }, sent),
+    settings,
+    0,
+  );
+  await expect(acquirer.fetch('https://shop.test/private', options)).rejects.toMatchObject({
+    code: 'robots_disallowed',
+  });
+  const page = await acquirer.fetch('https://shop.test/private', {
+    ...options,
+    robots: () => 'ignore',
+  });
+  expect(page.status).toBe(200);
+  expect(sent).toEqual(['/robots.txt', '/private']);
+});
+it.each([
+  ['access-blocked', 403, 'robots_disallowed', ['/robots.txt']],
+  // A transient failure is retried before the page is refused.
+  ['unreachable', 503, 'robots_unavailable', ['/robots.txt', '/robots.txt', '/robots.txt']],
+])(
+  'never fetches past an %s robots.txt, even when ignoring robots.txt',
+  async (_label, status, code, requests) => {
+    const sent: string[] = [];
+    const acquirer = new PageAcquirer(
+      async () => {},
+      robotsSite({ status, body: '' }, sent),
+      settings,
+      0,
+    );
+    await expect(
+      acquirer.fetch('https://shop.test/private', { ...options, robots: () => 'ignore' }),
+    ).rejects.toMatchObject({ code });
+    expect(sent).toEqual(requests);
+  },
+);
+it('retries a transient robots.txt failure and never caches one', async () => {
+  const sent: string[] = [];
+  const answers = [503, 429, 200, 503, 503, 503];
+  const fetcher = createWebsiteFetcher(
+    async () => [{ address: '93.184.216.34', family: 4 }],
+    async (url) => {
+      sent.push(url.pathname);
+      if (url.pathname !== '/robots.txt')
+        return { status: 200, location: undefined, type: 'text/html', body: Buffer.from('ok') };
+      const status = answers.shift() ?? 200;
+      return { status, location: undefined, type: 'text/plain', body: Buffer.from('') };
+    },
+  );
+  const acquirer = new PageAcquirer(async () => {}, fetcher, settings, 0);
+  expect((await acquirer.fetch('https://shop.test/page', options)).status).toBe(200);
+  expect(sent).toEqual(['/robots.txt', '/robots.txt', '/robots.txt', '/page']);
+  // A readable answer is cached for the TTL; a transient failure is asked again next time.
+  const other = 'https://other.test';
+  expect((await acquirer.robots(other)).unavailable).toBe(true);
+  expect((await acquirer.robots(other)).unavailable).toBe(false);
+  expect(sent).toHaveLength(4 + 3 + 1);
+});
+it('asks once for a robots.txt the fetcher refuses, and keeps the refusal final', async () => {
+  const sent: string[] = [];
+  const fetcher = createWebsiteFetcher(
+    async () => [{ address: '93.184.216.34', family: 4 }],
+    async (url) => {
+      sent.push(url.pathname);
+      throw new FetchError('response_too_large');
+    },
+  );
+  const acquirer = new PageAcquirer(async () => {}, fetcher, settings, 0);
+  const first = await acquirer.robots('https://shop.test');
+  const again = await acquirer.robots('https://shop.test');
+  expect([first.unavailable, first.transient, again.transient]).toEqual([true, false, false]);
+  expect(sent).toEqual(['/robots.txt']);
+});
+it('names the robots group that applies to a crawler without reading parser internals', () => {
+  const body = [
+    'User-agent: GPTBot/1.1',
+    'User-agent: ClaudeBot',
+    'Disallow: /',
+    'User-agent: *',
+    'Allow: /',
+    '# A trailing agent without rules forms no group.',
+    'User-agent: Bingbot',
+  ].join('\n');
+  const robots = robotsPolicy('https://example.test', 200, body, settings);
+  expect([
+    robots.matched(['GPTBot']),
+    robots.matched(['claudebot']),
+    robots.matched(['Bingbot']),
+    robotsPolicy('https://example.test', 200, 'User-agent: GPTBot\nDisallow: /', settings).matched([
+      'Googlebot',
+    ]),
+  ]).toEqual(['specific_group', 'specific_group', 'wildcard_group', 'no_rules']);
+});
+it('keeps an unsupported crawl delay binding when the crawl ignores robots.txt', () => {
+  const slow = robotsPolicy('https://example.test', 200, 'User-agent: *\nCrawl-delay: 2', settings);
+  expect(slow.admits('https://example.test/', 'ignore')).toBe(false);
+  // A 3xx answer is not a readable robots.txt, whatever the crawl chose.
+  const unread = robotsPolicy('https://example.test', 304, '', settings);
+  expect([
+    unread.admits('https://example.test/', 'ignore'),
+    unread.admits('https://example.test/', 'respect'),
+  ]).toEqual([false, false]);
+  const rules = robotsPolicy('https://example.test', 200, 'User-agent: *\nDisallow: /a', settings);
+  expect([
+    rules.admits('https://example.test/a', 'ignore'),
+    rules.excludes('https://example.test/a'),
+  ]).toEqual([true, true]);
+  expect([
+    rules.admits('https://example.test/a', 'respect'),
+    rules.excludes('https://example.test/b'),
+  ]).toEqual([false, false]);
+});
 it('applies crawler-specific robots rules, longest allow, refusal and retryable unavailability', () => {
   const body =
     'User-agent: *\nDisallow: /private\nAllow: /private/public\nSitemap: https://example.test/map.xml';
@@ -236,14 +369,21 @@ it('extracts visible evidence and keeps schema, headings and table structure sep
   expect(extractSourcePage(Buffer.from('<p>Visible without a title</p>')).facts.title).toBe('');
 });
 it('matches names the way answers do, quoting spaced and joined spellings, and keeps absence distinct', () => {
-  const spaced = extractSourcePage(Buffer.from('<p>Admissions open at Northwind Academy.</p>'));
-  expect(assessPage(spaced, { brand_name: 'northwindacademy' }).presences[0]).toMatchObject({
+  const joined = extractSourcePage(Buffer.from('<p>Admissions open at northwindacademy.com.</p>'));
+  expect(assessPage(joined, { brand_name: 'Northwind Academy' }).presences[0]).toMatchObject({
     presence: 'present',
     match_method: 'normalized_alias',
     match_count: 1,
   });
-  const compact = extractSourcePage(Buffer.from('<p>We love SummitWear shoes</p>'));
-  expect(assessPage(compact, { brand_name: 'Summit Wear' }).presences[0]).toMatchObject({
+  // Separate words on the page never join to spell a one-word name (AR-6).
+  const spaced = extractSourcePage(
+    Buffer.from(`<p>Admissions open at Northwind Academy. ${'Other words '.repeat(100)}</p>`),
+  );
+  expect(assessPage(spaced, { brand_name: 'northwindacademy' }).presences[0]?.presence).toBe(
+    'not_detected',
+  );
+  const compact = extractSourcePage(Buffer.from('<p>We love PineandOak shoes</p>'));
+  expect(assessPage(compact, { brand_name: 'Pine & Oak' }).presences[0]).toMatchObject({
     presence: 'present',
     first_offset: 8,
   });
@@ -273,6 +413,45 @@ it('matches names the way answers do, quoting spaced and joined spellings, and k
       .presences[0]?.presence,
   ).toBe('partial');
   expect(assessPage(full, {}).presences).toEqual([]);
+});
+it('quotes and counts only the mentions the mention rules accept', () => {
+  const page = extractSourcePage(
+    Buffer.from('<p>We baked apple pie today. Later we bought an Apple laptop.</p>'),
+  );
+  const result = assessPage(page, {
+    brand_name: 'Apple',
+    entity_matching: {
+      entities: { apple: { mode: 'always', context_terms: [], exclusion_phrases: ['apple pie'] } },
+    },
+  });
+  expect(result.presences[0]).toMatchObject({
+    presence: 'present',
+    match_count: 1,
+    first_offset: 45,
+  });
+});
+it('never judges a name too short to find on a page absent, so it leaves no listing gap', () => {
+  const page = extractSourcePage(
+    Buffer.from(`<p>Compare HP and Dell laptops. ${'Other words '.repeat(100)}</p>`),
+  );
+  const presences = (brandAliases: string[]) =>
+    assessPage(page, {
+      brand_name: 'HP',
+      brand_aliases: brandAliases,
+      competitors: [{ name: 'Dell' }],
+    }).presences.map((row) => [row.entity_kind, row.presence]);
+  expect(presences([])).toEqual([
+    ['brand', 'not_assessable'],
+    ['competitor', 'present'],
+  ]);
+  expect(
+    isListingGap({ source_class: null }, [
+      { entity_kind: 'brand', presence: 'not_assessable' },
+      { entity_kind: 'competitor', presence: 'present' },
+    ]),
+  ).toBe(false);
+  // A longer alias keeps the brand assessable.
+  expect(presences(['Hewlett-Packard'])[0]).toEqual(['brand', 'not_detected']);
 });
 it('derives page formats from a page address and keeps redirect tokens unresolved', () => {
   expect(urlFormat('https://example.test/compare/tools').format).toBe('comparison');
@@ -374,10 +553,11 @@ it('quotes every named entity even when one of them fills the page', () => {
   expect(
     result.passages.every((passage) => passage.text.length <= policy.source_pages.passage_chars),
   ).toBe(true);
+  // "AI" is too short to judge on a page, so it is never read as absent.
   expect(result.presences.map((presence) => presence.presence)).toEqual([
     'present',
     'present',
-    'not_detected',
+    'not_assessable',
   ]);
   expect(
     assessPage(

@@ -1,4 +1,5 @@
 import { screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vite-plus/test';
 
@@ -83,6 +84,63 @@ describe('Execution evidence drawer', () => {
         .getAllByRole('listitem')
         .map((item) => item.textContent),
     ).toEqual(['Fast', 'Local']);
+  }, 20_000);
+
+  it('switches to another engine’s answer to the same prompt without leaving the drawer', async () => {
+    const OTHER = '22222222-2222-4222-8222-222222222222';
+    const row = { transport_provider: 'x', error_code: '', latency_ms: 1, prompt_text: 'Q' };
+    mswServer.use(
+      http.get(`/api/v1/executions/${ID}`, () =>
+        HttpResponse.json({ ...evidence, answer_text: 'From the first engine.' }),
+      ),
+      http.get(`/api/v1/executions/${OTHER}`, () =>
+        HttpResponse.json({
+          ...evidence,
+          id: OTHER,
+          task_id: OTHER,
+          logical_engine: 'gemini',
+          answer_text: 'From the second engine.',
+        }),
+      ),
+      http.get(`/api/v1/audits/${ID}/executions`, () =>
+        HttpResponse.json([
+          { ...row, id: ID, prompt_index: 0, logical_engine: 'chatgpt', status: 'succeeded' },
+          { ...row, id: OTHER, prompt_index: 0, logical_engine: 'gemini', status: 'succeeded' },
+          // Another prompt's answer and a failed one are not choices.
+          {
+            ...row,
+            id: ID.replace('1', '3'),
+            prompt_index: 1,
+            logical_engine: 'claude',
+            status: 'succeeded',
+          },
+          {
+            ...row,
+            id: ID.replace('1', '4'),
+            prompt_index: 0,
+            logical_engine: 'perplexity',
+            status: 'failed',
+          },
+        ]),
+      ),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(
+      <ExecutionEvidenceDrawer
+        execution={{ id: ID, prompt_index: 0 }}
+        open
+        onOpenChange={() => {}}
+      />,
+      runRoute,
+    );
+
+    const drawer = await screen.findByRole('dialog', { name: 'Execution evidence' });
+    await within(drawer).findByText('From the first engine.', {}, { timeout: 15_000 });
+    await user.click(await within(drawer).findByRole('button', { name: /^Engine:/u }));
+    const options = await screen.findAllByRole('menuitemradio');
+    expect(options).toHaveLength(2);
+    await user.click(screen.getByRole('menuitemradio', { name: /gemini/iu }));
+    expect(await within(drawer).findByText('From the second engine.')).toBeInTheDocument();
   }, 20_000);
 
   it("reports a measured AI Overview absence from the read's persisted outcome", async () => {

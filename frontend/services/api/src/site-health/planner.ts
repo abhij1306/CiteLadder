@@ -1,37 +1,41 @@
 /** Explicit crawl admission freezes policy and commits all initial work together. */
 import { randomUUID } from 'node:crypto';
 import { ACTIVE_CRAWL_STATUSES } from '@citeladder/contracts/site-health';
-import type { Selectable } from 'kysely';
+import { sql, type Selectable } from 'kysely';
 import { policy } from '../config.ts';
 import { measuredTargetPages } from '../opportunities/enqueue.ts';
 import type { Database } from '../db/database.ts';
 import { notFound } from '../errors.ts';
-import { record, strings } from '../db/json.ts';
+import { record } from '../db/json.ts';
 import type {
   SiteHealthProfiles,
   SiteUrls,
   WorkspaceSiteHealthRuntime,
 } from '../generated/db-schema.ts';
-import { enqueueCrawlTasks, insertObservations } from './admission-writes.ts';
-import { addAutomaticRoot, crawlScope, lockRuntime } from './frontier.ts';
+import { enqueueCrawlTasks, fitTrackedSet, insertObservations } from './admission-writes.ts';
+import { addAutomaticRoot, candidate, crawlScope, lockRuntime } from './frontier.ts';
 import { siteHealthRuntime } from './reads/runtime.ts';
 import {
   controls,
   crawlError,
   crawlSetting,
   frozenConfiguration,
-  normalizeGlobs,
-  normalizedSeed,
   projectWebsiteRoot,
-  type CreateCrawlRequest,
+  type CrawlAdmission,
 } from './planner-policy.ts';
+import { fillTrackedSet, lockTrackedSet } from './tracked-set.ts';
+import { pageRerunSql } from './page-rerun.ts';
 import { inventoryCrawlIds } from './reads/crawl.ts';
 import { recordCrawlEvent } from './site-task.ts';
 import type { Crawl } from './site-task.ts';
-import { classifyUrlAdmission, type Scope } from './url-admission.ts';
+import { classifyUrlAdmission } from './url-admission.ts';
 import { canonicalIdentity } from './url-identity.ts';
 
-/** Persists the workspace's current runtime projection and locks it for admission. */
+/**
+ * Persist the workspace's current runtime projection and lock its row. The
+ * runtime row is the first Site Health lock after the project, so callers take
+ * it before membership, the active crawl and the profile.
+ */
 export async function admissionRuntime(db: Database, workspaceId: string) {
   const now = new Date();
   const projection = siteHealthRuntime();
@@ -55,7 +59,7 @@ export async function admissionRuntime(db: Database, workspaceId: string) {
   return runtime;
 }
 
-export async function enqueueCrawlTask(
+async function enqueueCrawlTask(
   db: Database,
   crawl: Crawl,
   input: {
@@ -116,6 +120,7 @@ async function seedObservation(
   ]);
 }
 
+/** Queue analysis of the active members, in fill order, within the crawl's page limit. */
 async function seedMonitored(db: Database, crawl: Crawl) {
   const rows = await db
     .selectFrom('site_urls as u')
@@ -129,6 +134,7 @@ async function seedMonitored(db: Database, crawl: Crawl) {
     .where('u.workspace_id', '=', crawl.workspace_id)
     .where('u.project_id', '=', crawl.project_id)
     .where('m.active', '=', true)
+    .orderBy(sql`m.fill_order asc nulls last`)
     .orderBy('u.normalized_url')
     .execute();
   // Pages with a declared change still being measured go first, so a budget
@@ -141,9 +147,10 @@ async function seedMonitored(db: Database, crawl: Crawl) {
     if (url.normalized_url === crawl.root_url) return 0;
     return declared.has(url.id) ? 1 : 2;
   };
+  // A stable sort: fill order holds within each rank.
   rows.sort((left, right) => rank(left) - rank(right));
-  // The budget is in pages, not tasks: site setup is no page, and the root's
-  // discover already holds the root's slot, so its analysis spends nothing more.
+  // The budget is in pages, not tasks: site setup is no page, and a URL that
+  // already has a discover task (a sample's root) spends nothing more.
   const held = new Set(
     (
       await db
@@ -198,11 +205,18 @@ function insertCrawl(
     root: string;
     configuration: Record<string, unknown>;
     runtime: Runtime;
-    seed?: string | null;
-    rerun: boolean;
+    /** How many URLs discovery may admit: a sample's cap or a full crawl's HTML-walk bound. */
+    discoveryLimit: number;
+    /** How many pages a re-audit names; 0 for a crawl of the site. */
+    rerunPages: number;
   },
 ) {
   const now = new Date();
+  const sample = input.runtime.discovery_mode === 'sample';
+  const rerun = input.rerunPages > 0;
+  // A full crawl's discovery waits for site setup: its sitemap, or an HTML walk without one.
+  let discovery = sample ? 'running' : 'pending';
+  if (rerun) discovery = 'completed';
   return db
     .insertInto('site_crawls')
     .values({
@@ -211,17 +225,19 @@ function insertCrawl(
       project_id: input.projectId,
       profile_id: input.profileId,
       root_url: input.root,
-      random_seed: normalizedSeed(input.seed),
+      // Unread since the tracked set (SH-B6) made every crawl's order stable; the column is
+      // NOT NULL until a later release drops it (expand/contract).
+      random_seed: '0',
       configuration: JSON.stringify(input.configuration),
-      sample_mode: input.runtime.discovery_mode === 'sample',
+      sample_mode: sample,
       status: 'queued',
       analysis_status: 'pending',
-      discovery_status: input.rerun ? 'completed' : 'running',
+      discovery_status: discovery,
       inventory_complete: false,
-      discovery_requested_count: input.rerun ? 0 : Number(input.configuration.requested_page_limit),
+      discovery_requested_count: rerun ? 0 : input.discoveryLimit,
       analysis_requested_count: 0,
-      discovered_url_count: input.rerun ? 1 : 0,
-      admitted_url_count: input.rerun ? 1 : 0,
+      discovered_url_count: input.rerunPages,
+      admitted_url_count: input.rerunPages,
       analyzed_url_count: 0,
       failed_url_count: 0,
       partial_reason: '',
@@ -237,17 +253,17 @@ function insertCrawl(
     .executeTakeFirstOrThrow();
 }
 
-async function creationEvents(db: Database, crawl: Crawl, rerunSiteUrlId?: string) {
+async function creationEvents(db: Database, crawl: Crawl, rerunSiteUrlIds?: readonly string[]) {
   await recordCrawlEvent(
     db,
     crawl,
     'crawl.created',
-    rerunSiteUrlId ? 'page rerun crawl created' : 'crawl created',
+    rerunSiteUrlIds ? 'page rerun crawl created' : 'crawl created',
     {
       root_url: crawl.root_url,
       sample_mode: crawl.sample_mode,
       source_kind: 'root',
-      ...(rerunSiteUrlId ? { rerun_site_url_id: rerunSiteUrlId } : {}),
+      ...(rerunSiteUrlIds ? { rerun_site_url_ids: rerunSiteUrlIds } : {}),
     },
   );
   await recordCrawlEvent(db, crawl, 'crawl.queued', 'crawl queued', {});
@@ -258,15 +274,13 @@ function refreshProfile(
   workspaceId: string,
   projectId: string,
   root: string,
-  scope: Scope,
+  domain: string,
 ) {
   const now = new Date();
   const values = {
     root_url: root,
     root_host: new URL(root).hostname,
-    registrable_domain: scope.domain!,
-    include_globs: JSON.stringify(scope.include),
-    exclude_globs: JSON.stringify(scope.exclude),
+    registrable_domain: domain,
     updated_at: now,
   };
   return db
@@ -275,6 +289,7 @@ function refreshProfile(
       id: randomUUID(),
       workspace_id: workspaceId,
       project_id: projectId,
+      // Unused since SH-B13; the column is NOT NULL until a later release drops it (expand/contract).
       selection_version: 0,
       created_at: now,
       ...values,
@@ -289,21 +304,35 @@ function refreshProfile(
     .executeTakeFirstOrThrow();
 }
 
-/** Caller owns the transaction: workspace -> project -> capacity/account -> runtime -> profile. */
-export async function createCrawl(db: Database, workspaceId: string, request: CreateCrawlRequest) {
-  if (crawlSetting('advanced_controls_enabled') !== true)
-    await db
-      .selectFrom('workspaces')
-      .select('id')
-      .where('id', '=', workspaceId)
-      .forShare()
-      .executeTakeFirst();
+/** The root as the first tracked page: site checks read its facts. */
+async function trackRoot(db: Database, crawl: Crawl) {
+  const decision = classifyUrlAdmission(crawl.root_url, crawlScope(crawl));
+  if (!decision.accepted || !decision.url) return;
+  const root = candidate(decision, {
+    url: decision.url,
+    hash: decision.hash,
+    depth: 0,
+    sourceKind: 'root',
+    parentPosition: 0,
+    linkOrdinal: 0,
+  });
+  await fillTrackedSet(db, crawl, [root]);
+}
+
+/**
+ * Caller owns the transaction: project -> runtime -> membership -> profile.
+ * A full crawl audits the tracked set: admission fits it to the monitored-URL
+ * limit (SH-B6), tracks the root on a first crawl and queues every tracked
+ * page's analysis within the crawl's page limit; site setup then reads the
+ * sitemap and fills any free slots, or starts an HTML walk without one (SH-B5).
+ */
+export async function createCrawl(db: Database, workspaceId: string, request: CrawlAdmission) {
   const project = await db
     .selectFrom('projects')
     .select('website_url')
     .where('workspace_id', '=', workspaceId)
     .where('id', '=', request.project_id)
-    .forUpdate()
+    .forNoKeyUpdate()
     .executeTakeFirst();
   if (!project) throw notFound('Project');
   const existing = await db
@@ -315,43 +344,31 @@ export async function createCrawl(db: Database, workspaceId: string, request: Cr
     .executeTakeFirst();
   if (existing) crawlError('Project already has an active crawl', 'crawl_already_active', 409);
   const { root, domain } = projectWebsiteRoot(project.website_url);
-  const scope = {
-    domain,
-    include: normalizeGlobs(request.include_globs),
-    exclude: normalizeGlobs(request.exclude_globs),
-  };
+  const scope = { domain };
   if (!classifyUrlAdmission(root, scope).accepted)
     crawlError('crawl root is not admissible', 'invalid_root');
-  // The self-hosted operator always has the advanced crawl controls.
-  const selected = controls(request, true);
-  const seeds = [
-    ...new Set(
-      selected.seeds.map((url) => {
-        const decision = classifyUrlAdmission(url, scope);
-        if (!decision.accepted || !decision.url)
-          crawlError('seed URL is not admissible', decision.reason ?? 'invalid_crawl_request');
-        return decision.url;
-      }),
-    ),
-  ];
   const runtime = await admissionRuntime(db, workspaceId);
-  const requested =
-    runtime.discovery_url_cap == null
-      ? selected.limit
-      : Math.min(selected.limit, runtime.discovery_url_cap);
-  const profile = await refreshProfile(db, workspaceId, request.project_id, root, scope);
-  const configuration = frozenConfiguration(scope, runtime, {
-    ...selected,
-    limit: requested,
-    seeds,
+  await lockTrackedSet(db, workspaceId, request.project_id);
+  const profile = await refreshProfile(db, workspaceId, request.project_id, root, domain);
+  const selected = controls(request);
+  const sample = runtime.discovery_mode === 'sample';
+  const discoveryCap = runtime.discovery_url_cap ?? selected.limit;
+  // A sample's tracked set is empty; a full crawl's is the monitored-URL limit.
+  const tracked = sample ? 0 : runtime.monitored_url_limit;
+  await fitTrackedSet(db, { workspaceId, projectId: request.project_id }, tracked, {
+    releaseSample: !sample,
   });
-  if (runtime.discovery_mode !== 'sample') {
+  const limit = sample ? Math.min(selected.limit, discoveryCap) : tracked;
+  const configuration = frozenConfiguration(scope, runtime, { ...selected, limit });
+  if (!sample) {
+    // The newest full site crawl's inventory: a page rerun holds no site inventory (SH-B1).
     const previous = await db
       .selectFrom('site_crawls')
       .selectAll()
       .where('workspace_id', '=', workspaceId)
       .where('project_id', '=', request.project_id)
       .where('sample_mode', '=', false)
+      .where(pageRerunSql, '=', false)
       .orderBy('created_at', 'desc')
       .orderBy('id', 'desc')
       .executeTakeFirst();
@@ -367,51 +384,48 @@ export async function createCrawl(db: Database, workspaceId: string, request: Cr
     root,
     configuration,
     runtime,
-    seed: request.seed,
-    rerun: false,
+    // The HTML walk may discover past the tracked set, so it reaches pages to fill it with.
+    discoveryLimit: sample ? limit : Math.max(discoveryCap, limit),
+    rerunPages: 0,
   });
-  const initial = (selected.mode === 'exact_urls' ? seeds : [root, ...seeds]).slice(0, requested);
-  await Promise.all(
-    [...new Set(initial)].map((url, position) =>
-      enqueueCrawlTask(db, crawl, { kind: 'discover', url, position }),
-    ),
-  );
+  if (sample && limit > 0)
+    await enqueueCrawlTask(db, crawl, { kind: 'discover', url: root, position: 0 });
   await enqueueCrawlTask(db, crawl, {
     kind: 'site_setup',
     url: root,
     priority: policy.site_health.crawl.site_setup_priority_boost,
     position: -1,
   });
+  if (!sample) await trackRoot(db, crawl);
   await seedMonitored(db, crawl);
-  if (selected.mode === 'auto') await addAutomaticRoot(db, crawl, runtime);
+  if (sample) await addAutomaticRoot(db, crawl, runtime);
   await creationEvents(db, crawl);
   return crawl;
 }
 
-/** Project/runtime/profile are already locked by rerun admission; reuse that frozen scope. */
+/**
+ * A re-audit of named pages as its own crawl: one page, or every tracked page
+ * an issue affects (Re-run all), one page fetch per page. It keeps the
+ * project's robots choice (`crawlRequest`), as every crawl that names none does.
+ * Project/runtime/profile are already locked by rerun admission; reuse that frozen scope.
+ */
 export async function createPageRerunCrawl(
   db: Database,
   workspaceId: string,
   projectId: string,
   profile: Profile,
-  url: Selectable<SiteUrls>,
+  urls: readonly [Selectable<SiteUrls>, ...Selectable<SiteUrls>[]],
   runtime: Runtime,
+  robots: Pick<ReturnType<typeof controls>, 'robots' | 'robotsDecision'>,
 ) {
-  const scope = {
-    domain: profile.registrable_domain || undefined,
-    include: strings(profile.include_globs),
-    exclude: strings(profile.exclude_globs),
-  };
-  const decision = classifyUrlAdmission(url.normalized_url, scope);
-  if (!decision.accepted)
-    crawlError('page is not admissible for rerun', decision.reason ?? 'invalid_crawl_request');
+  const scope = { domain: profile.registrable_domain || undefined };
+  for (const url of urls) {
+    const decision = classifyUrlAdmission(url.normalized_url, scope);
+    if (!decision.accepted)
+      crawlError('page is not admissible for rerun', decision.reason ?? 'invalid_crawl_request');
+  }
   const configuration = {
-    ...frozenConfiguration(scope, runtime, {
-      mode: 'auto',
-      limit: 1,
-      seeds: [],
-      kinds: [],
-    }),
+    ...frozenConfiguration(scope, runtime, { ...robots, limit: urls.length }),
     // Marks a page re-read, which Changes never compares as a site crawl.
     page_rerun: true,
   };
@@ -419,17 +433,27 @@ export async function createPageRerunCrawl(
     workspaceId,
     projectId,
     profileId: profile.id,
-    root: profile.root_url || url.normalized_url,
+    root: profile.root_url || urls[0].normalized_url,
     configuration,
     runtime,
-    rerun: true,
+    discoveryLimit: 0,
+    rerunPages: urls.length,
   });
-  await seedObservation(db, crawl, url, true);
-  await enqueueCrawlTask(db, crawl, {
-    kind: 'analyze',
-    url: url.normalized_url,
-    siteUrlId: url.id,
-  });
-  await creationEvents(db, crawl, url.id);
+  await Promise.all(urls.map((url) => seedObservation(db, crawl, url, true)));
+  await Promise.all(
+    urls.map((url, position) =>
+      enqueueCrawlTask(db, crawl, {
+        kind: 'analyze',
+        url: url.normalized_url,
+        siteUrlId: url.id,
+        position,
+      }),
+    ),
+  );
+  await creationEvents(
+    db,
+    crawl,
+    urls.map((url) => url.id),
+  );
   return crawl;
 }

@@ -1,29 +1,30 @@
-'use client';
-
 import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Settings2, Unplug } from 'lucide-react';
+import { Settings2 } from 'lucide-react';
 
 import { ListScreen, RESERVED_CONTROLS } from '@/components/layout/page-shell';
 import { SearchIntelligenceCitationMatcher } from '@/components/search-intelligence/search-intelligence-citation-matcher';
 import { SearchIntelligenceCollection } from './search-intelligence-collection';
+import { useSearchCollection, type SearchCollection } from './search-intelligence-collection-state';
 import { SearchIntelligenceReviewDrawer } from '@/components/search-intelligence/search-intelligence-review-drawer';
 import { SearchIntelligenceOverview } from '@/components/search-intelligence/search-intelligence-overview';
 import { referringLists } from './search-intelligence-format';
+import { NotConnected, UnavailableNotice } from './search-intelligence-availability';
 import { CostDetails, RunNotice } from './search-intelligence-runs';
-import { Callout } from '@/components/ui/callout';
 import { Button } from '@/components/ui/button';
 import { Drawer } from '@/components/ui/drawer';
 import { QueryState } from '@/components/ui/query-state';
 import { readErrorProps } from '@/components/ui/read-error';
 import { TextLink } from '@/components/ui/text-link';
-import { SavedViewControls, scopeControls } from './search-intelligence-scope';
+import type { FilterDefinition } from '@/components/ui/all-filters';
+import { savedViewFilters, scopeControls } from './search-intelligence-scope';
 import { Stack } from '@/components/ui/layout';
 import { TabPanel, TabsRoot } from '@/components/ui/tabs';
 import {
   searchIntelligenceMutations,
   searchIntelligenceQueries,
   type SearchIntelligenceDataset,
+  type SearchIntelligenceReadiness,
   type SearchIntelligenceRun,
 } from '@/lib/api/search-intelligence';
 import type { SearchReviewAction } from '@citeladder/contracts/search-intelligence-requests';
@@ -31,8 +32,8 @@ import { searchMarketLabel } from '@/lib/config/search-intelligence';
 import { pollSearchRun } from '@/lib/search-intelligence/status';
 import { stringUrlCodec, useUrlState } from '@/lib/navigation/url-state';
 import { useProjectScope } from '@/lib/project/active-project-scope';
+import { useWorkspaceCapability } from '@/lib/project/project-context';
 
-const PROVIDER_SETTINGS = '/settings?tab=providers';
 const TABS = [
   { value: 'overview', label: 'Overview' },
   { value: 'keywords', label: 'Keywords' },
@@ -51,10 +52,12 @@ const TAB_CODEC = stringUrlCodec(
  * answers only the newest dataset of each acquisition identity.
  */
 function selectDatasets(
-  latestDatasets: readonly SearchIntelligenceDataset[],
+  readiness: SearchIntelligenceReadiness | undefined,
   scope: string,
   market: string,
 ) {
+  const latestDatasets = readiness?.datasets ?? [];
+  const offered = readiness?.markets ?? [];
   const scopes = [...new Set(latestDatasets.map((item) => item.research_scope ?? 'exact_host'))];
   const activeScope = scopes.includes(scope as 'exact_host' | 'domain_subdomains')
     ? scope
@@ -70,7 +73,7 @@ function selectDatasets(
           `${item.location_code}:${item.language_code}`,
           {
             value: `${item.location_code}:${item.language_code}`,
-            label: `${searchMarketLabel(item.location_code)} · ${item.language_code}`,
+            label: `${searchMarketLabel(item.location_code, offered)} · ${item.language_code}`,
           },
         ]),
     ).values(),
@@ -112,8 +115,16 @@ export function SearchIntelligencePage() {
     setAction(nextAction);
     setDrawerOpen(true);
   };
+  const actions = useRoleActions({
+    openReview,
+    cancel: (runId) => cancelMutation.mutate(runId),
+    openMatch: (origin) => {
+      setCitationOrigin(origin);
+      setCitationOpen(true);
+    },
+  });
   const { scopes, activeScope, markets, activeMarket, datasets } = selectDatasets(
-    readiness.data?.datasets ?? [],
+    readiness.data,
     scope,
     market,
   );
@@ -121,25 +132,39 @@ export function SearchIntelligencePage() {
     setComparison(dataset);
     setTab('competitors');
   };
+  const collection = useSearchCollection({
+    tab: tab === 'overview' ? null : tab,
+    datasets,
+    competitors: readiness.data?.competitors ?? [],
+    selected: comparison,
+    onSelect: setComparison,
+  });
   // The first load draws the tab row and the control band the loaded page
-  // has, so the work starts on the same line before and after.
+  // has, so the work starts on the same line before and after. The overview's
+  // filters join the tab row; a collection tab's view and action take a band.
   if (readiness.isPending)
     return (
       <TabsRoot value={tab} onValueChange={setTab}>
-        <ListScreen tabs={SEARCH_INTELLIGENCE_TABS} controls={RESERVED_CONTROLS}>
+        <ListScreen
+          tabs={SEARCH_INTELLIGENCE_TABS}
+          controls={tab === 'overview' ? undefined : RESERVED_CONTROLS}
+        >
           <QueryState kind="loading" label="Loading Keyword Research…" />
         </ListScreen>
       </TabsRoot>
     );
+  // A failed read keeps the tab row, so the page does not lose its place.
   if (readiness.isError)
     return (
-      <ListScreen>
-        <QueryState
-          kind="error"
-          {...readErrorProps(readiness)}
-          fallback="Keyword Research could not be loaded."
-        />
-      </ListScreen>
+      <TabsRoot value={tab} onValueChange={setTab}>
+        <ListScreen tabs={SEARCH_INTELLIGENCE_TABS}>
+          <QueryState
+            kind="error"
+            {...readErrorProps(readiness)}
+            fallback="Keyword Research could not be loaded."
+          />
+        </ListScreen>
+      </TabsRoot>
     );
   const data = readiness.data;
   const tabs = SEARCH_INTELLIGENCE_TABS;
@@ -147,13 +172,7 @@ export function SearchIntelligencePage() {
     return (
       <TabsRoot value={tab} onValueChange={setTab}>
         <ListScreen tabs={tabs}>
-          <QueryState
-            kind="empty"
-            icon={Unplug}
-            heading="Connect DataForSEO"
-            description="Keyword Research uses your workspace’s own DataForSEO account. Add its login once; every analysis shows its cost before anything is fetched."
-            action={<TextLink href={PROVIDER_SETTINGS}>Open provider settings</TextLink>}
-          />
+          <NotConnected />
         </ListScreen>
       </TabsRoot>
     );
@@ -165,17 +184,17 @@ export function SearchIntelligencePage() {
             kind="empty"
             icon={Settings2}
             heading="Add your website address"
-            description="Keyword Research studies the project’s own website, so the project needs its homepage address (for example https://www.example.com)."
+            description="Keyword Research needs the project’s homepage address."
             action={<TextLink href="/projects">Edit the project</TextLink>}
           />
         </ListScreen>
       </TabsRoot>
     );
-  const firstRun = (
-    <Button variant="primary" onClick={() => openReview('analysis')}>
+  const firstRun = actions.analysis ? (
+    <Button variant="primary" onClick={actions.analysis}>
       Review first analysis
     </Button>
-  );
+  ) : undefined;
   return (
     <TabsRoot value={tab} onValueChange={setTab}>
       <ListScreen
@@ -183,41 +202,41 @@ export function SearchIntelligencePage() {
         actions={
           <PageActions
             hasDatasets={Boolean(data.datasets.length)}
-            onReview={openReview}
+            onReview={actions.review}
             onCost={() => setCostOpen(true)}
           />
         }
-        controls={scopeControls({
+        controls={pageControls({
           data,
           tab,
-          latest: datasets.find((item) =>
-            tab === 'backlinks' ? item.location_code === null : item.location_code !== null,
-          ),
-          marketControl: (
-            <SavedViewControls
-              scopes={scopes}
-              scope={activeScope}
-              markets={markets}
-              market={activeMarket}
-              tab={tab}
-              onScope={(value) => {
-                setScope(value);
-                setComparison(null);
-              }}
-              onMarket={(value) => {
-                setMarket(value);
-                setComparison(null);
-              }}
-            />
-          ),
+          datasets,
+          collection,
+          onSeed: actions.onSeed,
+          onMatch: actions.onMatch,
+          onExpand: actions.onExpand,
+          savedView: savedViewFilters({
+            scopes,
+            scope: activeScope,
+            markets,
+            market: activeMarket,
+            tab,
+            onScope: (value) => {
+              setScope(value);
+              setComparison(null);
+            },
+            onMarket: (value) => {
+              setMarket(value);
+              setComparison(null);
+            },
+          }),
         })}
       >
         <Stack gap="workspace" className="min-w-0">
           <UnavailableNotice data={data} />
           <RunNotice
             run={data.latest_run}
-            onCancel={(runId) => cancelMutation.mutate(runId)}
-            onReview={() => openReview('analysis')}
+            onCancel={actions.cancel}
+            onReview={actions.analysis}
             cancelling={cancelMutation.isPending}
           />
           <TabPanel value="overview" className="min-w-0">
@@ -231,27 +250,14 @@ export function SearchIntelligencePage() {
           </TabPanel>
           {TABS.filter((item) => item.value !== 'overview').map(({ value }) => (
             <TabPanel key={value} value={value} className="min-w-0">
-              <SearchIntelligenceCollection
-                tab={value}
-                datasets={datasets}
-                competitors={data.competitors}
-                selected={value === 'competitors' ? comparison : null}
-                onSelect={setComparison}
-                onExpand={() => openReview('increase_depth')}
-                action={(targetOrigin) => (
-                  // NOSONAR -- a render prop the collection calls, never mounted as a component type
-                  <CollectionAction
-                    tab={value}
-                    datasets={datasets}
-                    targetOrigin={targetOrigin}
-                    onSeed={() => openReview('seed')}
-                    onMatch={() => {
-                      setCitationOrigin(targetOrigin);
-                      setCitationOpen(true);
-                    }}
-                  />
-                )}
-              />
+              {collection?.tab === value ? (
+                <SearchIntelligenceCollection
+                  collection={collection}
+                  datasets={datasets}
+                  competitors={data.competitors}
+                  onSelect={setComparison}
+                />
+              ) : null}
             </TabPanel>
           ))}
           <Drawer
@@ -296,27 +302,66 @@ export function SearchIntelligencePage() {
   );
 }
 
+/**
+ * The page's actions, each only for a role that may take it: reviews and
+ * cancels start or stop DataForSEO spend (run); saving citation matches is a write.
+ */
+function useRoleActions({
+  openReview,
+  cancel,
+  openMatch,
+}: Readonly<{
+  openReview: (action: SearchReviewAction) => void;
+  cancel: (runId: string) => void;
+  openMatch: (targetOrigin: string | undefined) => void;
+}>): Readonly<
+  CollectionActions & {
+    review?: (action: SearchReviewAction) => void;
+    /** Opens the analysis review: the first run, or the recovery for a stopped one. */
+    analysis?: () => void;
+    cancel?: (runId: string) => void;
+  }
+> {
+  const canRun = useWorkspaceCapability('run');
+  const canWrite = useWorkspaceCapability('write');
+  const onMatch = canWrite ? openMatch : undefined;
+  if (!canRun) return { onMatch };
+  return {
+    review: openReview,
+    analysis: () => openReview('analysis'),
+    cancel,
+    onSeed: () => openReview('seed'),
+    onExpand: () => openReview('increase_depth'),
+    onMatch,
+  };
+}
+
 function PageActions({
   hasDatasets,
   onReview,
   onCost,
 }: Readonly<{
   hasDatasets: boolean;
-  onReview: (action: SearchReviewAction) => void;
+  /** Opens a review of paid provider work; omitted for a role that may not run one. */
+  onReview?: (action: SearchReviewAction) => void;
   onCost: () => void;
 }>) {
+  const costDetails = (
+    <Button variant="ghost" onClick={onCost}>
+      Cost details
+    </Button>
+  );
+  if (!onReview) return costDetails;
   return (
     <>
-      <Button variant="ghost" onClick={onCost}>
-        Cost details
-      </Button>
+      {costDetails}
       {hasDatasets ? (
         <>
-          <Button variant="secondary" onClick={() => onReview('analysis')}>
-            New analysis
-          </Button>
-          <Button variant="primary" onClick={() => onReview('refresh')}>
+          <Button variant="secondary" onClick={() => onReview('refresh')}>
             Refresh
+          </Button>
+          <Button variant="primary" onClick={() => onReview('analysis')}>
+            New analysis
           </Button>
         </>
       ) : (
@@ -328,48 +373,90 @@ function PageActions({
   );
 }
 
-/** The tab's own next step beside its view switcher. */
-function CollectionAction({
+/**
+ * The page's one control strip for the open tab. The caption names the saved
+ * result on screen, else the newest one the tab can show.
+ */
+function pageControls({
+  data,
   tab,
   datasets,
-  targetOrigin,
-  onSeed,
-  onMatch,
-}: Readonly<{
-  tab: string;
-  datasets: SearchIntelligenceDataset[];
-  /** The website the tab is showing. */
-  targetOrigin: string | undefined;
-  onSeed: () => void;
-  onMatch: () => void;
-}>) {
-  if (tab === 'keywords')
-    return (
-      <Button variant="secondary" onClick={onSeed}>
-        Research a keyword
-      </Button>
-    );
-  // Only the website on screen: matching another website's list would save
-  // matches for a site the reader is not looking at.
-  if (
-    tab === 'backlinks' &&
-    referringLists(datasets).some((dataset) => dataset.target_origin === targetOrigin)
-  )
-    return (
-      <Button variant="secondary" onClick={onMatch}>
-        Match with Visibility citations
-      </Button>
-    );
-  return null;
+  collection,
+  savedView,
+  ...actions
+}: Readonly<
+  {
+    data: SearchIntelligenceReadiness;
+    tab: Tab;
+    datasets: SearchIntelligenceDataset[];
+    collection: SearchCollection | null;
+    savedView: FilterDefinition[];
+  } & CollectionActions
+>) {
+  const newest = datasets.find((item) =>
+    tab === 'backlinks' ? item.location_code === null : item.location_code !== null,
+  );
+  return scopeControls({
+    data,
+    tab,
+    latest: collection?.dataset ?? newest,
+    savedView,
+    collection: collection ?? undefined,
+    action: collection ? (
+      <CollectionAction collection={collection} datasets={datasets} {...actions} />
+    ) : undefined,
+  });
 }
 
-/** Why saved results cannot be refreshed: no DataForSEO connection. */
-function UnavailableNotice({ data }: Readonly<{ data: { connected: boolean } }>) {
-  if (data.connected) return null;
+/** A tab's next steps; each is omitted for a role that may not take it. */
+type CollectionActions = {
+  /** Reviews a keyword to research, a run. */
+  onSeed?: () => void;
+  /** Saves citation matches, a write. */
+  onMatch?: (targetOrigin: string | undefined) => void;
+  /** Reviews a deeper collection, a run. */
+  onExpand?: () => void;
+};
+
+/**
+ * The tab's own next step, at the end of the control strip: its research
+ * action, then a deeper review of the saved result on screen.
+ */
+function CollectionAction({
+  collection,
+  datasets,
+  onSeed,
+  onMatch,
+  onExpand,
+}: Readonly<
+  {
+    collection: SearchCollection;
+    datasets: SearchIntelligenceDataset[];
+  } & CollectionActions
+>) {
+  // Only the website on screen: matching another website's list would save
+  // matches for a site the reader is not looking at.
+  const matchable =
+    collection.tab === 'backlinks' &&
+    referringLists(datasets).some((dataset) => dataset.target_origin === collection.target);
+  const expandable = !collection.listingCompetitors && Boolean(collection.dataset);
   return (
-    <Callout tone="negative">
-      DataForSEO is not connected, so saved results can be read but not refreshed.{' '}
-      <TextLink href={PROVIDER_SETTINGS}>Open provider settings</TextLink>
-    </Callout>
+    <>
+      {collection.tab === 'keywords' && onSeed ? (
+        <Button variant="secondary" onClick={onSeed}>
+          Research a keyword
+        </Button>
+      ) : null}
+      {matchable && onMatch ? (
+        <Button variant="secondary" onClick={() => onMatch(collection.target)}>
+          Match with Visibility citations
+        </Button>
+      ) : null}
+      {expandable && onExpand ? (
+        <Button variant="ghost" onClick={onExpand}>
+          Review depth
+        </Button>
+      ) : null}
+    </>
   );
 }

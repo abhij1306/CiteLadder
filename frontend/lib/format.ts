@@ -196,3 +196,24 @@ export function readableUrl(value: string): string {
   }
   return current;
 }
+
+/**
+ * A web address as a short title: its host without `www.`, then its last
+ * path segment, readable, with `…` for any segments between
+ * (`bestandless.com.au/…/Womens-Maxi-Dress`). The query and fragment are
+ * dropped. Anything that is not an http(s) URL is only made readable.
+ */
+export function shortUrlTitle(value: string): string {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return readableUrl(value);
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return readableUrl(value);
+  const host = url.hostname.replace(/^www\./u, '');
+  const segments = url.pathname.split('/').filter(Boolean);
+  const last = segments.at(-1);
+  if (last === undefined) return host;
+  return `${host}${segments.length > 1 ? '/…' : ''}/${readableUrl(last)}`;
+}

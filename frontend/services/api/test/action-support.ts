@@ -16,6 +16,11 @@ export type ActionSeed = OpportunitySeed & {
   members: Record<string, string>;
 };
 
+/** A page finding's evidence as the refresh stores it: the one defect it folds. */
+const pageIssues = (issueId: string, ruleId: string, severity: string) => ({
+  issues: [{ issue_id: issueId, rule_id: ruleId, severity, category: 'content', evidence: {} }],
+});
+
 async function seed(db: Database, content: boolean): Promise<ActionSeed> {
   const scn = await seedOpportunityScenario(db, content);
   return db.transaction().execute(async (trx) => {
@@ -24,6 +29,8 @@ async function seed(db: Database, content: boolean): Promise<ActionSeed> {
       audit_id: scn.audit_id,
       site_crawl_id: scn.crawl_id,
       total_count: 4,
+      // Before any go-live a declaration accepts, so it is every declaration's baseline.
+      created_at: new Date(Date.now() - 31 * 86_400_000),
       source_analysis_ids: JSON.stringify([scn.analysis0_id]),
       source_issue_ids: JSON.stringify(
         [scn.issue_structured_id, scn.issue_content_id].sort((left, right) =>
@@ -65,7 +72,9 @@ async function seed(db: Database, content: boolean): Promise<ActionSeed> {
         opportunity_type: 'site',
         target_key: 'url:https://acme.test/a',
         target_url: 'https://acme.test/a',
-        evidence: JSON.stringify({ issue_rule_id: 'aeo.structured_data_present' }),
+        evidence: JSON.stringify(
+          pageIssues(scn.issue_structured_id, 'aeo.structured_data_present', 'medium'),
+        ),
         source_issue_ids: JSON.stringify([scn.issue_structured_id]),
       }),
       opportunityRow(scope, {
@@ -76,7 +85,7 @@ async function seed(db: Database, content: boolean): Promise<ActionSeed> {
         opportunity_type: 'site',
         target_key: 'url:https://acme.test/b',
         target_url: 'https://acme.test/b',
-        evidence: JSON.stringify({ issue_rule_id: 'aeo.answer_first' }),
+        evidence: JSON.stringify(pageIssues(scn.issue_content_id, 'aeo.answer_first', 'low')),
         source_issue_ids: JSON.stringify([scn.issue_content_id]),
       }),
     ];
@@ -120,6 +129,7 @@ async function seed(db: Database, content: boolean): Promise<ActionSeed> {
         priority_score: Math.max(...rows.map((row) => row.priority_score)),
         families: JSON.stringify([family]),
         member_opportunity_ids: JSON.stringify(rows.map((row) => row.id)),
+        last_member_opportunity_ids: JSON.stringify(rows.map((row) => row.id)),
         opportunity_snapshot_id: snapshot.id,
       });
       await trx.insertInto('actions').values(action).execute();
@@ -306,7 +316,10 @@ export async function actionFixture<T>(phase: string, ...args: string[]): Promis
           scope.workspace_id,
           'https://sibling.test/',
         );
-        await trx.insertInto('opportunity_snapshots').values(snapshotRow(scope)).execute();
+        await trx
+          .insertInto('opportunity_snapshots')
+          .values(snapshotRow(scope, { created_at: new Date(Date.now() - 31 * 86_400_000) }))
+          .execute();
         const id = await standaloneAction(
           trx,
           opportunityRow(scope, {

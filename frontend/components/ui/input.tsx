@@ -87,7 +87,7 @@ export function Input({
       )}
     >
       {startContent ? (
-        <span className="text-ink-muted text-data flex shrink-0 items-center font-mono whitespace-nowrap">
+        <span className="text-ink-muted text-caption flex shrink-0 items-center font-mono whitespace-nowrap">
           {startContent}
         </span>
       ) : null}
@@ -100,7 +100,7 @@ export function Input({
         {...props}
       />
       {endContent ? (
-        <span className="text-ink-muted text-data flex shrink-0 items-center font-mono whitespace-nowrap">
+        <span className="text-ink-muted text-caption flex shrink-0 items-center font-mono whitespace-nowrap">
           {endContent}
         </span>
       ) : null}
@@ -129,7 +129,7 @@ export function FieldEndButton({
     <button
       type="button"
       data-field-end-target=""
-      className="focus-ring text-ink-muted enabled:hover:bg-surface-sunken enabled:hover:text-ink grid size-6 shrink-0 place-items-center rounded-xs transition-colors focus-visible:outline-offset-1"
+      className="focus-ring text-ink-muted enabled:hover:overlay-hover enabled:hover:text-ink grid size-6 shrink-0 place-items-center rounded-xs transition-colors focus-visible:outline-offset-1"
       disabled={disabled}
       onClick={onClick}
       aria-label={label}

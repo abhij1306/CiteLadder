@@ -1,29 +1,19 @@
 import { policy } from '../../config.ts';
+import { isListingGap } from '../listing-gap.ts';
 import { rules } from './detectors.ts';
-import { brandOf, competitorsOf, earnedPageBrief } from './earned-page-brief.ts';
+import { competitorsOf, earnedPageBrief } from './earned-page-brief.ts';
 import type { DetectorHit, EarnedPageEvidence, SourcePageEvidence } from './evidence.ts';
 import { pageCompetitorPresenceFactor, pageRecurrenceFactor } from './scoring.ts';
 import { compareText } from '../../text-order.ts';
 const p = policy.opportunity.earned_actions;
-const s = policy.opportunity.source_pages;
 
 /**
- * A page earns the Action when it was read well enough to trust an absence,
- * answers to tracked prompts keep citing it, it is the kind of page that takes
- * another entry, and at least one competitor is on it while the brand is not.
+ * Every page the URLs table shows as a Gap earns the Action (AS4): its latest
+ * successful reading is a listing gap. Its format, how often it is cited and
+ * how much of it was read only rank it, through the priority factors.
  */
 function qualifies(page: SourcePageEvidence): boolean {
-  return (
-    page.snapshot_id !== null &&
-    page.sufficient_coverage &&
-    page.roster_current &&
-    page.prompts.length > 0 &&
-    Math.max(page.recurrence_count, page.answer_count) >= p.EARNED_PAGE_MIN_RECURRENCE &&
-    !p.EARNED_EXCLUDED_SOURCE_CLASSES.includes(page.source_class ?? '') &&
-    p.EARNED_PAGE_INCLUDABLE_FORMATS.includes(page.page_format) &&
-    competitorsOf(page).length > 0 &&
-    brandOf(page)?.presence === s.PRESENCE_NOT_DETECTED
-  );
+  return page.snapshot_id !== null && isListingGap(page, page.entities);
 }
 
 export function detectEarnedPageOpportunities(evidence: EarnedPageEvidence): DetectorHit[] {

@@ -33,8 +33,8 @@ export function words(token: string): string {
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
 
-export function label<T extends Record<string, string>>(table: T, token: string): string {
-  return token in table ? table[token as keyof T]! : words(token);
+export function label(table: Readonly<Record<string, string>>, token: string): string {
+  return table[token] ?? words(token);
 }
 
 export const connectionLabel = (token: string) => label(CONNECTION, token);

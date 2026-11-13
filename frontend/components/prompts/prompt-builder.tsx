@@ -1,5 +1,3 @@
-'use client';
-
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import { ArrowLeft, ArrowRight, Check, Sparkles } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
@@ -126,7 +124,7 @@ function BuilderSheet(props: Readonly<PromptBuilderProps>) {
       open={props.open}
       onOpenChange={props.onOpenChange}
       title="Prompt Builder"
-      description="Shape what CiteLadder drafts. Suggestions wait for your review; only accepted ones are tracked."
+      description="Only suggestions you accept are tracked."
       closeLabel="Close Prompt Builder"
       width="wide"
       footer={

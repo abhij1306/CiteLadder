@@ -1,9 +1,12 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
-import { useState } from 'react';
-import { describe, expect, it } from 'vite-plus/test';
+import { Inbox } from 'lucide-react';
+import { useState, type ComponentProps } from 'react';
+import { describe, expect, it, vi } from 'vite-plus/test';
 
 import { Button } from './button';
 import { DataTable } from './data-table';
+
+type DataTableProps = ComponentProps<typeof DataTable>;
 import { TableActionsCell, TableCell, TableCellLines, TableRow, TableSelectCell } from './table';
 
 const PROMPTS = ['Best CRM for startups', 'Cheapest CRM for agencies'];
@@ -164,6 +167,86 @@ describe('DataTable', () => {
       '25',
     );
     expect(screen.getByRole('button', { name: 'Next page' })).toBeDisabled();
+  });
+
+  it('draws an inline empty state as one table row, and a block one under an h3', () => {
+    const table = (state: DataTableProps['state']) => (
+      <DataTable
+        title="Referrers"
+        columns={[
+          { key: 'host', label: 'Host' },
+          { key: 'sessions', label: 'Sessions', width: 'figure', numeric: true },
+        ]}
+        state={state}
+      />
+    );
+    const { container, rerender } = render(
+      table({ kind: 'empty', inline: true, message: 'No referrers in this period.' }),
+    );
+    expect(container.querySelectorAll('tbody tr')).toHaveLength(1);
+    expect(screen.getByRole('cell', { name: 'No referrers in this period.' })).toBeVisible();
+    expect(screen.getAllByRole('heading').map((heading) => heading.textContent)).toEqual([
+      'Referrers',
+    ]);
+
+    rerender(table({ kind: 'empty', icon: Inbox, heading: 'No referrers yet' }));
+    expect(screen.getByRole('heading', { name: 'No referrers yet' }).tagName).toBe('H3');
+  });
+
+  it('fades the edge that hides columns only while the table scrolls sideways', () => {
+    const { container } = render(
+      <DataTable label="Wide" columns={[{ key: 'url', label: 'URL' }]}>
+        <TableRow>
+          <TableCell>/pricing</TableCell>
+        </TableRow>
+      </DataTable>,
+    );
+    const frame = container.querySelector<HTMLElement>('.table-frame')!;
+    const fades = () =>
+      [...container.querySelectorAll('[data-scroll-edge]')].map((fade) =>
+        fade.getAttribute('data-scroll-edge'),
+      );
+    const layout = (scrollWidth: number, scrollLeft: number) => {
+      Object.defineProperty(frame, 'clientWidth', { configurable: true, value: 400 });
+      Object.defineProperty(frame, 'scrollWidth', { configurable: true, value: scrollWidth });
+      Object.defineProperty(frame, 'scrollLeft', { configurable: true, value: scrollLeft });
+      fireEvent.scroll(frame);
+    };
+
+    layout(400, 0);
+    expect(fades()).toEqual([]);
+    layout(900, 0);
+    expect(fades()).toEqual(['end']);
+    layout(900, 200);
+    expect(fades()).toEqual(['start', 'end']);
+    layout(900, 500);
+    expect(fades()).toEqual(['start']);
+  });
+
+  it('warns in development when no column can absorb the width', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    render(
+      <DataTable
+        title="Fixed figures"
+        columns={[
+          { key: 'engine', label: 'Engine', width: 'name' },
+          { key: 'share', label: 'Share', width: 'figure', numeric: true },
+        ]}
+      />,
+    );
+    render(
+      <DataTable
+        title="Flexible figures"
+        columns={[
+          { key: 'engine', label: 'Engine' },
+          { key: 'share', label: 'Share', width: 'figure', numeric: true },
+        ]}
+      />,
+    );
+    expect(warn.mock.calls.map(([message]) => message)).toEqual([
+      'DataTable "Fixed figures" has no flexible column (width "flex" or "lead"): its text truncates while its fixed columns leave space unused.',
+    ]);
+    warn.mockRestore();
   });
 
   it('keeps a row’s actions together in its trailing cell', () => {

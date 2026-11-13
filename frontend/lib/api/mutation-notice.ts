@@ -55,9 +55,7 @@ export function mutationNoticeForError(
   const humanized = humanizeApiError(error);
   const retryable = isTransientMutationError(error);
   return {
-    message: retryable
-      ? transientMessage(error, humanized.message, options.action)
-      : humanized.message,
+    message: retryable ? transientMessage(error, options.action) : humanized.message,
     retryable,
     code: humanized.code,
     requestId: humanized.requestId,
@@ -81,12 +79,20 @@ const _GENERIC_TRANSIENT_CODES = new Set(['internal_error', 'request_timeout', '
  * server message: network-class errors, the A3 timeout, and a bare 5xx whose
  * message is a sanitized placeholder or just the HTTP status text.
  */
-function transientMessage(error: unknown, message: string, action: string): string {
+function transientMessage(error: unknown, action: string): string {
   const generic = `Could not ${action} — the request failed or timed out. This is usually temporary; try again.`;
-  if (!(error instanceof ApiError)) return generic;
-  // No status = network-class/timeout; no code = no canonical envelope block,
-  // so `message` is only the status-text fallback.
-  if (error.status <= 0 || !error.code) return generic;
-  if (_GENERIC_TRANSIENT_CODES.has(error.code)) return generic;
-  return message.trim() || generic;
+  return serverMessage(error) ?? generic;
+}
+
+/**
+ * The error envelope's own sentence, when the failure carries a specific one:
+ * a coded API response whose code is not one of the placeholders above. A
+ * network-class failure, the A3 timeout, or a response without the envelope
+ * (whose message is only the HTTP status text) has none.
+ */
+export function serverMessage(error: unknown): string | undefined {
+  if (!(error instanceof ApiError)) return undefined;
+  if (error.status <= 0 || !error.code || _GENERIC_TRANSIENT_CODES.has(error.code))
+    return undefined;
+  return error.message.trim() || undefined;
 }

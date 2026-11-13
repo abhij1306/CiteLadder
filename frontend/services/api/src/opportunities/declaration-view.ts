@@ -72,6 +72,7 @@ function checkStates(
       source_id: found?.source_id ?? null,
       subject: subject(check, prompts),
       prompt_id: promptId && prompts.has(promptId) ? promptId : null,
+      pages: found?.pages ?? null,
     };
   });
 }
@@ -98,6 +99,14 @@ export async function declarationView(
     .where('workspace_id', '=', row.workspace_id)
     .where('id', '=', row.id)
     .executeTakeFirstOrThrow();
+  // Who recorded the deployment, while they are still a member of this workspace.
+  const recorder = await db
+    .selectFrom('workspace_members as member')
+    .innerJoin('users', 'users.id', 'member.user_id')
+    .select('users.email')
+    .where('member.workspace_id', '=', row.workspace_id)
+    .where('member.user_id', '=', row.actor_user_id)
+    .executeTakeFirst();
   const checks = z.array(expectedCheckSchema).parse(row.expected_checks ?? []);
   const measuredUntil = new Date(row.declared_implemented_at);
   measuredUntil.setUTCDate(
@@ -110,9 +119,12 @@ export async function declarationView(
     output_revision_id: row.output_revision_id,
     member_opportunity_ids: strings(row.member_opportunity_ids),
     opportunity_snapshot_id: row.opportunity_snapshot_id,
+    resolved_before_snapshot_id: row.resolved_before_snapshot_id,
     target_site_url_ids: strings(row.target_site_url_ids),
     target_external_url: row.target_external_url,
     declared_implemented_at: wireUtc(timestamp.at),
+    deployed_by: recorder?.email ?? null,
+    deployment_reference: row.deployment_reference,
     expected_checks: checks,
     state: latest ? observationKind.parse(latest.observation_kind) : ('declared' as const),
     limitations: strings(latest?.limitations),

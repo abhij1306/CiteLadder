@@ -57,4 +57,9 @@ describe('where you stand on a cited page', () => {
     expect(pageStanding(editorial, reading, listed)).toBe('listed');
     expect(pageStanding(editorial, reading, [presence('brand', 'not_detected')])).toBe('read');
   });
+
+  it('never calls a page a gap when your name is too short to judge on it', () => {
+    const shortName = [presence('brand', 'not_assessable'), presence('competitor', 'present')];
+    expect(pageStanding(editorial, reading, shortName)).toBe('not_assessable');
+  });
 });

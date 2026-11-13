@@ -11,6 +11,8 @@ import {
   changeSummarySchema,
   inventoryPageSchema,
   issueHistoryPageSchema,
+  issueSectionSchema,
+  issueSortSchema,
   latestCrawlIssuesPageSchema,
   latestCrawlPagesPageSchema,
   pageDetailSchema,
@@ -28,20 +30,20 @@ import { z } from 'zod';
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { ApiError, notFound } from '../errors.ts';
+import { eventStreamResponse, eventTailStream, resumeCursor } from '../http/event-stream.ts';
 import { InvalidCursorError } from '../http/keyset-cursor.ts';
 import type { RequestParams } from '../http/params.ts';
-import { slottedEventStream } from '../http/stream-slots.ts';
-import { parseUuid } from '../http/uuid.ts';
+import { slottedEventStream, streamOwner } from '../http/stream-slots.ts';
 import { revalidatable } from '../http/revalidate.ts';
 import {
-  dashboardCrawl,
+  currentSiteCrawl,
   isTerminal,
   loadCrawl,
-  crawlProjection,
   rootFailure,
 } from '../site-health/reads/crawl.ts';
+import { crawlProjection } from '../site-health/reads/crawl-projection.ts';
 import { dashboard } from '../site-health/reads/dashboard.ts';
-import { eventReplay, eventStream } from '../site-health/reads/events.ts';
+import { crawlEventTail, eventReplay } from '../site-health/reads/events.ts';
 import {
   architectureMarkdown,
   TABLE_VIEWS,
@@ -87,6 +89,7 @@ const pageFilters = {
 const pagesQuery = {
   ...paging,
   ...pageFilters,
+  query: text,
   sort: { scalar: { kind: 'literal', values: PAGE_SORTS }, default: 'status' },
 } as const;
 const issuesQuery = {
@@ -95,18 +98,15 @@ const issuesQuery = {
   severity: text,
   category: text,
   dimension: text,
+  // The Issues tab: categories map to one section, the rest follow their dimension.
+  section: { scalar: { kind: 'literal', values: issueSectionSchema.options } },
+  sort: { scalar: { kind: 'literal', values: issueSortSchema.options }, default: 'severity' },
   rule: text,
   site_url_id: optionalUuid,
   page_kind: text,
   finding_class: {
     scalar: { kind: 'literal', values: ['defect', 'advisory'] },
     default: 'defect',
-  },
-  // Opt-in: embed the first row's detail (`first_issue`) with this many
-  // occurrences, so a list-detail reader's default selection needs no
-  // second request.
-  detail_limit: {
-    scalar: { kind: 'int', ge: 1, le: policy.site_health.reads.page_max_limit },
   },
 } as const;
 const download = z.unknown();
@@ -121,7 +121,12 @@ const readPages = (db: Database, workspaceId: string, crawlId: string, query: Pa
       db,
       workspaceId,
       crawlId,
-      { status: query.status_filter, monitored: query.monitored, pageKind: query.page_kind },
+      {
+        status: query.status_filter,
+        monitored: query.monitored,
+        pageKind: query.page_kind,
+        query: query.query,
+      },
       query.sort,
       query,
     ),
@@ -144,13 +149,13 @@ const readIssues = (db: Database, workspaceId: string, crawlId: string, query: I
         findingClass: query.finding_class,
       },
       query,
-      query.detail_limit ?? null,
+      { section: query.section ?? null, sort: query.sort },
     ),
   );
 
-/** The project's newest crawl, the one its dashboard shows, or 404 before any. */
-async function newestCrawl(db: Database, workspaceId: string, projectId: string) {
-  const crawl = await dashboardCrawl(db, workspaceId, projectId, null);
+/** The project's current crawl (SH-B1), or 404 before it has one. */
+async function requireCurrentCrawl(db: Database, workspaceId: string, projectId: string) {
+  const crawl = await currentSiteCrawl(db, workspaceId, projectId);
   if (crawl === null) throw notFound('Crawl');
   return crawl;
 }
@@ -299,6 +304,8 @@ export const siteHealthRoutes = [
   }),
   defineGetRoute({
     family,
+    exposure: 'both',
+    publicPath: `${publicCrawlRoot}/issues/{group_id}`,
     path: `${crawlRoot}/issues/{group_id}`,
     params: { path: { ...crawlPath, group_id: uuid }, query: { ...paging, page_kind: text } },
     response: siteIssueDetailSchema,
@@ -330,23 +337,24 @@ export const siteHealthRoutes = [
     async handle({ c, db, config }, { path, query }) {
       const workspaceId = c.get('workspace').workspaceId;
       // Resume after the client's last event, from the SSE header or the query.
-      const after = parseUuid(c.req.header('last-event-id') ?? query.last_event_id);
+      const after = resumeCursor({
+        header: c.req.header('last-event-id'),
+        query: query.last_event_id,
+      });
       if (!query.stream) return c.json(await eventReplay(db, workspaceId, path.crawl_id, after));
-      const crawl = await loadCrawl(db, workspaceId, path.crawl_id);
-      const signal = c.req.raw.signal;
-      const body = slottedEventStream({
-        userId: c.get('user').id,
-        limits: config.auth.limits,
-        signal,
-        open: () => eventStream(db, workspaceId, crawl, after, signal),
-      });
-      return new Response(body, {
-        headers: {
-          'content-type': 'text/event-stream',
-          'cache-control': 'no-cache',
-          'x-accel-buffering': 'no',
-        },
-      });
+      const tail = crawlEventTail(
+        db,
+        workspaceId,
+        await loadCrawl(db, workspaceId, path.crawl_id),
+        after,
+      );
+      return eventStreamResponse(
+        slottedEventStream({
+          ...streamOwner(c, db, config.auth.limits),
+          signal: c.req.raw.signal,
+          open: (held) => eventTailStream(tail, held),
+        }),
+      );
     },
   }),
   exportRoute('csv'),
@@ -360,7 +368,7 @@ export const siteHealthRoutes = [
     handle: ({ c, db }, { path, query }) =>
       dashboard(db, c.get('workspace').workspaceId, path.project_id, query.crawl_id),
   }),
-  // The dashboard crawl's pages and issues, for a reader that does not know the
+  // The current crawl's pages and issues, for a reader that does not know the
   // crawl yet: the route prefetchers start them beside the dashboard rather
   // than after it.
   defineGetRoute({
@@ -370,7 +378,7 @@ export const siteHealthRoutes = [
     response: latestCrawlPagesPageSchema,
     async handle({ c, db }, { path, query }) {
       const workspaceId = c.get('workspace').workspaceId;
-      const crawl = await newestCrawl(db, workspaceId, path.project_id);
+      const crawl = await requireCurrentCrawl(db, workspaceId, path.project_id);
       const page = await readPages(db, workspaceId, crawl.id, query);
       return latestCrawlPagesPageSchema.parse({
         ...page,
@@ -386,10 +394,10 @@ export const siteHealthRoutes = [
     response: latestCrawlIssuesPageSchema,
     async handle({ c, db }, { path, query }) {
       const workspaceId = c.get('workspace').workspaceId;
-      // The crawl, and so its status, is read before the page, as the crawl's own route does.
-      const crawl = await newestCrawl(db, workspaceId, path.project_id);
+      // The current crawl is terminal, so its issues are published and revalidatable.
+      const crawl = await requireCurrentCrawl(db, workspaceId, path.project_id);
       const page = { ...(await readIssues(db, workspaceId, crawl.id, query)), crawl_id: crawl.id };
-      return isTerminal(crawl) ? revalidatable(c, page) : page;
+      return revalidatable(c, page);
     },
   }),
   defineGetRoute({

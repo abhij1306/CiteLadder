@@ -177,7 +177,8 @@ export async function getVisibilityFanout(
   return {
     ...summary,
     items,
-    answers,
+    // `id` and `created_at` only key the cursor; the contract does not carry them.
+    answers: answers.map(({ id: _id, created_at: _createdAt, ...answer }) => answer),
     next_cursor: hasMore && keys ? encodeKeysetCursor('fanout', filters, keys) : null,
   };
 }

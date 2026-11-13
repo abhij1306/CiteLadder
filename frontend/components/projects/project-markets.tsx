@@ -1,5 +1,3 @@
-'use client';
-
 import { useMutation } from '@tanstack/react-query';
 import { X } from 'lucide-react';
 import { useState } from 'react';
@@ -51,7 +49,7 @@ export function ProjectMarkets({
         Measure the same prompts from other countries. Each market runs and reports separately.
       </p>
       {extra.length ? (
-        <ul className={ledgerClasses('boxed')}>
+        <ul className={ledgerClasses()}>
           {extra.map((market) => (
             <Inline
               as="li"

@@ -15,7 +15,7 @@ export async function lockRun(db: Database, lease: Lease): Promise<Run> {
     lease.owner,
     [statuses.running],
   );
-  if (!run || run.cancelled_at !== null) throw new AgentError('lease');
+  if (run?.cancelled_at !== null) throw new AgentError('lease');
   return run;
 }
 export async function terminalize(
@@ -150,8 +150,7 @@ export class AgentQueue {
         .forUpdate()
         .skipLocked()
         .execute();
-      // One transaction connection: the runs end in order.
-      for (const run of rows) await endInterrupted(trx, run, reconcile); // NOSONAR
+      for (const run of rows) await endInterrupted(trx, run, reconcile); // NOSONAR -- One transaction connection: the runs end in order.
       return rows.length;
     });
   }

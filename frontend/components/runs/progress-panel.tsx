@@ -1,5 +1,3 @@
-'use client';
-
 import { useState } from 'react';
 
 import { Badge } from '@/components/ui/badge';
@@ -20,7 +18,7 @@ import type { Audit } from '@citeladder/contracts';
 import { saveBlob } from '@/lib/download';
 import { useDisplayTimeZone } from '@/lib/display-timezone';
 import { formatDisplayDate, formatDisplayTime } from '@/lib/format';
-import { AUDIT_STATES, isAuditCancelable } from '@/lib/runs/status';
+import { AUDIT_STATES } from '@/lib/runs/status';
 
 type ExportFormat = 'csv' | 'md';
 
@@ -80,13 +78,14 @@ export function RunActions({
 }: Readonly<{
   audit: Audit;
   cancelPending: boolean;
-  onCancel: () => void;
+  /** Cancel and rerun are offered only to a role that may run audits. */
+  onCancel?: () => void;
   onRerunFailures?: () => void;
   rerunPending?: boolean;
   onExport: (format: ExportFormat) => void;
   exporting: ExportFormat | null;
 }>) {
-  const cancelable = isAuditCancelable(audit.status);
+  const { cancelable } = audit;
   return (
     <>
       <Button variant="secondary" onClick={() => onExport('csv')} disabled={exporting !== null}>
@@ -95,9 +94,11 @@ export function RunActions({
       <Button variant="secondary" onClick={() => onExport('md')} disabled={exporting !== null}>
         {exporting === 'md' ? 'Exporting…' : 'Export MD'}
       </Button>
-      <Button variant="danger" onClick={onCancel} disabled={!cancelable || cancelPending}>
-        {cancelPending ? 'Cancelling…' : 'Cancel run'}
-      </Button>
+      {onCancel ? (
+        <Button variant="danger" onClick={onCancel} disabled={!cancelable || cancelPending}>
+          {cancelPending ? 'Cancelling…' : 'Cancel run'}
+        </Button>
+      ) : null}
       {audit.failed_count > 0 && onRerunFailures ? (
         <Button variant="secondary" onClick={onRerunFailures} disabled={rerunPending}>
           {rerunPending ? 'Creating repair…' : 'Rerun failed'}

@@ -1,5 +1,3 @@
-'use client';
-
 import { useMutation, type UseQueryResult } from '@tanstack/react-query';
 
 import { Callout } from '@/components/ui/callout';
@@ -12,7 +10,7 @@ import { ReadError } from '@/components/ui/read-error';
 import type { ObservedCompetitor } from '@citeladder/contracts';
 import { Button } from '@/components/ui/button';
 import { visibilityMutations } from '@/lib/api/visibility-queries';
-import { useActiveWorkspaceId } from '@/lib/project/project-context';
+import { useActiveWorkspaceId, useWorkspaceCapability } from '@/lib/project/project-context';
 
 /**
  * Competitors the runs observed but the project does not yet track, with the
@@ -33,6 +31,8 @@ export function CompetitorSuggestions({
   const acceptMutation = useMutation(
     visibilityMutations.acceptCompetitorSuggestion({ workspaceId, projectId }),
   );
+  // Adding a competitor edits the project; a role without write reads the list.
+  const canWrite = useWorkspaceCapability('write');
 
   return (
     <Card aria-labelledby="competitor-suggestions">
@@ -46,7 +46,7 @@ export function CompetitorSuggestions({
         <SuggestionRows
           suggestionsQuery={suggestionsQuery}
           adding={acceptMutation.isPending}
-          onAdd={(candidateId) => acceptMutation.mutate(candidateId)}
+          onAdd={canWrite ? (candidateId) => acceptMutation.mutate(candidateId) : undefined}
         />
         {acceptMutation.isError ? (
           <Callout tone="negative">Could not add that competitor. Try again.</Callout>
@@ -63,7 +63,8 @@ function SuggestionRows({
 }: Readonly<{
   suggestionsQuery: UseQueryResult<ObservedCompetitor[], unknown>;
   adding: boolean;
-  onAdd: (candidateId: string) => void;
+  /** Adds a candidate to the roster; omitted for a role that may not. */
+  onAdd?: (candidateId: string) => void;
 }>) {
   return (
     <>
@@ -76,7 +77,7 @@ function SuggestionRows({
         />
       ) : null}
       {suggestionsQuery.data?.length ? (
-        <ul className={ledgerClasses('open')}>
+        <ul className={ledgerClasses()}>
           {suggestionsQuery.data.map((candidate) => (
             <Inline
               as="li"
@@ -90,14 +91,17 @@ function SuggestionRows({
                   engines
                 </p>
               </Stack>
-              <Button variant="secondary" onClick={() => onAdd(candidate.id)} disabled={adding}>
-                Add competitor
-              </Button>
+              {onAdd ? (
+                <Button variant="secondary" onClick={() => onAdd(candidate.id)} disabled={adding}>
+                  Add competitor
+                </Button>
+              ) : null}
             </Inline>
           ))}
         </ul>
       ) : null}
-      {!suggestionsQuery.data?.length && !suggestionsQuery.isLoading ? (
+      {/* Only an answered, empty list is "none yet"; a failed read says so above. */}
+      {suggestionsQuery.isSuccess && !suggestionsQuery.data.length ? (
         <QueryState kind="empty" inline message="No repeated citation candidates yet." />
       ) : null}
     </>

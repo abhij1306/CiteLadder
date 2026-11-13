@@ -6,7 +6,7 @@ import { refreshTrafficSnapshot, projectPerformanceRange } from '../src/traffic/
 import { buildTrafficProjection, TrafficProjectionBuilder } from '../src/traffic/projection.ts';
 import { TaskCancelledError } from '../src/queue/executor.ts';
 import { ReferralClassifications } from '../src/referrals/persisted.ts';
-import { Fixtures, testDatabase } from './support.ts';
+import { asOwner, Fixtures, testDatabase } from './support.ts';
 import {
   importSeed,
   metric,
@@ -176,21 +176,98 @@ describe('traffic projections and Performance', () => {
     ]);
   });
 
+  it.each([
+    // Read the next day, when Search Console had finalized only July 20.
+    ['2026-07-29T12:00:00Z', null, true],
+    // Read four weeks later, when every July day was final: the silence is zero.
+    ['2026-08-20T12:00:00Z', 0, false],
+  ])(
+    'a Search Console day silent in a revision fetched at %s reads %s',
+    async (fetchedAt, july23, pending) => {
+      const seed = await importSeed(db, t);
+      // Revision 0 read July 1-28 and reported rows only through July 20.
+      await metric(db, seed, { date: '2026-07-20' });
+      // Revision 1 re-read only July 26-28, after Search Console finalized them.
+      await metric(db, seed, { date: '2026-07-27', revision: 1 });
+      await db
+        .updateTable('integration_sync_runs')
+        .set({ window_start: '2026-07-26', window_end: WINDOW[1] })
+        .where('connection_id', '=', seed.connectionId)
+        .where('resync_seq', '=', 1)
+        .execute();
+      await asOwner((owner) =>
+        owner
+          .updateTable('integration_import_artifacts')
+          .set({ fetched_at: new Date(fetchedAt) })
+          .where('id', '=', seed.artifactId)
+          .execute(),
+      );
+      await refreshTrafficSnapshot(await task(db, t, 'traffic_snapshot_refresh'), context);
+      const snapshot = await db
+        .selectFrom('traffic_snapshots')
+        .select(['metrics', 'coverage'])
+        .where('project_id', '=', t.projectId)
+        .where('window_start', '=', sql<Date>`${WINDOW[0]}::date`)
+        .where('window_end', '=', sql<Date>`${WINDOW[1]}::date`)
+        .where('granularity', '=', 'day')
+        .executeTakeFirstOrThrow();
+      const series = (
+        snapshot.metrics as {
+          series: { clicks: { date: string; value: number | null }[] };
+        }
+      ).series.clicks;
+      const clicks = new Map(series.map((point) => [point.date, point.value]));
+      const days = ['2026-07-19', '2026-07-20', '2026-07-23', '2026-07-26', '2026-07-27'];
+      expect(days.map((d) => clicks.get(d))).toEqual([0, 1, july23, 0, 1]);
+      const quality = (
+        snapshot.coverage as {
+          analytics_quality: {
+            gsc_day_daily: { day: string; not_yet_reported: boolean }[];
+          };
+        }
+      ).analytics_quality.gsc_day_daily;
+      const unreported = new Map(quality.map((q) => [q.day, q.not_yet_reported]));
+      expect(days.map((d) => unreported.get(d))).toEqual([false, false, pending, false, false]);
+    },
+  );
+
+  it('counts only imported days as covered, not a gap between two imports', async () => {
+    const seed = await importSeed(db, t);
+    await metric(db, seed, {});
+    await metric(db, seed, { date: '2026-06-10', revision: 1 });
+    // The second import covered one June day; nothing imported June 11-30.
+    await db
+      .updateTable('integration_sync_runs')
+      .set({ window_start: '2026-06-10', window_end: '2026-06-10' })
+      .where('connection_id', '=', seed.connectionId)
+      .where('resync_seq', '=', 1)
+      .execute();
+    await refreshTrafficSnapshot(await task(db, t, 'traffic_snapshot_refresh'), context);
+    const { body } = await request(`performance?range=custom&from=${WINDOW[0]}&to=${WINDOW[1]}`);
+    expect(body.coverage).toMatchObject({
+      earliest_date: '2026-06-10',
+      latest_date: WINDOW[1],
+      covered_days: 29,
+    });
+  });
+
   it('observes zeros through a fallback from a newer truncated run', async () => {
     const seed = await importSeed(db, t);
     await metric(db, seed, { metrics: { impressions: 0, clicks: 0 } });
     await metric(db, seed, { revision: 1, metrics: { impressions: 500, clicks: 50 } });
-    await db
-      .updateTable('integration_import_artifacts')
-      .set({ extract_metadata: JSON.stringify({ truncated: true }) })
-      .where('sync_run_id', 'in', (q) =>
-        q
-          .selectFrom('integration_sync_runs')
-          .select('id')
-          .where('connection_id', '=', seed.connectionId)
-          .where('resync_seq', '=', 1),
-      )
-      .execute();
+    await asOwner((owner) =>
+      owner
+        .updateTable('integration_import_artifacts')
+        .set({ extract_metadata: JSON.stringify({ truncated: true }) })
+        .where('sync_run_id', 'in', (q) =>
+          q
+            .selectFrom('integration_sync_runs')
+            .select('id')
+            .where('connection_id', '=', seed.connectionId)
+            .where('resync_seq', '=', 1),
+        )
+        .execute(),
+    );
     await refreshTrafficSnapshot(await task(db, t, 'traffic_snapshot_refresh'), context);
     const { body } = await request(`performance?range=custom&from=${WINDOW[0]}&to=${WINDOW[1]}`);
     expect(body.selected.totals).toMatchObject({ clicks: 0, impressions: 0 });

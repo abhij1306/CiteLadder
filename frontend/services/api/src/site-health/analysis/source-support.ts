@@ -56,14 +56,14 @@ function localRelationship(node: HtmlElement) {
 function recordAnchor(
   node: HtmlElement,
   section: string,
-  finalUrl: string,
+  baseUrl: string,
   base: string,
   facts: SourceSupport,
 ) {
   const href = attribute(node, 'href').trim();
   let url: URL;
   try {
-    url = new URL(href, finalUrl);
+    url = new URL(href, baseUrl);
   } catch {
     if (section) facts.invalid_source_count++;
     return;
@@ -127,11 +127,11 @@ function ownedNode(node: HtmlElement, page: PageScope, inSection: boolean) {
   return pageOwned(node, page.region, referenceItem ? NO_CONTAINERS : page.cards);
 }
 
-export function sourceSupportFacts(page: PageScope, finalUrl: string) {
+export function sourceSupportFacts(page: PageScope) {
   const facts = emptySourceSupport();
   let base = '';
   try {
-    base = normalHost(new URL(finalUrl).hostname);
+    base = normalHost(new URL(page.finalUrl).hostname);
   } catch {
     return facts;
   }
@@ -145,7 +145,7 @@ export function sourceSupportFacts(page: PageScope, finalUrl: string) {
       section = nextSection(node, section);
       if (section.name && !facts.context_reasons.includes(section.name))
         facts.context_reasons.push(section.name);
-    } else recordAnchor(node, section.name, finalUrl, base, facts);
+    } else recordAnchor(node, section.name, page.baseUrl, base, facts);
   }
   facts.research_sensitive = facts.context_reasons.length > 0;
   return facts;

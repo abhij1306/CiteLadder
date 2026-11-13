@@ -118,15 +118,18 @@ describe('resolveProjectId', () => {
 });
 
 describe('pickActiveProject', () => {
-  it('prefers the directly-resolved project over the list copy', () => {
-    const resolved = project(PROJECT_1);
-    expect(pickActiveProject(resolved, [project(PROJECT_1)], PROJECT_1)).toBe(resolved);
+  it('picks the view of the active project', () => {
+    expect(
+      pickActiveProject([project(PROJECT_2), project(PROJECT_1)], PROJECT_1, WORKSPACE_A)?.id,
+    ).toBe(PROJECT_1);
   });
 
-  it('ignores a resolved project that is no longer the active one', () => {
-    expect(pickActiveProject(project(PROJECT_2), [project(PROJECT_1)], PROJECT_1)?.id).toBe(
-      PROJECT_1,
-    );
+  it('has no active project while its view is still loading', () => {
+    expect(pickActiveProject([project(PROJECT_2), undefined], PROJECT_1, WORKSPACE_A)).toBeNull();
+  });
+
+  it('never takes a view from another workspace', () => {
+    expect(pickActiveProject([project(PROJECT_1, WORKSPACE_B)], PROJECT_1, WORKSPACE_A)).toBeNull();
   });
 });
 

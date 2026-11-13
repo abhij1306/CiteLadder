@@ -25,6 +25,12 @@ beforeAll(() => mswServer.listen({ onUnhandledFrame: 'error' }));
 afterEach(() => mswServer.resetHandlers());
 afterAll(() => mswServer.close());
 
+/** One figure of the Overview's score row: its label, value, sub-line and link. */
+function stat(label: string) {
+  const term = within(screen.getByTestId('overview-metrics')).getByText(label);
+  return term.closest('[data-stat-segment]');
+}
+
 /** A terminal overview snapshot; each test overrides only what it is about. */
 const terminalOverview = (overrides: Record<string, unknown> = {}) => ({
   project_id: PROJECT,
@@ -65,6 +71,7 @@ const terminalOverview = (overrides: Record<string, unknown> = {}) => ({
       finding_class: 'defect',
       severity: 'critical',
       category: 'technical',
+      section: 'technical',
       description: 'The page has a non-empty title.',
       remediation: 'Add a title.',
       score_roles: ['web_fundamentals'],
@@ -79,6 +86,7 @@ const terminalOverview = (overrides: Record<string, unknown> = {}) => ({
       finding_class: 'advisory',
       severity: 'medium',
       category: 'content',
+      section: 'content',
       description: 'The page names its author visibly.',
       remediation: 'Add a named author.',
       score_roles: ['aeo_readiness'],
@@ -93,6 +101,7 @@ const terminalOverview = (overrides: Record<string, unknown> = {}) => ({
       finding_class: 'advisory',
       severity: 'info',
       category: 'content',
+      section: 'content',
       description: 'The page has a meta description.',
       remediation: 'Add a meta description.',
       score_roles: [],
@@ -144,13 +153,7 @@ const terminalOverview = (overrides: Record<string, unknown> = {}) => ({
     },
     limitations: ['HTTP evidence only; browser layout was not measured.'],
   },
-  trend: {
-    state: 'unavailable',
-    reason: 'no_comparable_snapshot',
-    metric: 'aeo_readiness_score',
-    series: [{ label: '2026-08-30', value: 72 }],
-    cohort_composition: UNCHANGED_COHORT_COMPOSITION,
-  },
+  open_issue_trend: [{ day: '2026-08-30', open_count: 7 }],
   change_summary: {
     state: 'unavailable',
     reason: 'no_comparable_snapshot',
@@ -203,14 +206,15 @@ describe('OverviewPanel', () => {
       screen.getByRole('img', { name: 'Web Fundamentals score: 81 out of 100' }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole('img', { name: 'AEO Checklist Completion: 50 out of 100' }),
-    ).toBeInTheDocument();
-    expect(
       screen.getByRole('img', { name: 'AEO Readiness score: 62 out of 100' }),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole('heading', { name: 'Classification completeness' }),
     ).not.toBeInTheDocument();
+    // The two completion shares are rings too, each with its link.
+    expect(
+      screen.getByRole('img', { name: 'AEO Checklist Completion: 50 out of 100' }),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole('img', { name: 'Crawl Coverage score: 40 out of 100' }),
     ).toBeInTheDocument();
@@ -284,8 +288,58 @@ describe('OverviewPanel', () => {
       />,
     );
 
-    expect(await screen.findByRole('img', { name: /Web Fundamentals score/ })).toBeInTheDocument();
+    await screen.findByRole('table', { name: 'Top issues' });
+    expect(stat('Crawl Coverage')).toHaveTextContent('Not measured');
     expect(screen.queryByRole('img', { name: /Crawl Coverage score/ })).not.toBeInTheDocument();
+  });
+
+  it('links each score to where it is acted on', () => {
+    renderWithProviders(
+      <OverviewPanel
+        projectId={PROJECT}
+        crawlId={CRAWL}
+        crawl={{ status: 'running', analyzed_count: 0, visible_url_count: 0 } as never}
+        dashboard={undefined}
+      />,
+    );
+    const links = within(screen.getByTestId('overview-metrics')).getAllByRole('link');
+    expect(links.map((link) => [link.textContent, link.getAttribute('href')])).toEqual([
+      ['View details', '/issues?section=technical'],
+      ['View details', '/issues?section=aeo'],
+      ['View details', '/site?tab=aeo-readiness'],
+      ['View details', '/site?tab=pages'],
+    ]);
+  });
+
+  it('plots open issues per day, oldest first', async () => {
+    mswServer.use(
+      http.get(`/api/v1/projects/${PROJECT}/site-health/overview`, () =>
+        HttpResponse.json(
+          terminalOverview({
+            open_issue_trend: [
+              { day: '2026-08-28', open_count: 12 },
+              { day: '2026-08-30', open_count: 9 },
+            ],
+          }),
+        ),
+      ),
+    );
+    renderWithProviders(
+      <OverviewPanel
+        projectId={PROJECT}
+        crawlId={CRAWL}
+        crawl={{ status: 'completed' } as never}
+        dashboard={undefined}
+      />,
+    );
+
+    const table = await screen.findByRole('table', { name: 'Open issues over time' });
+    expect(
+      within(table)
+        .getAllByRole('row')
+        .map((row) => row.textContent),
+    ).toEqual(['Series2026-08-282026-08-30', 'Open issues129']);
+    expect(screen.queryByRole('heading', { name: 'AEO Readiness trend' })).not.toBeInTheDocument();
   });
 
   it('explains a changed scored cohort once, beside the score changes', async () => {
@@ -299,16 +353,6 @@ describe('OverviewPanel', () => {
       http.get(`/api/v1/projects/${PROJECT}/site-health/overview`, () =>
         HttpResponse.json(
           terminalOverview({
-            trend: {
-              state: 'measured',
-              reason: 'cohort_composition_changed',
-              metric: 'aeo_readiness_score',
-              series: [
-                { label: '2026-08-29', value: 70 },
-                { label: '2026-08-30', value: 72 },
-              ],
-              cohort_composition: changedComposition,
-            },
             change_summary: {
               state: 'measured',
               reason: 'cohort_composition_changed',
@@ -328,7 +372,7 @@ describe('OverviewPanel', () => {
       />,
     );
 
-    expect(await screen.findByRole('heading', { name: 'AEO Readiness trend' })).toBeVisible();
+    expect(await screen.findByRole('heading', { name: 'Change summary' })).toBeVisible();
     expect(screen.getAllByText('Scored cohort composition changed.')).toHaveLength(1);
     expect(
       screen.getByText(
@@ -337,7 +381,7 @@ describe('OverviewPanel', () => {
     ).toBeInTheDocument();
   });
 
-  it('opens persisted HTTP Web Fundamentals evidence without browser-only checks', async () => {
+  it('opens HTTP Web Fundamentals evidence without browser-only checks', async () => {
     mswServer.use(
       http.get(`/api/v1/projects/${PROJECT}/site-health/overview`, () =>
         HttpResponse.json(terminalOverview()),
@@ -354,6 +398,12 @@ describe('OverviewPanel', () => {
     );
 
     await screen.findByRole('table', { name: 'Top issues' });
+    // One list, one area a row, each with its state.
+    const areas = within(screen.getByRole('list', { name: 'Web Fundamentals areas' }));
+    expect(areas.getAllByRole('listitem').map((item) => item.textContent)).toEqual([
+      'accessibilityMeasured',
+      'mobileLimited Evidence',
+    ]);
     await user.click(screen.getByRole('button', { name: 'View evidence' }));
     expect(screen.getByRole('dialog')).toHaveTextContent('Images missing alt attributes');
     expect(screen.getByRole('dialog')).not.toHaveTextContent('mobile_layout');
@@ -379,7 +429,10 @@ describe('OverviewPanel', () => {
     const table = await screen.findByRole('table', { name: 'Top issues' });
     expect(
       screen.getByRole('link', { name: 'Visible creator attribution incomplete' }),
-    ).toHaveAttribute('href', '/issues?rule=aeo.visible_attribution&finding_class=advisory');
+    ).toHaveAttribute(
+      'href',
+      '/issues?rule=aeo.visible_attribution&section=content&finding_class=advisory',
+    );
     expect(screen.getByRole('link', { name: 'Missing page title' })).toHaveAttribute(
       'href',
       '/issues?rule=technical.title_present',
@@ -393,7 +446,7 @@ describe('OverviewPanel', () => {
     ]);
   });
 
-  const ALERT = 'Could not load the persisted Site Health Overview.';
+  const ALERT = 'Could not load the Website overview.';
 
   function renderTerminal() {
     renderWithProviders(

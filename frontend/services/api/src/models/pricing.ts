@@ -14,6 +14,7 @@ export type MeteredFeature =
   | 'answer_perception'
   | 'fact_verification'
   | 'commerce_shelf'
+  | 'content_angles'
   | 'prompt_quality_judge'
   | 'internal_link_judge'
   | 'commerce_competitor_discovery'

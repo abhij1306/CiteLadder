@@ -4,12 +4,16 @@
  * persisted chat until the run reaches a terminal state.
  */
 export const AGENT_CHAT_PAGE_SIZE = 30;
+/** How many of an issue family's pages a developer ticket lists before "and N more". */
+export const DEVELOPER_TICKET_PAGES_MAX = 50;
 /** A turn without this tab's stream is polled quickly at first, then less often. */
 export const AGENT_RUN_POLL_STEPS: readonly { untilMs: number; everyMs: number }[] = [
   { untilMs: 30_000, everyMs: 2_000 },
   { untilMs: 120_000, everyMs: 5_000 },
 ];
 export const AGENT_RUN_POLL_MAX_MS = 10_000;
+/** A page chat is polled at this cadence while its page is being read. */
+export const AGENT_PAGE_FETCH_POLL_MS = 2_000;
 /** The chat list refreshes at this cadence while any listed chat has a turn running. */
 export const AGENT_CHAT_LIST_POLL_MS = 5_000;
 /**
@@ -27,15 +31,16 @@ export const AGENT_RUN_RETRY = { defaultDelayMs: 15_000, maxAttempts: 8 } as con
 /** Distance from the end that still counts as following the conversation. */
 export const AGENT_FOLLOW_LATEST_GAP_PX = 96;
 /**
- * Floors of an Action's priority bands. A crawl or catalog finding scores its
- * severity × 10 (critical 40, high 30, medium 20, low 10), so these keep its
- * band equal to its severity; a prompt gap's value and gap factors lift it.
+ * The grouped Actions list shows this many of each group's Actions, by
+ * priority, before its "Show all" row (AS2).
  */
-export const ACTION_PRIORITY_BANDS = { high: 30, medium: 20 } as const;
+export const ACTIONS_GROUP_PREVIEW_ROWS = 5;
 /** New chat shows this many top Actions under "Work on this". */
 export const AGENT_TOP_ACTIONS = 3;
 /** Debounce for the sidebar chat search. */
 export const AGENT_CHAT_SEARCH_DEBOUNCE_MS = 250;
+/** Debounce for Analyze a page's page search, which the server answers. */
+export const ANALYZE_PAGE_SEARCH_DEBOUNCE_MS = 250;
 /**
  * Actions the composer's `@` menu matches against, loaded when the menu first
  * opens. The table's first page is too few to find an Action by name.

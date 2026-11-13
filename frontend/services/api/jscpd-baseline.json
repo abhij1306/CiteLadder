@@ -1,0 +1,7 @@
+{
+  "format_version": 1,
+  "tool_version": "5.2.1",
+  "scope": ["frontend/services/api/src", "frontend/services/api/scripts"],
+  "production_percentage": 0,
+  "clone_fingerprints": []
+}

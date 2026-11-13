@@ -1,5 +1,3 @@
-'use client';
-
 import { ArrowRight } from 'lucide-react';
 import { useMemo } from 'react';
 
@@ -66,7 +64,7 @@ export function MissingPrompts({
           </p>
         ) : null}
         {rows.length ? (
-          <ul className={ledgerClasses('open')}>
+          <ul className={ledgerClasses()}>
             {rows.slice(0, SHOWN).map((row) => (
               <MissingRow key={row.promptId} row={row} />
             ))}

@@ -1,12 +1,11 @@
-'use client';
-
 import { useContext, useLayoutEffect, type ReactNode, type RefObject } from 'react';
 import { useLocation } from 'react-router-dom';
 
 import { AppGrid } from '@/components/ui/app-grid';
 import { NavMenuButton } from '@/components/ui/app-shell';
 import { BackButton } from '@/components/ui/back-button';
-import { FilterBar, type FilterBarProps } from '@/components/ui/filter-bar';
+import type { FilterDefinition } from '@/components/ui/all-filters';
+import { FilterBar, FilterControls, type FilterBarProps } from '@/components/ui/filter-bar';
 import { PageHeader } from '@/components/ui/page-header';
 import { QueryState } from '@/components/ui/query-state';
 import { TabRow, type TabRowProps } from '@/components/ui/tabs';
@@ -51,7 +50,11 @@ type ScreenBands<T extends string> = Readonly<{
   actions?: ReactNode;
   /** The route's tabs, drawn as the `TabRow`; the route owns the `TabsRoot`. */
   tabs?: TabRowProps<T>;
-  /** Search, filters, status and export for the whole route, drawn as the `FilterBar`. */
+  /**
+   * The selected tab's control row, drawn as the `FilterBar`: view, search,
+   * All filters, then the count and the action at its end (D57). A row of
+   * filters alone follows the tabs, or with no tabs the header's title (D60).
+   */
   controls?: FilterBarProps;
   children?: ReactNode;
 }>;
@@ -72,10 +75,23 @@ type FillLayout =
       scrollLabel?: string;
     }>;
 
-/** ListScreen — a collection, dashboard or workspace route. */
-export function ListScreen<T extends string = string>(props: ScreenBands<T> & FillLayout) {
+/**
+ * ListScreen — a collection, dashboard or workspace route. A workspace opened
+ * from a record (the Agent's page workspace, from its Action) leads its title
+ * with `back`, as a detail page does.
+ */
+export function ListScreen<T extends string = string>(
+  props: ScreenBands<T> & FillLayout & Readonly<{ back?: PageBack }> & NarrowLayout,
+) {
   return <PageShell {...props} />;
 }
+
+/**
+ * `narrow` centres the tabs, controls and content in one column at the thread
+ * width (`max-w-thread`, the Agent's): settings, a short list or a setup page
+ * whose rows would leave their actions stranded at a wide page's far edge (D61).
+ */
+type NarrowLayout = Readonly<{ narrow?: boolean }>;
 
 /**
  * The control band, held while the route's filters wait on their first read.
@@ -101,13 +117,16 @@ export function RouteLoadingScreen({ label }: Readonly<{ label?: string }>) {
 
 /**
  * DetailScreen — one record: the back button before the title, optional tabs
- * or controls, then the content, either one stack or the main column beside
- * its `aside` (AppGrid `main-aside`).
+ * or controls, then the content: one stack, the main column beside its
+ * `aside` (AppGrid `main-aside`), or, with `column`, one centered column at
+ * the thread width (`max-w-thread`, the Agent's) whose sections stand apart
+ * like the page's bands (an Action).
  */
 export function DetailScreen<T extends string = string>({
   back,
   lead,
   aside,
+  column = false,
   children,
   ...bands
 }: ScreenBands<T> &
@@ -120,19 +139,36 @@ export function DetailScreen<T extends string = string>({
     lead?: ReactNode;
     /** Supporting context beside the main content. */
     aside?: ReactNode;
+    /** One centered column instead of the full width. */
+    column?: boolean;
   }>) {
   return (
     <PageShell {...bands} back={back}>
       {lead}
-      {aside ? (
-        <AppGrid layout="main-aside">
-          <div className="flex min-w-0 flex-col gap-[var(--workspace-gap)]">{children}</div>
-          <aside className="flex min-w-0 flex-col gap-[var(--workspace-gap)]">{aside}</aside>
-        </AppGrid>
-      ) : (
-        children
-      )}
+      <DetailContent column={column} aside={aside}>
+        {children}
+      </DetailContent>
     </PageShell>
+  );
+}
+
+function DetailContent({
+  column,
+  aside,
+  children,
+}: Readonly<{ column: boolean; aside: ReactNode; children: ReactNode }>) {
+  if (column)
+    return (
+      <div className="max-w-thread mx-auto flex w-full min-w-0 flex-col gap-[var(--page-section-gap)]">
+        {children}
+      </div>
+    );
+  if (!aside) return children;
+  return (
+    <AppGrid layout="main-aside">
+      <div className="flex min-w-0 flex-col gap-[var(--workspace-gap)]">{children}</div>
+      <aside className="flex min-w-0 flex-col gap-[var(--workspace-gap)]">{aside}</aside>
+    </AppGrid>
   );
 }
 
@@ -142,28 +178,23 @@ function PageShell<T extends string>({
   actions,
   tabs,
   controls,
+  narrow = false,
   children,
   ...layout
-}: ScreenBands<T> & FillLayout & Readonly<{ back?: PageBack }>) {
+}: ScreenBands<T> & FillLayout & Readonly<{ back?: PageBack }> & NarrowLayout) {
   const resolved = useRouteTitle(title);
   const shell = useContext(ShellContext);
   const navDrawer = shell?.navDrawer;
   const content = <PageContent {...layout}>{children}</PageContent>;
-  const tabBand = tabs ? (
-    <div data-page-band="control">
-      <TabRow {...tabs} />
-    </div>
-  ) : null;
-  const filterBand = controls ? (
-    <div data-page-band="control">
-      <FilterBar {...controls} />
-    </div>
-  ) : null;
+  // A control row holding only filters is one button: it follows the title
+  // rather than taking a band of its own, its menus opening toward the content.
+  const headerFilters = !tabs && controls && filtersOnly(controls) ? controls.filters : undefined;
   return (
     // header → 16 → tabs → 8 → filters → 8 → content; header → 16 → content.
     <div className="flex min-w-0 flex-col gap-[var(--page-section-gap)]">
       <PageHeader
         title={resolved}
+        filters={headerFilters ? <FilterControls filters={headerFilters} /> : undefined}
         lead={
           <>
             {/* Below 900px the header leads with the navigation menu. */}
@@ -175,6 +206,7 @@ function PageShell<T extends string>({
             ) : null}
           </>
         }
+        center={shell?.searchTrigger}
         actions={
           <>
             {actions}
@@ -182,16 +214,72 @@ function PageShell<T extends string>({
           </>
         }
       />
-      {tabBand || filterBand ? (
-        <div className="flex min-w-0 flex-col gap-[var(--page-band-gap)]">
-          {tabBand}
-          {filterBand}
+      <NarrowColumn narrow={narrow}>
+        <ControlBands tabs={tabs} controls={headerFilters ? undefined : controls}>
           {content}
-        </div>
-      ) : (
-        content
-      )}
+        </ControlBands>
+      </NarrowColumn>
     </div>
+  );
+}
+
+function NarrowColumn({ narrow, children }: Readonly<{ narrow: boolean; children: ReactNode }>) {
+  if (!narrow) return children;
+  return (
+    <div data-page-column="narrow" className="max-w-thread mx-auto w-full min-w-0">
+      {children}
+    </div>
+  );
+}
+
+/** The tab row and the control row over the content, 8 apart; the content alone without them. */
+function ControlBands<T extends string>({
+  tabs,
+  controls,
+  children,
+}: Pick<ScreenBands<T>, 'tabs' | 'controls'> & Readonly<{ children: ReactNode }>) {
+  if (!tabs && !controls) return children;
+  // On a tabbed page, a row of filters (and its live note) follows the tabs (D60).
+  const onTabRow = Boolean(tabs && controls && joinsTabRow(controls));
+  return (
+    <div className="flex min-w-0 flex-col gap-[var(--page-band-gap)]">
+      {tabs ? (
+        <div data-page-band="control" className="flex min-w-0 flex-wrap items-center gap-2">
+          <TabRow {...tabs} />
+          {controls && onTabRow ? (
+            <div className="flex min-w-0 flex-1">
+              <FilterBar {...controls} />
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+      {controls && !onTabRow ? (
+        <div data-page-band="control">
+          <FilterBar {...controls} />
+        </div>
+      ) : null}
+      {children}
+    </div>
+  );
+}
+
+/** Whether a control row carries filters and nothing else (no view, search, count or action). */
+function filtersOnly(controls: FilterBarProps): controls is FilterBarProps & {
+  filters: readonly FilterDefinition[];
+} {
+  return (
+    Boolean(controls.filters?.length) &&
+    !controls.view &&
+    !controls.search &&
+    controls.status === undefined &&
+    !controls.actions
+  );
+}
+
+/** Whether a control row is filters, with at most a live note: no view, search or action. */
+function joinsTabRow(controls: FilterBarProps) {
+  return (
+    Boolean(controls.filters?.length) && !controls.view && !controls.search && !controls.actions
   );
 }
 
@@ -242,10 +330,12 @@ function FillContent({
 }>) {
   return (
     <div className="flex h-[calc(100dvh-var(--route-chrome-height))] min-h-0 flex-col gap-[var(--workspace-gap)]">
+      {/* The scrollbar's track is reserved on both edges, so content centred
+          in the region shares its centre with the dock below it. */}
       <section
         ref={scrollRef}
         aria-label={scrollLabel}
-        className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
+        className="min-h-0 flex-1 [scrollbar-gutter:stable_both-edges] overflow-y-auto overscroll-contain"
       >
         <div
           data-page-content=""

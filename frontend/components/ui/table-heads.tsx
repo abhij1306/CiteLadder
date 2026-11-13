@@ -23,8 +23,10 @@ export function HintedTableHead({
   numeric,
   desktopOnly,
 }: Readonly<{ label: string; hint: string } & HeadOptions>) {
+  // Like a plain header, a label longer than its column wraps under itself
+  // instead of painting over the next header.
   return (
-    <TableHead numeric={numeric} desktopOnly={desktopOnly}>
+    <TableHead numeric={numeric} desktopOnly={desktopOnly} className="whitespace-normal">
       <Tooltip content={hint}>
         <button type="button" className="focus-ring cursor-default rounded-xs">
           {label}
@@ -37,7 +39,7 @@ export function HintedTableHead({
 /** The header aligns with its column's values, as `TableHead` does. */
 const SORT_ALIGN = {
   start: { column: 'items-start', row: 'justify-start text-left' },
-  center: { column: 'items-center', row: 'justify-center text-center' },
+  end: { column: 'items-end', row: 'justify-end text-right' },
 } as const;
 
 /**
@@ -83,7 +85,7 @@ export function SortableTableHead({
     ariaSort = descending ? 'descending' : 'ascending';
     Icon = descending ? ArrowDown : ArrowUp;
   }
-  const align = numeric ? SORT_ALIGN.center : SORT_ALIGN.start;
+  const align = numeric ? SORT_ALIGN.end : SORT_ALIGN.start;
   const button = (
     <button
       type="button"

@@ -1,14 +1,17 @@
-'use client';
-
 import { useQuery } from '@tanstack/react-query';
 import { lazy, useEffect, type ReactNode } from 'react';
 
 import { ReadError, readErrorProps } from '@/components/ui/read-error';
+import { choiceFilter } from '@/components/ui/all-filters';
 import { Drawer } from '@/components/ui/drawer';
+import { FilterControls } from '@/components/ui/filter-bar';
 import { IslandUnavailable, LazyIsland } from '@/components/ui/lazy-island';
 import { Stack } from '@/components/ui/layout';
+import { QueryState } from '@/components/ui/query-state';
 import { Skeleton } from '@/components/ui/skeleton';
 import { runsQueries } from '@/lib/api/runs';
+import { ICONS } from '@/lib/icons';
+import { usePromptEngineAnswers } from '@/lib/runs/use-prompt-engine-answers';
 import { useProjectScope } from '@/lib/project/active-project-scope';
 
 /**
@@ -56,15 +59,23 @@ export function ExecutionEvidenceDrawer({
   execution,
   open,
   onOpenChange,
+  unavailable,
 }: Readonly<{
   execution: EvidenceSubject | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Said in place of the evidence when the opener found no answer to show. */
+  unavailable?: string;
 }>) {
   const { workspaceId } = useProjectScope();
+  const engines = usePromptEngineAnswers({
+    workspaceId,
+    executionId: execution?.id ?? null,
+    enabled: open,
+  });
   const evidenceQuery = useQuery({
-    ...runsQueries.execution(workspaceId, execution?.id ?? null),
-    enabled: open && execution !== null,
+    ...runsQueries.execution(workspaceId, engines.activeId),
+    enabled: open && engines.activeId !== null,
   });
   // Start the card's download beside the evidence read rather than after it.
   useEffect(() => {
@@ -72,7 +83,9 @@ export function ExecutionEvidenceDrawer({
   }, [open]);
 
   let evidenceBody: ReactNode;
-  if (evidenceQuery.isError) {
+  if (unavailable) {
+    evidenceBody = <QueryState kind="empty" icon={ICONS.runs} heading={unavailable} />;
+  } else if (evidenceQuery.isError) {
     evidenceBody = (
       <ReadError
         {...readErrorProps(evidenceQuery)}
@@ -113,7 +126,28 @@ export function ExecutionEvidenceDrawer({
       width="wide"
       closeLabel="Close evidence drawer"
     >
-      {evidenceBody}
+      {/* One engine's answer has nothing to choose; the filter appears with a second. */}
+      {engines.options.length > 1 && engines.activeId !== null ? (
+        <Stack gap="workspace">
+          <div className="flex min-w-0">
+            <FilterControls
+              filters={[
+                choiceFilter({
+                  id: 'engine',
+                  label: 'Engine',
+                  value: engines.activeId,
+                  defaultValue: engines.activeId,
+                  groups: [{ options: engines.options }],
+                  onChange: engines.select,
+                }),
+              ]}
+            />
+          </div>
+          {evidenceBody}
+        </Stack>
+      ) : (
+        evidenceBody
+      )}
     </Drawer>
   );
 }

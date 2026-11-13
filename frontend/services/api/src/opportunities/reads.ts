@@ -85,12 +85,26 @@ function cursorScore(text: string): number {
   return score;
 }
 
-/** Live-row catalog page, ordered by priority then UUID; the caller has authorized the project. */
+/** The project's persisted action order, or `undefined` when nobody has reordered. */
+export function readOpportunityOrder(db: Database, scope: Scope) {
+  return new WorkspaceScope(scope.workspaceId)
+    .selectFrom(db, 'opportunity_orders')
+    .select(['ordered_keys', 'version'])
+    .where('project_id', '=', scope.projectId)
+    .executeTakeFirst();
+}
+type OpportunityOrder = Awaited<ReturnType<typeof readOpportunityOrder>>;
+
+/**
+ * Live-row catalog page, ordered by priority then UUID; the caller has
+ * authorized the project. A caller that already read the order passes it in.
+ */
 export async function listOpportunities(
   db: Database,
   scope: Scope,
   filters: OpportunityFilters,
   page: { limit: number; cursor: string | null },
+  persistedOrder?: { order: OpportunityOrder },
 ) {
   validateFilters(filters);
   const limit = Math.max(1, Math.min(page.limit, o.LIST_MAX_LIMIT));
@@ -134,11 +148,7 @@ export async function listOpportunities(
         last.id,
       ]);
   }
-  const order = await new WorkspaceScope(scope.workspaceId)
-    .selectFrom(db, 'opportunity_orders')
-    .select('ordered_keys')
-    .where('project_id', '=', scope.projectId)
-    .executeTakeFirst();
+  const order = persistedOrder ? persistedOrder.order : await readOpportunityOrder(db, scope);
   return { items: orderedItems(rows, order?.ordered_keys ?? null), next_cursor: nextCursor };
 }
 

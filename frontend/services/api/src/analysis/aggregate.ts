@@ -202,7 +202,7 @@ function composite(group: AggregateExecution[], config: ScoringConfig) {
     ),
   };
 }
-export function promptMetrics(rows: AggregateExecution[], config: ScoringConfig) {
+function promptMetrics(rows: AggregateExecution[], config: ScoringConfig) {
   const grouped = groupBy(rows, (row) => row.prompt_index);
   return [...grouped]
     .map(([index, group]) => {

@@ -1,11 +1,12 @@
 /**
  * Bounded JSON-LD and microdata facts. Each recognized schema.org type an
- * object declares becomes one block with its required-property contract, the
- * enrichment fields the page-kind schema checks read, and Product/Offer claims.
+ * object or microdata item declares becomes one block with its
+ * required-property contract, the enrichment fields the page-kind schema
+ * checks read, and Product/Offer claims.
  */
 import {
-  ancestors,
   attribute,
+  childElements,
   elements,
   hasAttribute,
   textContent,
@@ -72,8 +73,11 @@ const isEmpty = (value: unknown) =>
   value === '' ||
   (Array.isArray(value) && !value.length) ||
   (isObject(value) && !Object.keys(value).length);
-const emptyProductValues = (): ProductValues =>
-  Object.fromEntries(PRODUCT_KEYS.map((key) => [key, []])) as unknown as ProductValues;
+const emptyProductValues = (): ProductValues => {
+  const values: Partial<ProductValues> = {};
+  for (const key of PRODUCT_KEYS) values[key] = [];
+  return values as ProductValues;
+};
 
 /** `"https://schema.org/Article"` and `"Article"` name the same type. */
 function cleanType(value: unknown): string {
@@ -225,10 +229,13 @@ function enrichment(object: JsonObject, type: string) {
   };
 }
 
-/** One block per recognized type; every block names the object it came from. */
+/**
+ * One block per recognized type. A JSON-LD block names the object it came from;
+ * a microdata item has no JSON-LD object, so it carries no entity index.
+ */
 function objectBlocks(
   { object, parentProperty }: NestedJsonLd,
-  entityIndex: number,
+  origin: { syntax: 'json-ld'; entityIndex: number } | { syntax: 'microdata' },
 ): SchemaBlock[] {
   return cleanTypes(object['@type'])
     .filter((type) => RECOGNIZED.has(type))
@@ -238,8 +245,8 @@ function objectBlocks(
       const missing = required.filter((name) => !present.includes(name));
       return {
         type,
-        syntax: 'json-ld',
-        entity_index: entityIndex,
+        syntax: origin.syntax,
+        ...(origin.syntax === 'json-ld' ? { entity_index: origin.entityIndex } : {}),
         parent_property: parentProperty,
         required,
         present,
@@ -284,109 +291,119 @@ export function jsonLdObjects(raw: string[]): NestedJsonLd[] {
 export function jsonLdBlocks(objects: NestedJsonLd[], maxBlocks: number): SchemaBlock[] {
   const blocks: SchemaBlock[] = [];
   for (const [entityIndex, object] of objects.entries()) {
-    blocks.push(...objectBlocks(object, entityIndex));
+    blocks.push(...objectBlocks(object, { syntax: 'json-ld', entityIndex }));
     if (blocks.length >= maxBlocks) return blocks.slice(0, maxBlocks);
   }
   return blocks;
 }
 
-const MICRODATA_PRODUCT_TARGETS: Record<string, keyof ProductValues> = {
-  name: 'name',
-  sku: 'sku',
-  gtin: 'gtin',
-  gtin8: 'gtin',
-  gtin12: 'gtin',
-  gtin13: 'gtin',
-  gtin14: 'gtin',
-  brand: 'brand',
-  manufacturer: 'brand',
-  mpn: 'mpn',
-  price: 'price',
-  priceCurrency: 'price_currency',
-  priceValidUntil: 'price_valid_until',
-  availability: 'availability',
-  description: 'description',
-  url: 'url',
-  category: 'category',
+/** The attribute that holds a URL-valued microdata property, by element. */
+const URL_VALUE_ATTRIBUTES: Record<string, string> = {
+  a: 'href',
+  area: 'href',
+  link: 'href',
+  audio: 'src',
+  embed: 'src',
+  iframe: 'src',
+  img: 'src',
+  source: 'src',
+  track: 'src',
+  video: 'src',
+  object: 'data',
 };
-const declaresProduct = (node: HtmlElement) =>
-  attribute(node, 'itemtype')
-    .split(/\s+/u)
-    .some((value) => stripTrailing(value, '/').split('/').at(-1) === 'Product');
 
-function microdataValue(node: HtmlElement) {
-  for (const name of ['content', 'href', 'datetime', 'value', 'src']) {
-    const value = attribute(node, name).trim();
-    if (value) return value;
+/**
+ * A microdata URL value (a URL property or `itemid`) as the absolute URL the
+ * microdata model defines, resolved against the document base; an empty or
+ * unresolvable one is kept as written.
+ */
+function absoluteUrl(value: string, baseUrl: string) {
+  if (!value) return value;
+  try {
+    return new URL(value, baseUrl).href;
+  } catch {
+    return value;
   }
+}
+
+/**
+ * A property's value as the microdata model reads it, after an explicit
+ * `content`, which schema.org consumers accept on any element. A URL
+ * property's value is absolute, so the page binds by its own URL.
+ */
+function microdataValue(node: HtmlElement, baseUrl: string) {
+  const content = attribute(node, 'content').trim();
+  if (content) return content;
+  if (node.tagName === 'meta') return '';
+  const urlAttribute = URL_VALUE_ATTRIBUTES[node.tagName];
+  if (urlAttribute) return absoluteUrl(attribute(node, urlAttribute).trim(), baseUrl);
+  if (node.tagName === 'data' || node.tagName === 'meter') return attribute(node, 'value').trim();
+  if (node.tagName === 'time' && hasAttribute(node, 'datetime'))
+    return attribute(node, 'datetime').trim();
   return squash(textContent(node));
 }
-/** A nested Product's properties belong to that product, not this one. */
-function nestedProductProperty(product: HtmlElement, property: HtmlElement) {
-  for (const node of [property, ...ancestors(property)]) {
-    if (node === product) return false;
-    if (hasAttribute(node, 'itemscope') && declaresProduct(node)) return true;
-  }
-  return false;
-}
-function microdataProduct(product: HtmlElement): ProductValues {
-  const found = emptyProductValues();
-  for (const property of elements(product)) {
-    if (property === product || !hasAttribute(property, 'itemprop')) continue;
-    if (nestedProductProperty(product, property)) continue;
-    const value = microdataValue(property);
-    if (value) addMicrodataValue(found, attribute(property, 'itemprop'), value);
-  }
-  return found;
-}
-/** File one property value under each product field its `itemprop` names. */
-function addMicrodataValue(found: ProductValues, itemprop: string, value: string) {
-  for (const name of itemprop.split(/\s+/u)) {
-    const target = MICRODATA_PRODUCT_TARGETS[name];
-    const bucket = target ? found[target] : undefined;
-    if (bucket && !bucket.includes(value) && bucket.length < sd.product_max_values)
-      bucket.push(value.slice(0, sd.product_max_value_chars));
+
+/** The elements whose `itemprop` belongs to this item: a nested item keeps its own. */
+function* itemProperties(item: HtmlElement): Generator<HtmlElement> {
+  const pending = childElements(item).toReversed();
+  while (pending.length) {
+    const node = pending.pop()!;
+    if (hasAttribute(node, 'itemprop')) yield node;
+    if (hasAttribute(node, 'itemscope')) continue;
+    for (const child of childElements(node).toReversed()) pending.push(child);
   }
 }
 
-/** Microdata stays shallow: each recognized `itemtype` is a block, Products carry their properties. */
-export function microdataBlocks(root: HtmlNode, maxBlocks: number): SchemaBlock[] {
-  const scoped = [...elements(root)].filter(
-    (node) => hasAttribute(node, 'itemscope') && attribute(node, 'itemtype').trim(),
-  );
-  const products = scoped.filter(declaresProduct).map(microdataProduct);
-  const blocks: SchemaBlock[] = [];
-  let productIndex = 0;
-  for (const node of scoped)
-    for (const candidate of attribute(node, 'itemtype').split(/\s+/u)) {
-      const type = cleanType(candidate);
-      if (!type || !RECOGNIZED.has(type)) continue;
-      const required = REQUIRED[type] ?? [];
-      const product =
-        type === 'Product' && products.length
-          ? products[Math.min(productIndex++, products.length - 1)]!
-          : {};
-      blocks.push({
-        type,
-        syntax: 'microdata',
-        required,
-        present: [],
-        missing: [...required],
-        valid: !required.length,
-        schema_id: '',
-        name: '',
-        author: '',
-        date_published: '',
-        date_modified: '',
-        same_as: [],
-        props_present: [],
-        url: '',
-        main_entity_id: '',
-        main_entity_of_page_id: '',
-        product,
-      });
-      if (blocks.length >= maxBlocks) return blocks;
+const propertyNames = (node: HtmlElement) =>
+  attribute(node, 'itemprop').split(/\s+/u).map(cleanType).filter(Boolean);
+
+/** A nested item is its own object, within the JSON-LD depth bound; any other property is text. */
+function propertyValue(property: HtmlElement, depth: number, baseUrl: string): unknown {
+  if (!hasAttribute(property, 'itemscope')) return microdataValue(property, baseUrl);
+  return depth < limits.jsonld_depth ? microdataObject(property, baseUrl, depth + 1) : undefined;
+}
+
+/**
+ * One microdata item as the JSON-LD object it is equivalent to, so both
+ * syntaxes meet one property contract. A repeated property becomes a list.
+ */
+function microdataObject(item: HtmlElement, baseUrl: string, depth = 0): JsonObject {
+  const properties = new Map<string, unknown[]>([
+    ['@type', attribute(item, 'itemtype').split(/\s+/u).filter(Boolean)],
+  ]);
+  const id = absoluteUrl(attribute(item, 'itemid').trim(), baseUrl);
+  if (id) properties.set('@id', [id]);
+  for (const property of itemProperties(item)) {
+    const value = propertyValue(property, depth, baseUrl);
+    if (isEmpty(value)) continue;
+    // A property name never overwrites the item's own `@type` or `@id`.
+    for (const name of propertyNames(property).filter((name) => !name.startsWith('@'))) {
+      const list = properties.get(name);
+      if (list) list.push(value);
+      else properties.set(name, [value]);
     }
+  }
+  return Object.fromEntries(
+    [...properties].map(([name, list]) => [name, list.length === 1 ? list[0] : list]),
+  );
+}
+
+/**
+ * Each recognized `itemtype` is a block holding its item's own properties,
+ * read as the equivalent JSON-LD object. A nested item is a block under the
+ * property that holds it.
+ */
+export function microdataBlocks(root: HtmlNode, maxBlocks: number, baseUrl: string): SchemaBlock[] {
+  const blocks: SchemaBlock[] = [];
+  for (const node of elements(root)) {
+    if (!hasAttribute(node, 'itemscope') || !attribute(node, 'itemtype').trim()) continue;
+    const nested = {
+      object: microdataObject(node, baseUrl),
+      parentProperty: propertyNames(node)[0] ?? '',
+    };
+    blocks.push(...objectBlocks(nested, { syntax: 'microdata' }));
+    if (blocks.length >= maxBlocks) return blocks.slice(0, maxBlocks);
+  }
   return blocks;
 }
 

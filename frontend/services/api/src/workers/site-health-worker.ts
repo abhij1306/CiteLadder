@@ -177,8 +177,7 @@ export class SiteHealthWorker {
         // A lease recovered at its attempt ceiling settles a task no executor will reconcile.
         for (const crawl of result.failedCrawls) {
           const reconcile = () => reconcileCrawl(this.db, crawl.workspaceId, crawl.crawlId);
-          // One crawl lock at a time, each in its own transaction.
-          await this.#guard('recovered crawl reconcile failed', reconcile); // NOSONAR
+          await this.#guard('recovered crawl reconcile failed', reconcile); // NOSONAR -- One crawl lock at a time, each in its own transaction.
         }
         return result.reclaimed;
       })

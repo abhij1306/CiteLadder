@@ -1,5 +1,3 @@
-'use client';
-
 import type { z } from 'zod';
 
 import { ProjectLink } from '@/components/ui/project-link';
@@ -62,9 +60,11 @@ export function SourceUrlPageCard({
 }
 
 /**
- * The two ways to act on the gap. An open Action carries the brief and the
- * measurement; before one exists (the page is not yet cited often enough),
- * the Agent can still draft the request from the page itself.
+ * The two ways to act on the gap. Every Gap page is an Action (AS4), which
+ * carries the brief and the measurement, and its chat opens with the
+ * Action's own request written; until the next refresh makes one (the page
+ * was read after the last run), the Agent can still draft the request from
+ * the page itself.
  */
 function GetListed({ url, actionId }: Readonly<{ url: string; actionId: string | null }>) {
   return (

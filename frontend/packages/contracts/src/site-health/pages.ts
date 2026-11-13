@@ -163,6 +163,13 @@ const internalLinksSchema = responseObject({
   formula_version: z.string(),
 });
 
+// One issue on the page, named by the crawl's Issues group it belongs to (so
+// the page can hand that group to the agent) and by the scores it counts in.
+export const pageIssueSchema = issueOccurrenceSchema.extend({
+  group_id: uuid(),
+  score_roles: z.array(z.string()),
+});
+
 // Full analyzed-page detail (persisted facts/delivery/scores/issues/provenance).
 export const pageDetailSchema = responseObject({
   url_hash: z.string().optional(),
@@ -183,6 +190,7 @@ export const pageDetailSchema = responseObject({
   aeo_measurement_state: z.enum(['measured', 'limited_evidence', 'not_measured', 'excluded']),
   aeo_measurement_reason: z.string(),
   main_content_indexable: z.boolean().nullable(),
+  robots_excluded: z.boolean(),
   issue_count: z.number().int().nullable(),
   last_audited: z.string().nullable(),
   page_kind: pageKindSchema.nullable(),
@@ -195,11 +203,13 @@ export const pageDetailSchema = responseObject({
   // Pack-governed industry role. `null` = the pack classifier never ran.
   // A present object with `role_id: null` plus an `abstention_reason` is an
   // EXECUTED abstention — a different fact, rendered differently.
-  facts: pageFactsSchema,
+  // Null when the page was never analyzed: not analyzed, never zero H1s,
+  // words or links.
+  facts: pageFactsSchema.nullable(),
   delivery: deliveryFactsSchema,
   // Null when this crawl persisted no link metric for the URL.
   internal_links: internalLinksSchema.nullable(),
-  issues: z.array(issueOccurrenceSchema),
+  issues: z.array(pageIssueSchema),
   evaluations: z.array(ruleEvaluationSchema),
   artifact_id: uuid().nullable(),
   extractor_version: z.string(),
@@ -208,16 +218,13 @@ export const pageDetailSchema = responseObject({
   scoring_version: z.string(),
 });
 
-// Identity/status returned by the per-page rerun (202). "Re-audit this page"
-// is normally invoked from a COMPLETED (terminal) source crawl; the backend
-// mints a fresh single-page rerun crawl in that case (`created_new_crawl`),
-// so the client must poll the returned `crawl_id`/`site_url_id` (the fresh
-// run) rather than the terminal source crawl it was invoked from.
+// Identity/status returned by the per-page rerun (202). A re-audit always runs
+// as a fresh single-page crawl (a running crawl refuses it), so the client
+// polls the returned `crawl_id`/`site_url_id`, not the crawl it was invoked from.
 export const rerunPageResponseSchema = responseObject({
   crawl_id: uuid(),
   site_url_id: uuid(),
   task_id: uuid(),
-  created_new_crawl: z.boolean(),
   analysis_status: pageAnalysisStatusSchema,
 });
 
@@ -226,4 +233,5 @@ export type DeliveryFacts = z.infer<typeof deliveryFactsSchema>;
 export type PageSummary = z.infer<typeof pageSummarySchema>;
 export type PagesPage = z.infer<typeof pagesPageSchema>;
 export type PageDetail = z.infer<typeof pageDetailSchema>;
+export type PageIssue = z.infer<typeof pageIssueSchema>;
 export type RerunPageResponse = z.infer<typeof rerunPageResponseSchema>;

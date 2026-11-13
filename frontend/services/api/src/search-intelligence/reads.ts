@@ -24,6 +24,7 @@ import { preferencesBody } from '../routes/search-intelligence-contracts.ts';
 import { competitorTarget, ownedTargets, searchMarket } from './targets.ts';
 import { datasetView, rowView, runView } from './views.ts';
 import { isNonEmpty, lastOf, onlyOf } from '../lists.ts';
+import { surfaceMarkets } from '../search-surfaces/locations.ts';
 import { workspaceConnections } from './credentials.ts';
 
 const si = policy.search_intelligence;
@@ -142,9 +143,17 @@ export async function readiness(
     competitors: competitors.flatMap(
       (row) => competitorTarget(row, savedDomains.parse(row.domains)) ?? [],
     ),
-    preferences: { ...saved, ...searchMarket(project, saved) },
+    // Every list dataset's depth: the saved one, else the policy default.
+    preferences: {
+      ...saved,
+      ...searchMarket(project, saved),
+      depths: { ...si.default_depths, ...saved.depths },
+    },
     latest_run: latest ? runView(latest) : null,
     datasets: datasets.map(datasetView),
+    // The Labs markets a review may choose: the ones `reviews.ts` accepts.
+    markets: surfaceMarkets('google_ai_overview'),
+    max_depth: si.max_depth,
   };
 }
 

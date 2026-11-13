@@ -1,5 +1,3 @@
-'use client';
-
 import { FolderOpen, Plus } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useEffect, useState } from 'react';

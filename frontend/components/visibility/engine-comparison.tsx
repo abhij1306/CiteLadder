@@ -1,5 +1,3 @@
-'use client';
-
 import { Bot } from 'lucide-react';
 
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';

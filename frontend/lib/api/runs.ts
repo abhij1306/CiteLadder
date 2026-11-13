@@ -169,8 +169,8 @@ export const runsQueries = {
 };
 
 /**
- * Reads derived from finished audits: Visibility, and Commerce's AI Shelf and
- * target Actions. A completed or cancelled run refreshes each of them; this is
+ * Reads derived from finished audits: Visibility, and Commerce's product
+ * metrics and Actions. A completed or cancelled run refreshes each of them; this is
  * the one place that says which.
  */
 export function refreshAuditResults(client: QueryClient) {

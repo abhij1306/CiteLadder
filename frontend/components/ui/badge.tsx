@@ -90,7 +90,7 @@ export type RunStatusValue = keyof typeof runStatusTone;
  * value) never inherits the figure's tight tracking.
  */
 const BADGE_FACE =
-  'inline-flex h-[var(--badge-height-sm)] max-w-full shrink-0 items-center gap-1 rounded-xs px-2 align-middle font-sans text-caption font-medium tracking-normal whitespace-nowrap';
+  'inline-flex h-[var(--badge-height-sm)] max-w-full shrink-0 items-center gap-1 rounded-xs px-2 align-middle font-sans text-caption tracking-normal whitespace-nowrap';
 
 export type BadgeProps = {
   children: ReactNode;
@@ -144,17 +144,7 @@ export function Badge(props: Readonly<BadgeProps>) {
   const tone = badgeTone(props);
   const PriorityIcon = props.variant === 'priority' ? PRIORITY_ICON[props.value] : null;
   return (
-    <span
-      {...attributes}
-      data-badge-tone={tone}
-      className={cn(
-        BADGE_FACE,
-        TONE[tone],
-        tone === 'neutral' &&
-          'in-data-[selected=true]:bg-surface in-data-[selected=true]:ring-line ring-inset in-data-[selected=true]:ring-1',
-        className,
-      )}
-    >
+    <span {...attributes} data-badge-tone={tone} className={cn(BADGE_FACE, TONE[tone], className)}>
       {dot ? <span className="size-1.5 shrink-0 rounded-full bg-current" aria-hidden /> : null}
       {PriorityIcon ? <PriorityIcon className="size-3.5 shrink-0" aria-hidden /> : null}
       {children}

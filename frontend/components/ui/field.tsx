@@ -41,7 +41,7 @@ export function Field({
 
   return (
     <div className={cn('flex min-w-0 flex-col gap-2', className)}>
-      <label htmlFor={id} className="text-label text-ink">
+      <label htmlFor={id} className="text-body-sm text-ink">
         {label}
         {required ? <span className="text-ink-muted ms-0.5">*</span> : null}
       </label>

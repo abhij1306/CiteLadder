@@ -1,13 +1,12 @@
-'use client';
-
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 
 import { useComposerCommands } from '@/components/agent/use-composer-commands';
 import { agentWriteFailure } from '@/lib/agent/errors';
 import { newIdempotencyKey, useRequestKey } from '@/lib/agent/idempotency';
-import { isLiveTurnConnected, useLiveTurnConnected } from '@/lib/agent/live-turns';
-import { isRunActive, runPollMs } from '@/lib/agent/run-state';
+import { isLiveTurnConnected, startLiveTurn, useLiveTurnConnected } from '@/lib/agent/live-turns';
+import { fetchedTurnToStart, isPageReading, isRunActive, runPollMs } from '@/lib/agent/run-state';
+import { AGENT_PAGE_FETCH_POLL_MS } from '@/lib/config/agent';
 import {
   agentMutations,
   agentQueries,
@@ -27,6 +26,8 @@ export function useChatDetail(workspaceId: string, chatId: string) {
     ...agentQueries.chat(workspaceId, chatId),
     enabled: Boolean(workspaceId && chatId),
     refetchInterval: (state) => {
+      // A page chat is read until its page fetch queues the first turn.
+      if (isPageReading(state.state.data?.page_fetch)) return AGENT_PAGE_FETCH_POLL_MS;
       const run = state.state.data?.latest_run;
       return run && isRunActive(run) && !isLiveTurnConnected(run.id) ? runPollMs(run) : false;
     },
@@ -36,6 +37,11 @@ export function useChatDetail(workspaceId: string, chatId: string) {
   useEffect(() => {
     if (closed) void refetch();
   }, [closed, refetch]);
+  // The server queued a page chat's first turn; it runs inside this tab's stream.
+  const fetchedTurn = fetchedTurnToStart(query.data);
+  useEffect(() => {
+    if (fetchedTurn) startLiveTurn(chatId, fetchedTurn, workspaceId);
+  }, [chatId, fetchedTurn, workspaceId]);
   return query;
 }
 

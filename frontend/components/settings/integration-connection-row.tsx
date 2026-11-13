@@ -1,12 +1,10 @@
-'use client';
-
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { LucideIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { BackfillHistory } from '@/components/settings/backfill-progress';
 import { PROVIDER_META, type GrantModel } from '@/components/settings/grant-model';
-import { useProjectContext } from '@/lib/project/project-context';
+import { useProjectContext, useWorkspaceCapability } from '@/lib/project/project-context';
 import { PropertyPicker, useActiveMapping } from '@/components/settings/property-picker';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -91,34 +89,42 @@ function ConnectionActions({
   onRemove: () => void;
 }>) {
   const syncDisabled = busy || runInFlight || !hasProperty || grant.status !== 'connected';
+  // Testing and removing touch the credential; syncing is a run. Each is
+  // offered only to a role that may do it.
+  const canManage = useWorkspaceCapability('manage_credentials');
+  const canRun = useWorkspaceCapability('run');
 
   return (
     <ControlRow
       media={<IconTile icon={Icon} />}
       controls={
         <>
-          <Button
-            variant="secondary"
-            className="min-w-14"
-            onClick={onTest}
-            disabled={busy}
-            aria-label={`Test ${label}`}
-          >
-            {testPending ? 'Testing…' : 'Test'}
-          </Button>
-          <Button
-            variant="secondary"
-            className="min-w-22"
-            onClick={onSync}
-            title={hasProperty ? undefined : 'Select a property first'}
-            disabled={syncDisabled}
-            pending={syncPending}
-            pendingLabel="Syncing…"
-            aria-label={`Sync ${label} now`}
-          >
-            Sync now
-          </Button>
-          {hasProperty ? (
+          {canManage ? (
+            <Button
+              variant="secondary"
+              className="min-w-14"
+              onClick={onTest}
+              disabled={busy}
+              aria-label={`Test ${label}`}
+            >
+              {testPending ? 'Testing…' : 'Test'}
+            </Button>
+          ) : null}
+          {canRun ? (
+            <Button
+              variant="secondary"
+              className="min-w-22"
+              onClick={onSync}
+              title={hasProperty ? undefined : 'Select a property first'}
+              disabled={syncDisabled}
+              pending={syncPending}
+              pendingLabel="Syncing…"
+              aria-label={`Sync ${label} now`}
+            >
+              Sync now
+            </Button>
+          ) : null}
+          {hasProperty && canManage ? (
             <Button
               variant="danger"
               onClick={onRemove}

@@ -1,4 +1,3 @@
-'use client';
 import { Fragment, useState, type ReactNode } from 'react';
 import type { z } from 'zod';
 import type { aiTrafficPagesSchema } from '@citeladder/contracts/ai-traffic';
@@ -9,6 +8,7 @@ import { Stack } from '@/components/ui/layout';
 import { Tooltip } from '@/components/ui/tooltip';
 import { Pressable } from '@/components/ui/pressable';
 import { MISSING_MARK } from '@/lib/format';
+import type { TrafficPagesSort } from '@/lib/config/crawl-logs';
 import { DisplayTime, TableTime } from '@/components/ui/display-time';
 import { aiTrafficQueries, type TrafficTableScope } from '@/lib/api/ai-traffic';
 import { useCursorTableQuery } from '@/lib/table/use-cursor-table-query';
@@ -16,6 +16,15 @@ import { UrlPanel, TrafficLeg, trafficLegExplanation } from './url-panel';
 
 /** A non-breaking space: a blank line that still takes a line's height. */
 const BLANK_LINE = ' ';
+
+/** The sort a header button sets: the path ascending, a figure descending. */
+const SORT_BY_COLUMN: Readonly<Record<string, TrafficPagesSort>> = {
+  path: 'url_asc',
+  crawl: 'requests_desc',
+  referrals: 'sessions_desc',
+  'key-events': 'key_events_desc',
+  citations: 'citations_desc',
+};
 
 const PAGE_COLUMNS: readonly DataTableColumn[] = [
   { key: 'path', label: 'Path' },
@@ -28,12 +37,39 @@ const PAGE_COLUMNS: readonly DataTableColumn[] = [
   { key: 'errors', label: '4xx / 5xx', width: 'figure', numeric: true },
 ];
 
+/** Pages' columns, sortable from their headers like every other table's. */
+function pageColumns(
+  sort: TrafficPagesSort | undefined,
+  onSort: ((sort: TrafficPagesSort) => void) | undefined,
+): readonly DataTableColumn[] {
+  if (!sort || !onSort) return PAGE_COLUMNS;
+  return PAGE_COLUMNS.map((column) => {
+    const order = SORT_BY_COLUMN[column.key];
+    if (!order) return column;
+    return {
+      ...column,
+      sort: {
+        active: sort === order,
+        descending: order !== 'url_asc',
+        onSort: () => onSort(order),
+      },
+    };
+  });
+}
+
 /**
  * Path-level AI Traffic: the coverage line over one cursor-paged table. A
  * page turn or filter keeps the rows, the line and the pager on screen until
  * the next page lands. The crawler drawer reads the same view for one bot.
  */
-export function TrafficPages({ workspaceId, projectId, filters }: TrafficTableScope) {
+export function TrafficPages({
+  workspaceId,
+  projectId,
+  filters,
+  sort,
+  onSort,
+}: TrafficTableScope &
+  Readonly<{ sort?: TrafficPagesSort; onSort?: (sort: TrafficPagesSort) => void }>) {
   const [urlHash, setUrlHash] = useState<string | null>(null);
   const { page, table } = useCursorTableQuery({
     workspaceId,
@@ -56,7 +92,7 @@ export function TrafficPages({ workspaceId, projectId, filters }: TrafficTableSc
       <CoverageLine data={page} />
       <DataTable
         label="Path-level AI Traffic with separate signal units"
-        columns={PAGE_COLUMNS}
+        columns={pageColumns(sort, onSort)}
         minWidth="xl"
         {...table}
       >

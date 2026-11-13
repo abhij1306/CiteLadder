@@ -22,11 +22,15 @@ export const aiReferralSourceRowSchema = responseObject({
   share: z.number().min(0).max(1).nullable(),
 });
 
-/** Persisted AI-referral measurements from the canonical GA4 source/medium report. */
+/**
+ * Persisted AI-referral measurements from the canonical GA4 source/medium report.
+ * The window is the persisted snapshot's; both ends are null when no snapshot
+ * answers the read, so "never synced" never reads as a synced empty window.
+ */
 export const aiReferralsSchema = responseObject({
   project_id: uuid(),
-  window_start: z.string(),
-  window_end: z.string(),
+  window_start: z.iso.date().nullable(),
+  window_end: z.iso.date().nullable(),
   granularity: snapshotGranularitySchema,
   referral_volume: metricSeriesSchema,
   referral_share: metricSeriesSchema,
@@ -328,6 +332,8 @@ export const crawlUploadSchema = z.object({
   missing_fields: z.array(z.string()),
   /** Fixes the upload's admission floor, so a resumed scan batches identically. */
   created_at: z.iso.datetime({ offset: true }),
+  /** Server time the upload completed; processing that finishes after it covers the upload. */
+  completed_at: z.iso.datetime({ offset: true }).nullable(),
 });
 export const crawlCatalogSchema = z.object({
   catalog_version: z.string(),

@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vite-plus/test';
@@ -6,7 +6,8 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vite-p
 import { makeProject } from '@/test/fixtures/project';
 import { makePrompt, makeSet, makeSetList } from '@/test/fixtures/prompts';
 import { mswServer } from '@/test/msw-server';
-import { renderWithProviders } from '@/test/render';
+import { chooseFilterOption, openFilterRow } from '@/test/all-filters';
+import { renderWithProviders, selectionAs } from '@/test/render';
 
 import { PromptLibrary } from './prompt-library';
 
@@ -41,6 +42,8 @@ function metric(visibilityRate: number) {
     owned_citation_rate: null,
     avg_position: null,
     visibility_delta: null,
+    mentions: 0,
+    brands: [],
   };
 }
 
@@ -99,14 +102,54 @@ describe('PromptLibrary first load', () => {
     ).toEqual([
       'Prompt',
       'Visibility',
-      'Owned citations',
-      'Avg. mention position',
+      expect.stringMatching(/^Mentions/),
+      expect.stringMatching(/^Citations/),
+      expect.stringMatching(/^Position/),
       'Change',
       'Enabled',
       'Actions',
     ]);
     const row = within(table).getByRole('row', { name: new RegExp(prompt.text.slice(0, 20)) });
     expect(within(row).getByText('50%')).toBeVisible();
+  });
+
+  it("opens a measured prompt's evidence on the latest run's succeeded answer", async () => {
+    const run = metric(0.5).audit_id;
+    const execution = (id: string, promptIndex: number, status: string) => ({
+      id,
+      prompt_index: promptIndex,
+      logical_engine: 'chatgpt',
+      transport_provider: 'openai',
+      status,
+      prompt_text: prompt.text,
+      error_code: '',
+      latency_ms: 1,
+    });
+    const ANSWER = '66666666-6666-4666-8666-666666666663';
+    const read: string[] = [];
+    libraryReads(async () => HttpResponse.json([metric(0.5)]));
+    mswServer.use(
+      http.get(`/api/v1/audits/${run}/executions`, () =>
+        HttpResponse.json([
+          execution('66666666-6666-4666-8666-666666666661', 1, 'succeeded'),
+          execution('66666666-6666-4666-8666-666666666662', 0, 'failed'),
+          execution(ANSWER, 0, 'succeeded'),
+        ]),
+      ),
+      http.get('/api/v1/executions/:id', ({ params }) => {
+        read.push(String(params.id));
+        return HttpResponse.json({ detail: 'Gone.', code: 'not_found' }, { status: 404 });
+      }),
+    );
+    const user = userEvent.setup();
+    renderLibrary();
+
+    await user.click(await screen.findByRole('button', { name: 'Prompt actions' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Evidence' }));
+
+    expect(await screen.findByRole('dialog', { name: 'Execution evidence' })).toBeVisible();
+    await waitFor(() => expect(read).toContain(ANSWER));
+    expect(new Set(read)).toEqual(new Set([ANSWER]));
   });
 
   it('draws the prompt rows without measured columns when the figures cannot be read', async () => {
@@ -124,6 +167,38 @@ describe('PromptLibrary first load', () => {
         .map((head) => head.textContent),
     ).toEqual(['Prompt', 'Enabled', 'Actions']);
   });
+});
+
+describe('PromptLibrary by role', () => {
+  it.each([
+    ['member', ['Add prompts', 'Launch audit'], ['Prompt', 'Enabled', 'Actions']],
+    ['viewer', [], ['Prompt', 'Enabled']],
+  ] as const)(
+    'offers a %s exactly the controls its role may use',
+    async (role, pageActions, headers) => {
+      libraryReads(async () => HttpResponse.json([]));
+      renderWithProviders(<PromptLibrary />, {
+        projectSelection: {
+          ...selectionAs(role),
+          projects: [project],
+          activeProject: project,
+          activeProjectId: project.id,
+          status: 'ready',
+        },
+      });
+
+      const table = await screen.findByRole('table', { name: 'Prompts' });
+      expect(
+        within(table)
+          .getAllByRole('columnheader')
+          .map((head) => head.textContent),
+      ).toEqual(headers);
+      const offered = ['Add prompts', 'Launch audit'].filter((name) =>
+        screen.queryByRole('button', { name: new RegExp(name) }),
+      );
+      expect(offered).toEqual(pageActions);
+    },
+  );
 });
 
 describe('PromptLibrary topic filter', () => {
@@ -170,11 +245,11 @@ describe('PromptLibrary topic filter', () => {
 
     const table = await screen.findByRole('table', { name: 'Prompts' });
     expect(within(table).getByText('Best road shoes?')).toBeVisible();
-    await user.click(await screen.findByRole('button', { name: 'Topic: All topics' }));
-    await user.click(await screen.findByRole('menuitemradio', { name: /^Trail/ }));
+    await screen.findByRole('button', { name: 'All filters' });
+    await chooseFilterOption(user, 'Topic', /^Trail/);
 
-    expect(within(table).getByText('Best trail shoes?')).toBeVisible();
+    await waitFor(() => expect(within(table).getByText('Best trail shoes?')).toBeVisible());
     expect(within(table).queryByText('Best road shoes?')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Topic: Trail' })).toBeVisible();
+    expect(await openFilterRow(user, 'Topic', 'Trail')).toBeVisible();
   });
 });

@@ -9,7 +9,7 @@ import type { Audit } from '@citeladder/contracts';
 import { queryKeys } from '@/lib/api/query-keys';
 import { makeProject } from '@/test/fixtures/project';
 import { mswServer } from '@/test/msw-server';
-import { renderWithProviders } from '@/test/render';
+import { renderWithProviders, selectionAs } from '@/test/render';
 import { RunDetailScreen } from './run-detail-screen';
 
 // The live stream only accelerates polling; this test drives the cancel path.
@@ -24,6 +24,7 @@ function audit(status: Audit['status']): Audit {
     project_id: '33333333-3333-4333-8333-333333333333',
     parent_audit_id: null,
     status,
+    cancelable: status === 'running',
     benchmark_mode: 'consumer_like',
     audit_scope: 'commerce',
     model_provenance: [],
@@ -97,5 +98,27 @@ describe('RunDetailScreen', () => {
     await waitFor(() => expect(shelfFetches).toBe(1));
     await userEvent.click(await screen.findByRole('button', { name: 'Cancel run' }));
     await waitFor(() => expect(shelfFetches).toBe(2));
+  });
+
+  it('lets a viewer follow and export a running run without offering to cancel it', async () => {
+    mswServer.use(
+      http.get(`/api/v1/audits/${RUN}`, () => HttpResponse.json(audit('running'))),
+      http.get(`/api/v1/audits/${RUN}/executions`, () => HttpResponse.json([])),
+    );
+    renderWithProviders(
+      <Routes>
+        <Route path="/runs/:runId" element={<RunDetailScreen />} />
+      </Routes>,
+      {
+        initialEntries: [`/runs/${RUN}`],
+        projectSelection: {
+          ...selectionAs('viewer'),
+          activeProject: makeProject({ id: '33333333-3333-4333-8333-333333333333' }),
+        },
+      },
+    );
+
+    expect(await screen.findByRole('button', { name: 'Export CSV' })).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Cancel run' })).toBeNull();
   });
 });

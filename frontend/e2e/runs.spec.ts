@@ -22,6 +22,7 @@ const audit = {
   workspace_id: WORKSPACE_ID,
   project_id: PROJECT_ID,
   status: 'completed',
+  cancelable: false,
   benchmark_mode: 'consumer_like',
   repetitions: 3,
   random_seed: '7',

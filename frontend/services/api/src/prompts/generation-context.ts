@@ -1,10 +1,12 @@
 import { randomUUID } from 'node:crypto';
 
 import { offeringMapSchema } from '@citeladder/contracts/project';
+import type { Selectable } from 'kysely';
 import { z } from 'zod';
 
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
+import type { BrandProfiles, Projects } from '../generated/db-schema.ts';
 import { record, strings } from '../db/json.ts';
 import { entityKey, projectEntityMatching } from '../analysis/entity-matching.ts';
 import { currentDemandSnapshot } from '../opportunities/sources.ts';
@@ -58,18 +60,21 @@ export async function topicProposalInput(
     .selectFrom('brands')
     .select(['id', 'name'])
     .where('project_id', '=', scope.projectId)
+    .where('workspace_id', '=', scope.workspaceId)
     .executeTakeFirst();
   const aliases = brand
     ? await trx
         .selectFrom('brand_aliases')
         .select('alias')
         .where('brand_id', '=', brand.id)
+        .where('workspace_id', '=', scope.workspaceId)
         .execute()
     : [];
   const existing = await trx
     .selectFrom('topics')
     .select('name')
     .where('project_id', '=', scope.projectId)
+    .where('workspace_id', '=', scope.workspaceId)
     .execute();
   const business = record(profile?.business_context);
   return {
@@ -176,6 +181,100 @@ function fieldSources(business: Record<string, unknown>, sources: Record<string,
   return result;
 }
 
+/** The project's brand and its aliases, when a brand is recorded. */
+async function brandIdentity(
+  trx: Database,
+  { workspaceId, projectId }: { workspaceId: string; projectId: string },
+) {
+  const brand = await trx
+    .selectFrom('brands')
+    .select(['id', 'name'])
+    .where('project_id', '=', projectId)
+    .where('workspace_id', '=', workspaceId)
+    .executeTakeFirst();
+  const aliases = brand
+    ? await trx
+        .selectFrom('brand_aliases')
+        .select('alias')
+        .where('brand_id', '=', brand.id)
+        .where('workspace_id', '=', workspaceId)
+        .execute()
+    : [];
+  return { brand, aliases };
+}
+
+/** The current demand snapshot and its highest-priority active signals, at most `count`. */
+async function demandGrounding(
+  trx: Database,
+  { workspaceId, projectId, count }: { workspaceId: string; projectId: string; count: number },
+) {
+  const snapshotRef = await currentDemandSnapshot(trx, { workspaceId, projectId });
+  const snapshot = snapshotRef
+    ? await trx
+        .selectFrom('demand_snapshots')
+        .select(['id', 'coverage', 'window_start', 'window_end'])
+        .where('id', '=', snapshotRef.id)
+        .where('workspace_id', '=', workspaceId)
+        .executeTakeFirstOrThrow()
+    : null;
+  const demand = snapshot
+    ? await trx
+        .selectFrom('demand_signals')
+        .select([
+          'id',
+          'signal_type',
+          'topic_cluster',
+          'page_url',
+          'priority_score',
+          'limitations',
+          'evidence',
+          'metrics',
+        ])
+        .where('workspace_id', '=', workspaceId)
+        .where('project_id', '=', projectId)
+        .where('snapshot_id', '=', snapshot.id)
+        .where('state', '=', 'active')
+        .orderBy('priority_score', (order) => order.desc().nullsLast())
+        .orderBy('id')
+        .limit(count)
+        .execute()
+    : [];
+  return { snapshot, demand };
+}
+
+type GenerationProfile = Pick<
+  Selectable<BrandProfiles>,
+  'business_context' | 'description' | 'positioning' | 'target_audience' | 'sources'
+>;
+type GenerationProject = Pick<
+  Selectable<Projects>,
+  'country_code' | 'primary_market' | 'language_code'
+>;
+
+/** The business context generation reads: the persisted context overlaid with profile fields. */
+function generationBusiness({
+  profile,
+  project,
+  offerings,
+}: {
+  profile: GenerationProfile | undefined;
+  project: GenerationProject;
+  offerings: string[];
+}) {
+  const persistedBusiness = record(profile?.business_context);
+  const business = {
+    ...persistedBusiness,
+    products_services: offerings,
+    description: profile?.description ?? '',
+    positioning: profile?.positioning ?? '',
+    target_audience: profile?.target_audience ?? '',
+    primary_market: project.country_code || project.primary_market,
+    language_code: project.language_code,
+    field_sources: fieldSources(persistedBusiness, record(profile?.sources)),
+  };
+  return { persistedBusiness, business };
+}
+
 export function generationContext(
   db: Database,
   workspaceId: string,
@@ -210,6 +309,7 @@ export function generationContext(
       .selectFrom('topics')
       .select(topicColumns)
       .where('project_id', '=', project.id)
+      .where('workspace_id', '=', workspaceId)
       .orderBy('created_at')
       .orderBy('id')
       .execute();
@@ -220,27 +320,18 @@ export function generationContext(
     const selected = wanted.length
       ? wanted.map((id) => topics.find((topic) => topic.id === id)!)
       : topics;
-    const brand = await trx
-      .selectFrom('brands')
-      .select(['id', 'name'])
-      .where('project_id', '=', project.id)
-      .executeTakeFirst();
-    const aliases = brand
-      ? await trx
-          .selectFrom('brand_aliases')
-          .select('alias')
-          .where('brand_id', '=', brand.id)
-          .execute()
-      : [];
+    const { brand, aliases } = await brandIdentity(trx, { workspaceId, projectId: project.id });
     const competitors = await trx
       .selectFrom('competitors')
       .select(['name', 'aliases'])
       .where('project_id', '=', project.id)
+      .where('workspace_id', '=', workspaceId)
       .execute();
     const prompts = await trx
       .selectFrom('prompts')
       .select(promptColumns)
       .where('prompt_set_id', '=', setId)
+      .where('workspace_id', '=', workspaceId)
       // Oldest first: model and judge context keep the most recent texts.
       .orderBy('created_at')
       .orderBy('id')
@@ -252,48 +343,12 @@ export function generationContext(
       .where('prompt_set_id', '=', setId)
       .where('expires_at', '>', new Date())
       .execute();
-    const snapshotRef = await currentDemandSnapshot(trx, { workspaceId, projectId: project.id });
-    const snapshot = snapshotRef
-      ? await trx
-          .selectFrom('demand_snapshots')
-          .select(['id', 'coverage', 'window_start', 'window_end'])
-          .where('id', '=', snapshotRef.id)
-          .where('workspace_id', '=', workspaceId)
-          .executeTakeFirstOrThrow()
-      : null;
-    const demand = snapshot
-      ? await trx
-          .selectFrom('demand_signals')
-          .select([
-            'id',
-            'signal_type',
-            'topic_cluster',
-            'page_url',
-            'priority_score',
-            'limitations',
-            'evidence',
-            'metrics',
-          ])
-          .where('workspace_id', '=', workspaceId)
-          .where('project_id', '=', project.id)
-          .where('snapshot_id', '=', snapshot.id)
-          .where('state', '=', 'active')
-          .orderBy('priority_score', (order) => order.desc().nullsLast())
-          .orderBy('id')
-          .limit(input.count)
-          .execute()
-      : [];
-    const persistedBusiness = record(profile?.business_context);
-    const business = {
-      ...persistedBusiness,
-      products_services: offerings,
-      description: profile?.description ?? '',
-      positioning: profile?.positioning ?? '',
-      target_audience: profile?.target_audience ?? '',
-      primary_market: project.country_code || project.primary_market,
-      language_code: project.language_code,
-      field_sources: fieldSources(persistedBusiness, record(profile?.sources)),
-    };
+    const { snapshot, demand } = await demandGrounding(trx, {
+      workspaceId,
+      projectId: project.id,
+      count: input.count,
+    });
+    const { persistedBusiness, business } = generationBusiness({ profile, project, offerings });
     const maps = offeringMaps(business);
     const context = {
       brand_name: brand?.name ?? project.brand_name,
@@ -358,7 +413,7 @@ export function generationContext(
       observed,
       vocabulary: await loadVocabulary(
         trx,
-        project.id,
+        { workspaceId, projectId: project.id },
         policy.prompts.generation.generated_binding_excluded_fields,
       ),
     };

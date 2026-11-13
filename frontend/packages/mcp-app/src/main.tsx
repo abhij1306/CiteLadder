@@ -49,7 +49,9 @@ app.ontoolinput = (input) =>
   controller.begin(input.arguments, app.getHostContext()?.toolInfo?.tool.name);
 app.onhostcontextchanged = (context) => hostContext(context);
 app.ontoolcancelled = () => controller.failHostRead();
-createRoot(document.getElementById('root')!).render(<Analytics controller={controller} />);
+const root = document.getElementById('root');
+if (!root) throw new Error('The MCP app document has no #root element.');
+createRoot(root).render(<Analytics controller={controller} />);
 try {
   await app.connect(undefined, { timeout: appPolicy.requestTimeoutMs });
   hostContext(app.getHostContext() ?? {});

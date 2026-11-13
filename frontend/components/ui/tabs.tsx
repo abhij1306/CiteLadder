@@ -1,5 +1,3 @@
-'use client';
-
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
 import { createContext, useContext, useRef } from 'react';
 import * as TabsPrimitive from '@radix-ui/react-tabs';
@@ -8,22 +6,30 @@ import { cn } from '@/lib/utils';
 
 /**
  * The segmented track every in-page switch shares (Tabs, SegmentedControl,
- * the sidebar's mode switch): `surface-sunken`, `radius-md`, 36px with a 3px
- * inset and 2px between segments. It keeps its width when the selection
- * changes.
+ * the sidebar's mode switch): the pressed tint of whatever fill it sits on
+ * (D51; `scroll-shade-x` paints it, since sunken would not show on the page
+ * ground), `radius-md`, 32px with a 2px inset and 2px between segments. It
+ * keeps its width when the selection changes. Its scrollbar is hidden, so when
+ * the segments overflow it a soft shade marks each edge with more of them;
+ * nothing shows while they fit.
  */
 export const TAB_TRACK =
-  'bg-surface-sunken inline-flex h-[var(--control-md)] max-w-full shrink-0 items-center gap-0.5 overflow-x-auto rounded-md p-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden';
+  'scroll-shade-x inline-flex h-[var(--control-md)] max-w-full shrink-0 items-center gap-0.5 overflow-x-auto rounded-md p-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden';
 
 /**
- * One segment: full track height, 12px padding, `radius-sm`, 14/20 medium
- * `ink-secondary`; the selected one lifts onto `surface` with the xs ring in
- * `ink`. A count follows the label in brackets (`ControlCount`, D16).
+ * One segment: full track height, 12px padding, `radius-sm`, 14/20 regular
+ * `ink-secondary`; the selected one lifts onto `surface` with a 1px `line`
+ * border (D51: an edge is a border, never a shadow ring) in `ink` at weight
+ * 500 (owner, 2026-11-10; buttons stay 500 throughout). Every segment keeps a
+ * 1px border, transparent until selected, so selecting one moves nothing. A
+ * count follows the label in brackets (`ControlCount`, D16).
  */
 export function tabClasses(selected: boolean, className?: string) {
   return cn(
-    'focus-ring inline-flex h-full shrink-0 items-center justify-center gap-1.5 rounded-sm px-3 text-label whitespace-nowrap transition-[background-color,color] duration-[var(--motion-fast)] focus-visible:outline-offset-1 disabled:cursor-not-allowed disabled:opacity-45',
-    selected ? 'bg-surface text-ink shadow-xs' : 'text-ink-secondary not-disabled:hover:text-ink',
+    'focus-ring inline-flex h-full shrink-0 items-center justify-center gap-1.5 rounded-sm border px-3 text-label whitespace-nowrap transition-[background-color,color] duration-[var(--motion-fast)] focus-visible:outline-offset-1 disabled:cursor-not-allowed disabled:opacity-45',
+    selected
+      ? 'bg-surface border-line text-ink font-medium'
+      : 'text-ink-secondary not-disabled:hover:text-ink border-transparent font-normal',
     className,
   );
 }
@@ -34,7 +40,7 @@ export function tabClasses(selected: boolean, className?: string) {
  * icon segments one control wide.
  */
 export const MODE_TRACK =
-  'bg-surface-sunken shell:h-[var(--control-md)] shell:w-full shell:flex-row shell:items-center flex w-[var(--control-md)] flex-col gap-0.5 rounded-md p-0.5';
+  'overlay-pressed shell:h-[var(--control-md)] shell:w-full shell:flex-row shell:items-center flex w-[var(--control-md)] flex-col gap-0.5 rounded-md p-0.5';
 
 export function modeSegmentClasses(selected: boolean) {
   return tabClasses(
@@ -44,7 +50,7 @@ export function modeSegmentClasses(selected: boolean) {
 }
 
 /**
- * The count a tab, segment or filter chip carries after its label: Geist at
+ * The count a tab, segment or filter chip carries after its label: the sans face at
  * the control's own size, `ink-muted`, in brackets ("All signals (107)",
  * decision D16), never mono. Its text leads with a space, so an accessible
  * name reads "All signals (107)".
@@ -78,11 +84,6 @@ export type TabsProps<T extends string> = TabStripProps<T> & {
   rootClassName?: string;
   /** Section tabs over their panel: one workspace gap between strip and panel. */
   spaced?: boolean;
-  /**
-   * Filters that apply to every tab, at the strip's right end on the same row,
-   * so the panel below spends no row on them.
-   */
-  controls?: ReactNode;
 };
 
 /**
@@ -119,7 +120,11 @@ export type TabRowProps<T extends string = string> = Readonly<
   Pick<TabStripProps<T>, 'items' | 'ariaLabel' | 'onIntent'>
 >;
 
-/** TabRow — the route's navigation band: tabs and nothing else, inside a `TabsRoot`. */
+/**
+ * TabRow — the route's navigation strip, inside a `TabsRoot`. The page shell
+ * sets a control row of filters alone right after it (D60); a row with a
+ * view, search or action stays the band under it (D57).
+ */
 export function TabRow<T extends string>({ items, ariaLabel, onIntent }: TabRowProps<T>) {
   return <TabStrip items={items} ariaLabel={ariaLabel} onIntent={onIntent} />;
 }
@@ -134,10 +139,9 @@ function TabStrip<T extends string>({
   className,
   onIntent,
   fill = false,
-  controls,
-}: Readonly<TabStripProps<T> & { controls?: ReactNode }>) {
+}: Readonly<TabStripProps<T>>) {
   const active = useContext(ActiveTabContext);
-  const list = (
+  return (
     <TabsPrimitive.List
       aria-label={ariaLabel}
       className={cn(TAB_TRACK, fill && 'flex w-full', className)}
@@ -162,15 +166,6 @@ function TabStrip<T extends string>({
         </TabsPrimitive.Trigger>
       ))}
     </TabsPrimitive.List>
-  );
-  if (controls == null) return list;
-  return (
-    <div className="flex min-w-0 items-center justify-between gap-4">
-      {list}
-      <div data-tab-controls="" className="flex shrink-0 items-center gap-2">
-        {controls}
-      </div>
-    </div>
   );
 }
 

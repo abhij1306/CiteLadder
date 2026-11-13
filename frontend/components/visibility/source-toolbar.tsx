@@ -1,8 +1,7 @@
-'use client';
-
 import type { ReactNode } from 'react';
 import { Download } from 'lucide-react';
 
+import type { FilterDefinition } from '@/components/ui/all-filters';
 import { Button } from '@/components/ui/button';
 import type { FilterBarProps } from '@/components/ui/filter-bar';
 import { Icon } from '@/components/ui/icon';
@@ -15,7 +14,7 @@ const DOMAIN_HEADERS = [
   'Domain',
   'Domain type',
   'Cited in',
-  'Retrieved in',
+  'Retrieved',
   'Pages cited',
   'Citations',
   'Citation share',
@@ -28,7 +27,7 @@ const URL_HEADERS = [
   'URL type',
   'On the page',
   'Cited in',
-  'Retrieved in',
+  'Retrieved',
   'Citation rate',
   'Citations',
   'Mentions',
@@ -37,7 +36,9 @@ const URL_HEADERS = [
 ] as const;
 
 /**
- * Search, the type filter and export, above whichever table is showing.
+ * The table's toolbar, above whichever table is showing (D57): the Domains |
+ * URLs switch (`view`, the inventory only), search, All filters (domain,
+ * type, standing), then Export at the end.
  *
  * Export writes the rows AS SHOWN — after the filter, the search and the sort.
  * Widening it to the unfiltered set would hand back a different answer from the
@@ -46,21 +47,20 @@ const URL_HEADERS = [
  */
 export function sourceTableToolbar({
   dimension,
+  view,
   search,
   onSearch,
   rows,
   domain,
-  typeControl,
-  domainControl,
+  filters,
 }: Readonly<{
   dimension: 'domain' | 'url';
+  view?: ReactNode;
   search: string;
   onSearch: (value: string) => void;
   rows: readonly SourceItem[];
   domain: string | null;
-  typeControl: ReactNode;
-  /** Narrows the URL table to one publisher, above the URL column. */
-  domainControl?: ReactNode;
+  filters?: readonly FilterDefinition[];
 }>): FilterBarProps {
   const onExport = () => {
     const stamp = new Date().toISOString().slice(0, 10);
@@ -102,6 +102,7 @@ export function sourceTableToolbar({
   };
 
   return {
+    view,
     search: (
       <SearchField
         value={search}
@@ -111,12 +112,7 @@ export function sourceTableToolbar({
         aria-label={dimension === 'url' ? 'Search URLs' : 'Search domains'}
       />
     ),
-    filters: (
-      <>
-        {domainControl}
-        {typeControl}
-      </>
-    ),
+    filters,
     actions: (
       <Button variant="secondary" onClick={onExport} disabled={rows.length === 0}>
         <Icon icon={Download} />

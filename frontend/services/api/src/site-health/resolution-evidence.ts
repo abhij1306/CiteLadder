@@ -177,6 +177,24 @@ const isRedirectingLink = (resolution: Resolution | undefined) =>
   (resolution.status !== null || resolution.errorCode === REDIRECT_LIMIT) &&
   redirects(resolution);
 
+type TargetJudgement = 'limited' | 'excluded' | 'unfetched' | 'shared' | 'passed' | 'broken';
+
+/**
+ * How one target counts: rate limited, excluded, never answered, a broken
+ * sitewide link judged once on the crawl root, else passed or broken.
+ */
+function judgeTarget(
+  resolution: Resolution | undefined,
+  sitemap: boolean,
+  sitewide: boolean,
+): TargetJudgement {
+  if (resolution?.status === 429) return 'limited';
+  if (resolution && isExcludedTarget(resolution)) return 'excluded';
+  if (resolution?.status === undefined || resolution.status === null) return 'unfetched';
+  if (!sitemap && sitewide && isBroken(resolution.status, false)) return 'shared';
+  return isBroken(resolution.status, sitemap) ? 'broken' : 'passed';
+}
+
 export function resolutionSet(
   targets: string[],
   resolutions: Map<string, Resolution>,
@@ -184,29 +202,17 @@ export function resolutionSet(
 ): RuleEvaluation {
   const { sitemap = false, sitewide = new Set<string>() } = options;
   const rule = sitemap ? 'technical.sitemap_url_unreachable' : 'technical.broken_internal_link';
-  const checked: string[] = [];
-  const limited: string[] = [];
-  const broken: string[] = [];
-  const excluded: string[] = [];
-  const shared: string[] = [];
-  for (const target of targets) {
-    const resolution = resolutions.get(target);
-    if (resolution?.status === 429) {
-      limited.push(target);
-      continue;
-    }
-    if (resolution && isExcludedTarget(resolution)) {
-      excluded.push(target);
-      continue;
-    }
-    if (resolution?.status === undefined || resolution.status === null) continue;
-    if (!sitemap && sitewide.has(target) && isBroken(resolution.status, false)) {
-      shared.push(target);
-      continue;
-    }
-    checked.push(target);
-    if (isBroken(resolution.status, sitemap)) broken.push(target);
-  }
+  const judgements = targets.map((target) => ({
+    target,
+    judgement: judgeTarget(resolutions.get(target), sitemap, sitewide.has(target)),
+  }));
+  const having = (...kinds: TargetJudgement[]) =>
+    judgements.filter(({ judgement }) => kinds.includes(judgement)).map(({ target }) => target);
+  const checked = having('passed', 'broken');
+  const limited = having('limited');
+  const broken = having('broken');
+  const excluded = having('excluded');
+  const shared = having('shared');
   // Excluded targets are outside the set this rule judges, not passes within it;
   // a broken sitewide link is judged once, on the crawl root.
   const judged = targets.length - excluded.length - shared.length;

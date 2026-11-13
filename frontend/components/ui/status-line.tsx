@@ -46,13 +46,15 @@ export function StatusLine({
   testId,
 }: Readonly<{
   messages: readonly StatusMessage[];
-  resting: string;
+  /** Null keeps the line's height with nothing in it. */
+  resting: string | null;
   testId?: string;
 }>) {
   const [first, ...rest] = messages;
   const tone = first?.tone ?? 'neutral';
   const text = first?.text ?? resting;
   const ToneIcon = TONE_ICON[tone];
+  if (!text) return <output data-testid={testId} className="h-[var(--control-md)]" />;
   return (
     <output
       data-testid={testId}

@@ -62,6 +62,16 @@ const byCode = new Map(
   Object.values(locations.countries).map((entry) => [entry.location_code, entry]),
 );
 
+/**
+ * The countries a surface measures, with their location codes, in the
+ * reviewed file's order: the markets a screen offers and names.
+ */
+export function surfaceMarkets(surface: SearchSurface) {
+  return Object.entries(locations.countries)
+    .filter(([, entry]) => entry.surfaces.includes(surface))
+    .map(([country_code, entry]) => ({ country_code, location_code: entry.location_code }));
+}
+
 /** The DataForSEO location code of a market country, or 0 when no surface supports it. */
 function locationCodeOf(country: string): number {
   return locations.countries[country.trim().toUpperCase()]?.location_code ?? 0;

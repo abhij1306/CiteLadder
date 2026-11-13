@@ -5,7 +5,7 @@ export const VISIBILITY_METRICS = [
   { value: 'owned_citation_rate', label: 'Owned citation rate' },
 ] as const;
 
-/** Table headers abbreviate share of voice to "S.O.V."; this tooltip names it. */
+/** What share of voice counts, behind the header that names it. */
 export const SHARE_OF_VOICE_HINT =
   'Share of voice: your share of every brand mention across the brands you track.';
 

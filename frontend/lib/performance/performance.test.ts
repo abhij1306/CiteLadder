@@ -12,9 +12,8 @@ import {
   computeTickIndices,
   defaultSort,
   describeWindow,
-  differenceTone,
-  formatDifference,
   formatMetric,
+  metricDelta,
   metricDifference,
   toChartPoints,
   toggleSort,
@@ -58,9 +57,23 @@ describe('metric formatting', () => {
 describe('comparison differences', () => {
   it('is the absolute difference of two observed values', () => {
     expect(metricDifference(14, 8)).toBe(6);
-    expect(formatDifference('clicks', 6)).toBe('+6');
-    expect(formatDifference('clicks', -3)).toBe('−3');
-    expect(formatDifference('clicks', 0)).toBe('0');
+    expect(metricDelta('clicks', -3)).toEqual({
+      value: -3,
+      precision: 0,
+      unit: '',
+      policy: 'higher-is-better',
+    });
+  });
+
+  it('states a CTR difference in points at the one decimal CTR itself shows', () => {
+    expect(formatMetric('ctr', 0.0353)).toBe('3.5%');
+    const delta = metricDelta('ctr', 0.0123);
+    expect(delta.value).toBeCloseTo(1.23);
+    expect(delta).toMatchObject({ precision: 1, unit: ' pp' });
+  });
+
+  it('treats a falling average position as the improvement', () => {
+    expect(metricDelta('position', -2)).toMatchObject({ value: -2, policy: 'lower-is-better' });
   });
 
   it('is unavailable when either side was not observed', () => {
@@ -69,16 +82,7 @@ describe('comparison differences', () => {
     expect(metricDifference(14, null)).toBeNull();
     expect(metricDifference(14, undefined)).toBeNull();
     expect(metricDifference(null, 8)).toBeNull();
-    expect(formatDifference('clicks', null)).toMatch(/not measured/i);
-  });
-
-  it('inverts tone for position, where lower is better', () => {
-    expect(differenceTone('clicks', 5)).toBe('up');
-    expect(differenceTone('clicks', -5)).toBe('down');
-    expect(differenceTone('position', -2)).toBe('up');
-    expect(differenceTone('position', 2)).toBe('down');
-    expect(differenceTone('position', 0)).toBe('flat');
-    expect(differenceTone('clicks', null)).toBe('flat');
+    expect(metricDelta('ctr', null).value).toBeNull();
   });
 });
 
@@ -88,9 +92,9 @@ describe('window description', () => {
     expect(windowLength(window())).toBe(7);
   });
 
-  it('says so when no dates resolved', () => {
+  it('says nothing when no dates resolved', () => {
     const unresolved = window({ snapshot_id: null, window_start: '', window_end: '' });
-    expect(describeWindow(unresolved)).toBe('No dates resolved');
+    expect(describeWindow(unresolved)).toBe('');
     expect(windowLength(unresolved)).toBe(0);
   });
 });

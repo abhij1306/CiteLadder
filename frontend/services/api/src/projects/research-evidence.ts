@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 
 import { z } from 'zod';
 
+import { normalizeDomain } from '../analysis/domains.ts';
 import { policy } from '../config.ts';
 import { extractPage, offeringLinks, type PageEvidence } from './html-evidence.ts';
 import { publicUrl, type WebsiteFetcher } from '../safe-fetch.ts';
@@ -320,9 +321,7 @@ export async function collectIdentityResearch(
       await /* NOSONAR -- Batches cap provider requests at the configured concurrency. */ Promise.allSettled(
         selected
           .slice(offset, offset + settings.keenable_concurrency)
-          .map((item) =>
-            client.page(item, new URL(item.source_url).hostname.replace(/^www\./u, '') === domain),
-          ),
+          .map((item) => client.page(item, normalizeDomain(item.source_url) === domain)),
       );
     logRejected('brand_discovery.identity_fetch_failed', fetched);
     for (const result of fetched) if (result.status === 'fulfilled') pages.push(result.value);

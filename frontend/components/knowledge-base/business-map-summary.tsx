@@ -1,5 +1,3 @@
-'use client';
-
 import { useQuery } from '@tanstack/react-query';
 import { z } from 'zod';
 
@@ -10,8 +8,7 @@ import { ChipList } from '@/components/ui/chip-input';
 import { FactList, type Fact } from '@/components/ui/facts';
 import { Stack } from '@/components/ui/layout';
 import { panelClasses } from '@/components/ui/panel';
-import { QueryState } from '@/components/ui/query-state';
-import { readErrorProps } from '@/components/ui/read-error';
+import { QueryState, screenState } from '@/components/ui/query-state';
 import { textRole } from '@/components/ui/typography';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
 import { projectQueries } from '@/lib/api/projects';
@@ -91,17 +88,11 @@ function BusinessMapBody({
   workspaceId,
   profile,
 }: Readonly<{ projectId: string; workspaceId: string; profile: BrandProfile }>) {
-  const query = useQuery(projectQueries.businessMap({ workspaceId, projectId }));
-  if (query.isPending) return <QueryState kind="loading" label="Loading the business map" />;
-  if (query.isError)
-    return (
-      <QueryState
-        kind="error"
-        {...readErrorProps(query)}
-        fallback="The business map could not be loaded."
-      />
-    );
-  const draft = businessDraft(profile, query.data);
+  const read = screenState(useQuery(projectQueries.businessMap({ workspaceId, projectId })), {
+    subject: 'the business map',
+  });
+  if (read.kind === 'state') return <QueryState {...read.state} />;
+  const draft = businessDraft(profile, read.data);
   const inferred = inferredFields(profile);
   const facts: Fact[] = [
     { label: 'Buyer roles', value: chips(draft.buyerRoles, inferred('buyer_roles')) },
@@ -129,7 +120,7 @@ function BusinessMapBody({
           key={map.offering}
           aria-label={map.offering}
           gap="compact"
-          className={panelClasses({ tone: 'tonal' })}
+          className={panelClasses()}
         >
           <h4 className={textRole('itemTitle')}>{map.offering}</h4>
           <FactList

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Selectable } from 'kysely';
 import type { Database } from '../db/database.ts';
+import { isForeignKeyViolation } from '../db/errors.ts';
 import type { ProviderConnections } from '../generated/db-schema.ts';
 import { ApiError, notFound } from '../errors.ts';
 import { createSecretCipher } from '../integrations/fernet.ts';
@@ -271,7 +272,7 @@ export async function deleteConnection(
       await recordSecurityEvent(trx, 'credential.delete', actorId, workspaceId, id);
     });
   } catch (error) {
-    if (error instanceof Error && 'code' in error && error.code === '23503')
+    if (isForeignKeyViolation(error))
       throw new ApiError(409, 'Connection is referenced by immutable execution evidence');
     throw error;
   }

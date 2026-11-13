@@ -11,7 +11,8 @@
  * and stays out of them.
  */
 import type { Database } from '../db/database.ts';
-import { isTerminal, taskCounters } from './reads/crawl.ts';
+import { isTerminal } from './reads/crawl.ts';
+import { taskCounters } from './reads/crawl-counters.ts';
 import type { Crawl } from './site-task.ts';
 
 /** Persist the counters of a crawl whose in-memory status is already terminal. */

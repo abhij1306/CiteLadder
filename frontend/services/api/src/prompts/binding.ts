@@ -16,6 +16,7 @@ import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { record, strings } from '../db/json.ts';
 import { ApiError } from '../errors.ts';
+import type { ProjectScope } from '../projects/brand-profile.ts';
 
 const {
   min_token_chars: MIN_TOKEN,
@@ -166,19 +167,23 @@ function businessContextValues(
 }
 
 /**
- * The project's identity vocabulary; the caller authorized the project.
+ * The scope's project identity vocabulary.
  * `excluded` business-context fields do not bind (generated text omits
  * service areas, so naming a place cannot stand in for an offering).
  */
 export async function loadVocabulary(
   db: Database,
-  projectId: string,
+  { workspaceId, projectId }: ProjectScope,
   excluded: readonly string[] = [],
 ): Promise<Vocabulary> {
   const [brand, domains, topics] = await Promise.all([
     db
       .selectFrom('brands')
-      .leftJoin('brand_profiles', 'brand_profiles.brand_id', 'brands.id')
+      .leftJoin('brand_profiles', (join) =>
+        join
+          .onRef('brand_profiles.brand_id', '=', 'brands.id')
+          .onRef('brand_profiles.workspace_id', '=', 'brands.workspace_id'),
+      )
       .select([
         'brands.id',
         'brands.name',
@@ -188,12 +193,19 @@ export async function loadVocabulary(
         'brand_profiles.positioning',
         'brand_profiles.target_audience',
       ])
+      .where('brands.workspace_id', '=', workspaceId)
       .where('brands.project_id', '=', projectId)
       .executeTakeFirst(),
-    db.selectFrom('owned_domains').select('domain').where('project_id', '=', projectId).execute(),
+    db
+      .selectFrom('owned_domains')
+      .select('domain')
+      .where('workspace_id', '=', workspaceId)
+      .where('project_id', '=', projectId)
+      .execute(),
     db
       .selectFrom('topics')
       .select(['name', 'description'])
+      .where('workspace_id', '=', workspaceId)
       .where('project_id', '=', projectId)
       .execute(),
   ]);
@@ -203,6 +215,7 @@ export async function loadVocabulary(
     const aliases = await db
       .selectFrom('brand_aliases')
       .select('alias')
+      .where('workspace_id', '=', workspaceId)
       .where('brand_id', '=', brand.id)
       .execute();
     names.push(brand.name, ...aliases.map((row) => row.alias));

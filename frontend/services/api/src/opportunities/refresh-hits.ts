@@ -1,7 +1,7 @@
 /**
  * Opportunity hits mapped from other owners' persisted signals: approved
  * Change Intelligence regressions, promoted Demand signals and Commerce
- * catalog/shelf gaps.
+ * product-metric, catalog and shelf gaps.
  */
 import { policy } from '../config.ts';
 import { siteHealth } from '../config/site-health.ts';
@@ -11,6 +11,7 @@ import { targetKey, type TargetRef } from '../analysis/opportunities/targets.ts'
 import type { Database } from '../db/database.ts';
 import { WorkspaceScope } from '../db/workspace-scope.ts';
 import { record } from '../db/json.ts';
+import { productMetricHits } from './product-metric-rules.ts';
 import type { DemandSource, Scope } from './sources.ts';
 import { compareText } from '../text-order.ts';
 
@@ -214,7 +215,10 @@ function demandHit(snapshotId: string, signal: DemandSignal): DetectorHit | null
     source_analysis_ids: [],
     source_issue_ids: [],
     source_metric_ids: Array.isArray(metricIds) ? [...metricIds] : [],
-    value_factor: Math.max(0.01, Math.min(1, (signal.priority_score || 0) / 100)),
+    value_factor: Math.max(
+      o.DEMAND_SIGNAL_VALUE_FACTOR_FLOOR,
+      Math.min(1, (signal.priority_score || 0) / o.DEMAND_SIGNAL_PRIORITY_SCALE),
+    ),
     gap_factor: o.DEMAND_SIGNAL_GAP_FACTOR,
   };
 }
@@ -268,21 +272,6 @@ type ShelfSnapshot = {
   target_kind: string;
   product_visibility: number;
 };
-
-function unmentionedHits(snapshots: ShelfSnapshot[], auditId: string): DetectorHit[] {
-  const rule = rules[o.RULE_PRODUCT_NOT_MENTIONED]!;
-  if (!rule.enabled) return [];
-  return snapshots
-    .filter((row) => row.target_kind === 'product' && row.product_visibility === 0)
-    .map((row) =>
-      commerceHit(
-        rule.rule_id,
-        { kind: 'product', product_id: row.target_id },
-        { product_id: row.target_id, product_visibility: 0, audit_id: auditId },
-        [row.id],
-      ),
-    );
-}
 
 const CATALOG_FIELDS = ['name', 'description', 'brand', 'price', 'currency'] as const;
 type CatalogProduct = Record<(typeof CATALOG_FIELDS)[number], unknown> & { id: string };
@@ -379,12 +368,9 @@ async function alternativeHits(
   return results;
 }
 
-/** Commerce catalog and shelf gaps for one audit, in (rule, target) order. */
-export async function commerceHits(
-  db: Database,
-  scope: Scope,
-  auditId: string,
-): Promise<DetectorHit[]> {
+/** The latest Commerce run's category shelf gaps; none without a Commerce run. */
+async function shelfHits(db: Database, scope: Scope, auditId: string | null) {
+  if (auditId === null) return [];
   const snapshots = await new WorkspaceScope(scope.workspaceId)
     .selectFrom(db, 'commerce_shelf_snapshots')
     .select(['id', 'target_id', 'target_kind', 'product_visibility'])
@@ -394,10 +380,24 @@ export async function commerceHits(
     .where('successful_execution_count', '>', 0)
     .orderBy('id')
     .execute();
+  return alternativeHits(db, scope.workspaceId, snapshots, auditId);
+}
+
+/**
+ * Commerce gaps, in (rule, target) order: the per-product metric findings
+ * over the window ending at `asOf`, catalog field gaps, and the latest
+ * Commerce run's category shelf gaps.
+ */
+export async function commerceHits(
+  db: Database,
+  scope: Scope,
+  auditId: string | null,
+  asOf: Date,
+): Promise<DetectorHit[]> {
   const hits = [
-    ...unmentionedHits(snapshots, auditId),
+    ...(await productMetricHits(db, scope, asOf)),
     ...(await catalogFieldHits(db, scope)),
-    ...(await alternativeHits(db, scope.workspaceId, snapshots, auditId)),
+    ...(await shelfHits(db, scope, auditId)),
   ];
   return hits.sort(
     (a, b) =>

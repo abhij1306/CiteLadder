@@ -1,8 +1,8 @@
 /**
  * Discovery-time canonical aliases: a fetched, system-selected page whose
- * declared canonical names another active page of this crawl is excluded
- * rather than analyzed twice. The whole-crawl alias graph (cycles,
- * representatives) is resolved again at finalization.
+ * declared canonical names another active, already fetched page of this crawl
+ * is excluded rather than analyzed twice. The whole-crawl alias graph (cycles,
+ * representatives, targets fetched later) is resolved again at finalization.
  */
 import { sql } from 'kysely';
 import { getDomain } from 'tldts';
@@ -41,7 +41,14 @@ function targetHash(crawl: Crawl, hash: string, declared: string, base: string) 
   return target.hash;
 }
 
-/** The hash this page aliases when it is a system-managed member and its target is an active one. */
+/**
+ * The hash this page aliases when its target is an active member this crawl
+ * already fetched. The page is a sample's selected member, or any page a full
+ * crawl's HTML walk fetched: a walked page joins the tracked set only after
+ * this check, so an alias never does. A target not fetched yet may still fail
+ * and be released, so the alias waits for finalization, which aliases only
+ * toward a target that ended active (`reconcileDuplicateAliases`).
+ */
 export async function duplicateOf(
   trx: Database,
   crawl: Crawl,
@@ -58,13 +65,13 @@ export async function duplicateOf(
         .onRef('o.project_id', '=', 'u.project_id')
         .on('o.crawl_id', '=', crawl.id),
     )
-    .innerJoin('monitored_site_urls as m', (join) =>
+    .leftJoin('monitored_site_urls as m', (join) =>
       join
         .onRef('m.site_url_id', '=', 'u.id')
         .onRef('m.workspace_id', '=', 'u.workspace_id')
         .onRef('m.project_id', '=', 'u.project_id'),
     )
-    .select(['u.url_hash', 'm.active', 'm.selection_source'])
+    .select(['u.url_hash', 'm.active'])
     .distinct()
     .where('u.workspace_id', '=', crawl.workspace_id)
     .where('u.project_id', '=', crawl.project_id)
@@ -72,11 +79,29 @@ export async function duplicateOf(
     .execute();
   const source = rows.find((row) => row.url_hash === page.hash);
   const destination = rows.find((row) => row.url_hash === target);
-  if (!source?.active || source.selection_source === 'user') return '';
-  return destination?.active ? target : '';
+  if (!source || (crawl.sample_mode && !source.active) || !destination?.active) return '';
+  const fetched = await trx
+    .selectFrom('site_crawl_tasks as t')
+    .innerJoin('site_fetch_artifacts as a', (join) =>
+      join
+        .onRef('a.task_id', '=', 't.id')
+        .onRef('a.workspace_id', '=', 't.workspace_id')
+        .onRef('a.crawl_id', '=', 't.crawl_id'),
+    )
+    .select('a.id')
+    .where('t.workspace_id', '=', crawl.workspace_id)
+    .where('t.crawl_id', '=', crawl.id)
+    .where('t.url_hash', '=', target)
+    .limit(1)
+    .executeTakeFirst();
+  return fetched ? target : '';
 }
 
-/** Exclude fetched aliases, release their system memberships and retire their current analyses. */
+/**
+ * Exclude fetched aliases, release their sample memberships and retire their
+ * current analyses. A tracked alias stays tracked (only a lowered limit removes a
+ * tracked page); its analysis is retired each crawl like any alias's.
+ */
 export async function markDuplicates(trx: Database, crawl: Crawl, hashes: string[]) {
   if (!hashes.length) return;
   const urls = await trx
@@ -124,20 +149,15 @@ export async function reconcileDuplicateAliases(db: Database, crawl: Crawl) {
         .onRef('m.workspace_id', '=', 'u.workspace_id')
         .onRef('m.project_id', '=', 'u.project_id'),
     )
-    .select(['u.url_hash', 'm.active', 'm.selection_source'])
+    .select(['u.url_hash', 'm.active'])
     .distinct()
     .where('u.workspace_id', '=', crawl.workspace_id)
     .where('u.project_id', '=', crawl.project_id)
     .execute();
   const admitted = new Set(rows.map((row) => row.url_hash));
   const active = new Set(rows.filter((row) => row.active).map((row) => row.url_hash));
-  // User selections and the crawl root, which carries the site-wide checks every page scores.
-  const protectedHashes = new Set([
-    ...rows
-      .filter((row) => row.active && row.selection_source === 'user')
-      .map((row) => row.url_hash),
-    rootHash(crawl),
-  ]);
+  // The crawl root carries the site-wide checks every page scores.
+  const protectedHashes = new Set([rootHash(crawl)]);
   const artifacts = await db
     .selectFrom('site_crawl_tasks as t')
     .innerJoin('site_fetch_artifacts as a', (join) =>
@@ -177,7 +197,7 @@ export type AliasGraph = {
   /** Admitted hashes this crawl fetched. */
   known: Set<string>;
   active: Set<string>;
-  /** Active user selections: never excluded, and a chain stops at one. */
+  /** Pages never excluded (the crawl root); a chain stops at one. */
   protectedHashes: Set<string>;
 };
 

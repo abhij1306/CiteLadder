@@ -8,7 +8,7 @@ import { defineGetRoute } from './define.ts';
 import { pagesExport, pagesRead, urlRead } from '../ai-traffic/pages.ts';
 import { insightsRead } from '../ai-traffic/insights.ts';
 import { crawlLogs } from '../config/crawl-logs.ts';
-import { tableCsv } from '../http/table-export.ts';
+import { csvDownload } from '../http/table-export.ts';
 
 const root = '/api/v1/projects/{project_id}/ai-traffic';
 const path = { project_id: { scalar: { kind: 'uuid' }, required: true } } as const;
@@ -47,46 +47,42 @@ export const trafficPageRoutes = [
     response: z.string().meta({ format: 'binary' }),
     async handle({ c, db }, { path, query }) {
       const scope = { workspaceId: c.get('workspace').workspaceId, projectId: path.project_id };
-      const items = (await pagesExport(db, scope, query)).map((r) => ({
-        ...r,
-        crawl_state: r.crawl.state,
-        requests: r.crawl.value,
-        referral_state: r.referrals.state,
-        sessions: r.referrals.value,
-        citation_state: r.citations.state,
-        tracked_citations: r.citations.value,
-        findings_state: r.findings.state,
-        open_findings: r.findings.value,
-      }));
-      return new Response(
-        tableCsv(
-          [
-            'canonical_url',
-            'url_hash',
-            'folder',
-            'resource_class',
-            'crawl_state',
-            'requests',
-            'last_crawl',
-            'errors_4xx',
-            'errors_5xx',
-            'referral_state',
-            'sessions',
-            'key_events',
-            'citation_state',
-            'tracked_citations',
-            'findings_state',
-            'open_findings',
-          ],
-          items,
-        ),
-        {
-          headers: {
-            'content-type': 'text/csv; charset=utf-8',
-            'content-disposition': 'attachment; filename="ai-traffic-pages.csv"',
-            'cache-control': 'no-store',
-          },
-        },
+      const pages = await pagesExport(db, scope, query);
+      const batches = (async function* () {
+        for await (const rows of pages)
+          yield rows.map((r) => ({
+            ...r,
+            crawl_state: r.crawl.state,
+            requests: r.crawl.value,
+            referral_state: r.referrals.state,
+            sessions: r.referrals.value,
+            citation_state: r.citations.state,
+            tracked_citations: r.citations.value,
+            findings_state: r.findings.state,
+            open_findings: r.findings.value,
+          }));
+      })();
+      return csvDownload(
+        'ai-traffic-pages.csv',
+        [
+          'canonical_url',
+          'url_hash',
+          'folder',
+          'resource_class',
+          'crawl_state',
+          'requests',
+          'last_crawl',
+          'errors_4xx',
+          'errors_5xx',
+          'referral_state',
+          'sessions',
+          'key_events',
+          'citation_state',
+          'tracked_citations',
+          'findings_state',
+          'open_findings',
+        ],
+        batches,
       );
     },
   }),

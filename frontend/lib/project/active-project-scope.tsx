@@ -1,5 +1,3 @@
-'use client';
-
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
 
 import type { Project } from '@citeladder/contracts';

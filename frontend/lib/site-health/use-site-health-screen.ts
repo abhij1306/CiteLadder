@@ -1,5 +1,3 @@
-'use client';
-
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
@@ -195,8 +193,8 @@ export function useSiteHealthScreen() {
       },
     });
   };
-  // Reruns the shown crawl's scope, so Changes always has a comparable baseline.
-  const recrawl = () => crawl && startCrawl({ project_id: projectId, recrawl_of: crawl.id });
+  // A failed start is retried with exactly what it sent: its project and robots choice.
+  const retryStart = () => startCrawl(createMutation.variables);
   const cancelCrawl = () => crawl && cancelMutation.mutate(crawl.id);
 
   // A create is genuinely in flight, or its projection refresh has not yet
@@ -234,7 +232,7 @@ export function useSiteHealthScreen() {
     createMutation,
     cancelMutation,
     startCrawl,
-    recrawl,
+    retryStart,
     cancelCrawl,
     runExport,
     exporting,

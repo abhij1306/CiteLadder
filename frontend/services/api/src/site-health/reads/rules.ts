@@ -1,6 +1,8 @@
 /** The rule catalog as the read API presents it: labels, routes, ranks and group identity. */
+import { issueSectionSchema, type IssueSection } from '@citeladder/contracts/site-health';
 import { policy } from '../../config.ts';
 import { sql } from 'kysely';
+import { z } from 'zod';
 import { record } from '../../db/json.ts';
 import { compareText } from '../../text-order.ts';
 import { uuidV5 } from '../../uuid-v5.ts';
@@ -44,6 +46,24 @@ export const remediationRoute = (ruleId: string) =>
 
 export const ruleScoreRoles = (ruleId: string) =>
   [...(RULES.get(ruleId)?.score_roles ?? [])].sort(compareText);
+
+const SECTION_BY_CATEGORY: Readonly<Record<string, IssueSection>> = z
+  .record(z.string(), issueSectionSchema)
+  .parse(reads.issue_section_by_category);
+
+/**
+ * The Issues tab a finding belongs to: its category's configured section
+ * (titles, descriptions, headings and answer content read as Content), else
+ * its own dimension.
+ */
+export const issueSection = (issue: { dimension: string; category: string }): IssueSection =>
+  SECTION_BY_CATEGORY[issue.category] ?? issueSectionSchema.parse(issue.dimension);
+
+/** The Issues tab of a catalog rule; a retired or unknown rule has none. */
+export function ruleSection(ruleId: string): IssueSection | null {
+  const rule = RULES.get(ruleId);
+  return rule ? issueSection(rule) : null;
+}
 
 /** A defect's band by severity; an advisory's by its readiness dimension's weight. */
 export function issueImpact(ruleId: string, findingClass: string, severity: string) {
@@ -100,8 +120,13 @@ export function siteLevelScope(
   return { ...scope, affected: typeof counted === 'number' ? counted : 0 };
 }
 
-/** Rules whose finding is persisted once for the site (`siteLevelScope`), as SQL. */
-export const siteLevelRule = sql`(i.rule_id like 'architecture.%' or i.rule_id = any(${sitewideLinkRules}::text[]))`;
+/** Rules whose finding is persisted once for the site (`siteLevelScope`), as SQL over `alias`. */
+export const siteLevelRuleOf = (alias: string) => {
+  const rule = sql.ref(`${alias}.rule_id`);
+  return sql`(${rule} like 'architecture.%' or ${rule} = any(${sitewideLinkRules}::text[]))`;
+};
+/** `siteLevelRuleOf` over the issue alias `i`. */
+export const siteLevelRule = siteLevelRuleOf('i');
 
 function wholeSiteScope(
   ruleId: string,

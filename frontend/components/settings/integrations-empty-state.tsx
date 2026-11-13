@@ -1,9 +1,8 @@
-'use client';
-
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { integrationsApi } from '@/lib/api/integrations';
 import { hardNavigate } from '@/lib/navigation/hard-navigate';
+import { useWorkspaceCapability } from '@/lib/project/project-context';
 
 /**
  * Settings → Integrations when the workspace has no connections yet. It is the
@@ -17,30 +16,35 @@ import { hardNavigate } from '@/lib/navigation/hard-navigate';
  * itself may still have been created with a Google ID).
  */
 export function IntegrationsEmptyState({ workspaceId }: Readonly<{ workspaceId: string }>) {
+  // Connecting is a credential action, offered only to a role that may take it.
+  const canManage = useWorkspaceCapability('manage_credentials');
   return (
     <Card data-testid="integrations-empty-state">
       <CardHeader
         actions={
-          <>
-            <Button
-              variant="secondary"
-              onClick={() => hardNavigate(integrationsApi.oauthStartUrl('bing', workspaceId))}
-            >
-              Connect Bing
-            </Button>
-            <Button
-              variant="primary"
-              onClick={() => hardNavigate(integrationsApi.oauthStartUrl('gsc', workspaceId))}
-            >
-              Connect Google
-            </Button>
-          </>
+          canManage ? (
+            <>
+              <Button
+                variant="secondary"
+                onClick={() => hardNavigate(integrationsApi.oauthStartUrl('bing', workspaceId))}
+              >
+                Connect Bing
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => hardNavigate(integrationsApi.oauthStartUrl('gsc', workspaceId))}
+              >
+                Connect Google
+              </Button>
+            </>
+          ) : undefined
         }
       >
         <CardTitle>No integrations connected</CardTitle>
         <CardDescription>
-          One Google consent connects Search Console and Analytics 4. Bing Webmaster Tools needs its
-          own sign-in.
+          {canManage
+            ? 'One Google consent connects Search Console and Analytics 4. Bing Webmaster Tools needs its own sign-in.'
+            : 'A workspace Owner or Admin can connect Google Search Console, Analytics 4 and Bing Webmaster Tools.'}
         </CardDescription>
       </CardHeader>
     </Card>

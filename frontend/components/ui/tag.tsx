@@ -1,18 +1,16 @@
-'use client';
-
 import { useId, useState, type ComponentPropsWithoutRef } from 'react';
 import { X } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 
 /**
- * The tag face: 24px, the Geist label style (12px medium, normal tracking and
+ * The tag face: 24px, the sans label style (12px medium, normal tracking and
  * figures, set here so a tag inside a figure never inherits the figure's
- * tight tracking) in `ink` on `surface` with the xs ring, `radius-xs`. It is
+ * tight tracking) in `ink` on `surface` with a 1px `line` border, `radius-xs`. It is
  * never wider than its container.
  */
 export const TAG_FACE =
-  'bg-surface text-ink shadow-xs inline-flex h-6 max-w-full min-w-0 shrink-0 items-center gap-1 rounded-xs px-2 font-sans text-caption font-medium tracking-normal normal-nums whitespace-nowrap';
+  'bg-surface text-ink border-line border inline-flex h-6 max-w-full min-w-0 shrink-0 items-center gap-1 rounded-xs px-2 font-sans text-caption tracking-normal normal-nums whitespace-nowrap';
 
 /**
  * Tag — a neutral chip for a topic, engine or active filter, optionally
@@ -45,7 +43,7 @@ export function Tag({
           type="button"
           aria-label={`Remove ${removeLabel ?? (typeof children === 'string' ? children : 'tag')}`}
           onClick={onRemove}
-          className="focus-ring text-ink-muted hover:bg-surface-sunken hover:text-ink grid size-5 place-items-center rounded-xs transition-colors"
+          className="focus-ring text-ink-muted hover:overlay-hover hover:text-ink grid size-5 place-items-center rounded-xs transition-colors"
         >
           <X className="size-3.5" aria-hidden />
         </button>
@@ -69,7 +67,7 @@ export function TagGroup({ labels }: Readonly<{ labels: readonly string[] }>) {
       {labels.length > 2 ? (
         <button
           type="button"
-          className={cn(TAG_FACE, 'focus-ring hover:bg-surface-sunken')}
+          className={cn(TAG_FACE, 'focus-ring hover:overlay-hover')}
           aria-expanded={expanded}
           aria-controls={id}
           aria-label={expanded ? 'Show fewer tags' : `Show ${labels.length - 2} more tags`}

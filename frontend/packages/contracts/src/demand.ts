@@ -54,6 +54,42 @@ export const demandSnapshotSummarySchema = responseObject({
 });
 export type DemandSnapshotSummary = z.infer<typeof demandSnapshotSummarySchema>;
 
+/**
+ * The detectors' thresholds from the API's demand policy, sent with the
+ * snapshot so the screen states each rule from the values the detectors read
+ * and never restates them. Shares are fractions (0.1 is 10%).
+ */
+export const demandDetectorPolicySchema = responseObject({
+  striking_distance: responseObject({
+    min_impressions: z.number(),
+    min_position: z.number(),
+    max_position: z.number(),
+  }),
+  cannibalization: responseObject({
+    min_page_impressions: z.number(),
+    min_page_share: z.number(),
+  }),
+  ctr_gap: responseObject({
+    min_candidate_impressions: z.number(),
+    relative_threshold: z.number(),
+    absolute_threshold: z.number(),
+    min_cohort_rows: z.number(),
+    min_cohort_impressions: z.number(),
+  }),
+  low_ctr: responseObject({
+    min_impressions: z.number(),
+    ctr_threshold: z.number(),
+    max_signals: z.number(),
+  }),
+  trends: responseObject({
+    window_days: z.number(),
+    required_days: z.number(),
+    emerging_ratio: z.number(),
+    declining_ratio: z.number(),
+  }),
+});
+export type DemandDetectorPolicy = z.infer<typeof demandDetectorPolicySchema>;
+
 export const demandSnapshotSchema = responseObject({
   id: z.uuid(),
   project_id: z.uuid(),
@@ -70,6 +106,7 @@ export const demandSnapshotSchema = responseObject({
   analyzer_version: z.string(),
   created_at: z.string(),
   signals: z.array(demandSignalSchema),
+  detector_policy: demandDetectorPolicySchema,
 });
 
 export const demandRecomputeResponseSchema = responseObject({

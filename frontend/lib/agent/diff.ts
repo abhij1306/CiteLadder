@@ -37,18 +37,23 @@ function walk(a: string[], b: string[]): DiffLine[] {
   const lines: DiffLine[] = [];
   let i = 0;
   let j = 0;
-  while (i < a.length || j < b.length) {
-    if (i < a.length && j < b.length && a[i] === b[j]) {
-      lines.push({ kind: 'same', text: a[i]! });
+  for (;;) {
+    const left = a[i];
+    const right = b[j];
+    if (left !== undefined && left === right) {
+      lines.push({ kind: 'same', text: left });
       i++;
       j++;
-    } else if (j >= b.length || (i < a.length && at(i + 1, j) >= at(i, j + 1))) {
-      lines.push({ kind: 'removed', text: a[i++]! });
+    } else if (left !== undefined && (right === undefined || at(i + 1, j) >= at(i, j + 1))) {
+      lines.push({ kind: 'removed', text: left });
+      i++;
+    } else if (right !== undefined) {
+      lines.push({ kind: 'added', text: right });
+      j++;
     } else {
-      lines.push({ kind: 'added', text: b[j++]! });
+      return lines;
     }
   }
-  return lines;
 }
 
 export function diffLines(before: string, after: string): DiffLine[] | null {

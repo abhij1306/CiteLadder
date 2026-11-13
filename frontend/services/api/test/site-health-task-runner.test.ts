@@ -183,6 +183,28 @@ it('stops renewing a lease the same owner re-claimed at the next attempt', async
   await cancel(id);
 });
 
+it('never starts a stale claim once the same owner re-claimed the next attempt', async () => {
+  const seed = await runningCrawl();
+  const id = await fixtures.task(seed, 'link_metrics');
+  const worker = new SiteHealthWorker(db, {
+    owner: 'same-owner',
+    settings,
+    executors: { link_metrics: async () => undefined },
+  });
+  const stale = await lease(id, worker.owner, 0);
+  const reclaimed = reclaimedBySameOwner();
+  await db.updateTable('site_crawl_tasks').set(reclaimed).where('id', '=', id).execute();
+  await worker.execute(stale);
+
+  // The live claim is still leased, waiting for its own slot to start it.
+  expect(await row(id)).toMatchObject({
+    status: 'leased',
+    lease_owner: 'same-owner',
+    ...reclaimed,
+  });
+  await cancel(id);
+});
+
 it('leaves the live claim untouched when a stale claim of the same owner defers it', async () => {
   const seed = await runningCrawl();
   await db

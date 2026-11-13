@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { sql } from 'kysely';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   integrationSyncEnqueueSchema,
   integrationSyncRunSchema,
@@ -10,6 +10,7 @@ import { createApp } from '../src/app.ts';
 import { integrationSettings } from '../src/integrations/config.ts';
 import { enqueueSyncRun, enqueueHistoryBackfill } from '../src/integrations/sync.ts';
 import { enqueueTask } from '../src/queue/enqueue.ts';
+import { addDays } from '../src/calendar-days.ts';
 import { seedProject } from './referral-fixtures.ts';
 import {
   TEST_SESSION_COOKIE,
@@ -31,6 +32,20 @@ beforeAll(async () => {
   process.env.TZ = 'Asia/Kolkata';
   ownerId = await fixtures.user();
 });
+afterEach(() => {
+  vi.useRealTimers();
+});
+/**
+ * Pins the clock to the next `hour` o'clock UTC, after the fixtures' grants
+ * start, and returns days relative to that UTC day.
+ */
+function pinNextUtcHour(hour: number) {
+  const at = new Date();
+  at.setUTCHours(24 + hour, 0, 0, 0);
+  vi.useFakeTimers({ toFake: ['Date'], now: at });
+  const today = at.toISOString().slice(0, 10);
+  return (offset: number) => addDays(today, offset);
+}
 afterAll(async () => {
   if (originalTimezone === undefined) delete process.env.TZ;
   else process.env.TZ = originalTimezone;
@@ -242,9 +257,11 @@ describe('integration sync API and immutable windows', () => {
     ).toBe('queued');
     expect((await enqueue(await seedTarget())).status).toBe('queued');
   });
-  it('returns a 202 enqueue identity and freezes the default UTC window without credentials', async () => {
+  it('returns a 202 enqueue identity and freezes the default Pacific-day window without credentials', async () => {
     const target = await seedTarget();
-    const before = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+    // At 03:00 UTC, Search Console's Pacific day is still the previous one.
+    const day = pinNextUtcHour(3);
+    const before = day(-2);
     const enqueued = await enqueue(target);
     expect(enqueued).toMatchObject({ connection_id: target.connectionId, status: 'queued' });
     const run = await detail(target, enqueued.sync_run_id);
@@ -409,8 +426,9 @@ describe('integration sync API and immutable windows', () => {
   });
 
   it('re-reads only the late-data days after coverage, even past a failed history gap', async () => {
-    const target = await seedTarget();
-    const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+    // Bing finalizes on its UTC day; Search Console's finality bound is covered below.
+    const target = await seedTarget('bing');
+    const yesterday = pinNextUtcHour(12)(-1);
     const daysBefore = (days: number) =>
       new Date(Date.parse(`${yesterday}T00:00:00Z`) - days * 86_400_000).toISOString().slice(0, 10);
     for (const [start, end, status] of [
@@ -441,6 +459,133 @@ describe('integration sync API and immutable windows', () => {
         .where('id', '=', queued.sync_run_id)
         .execute();
     }
+  });
+
+  it.each([
+    // 03:00 UTC is 19:00 or 20:00 the previous day in Los Angeles.
+    ['America/Los_Angeles', 3, -2],
+    // 20:00 UTC is 05:00 the next day in Tokyo, so today's UTC date is finished there.
+    ['Asia/Tokyo', 20, 0],
+    // An unrecorded zone waits for UTC-12: 11:00 UTC is 23:00 the previous day there.
+    [null, 11, -2],
+  ])(
+    'ends a GA4 property in zone %s at %s:00 UTC on its own yesterday, never its unfinished day',
+    async (zone, hour, end) => {
+      const target = await seedTarget('ga4');
+      await db
+        .updateTable('integration_property_mappings')
+        .set({ reporting_timezone: zone })
+        .where('id', '=', target.mappingId)
+        .execute();
+      const day = pinNextUtcHour(hour);
+      const plain = await detail(target, (await enqueue(target)).sync_run_id);
+      expect(plain.window_end).toBe(day(end));
+      await db
+        .updateTable('integration_sync_runs')
+        .set({ status: 'cancelled' })
+        .where('id', '=', plain.id)
+        .execute();
+      const explicit = await enqueue(target, {
+        window_start: day(-3),
+        window_end: day(1),
+      });
+      const run = await detail(target, explicit.sync_run_id);
+      expect([run.window_start, run.window_end]).toEqual([day(-3), day(end)]);
+    },
+  );
+
+  it('re-reads Search Console days until they are reported, within the finality bound', async () => {
+    const target = await seedTarget();
+    const day = pinNextUtcHour(12);
+    const yesterday = day(-1);
+    const covered = await enqueueSyncRun(db, {
+      ...target,
+      windowStart: day(-42),
+      windowEnd: yesterday,
+      syncKind: 'backfill',
+    });
+    /** Ends the run as `status` with one Search Console day extract; its artifact and revision. */
+    const extracted = async (runId: string, status: 'succeeded' | 'failed') => {
+      const run = await db
+        .updateTable('integration_sync_runs')
+        .set({ status })
+        .where('id', '=', runId)
+        .returning('resync_seq')
+        .executeTakeFirstOrThrow();
+      const artifactId = randomUUID();
+      await db
+        .insertInto('integration_import_artifacts')
+        .values({
+          id: artifactId,
+          workspace_id: target.workspaceId,
+          connection_id: target.connectionId,
+          sync_run_id: runId,
+          provider: 'gsc',
+          dataset: 'gsc_day_daily',
+          query_snapshot: JSON.stringify({}),
+          payload: JSON.stringify({}),
+          payload_hash: randomUUID(),
+          extract_metadata: JSON.stringify({}),
+          row_count: 1,
+          fetched_at: new Date(),
+          created_at: new Date(),
+        })
+        .execute();
+      return { artifactId, revision: run.resync_seq };
+    };
+    const selected = await extracted(covered.sync_run_id, 'succeeded');
+    const nextWindow = async () => {
+      const queued = await enqueueSyncRun(db, {
+        ...target,
+        syncKind: 'scheduled',
+      });
+      const run = await detail(target, queued.sync_run_id);
+      await db
+        .updateTable('integration_sync_runs')
+        .set({ status: 'cancelled' })
+        .where('id', '=', queued.sync_run_id)
+        .execute();
+      return [run.window_start, run.window_end];
+    };
+    const reportedThrough = async (date: string, extract = selected) => {
+      await db
+        .insertInto('integration_metric_rows')
+        .values({
+          id: randomUUID(),
+          workspace_id: target.workspaceId,
+          project_id: target.projectId,
+          provider: 'gsc',
+          property_ref: target.propertyRef,
+          dataset: 'gsc_day_daily',
+          date,
+          dimension_key: date,
+          metrics: JSON.stringify({ clicks: 1, impressions: 2 }),
+          source_artifact_id: extract.artifactId,
+          resync_seq: extract.revision,
+          importer_version: 'test-1',
+          created_at: new Date(),
+        })
+        .execute();
+      return nextWindow();
+    };
+    // Nothing reported yet: every day within the finality bound may be pending.
+    expect(await nextWindow()).toEqual([day(-10), yesterday]);
+    // Pending for 37 days: re-read only within the 10-day finality bound.
+    expect(await reportedThrough(day(-38))).toEqual([day(-10), yesterday]);
+    // Reported up to 8 days ago: every day since may still be pending.
+    expect(await reportedThrough(day(-8))).toEqual([day(-7), yesterday]);
+    // A failed run's later row never replaced the revision that read those days.
+    const failed = await enqueueSyncRun(db, {
+      ...target,
+      windowStart: day(-7),
+      windowEnd: yesterday,
+    });
+    expect(await reportedThrough(day(-2), await extracted(failed.sync_run_id, 'failed'))).toEqual([
+      day(-7),
+      yesterday,
+    ]);
+    // Reported up to 2 days ago: only the 3 usual late-data days are re-read.
+    expect(await reportedThrough(day(-2))).toEqual([day(-3), yesterday]);
   });
 
   it('hides unknown runs, mismatched connections, and another workspace', async () => {

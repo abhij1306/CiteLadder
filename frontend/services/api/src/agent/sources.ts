@@ -10,12 +10,30 @@ import type { WebSource } from '../models/conversation.ts';
 const LINKED_REF = /\[([^[\]\n]+)\]\(\s*citeladder:\/\/[^)]*\)/giu;
 // Trailing sentence punctuation belongs to the prose, not the reference.
 const BARE_REF = /\(?citeladder:\/\/[^\s<>()[\]"']*[^\s<>()[\]"'.,;:!?]\)?/giu;
-const UUID = /\(?\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b\)?/giu;
+const UUID_TEXT = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
+const UUID = new RegExp(String.raw`(\(?)\b(${UUID_TEXT})\b(\)?)`, 'giu');
+const WRITTEN_UUID = new RegExp(String.raw`\b${UUID_TEXT}\b`, 'giu');
 // Most replies cite nothing; they skip the per-line work.
 const ANY_REF = /citeladder:\/\/|[0-9a-f]{8}-[0-9a-f]{4}-/iu;
 
-function scrubLine(line: string) {
-  const scrubbed = line.replace(LINKED_REF, '$1').replace(BARE_REF, '').replace(UUID, '');
+/**
+ * The UUIDs the person wrote, lower-cased: in their messages, or typed into a
+ * document. An Agent save scrubs every other UUID, so one left in a saved
+ * document came from the person.
+ */
+export function writtenIds(...texts: readonly string[]): ReadonlySet<string> {
+  return new Set(
+    texts.flatMap((text) => [...text.matchAll(WRITTEN_UUID)].map(([id]) => id.toLowerCase())),
+  );
+}
+
+function scrubLine(line: string, keep: ReadonlySet<string>) {
+  const scrubbed = line
+    .replace(LINKED_REF, '$1')
+    .replace(BARE_REF, '')
+    .replace(UUID, (match: string, _open: string, id: string) =>
+      keep.has(id.toLowerCase()) ? match : '',
+    );
   if (scrubbed === line) return line;
   // Removing a token can leave doubled spaces or a space before punctuation.
   return scrubbed
@@ -26,15 +44,20 @@ function scrubLine(line: string) {
 
 /**
  * Removes record references and UUIDs from user-facing text, fenced blocks
- * included: no deliverable carries a machine-readable submission, so an ID in
- * a document is always a leak into Copy and Export.
+ * included: no deliverable carries a machine-readable submission, so a
+ * CiteLadder ID in a document is always a leak into Copy and Export. A UUID in
+ * `keep` is the person's own (a form id in the HTML they pasted) and stays,
+ * so code they supplied is never corrupted.
  */
-export function scrubRecordRefs(text: string) {
+export function scrubRecordRefs(text: string, keep: ReadonlySet<string> = new Set()) {
   if (!ANY_REF.test(text)) return text;
-  return text.split('\n').map(scrubLine).join('\n');
+  return text
+    .split('\n')
+    .map((line) => scrubLine(line, keep))
+    .join('\n');
 }
 
-/** The records one read returned, as the `citeladder://` references screens resolve. */
+/** The records one read supplied to the model, as the `citeladder://` references screens resolve. */
 export function readSources(refs: readonly { record_uri?: string | null }[]) {
   return refs.flatMap((ref) => (ref.record_uri ? [ref.record_uri] : []));
 }

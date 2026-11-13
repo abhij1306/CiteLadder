@@ -1,28 +1,23 @@
 import { sql, type RawBuilder } from 'kysely';
 import type { Database } from '../db/database.ts';
+import type { LaneDescriptor } from './task-queue.ts';
 
 /** Statuses whose lease each lane's recovery reclaims once `lease_expires_at` passes. */
 export const leasedStatuses = ['leased', 'running'] as const;
-
-type QueueTableName =
-  | 'agent_runs'
-  | 'analytics_tasks'
-  | 'audit_tasks'
-  | 'brand_discovery_tasks'
-  | 'integration_sync_runs'
-  | 'site_crawl_tasks';
 
 /**
  * When a lane's next task is due: the earlier of its next claimable row and its
  * next lease expiry. An expired lease is pending work: a killed request or
  * execution leaves it for recovery, so an idle runner must stay (or start a
- * successor) for it too. Each side is its own `min()` so it can read the
- * table's (status, time) index; `least` ignores the side that has no rows.
+ * successor) for it too. Each side is its own `min()` so it can read its own
+ * index: the lane's claim index (claimable rows in `available_at` order) and
+ * its (status, lease_expires_at) index where it has one (`agent_runs` has none).
+ * `least` ignores the side with no rows.
  */
 export async function nextDueAt(
   db: Database,
   options: {
-    table: QueueTableName;
+    table: LaneDescriptor['table'];
     claimable: readonly string[];
     /** Extra claimability, such as remaining attempts. */
     ready?: RawBuilder<boolean>;

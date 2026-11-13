@@ -195,11 +195,10 @@ export async function getPerformance(
     let peer: Window | null;
     if (compare === p.PERFORMANCE_COMPARE_PREVIOUS)
       peer = [addDays(window[0], -inclusiveDays(...window)), addDays(window[0], -1)];
-    else if (compare === p.PERFORMANCE_COMPARE_YEAR_OVER_YEAR)
-      peer = window.map((day) =>
-        addDays(day, -p.PERFORMANCE_YEAR_OVER_YEAR_SHIFT_DAYS),
-      ) as unknown as Window;
-    else peer = customWindow(options.compare_from, options.compare_to);
+    else if (compare === p.PERFORMANCE_COMPARE_YEAR_OVER_YEAR) {
+      const shift = -p.PERFORMANCE_YEAR_OVER_YEAR_SHIFT_DAYS;
+      peer = [addDays(window[0], shift), addDays(window[1], shift)];
+    } else peer = customWindow(options.compare_from, options.compare_to);
     if (!peer) throw new ApiError(422, "compare=custom requires 'compare_from' and 'compare_to'");
     comparison = performanceWindow(await exactSnapshot(db, options, peer, granularity), peer);
   }

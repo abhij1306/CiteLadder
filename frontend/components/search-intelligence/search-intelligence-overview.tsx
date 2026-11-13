@@ -59,7 +59,7 @@ export function SearchIntelligenceOverview({
         kind="empty"
         icon={Database}
         heading="See where you rank and where competitors outrank you"
-        description="The first analysis reads your keyword footprint and rankings, plus the keywords one competitor ranks for and you don’t. You see the exact cost before anything is fetched."
+        description="You see the exact cost before anything is fetched."
         action={firstRun}
       />
     );

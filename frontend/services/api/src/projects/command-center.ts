@@ -7,7 +7,8 @@ import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { notFound } from '../errors.ts';
 import type { Audits } from '../generated/db-schema.ts';
-import { listOpportunities } from '../opportunities/reads.ts';
+import { listOpportunities, readOpportunityOrder } from '../opportunities/reads.ts';
+import { currentSiteCrawl } from '../site-health/reads/crawl.ts';
 import { persistedBaseline } from '../visibility/comparison.ts';
 import { getRunVisibility, type VisibilityResponse } from '../visibility/dashboard.ts';
 import { latestBrandRunId } from '../visibility/selection.ts';
@@ -16,7 +17,9 @@ import type { ProjectScope } from './brand-profile.ts';
 import { readProject } from './service.ts';
 
 type View = z.input<typeof commandCenterSchema>;
-type Audit = Selectable<Audits>;
+/** What the overview shows of a run and its baseline. */
+const AUDIT_COLUMNS = ['id', 'completed_at', 'created_at', 'benchmark_mode'] as const;
+type Audit = Pick<Selectable<Audits>, (typeof AUDIT_COLUMNS)[number]>;
 const instant = (audit: Audit) => (audit.completed_at ?? audit.created_at).toISOString();
 const percent = (value: number | null | undefined) =>
   value == null ? null : Math.round(value * 10000) / 100;
@@ -49,7 +52,7 @@ function state(
 async function comparableAudits(db: Database, scope: ProjectScope, auditId: string | null) {
   const query = db
     .selectFrom('audits')
-    .selectAll()
+    .select(AUDIT_COLUMNS)
     .where('workspace_id', '=', scope.workspaceId)
     .where('project_id', '=', scope.projectId)
     .where('status', 'in', policy.visibility.dashboard_audit_statuses)
@@ -209,16 +212,7 @@ async function loopEvidence(db: Database, scope: ProjectScope) {
       .orderBy('updated_at', 'desc')
       .limit(1)
       .executeTakeFirst(),
-    db
-      .selectFrom('site_crawls')
-      .selectAll()
-      .where('workspace_id', '=', scope.workspaceId)
-      .where('project_id', '=', scope.projectId)
-      .where('status', 'in', ['completed', 'partially_completed'])
-      .orderBy('completed_at', 'desc')
-      .orderBy('id', 'desc')
-      .limit(1)
-      .executeTakeFirst(),
+    currentSiteCrawl(db, scope.workspaceId, scope.projectId),
     db
       .selectFrom('demand_snapshots')
       .selectAll()
@@ -349,12 +343,14 @@ export async function commandCenter(
   // The project read authorizes the scope before anything else is read.
   const project = await readProject(db, scope);
   const audits = await comparableAudits(db, scope, auditId);
+  // The action order is read once: it orders the actions and versions them.
+  const order = readOpportunityOrder(db, scope);
   // Independent reads of persisted state, issued together.
   const [
     current,
     previous,
     opportunities,
-    order,
+    persistedOrder,
     profile,
     { mapping, crawl, demand, implementation },
     counted,
@@ -364,18 +360,16 @@ export async function commandCenter(
   ] = await Promise.all([
     visibility(db, scope, audits?.selected ?? null),
     visibility(db, scope, audits?.previous ?? null),
-    listOpportunities(
-      db,
-      scope,
-      { type: null, severity: null, status: null, rule_id: null, min_priority: null },
-      { limit: 8, cursor: null },
+    order.then((persisted) =>
+      listOpportunities(
+        db,
+        scope,
+        { type: null, severity: null, status: null, rule_id: null, min_priority: null },
+        { limit: policy.projects.overview_opportunity_rows, cursor: null },
+        { order: persisted },
+      ),
     ),
-    db
-      .selectFrom('opportunity_orders')
-      .select('version')
-      .where('workspace_id', '=', scope.workspaceId)
-      .where('project_id', '=', scope.projectId)
-      .executeTakeFirst(),
+    order,
     db
       .selectFrom('brand_profiles')
       .selectAll()
@@ -485,7 +479,7 @@ export async function commandCenter(
     state: metrics(current, previous),
     movements: movements(current, previous),
     actions: opportunities.items,
-    action_order_version: order?.version ?? 0,
+    action_order_version: persistedOrder?.version ?? 0,
     resolved_actions: resolved,
     report_available: Boolean(audits),
     stale: audits?.historical ?? false,

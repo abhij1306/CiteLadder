@@ -4,7 +4,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { mswServer } from '@/test/msw-server';
-import { renderWithProviders } from '@/test/render';
+import { renderWithProviders, selectionAs } from '@/test/render';
 import {
   CHATGPT_MODEL,
   CONNECTION_ID,
@@ -60,6 +60,18 @@ describe('ProviderSettings', () => {
     expect(screen.queryByText(/coming soon/i)).toBeNull();
     // Credentials are asked for on demand, not repeated down the page.
     expect(screen.queryByLabelText(/api login/i)).toBeNull();
+  });
+
+  it('shows a Member whether each provider works, with no credential to connect or manage', async () => {
+    mswServer.use(
+      consumerCatalogHandler(),
+      http.get('/api/v1/provider-connections', () => HttpResponse.json([])),
+    );
+
+    renderWithProviders(<ProviderSettings />, { projectSelection: selectionAs('member') });
+
+    expect((await row('OpenAI')).getByText('Not connected')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^(Connect|Manage) / })).toBeNull();
   });
 
   it('saves one DataForSEO login for every surface it measures', async () => {

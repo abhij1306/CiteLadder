@@ -104,7 +104,7 @@ export function confirmRun(db: Database, scope: Scope, runId: string) {
       .selectFrom(trx, 'projects')
       .select('id')
       .where('id', '=', scope.projectId)
-      .forUpdate()
+      .forNoKeyUpdate()
       .execute();
     const run = await lockRun(trx, scope, runId);
     if (run === undefined) throw notFound('Run');

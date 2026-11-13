@@ -7,9 +7,11 @@
 import { asApiErrorCode } from '@citeladder/contracts/error-codes';
 import { createHash, randomUUID } from 'node:crypto';
 
+import { normalizeDomain } from '../analysis/domains.ts';
 import type { Database } from '../db/database.ts';
 import { ApiError, notFound } from '../errors.ts';
-import { compareText, stripTrailing } from '../text-order.ts';
+import { chunksOf } from '../lists.ts';
+import { compareText } from '../text-order.ts';
 import type { Scope } from './reads.ts';
 import { datasetView } from './views.ts';
 
@@ -17,19 +19,10 @@ const PARENT_KIND = 'referring_domains';
 const DERIVED_KIND = 'citation_matches';
 const ROW_KIND = 'citation_match';
 const PARSER_VERSION = 'citation-match-1';
+// A match row binds 13 parameters; 1,000 rows stay far below the 65,535 limit.
+const MATCH_INSERT_CHUNK = 1000;
 
 const sha256 = (text: string) => createHash('sha256').update(text).digest('hex');
-
-/** Lower-cased, dot-trimmed and without a leading `www.`. */
-function comparableDomain(value: string): string {
-  let domain = stripTrailing(value.trim().toLowerCase(), '.');
-  while (domain.startsWith('.')) domain = domain.slice(1);
-  return domain.startsWith('www.') ? domain.slice('www.'.length) : domain;
-}
-
-function hostnameOf(url: string): string {
-  return URL.parse(url)?.hostname ?? '';
-}
 
 type Citation = {
   id: string;
@@ -127,9 +120,9 @@ export function deriveCitationMatches(
         .orderBy('id')
         .execute(),
     ]);
-    const linkingDomains = new Set(linking.map((row) => comparableDomain(row.domain)));
+    const linkingDomains = new Set(linking.map((row) => normalizeDomain(row.domain)));
     const matches = citations.flatMap((citation) => {
-      const domain = comparableDomain(citation.domain || hostnameOf(citedUrl(citation)));
+      const domain = normalizeDomain(citation.domain || citedUrl(citation));
       return linkingDomains.has(domain) ? [{ citation, domain }] : [];
     });
 
@@ -187,11 +180,13 @@ export function deriveCitationMatches(
       })
       .returningAll()
       .executeTakeFirstOrThrow();
-    if (matches.length > 0) {
-      await trx
+    // One statement per chunk keeps each insert under PostgreSQL's 65,535
+    // bind parameters; the chunks commit together in this transaction.
+    for (const chunk of chunksOf(matches, MATCH_INSERT_CHUNK)) {
+      await trx // NOSONAR -- Sequential inserts share one transaction.
         .insertInto('search_intelligence_rows')
         .values(
-          matches.map(({ citation, domain }) => ({
+          chunk.map(({ citation, domain }) => ({
             id: randomUUID(),
             workspace_id: scope.workspace.workspaceId,
             project_id: scope.projectId,

@@ -116,6 +116,8 @@ export const sourcePageVocabulary = {
   PRESENCE_NOT_DETECTED: 'not_detected',
   PRESENCE_AMBIGUOUS: 'ambiguous',
   PRESENCE_PARTIAL: 'partial',
+  /** Every name and alias is shorter than `min_alias_chars`: never judged absent (AR-6). */
+  PRESENCE_NOT_ASSESSABLE: 'not_assessable',
   PRESENCE_MATCH_EXACT_ALIAS: 'exact_alias',
   PRESENCE_MATCH_NORMALIZED_ALIAS: 'normalized_alias',
   PRESENCE_MATCH_NONE: 'none',

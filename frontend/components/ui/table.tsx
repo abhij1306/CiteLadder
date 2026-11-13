@@ -32,7 +32,7 @@ import { cn } from '@/lib/utils';
  * page its boundary is the `table-frame` hairline ring (an outer shadow, so it
  * never changes the box); inside a Card the ring drops.
  */
-const tableHeadClasses = 'text-caption text-ink-secondary font-medium whitespace-nowrap';
+const tableHeadClasses = 'text-caption text-ink-secondary whitespace-nowrap';
 const TABLE_MIN_WIDTH = {
   sm: 'min-w-[var(--table-min-width-sm)]',
   md: 'min-w-[var(--table-min-width-md)]',
@@ -131,11 +131,12 @@ export function TableRow({
       {...props}
       className={cn(
         'h-[var(--table-row-height)] transition-colors duration-[var(--motion-fast)]',
-        pressable && 'hover:bg-surface-sunken',
-        // A selected row takes `surface-sunken`; the tracked brand's own row
-        // takes `accent-soft`, and hover never changes it.
-        'aria-selected:bg-surface-sunken',
-        highlight && 'bg-accent-soft hover:bg-accent-soft',
+        // Hover and selected are two states (D51): a selected row takes the
+        // selected overlay and no hover; the tracked brand's own row takes
+        // `accent-soft`, and hover never changes it.
+        pressable && !highlight && 'not-aria-selected:hover:overlay-hover',
+        'aria-selected:overlay-selected',
+        highlight && 'bg-accent-soft',
         className,
       )}
     >
@@ -195,9 +196,9 @@ export function TableHead({
       className={cn(
         tableHeadClasses,
         'aria-[sort=ascending]:text-ink aria-[sort=descending]:text-ink',
-        // The header is a `surface-sunken` band with rounded ends; its opaque
-        // fill keeps a sticky header over scrolled rows.
-        'bg-surface-sunken sticky top-0 z-10 h-[var(--table-header-height)] px-[var(--table-cell-padding-x)] text-left align-middle first:rounded-l-sm last:rounded-r-sm',
+        // The header is a square `surface-sunken` band, full-bleed like the
+        // rows under it; its opaque fill keeps a sticky header over scrolled rows.
+        'bg-surface-sunken sticky top-0 z-10 h-[var(--table-header-height)] px-[var(--table-cell-padding-x)] text-left align-middle',
         numeric && 'tabular-nums text-right',
         trailing && 'text-right',
         desktopOnly && desktopOnlyClasses,
@@ -229,10 +230,11 @@ function isPlainText(children: ReactNode) {
 export const TableTextLinesContext = createContext<1 | 2>(2);
 
 /**
- * The lines a `TableCellLines` title takes: one by default; two in a
+ * The lines a `TableCellLines` title may take: one by default; up to two in a
  * `DataTable` of three-line rows (`rowLines={3}`), where a long title (a
- * prompt) wraps over its caption instead of being cut at one line. The
- * title then always holds two lines, so every row keeps one height.
+ * prompt) wraps over its caption instead of being cut at one line. A title
+ * that fits on one line keeps its row compact (owner, 2026-11-11): only a
+ * wrapping title makes its row taller.
  */
 export const TableTitleLinesContext = createContext<1 | 2>(1);
 
@@ -355,11 +357,9 @@ export function TableCellLines({
 }>) {
   const titleLines = useContext(TableTitleLinesContext);
   return (
-    <span className="grid min-w-0">
-      <ClampText
-        lines={titleLines}
-        className={cn(title ? textRole('itemTitle') : undefined, titleLines === 2 && 'min-h-[2lh]')}
-      >
+    // The title and its caption are one fact: 4 apart.
+    <span className="grid min-w-0 gap-1">
+      <ClampText lines={titleLines} className={title ? textRole('itemTitle') : undefined}>
         {primary}
       </ClampText>
       {secondary ? (

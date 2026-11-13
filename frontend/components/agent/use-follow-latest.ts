@@ -1,5 +1,3 @@
-'use client';
-
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import { AGENT_FOLLOW_LATEST_GAP_PX } from '@/lib/config/agent';

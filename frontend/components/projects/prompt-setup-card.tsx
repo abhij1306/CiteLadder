@@ -1,10 +1,7 @@
-'use client';
-
 import { ProjectLink } from '@/components/ui/project-link';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Inline } from '@/components/ui/layout';
-import { textRole } from '@/components/ui/typography';
 import { PROMPTS_GENERATE_HREF, PROMPTS_HREF } from '@/lib/prompts/routes';
 
 /**
@@ -17,9 +14,9 @@ export function PromptSetupCard() {
     <Card aria-labelledby="prompt-setup-heading">
       <CardHeader>
         <CardTitle id="prompt-setup-heading">Choose the questions you want to track</CardTitle>
-        <p className={textRole('caption')}>
+        <CardDescription>
           Generate buyer questions from your confirmed offerings, or add your own.
-        </p>
+        </CardDescription>
       </CardHeader>
       <Inline as={CardContent} className="flex-wrap">
         <Button asChild variant="primary">

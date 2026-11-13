@@ -1,11 +1,9 @@
-'use client';
-
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Search } from 'lucide-react';
 
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
-import { FilterChoice } from '@/components/ui/filter-bar';
+import { choiceFilter, type FilterDefinition } from '@/components/ui/all-filters';
 import { Icon } from '@/components/ui/icon';
 import { Inline } from '@/components/ui/layout';
 import { pageNumberControls, useTablePage } from '@/components/ui/pager';
@@ -57,7 +55,8 @@ const PAGE_SIZE = 10;
 
 const COLUMNS: readonly DataTableColumn[] = [
   { key: 'search', label: 'Search' },
-  { key: 'model', label: 'Model', width: 'name' },
+  // The page's filter calls these surfaces; the column uses the same word.
+  { key: 'surface', label: 'Surface', width: 'name' },
   { key: 'occurrences', label: 'Occurrences', width: 'figure', numeric: true },
 ];
 
@@ -69,15 +68,32 @@ const GROUP_NOUNS: Record<(typeof GROUP_OPTIONS)[number]['value'], string> = {
 };
 
 const GROUP_OPTIONS = [
-  { value: 'none', label: 'Group by: None' },
-  { value: 'prompt', label: 'Group by: Prompt' },
-  { value: 'topic', label: 'Group by: Topic' },
+  { value: 'none', label: 'None' },
+  { value: 'prompt', label: 'Prompt' },
+  { value: 'topic', label: 'Topic' },
 ] as const;
 
 const groupCodec = stringUrlCodec(
   GROUP_OPTIONS.map((option) => option.value),
   'none',
 );
+
+/**
+ * How the searches are grouped, in the table's own All filters. It reads and
+ * writes the same `group` URL state the table reads, so the menu and the
+ * table never disagree.
+ */
+function useFanoutGroupFilter(): FilterDefinition {
+  const [grouping, setGrouping] = useUrlState('group', groupCodec);
+  return choiceFilter({
+    id: 'fanout-group',
+    label: 'Group by',
+    value: grouping,
+    defaultValue: 'none',
+    groups: [{ options: GROUP_OPTIONS }],
+    onChange: setGrouping,
+  });
+}
 
 /**
  * The searches an engine ran before answering, as ONE table.
@@ -127,9 +143,9 @@ export function FanoutEvidence({
     scopeReady: boolean;
     scopeNarrowed: boolean;
   }>) {
+  const groupFilter = useFanoutGroupFilter();
   const {
     grouping,
-    setGrouping,
     search,
     setSearch,
     needle,
@@ -152,7 +168,9 @@ export function FanoutEvidence({
   const selectionWide = isSelectionWide(summary, scopeNarrowed);
   const matched = summaryMatchesInput ? selectionMatchedQueries(summary, scopeNarrowed) : null;
 
-  if (query.isLoading) return <EvidenceSkeleton />;
+  // Pending, not merely loading: a read still waiting on its scope fetches
+  // nothing and has no items, which is not "no searches recorded".
+  if (query.isPending) return <EvidenceSkeleton />;
   if (query.isError) return <EvidenceError onRetry={() => query.refetch()} />;
   if (items.length === 0) {
     return <FanoutEmpty isFiltered={isFiltered} onClearFilters={onClearFilters} />;
@@ -174,19 +192,17 @@ export function FanoutEvidence({
             maxLength={SEARCH_MAX_LENGTH}
           />
         ),
-        status:
-          needle && matched != null ? <SearchScopeNote search={needle} matched={matched} /> : null,
-        actions: (
+        // How the table groups is its own filter, after the search.
+        filters: [groupFilter],
+        // What the table holds closes the row: the counts, and what a search kept.
+        status: (
           <>
+            {needle && matched != null ? (
+              <SearchScopeNote search={needle} matched={matched} />
+            ) : null}
             <span aria-busy={!summaryMatchesInput}>
               <FanoutCounts summary={summary} fallback={totals} selectionWide={selectionWide} />
             </span>
-            <FilterChoice
-              label="Group searches by"
-              value={grouping}
-              options={GROUP_OPTIONS}
-              onChange={setGrouping}
-            />
           </>
         ),
       }}
@@ -217,7 +233,7 @@ export function FanoutEvidence({
  * reading it inline buried the four states the component actually renders.
  */
 function useSearchTable(query: EvidenceTabProps['query'], runId: string | null) {
-  const [grouping, setGrouping] = useUrlState('group', groupCodec);
+  const [grouping] = useUrlState('group', groupCodec);
   const [search, setSearch] = useUrlState('q', optionalStringUrlCodec, { history: 'replace' });
   // Trimmed and capped ONCE: the table filter, the server scope, the match
   // count and the empty state all read this, so none of them can be asking
@@ -269,7 +285,6 @@ function useSearchTable(query: EvidenceTabProps['query'], runId: string | null) 
       }));
   return {
     grouping,
-    setGrouping,
     search,
     setSearch,
     needle,
@@ -323,7 +338,7 @@ function SearchGroupRows({ group }: Readonly<{ group: SearchGroup }>) {
     <>
       {group.label ? (
         <TableRow>
-          <TableCell colSpan={3} className="bg-surface-2">
+          <TableCell colSpan={3} className="bg-surface-sunken">
             <ClampText className={textRole('itemTitle')}>{group.label}</ClampText>
           </TableCell>
         </TableRow>

@@ -1,5 +1,3 @@
-'use client';
-
 import { Info, Inbox, RefreshCw, SearchX } from 'lucide-react';
 import type { UseQueryResult } from '@tanstack/react-query';
 

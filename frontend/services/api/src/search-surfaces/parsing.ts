@@ -394,6 +394,97 @@ export function parseAds(envelope: unknown): { ads: AdItem[]; skipped: number } 
   }
   return { ads, skipped };
 }
+const PRODUCTS_ITEM_TYPE = 'chat_gpt_products';
+const PRODUCT_CARD_TYPE = 'chat_gpt_products_element';
+/** An optional card field of an unexpected shape reads as absent rather than dropping the card. */
+const lenient = <T>(read: (value: unknown) => T) => z.unknown().optional().transform(read);
+const lenientText = lenient(text);
+/**
+ * ChatGPT fills card fields unevenly; only the title is required. The card's
+ * `rating` is never read (owner decision CM4).
+ */
+const productCardSchema = z.object({
+  type: z.literal(PRODUCT_CARD_TYPE),
+  title: z.string().trim().min(1),
+  tag: lenientText,
+  price: lenient((value) =>
+    typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null,
+  ),
+  currency: lenientText,
+  merchants: lenientText,
+  url: lenientText,
+  domain: lenientText,
+  product_id: lenientText,
+  images: lenient(list),
+});
+/** One organic product card of a ChatGPT shopping carousel. */
+export type ShoppingResult = {
+  /** One-based position of the card within its carousel block. */
+  position: number;
+  title: string;
+  tag: string | null;
+  price: number | null;
+  /** ISO 4217 code, else empty. */
+  currency: string;
+  merchant_name: string | null;
+  /** The card's link as given, or empty when it carries no web URL. */
+  url: string;
+  /** Hostname of the card's link, else the card's own domain, lowercased. */
+  domain: string;
+  /** ChatGPT's own product key. */
+  external_product_id: string | null;
+  /** First image URL; stored as evidence only. */
+  image_url: string | null;
+};
+function shoppingResult(node: unknown, position: number): ShoppingResult | null {
+  const parsed = productCardSchema.safeParse(node);
+  if (!parsed.success) return null;
+  const card = parsed.data,
+    link = webUrl(card.url),
+    currency = card.currency.toUpperCase();
+  const image = card.images.find(
+    (value): value is string => typeof value === 'string' && webUrl(value) !== null,
+  );
+  return {
+    position,
+    title: card.title,
+    tag: card.tag || null,
+    price: card.price,
+    currency: /^[A-Z]{3}$/u.test(currency) ? currency : '',
+    merchant_name: card.merchants || null,
+    url: link ? card.url : '',
+    domain: (link?.hostname ?? card.domain).toLowerCase(),
+    external_product_id: card.product_id || null,
+    image_url: image ?? null,
+  };
+}
+function productBlocks(node: Record<string, unknown>, depth = 0): Record<string, unknown>[] {
+  // Cards are read inside the derive transaction; a pathological tree yields none, not a failure.
+  if (depth > 128) return [];
+  return objects(node.items).flatMap((child) => {
+    if (isAd(child)) return [];
+    return child.type === PRODUCTS_ITEM_TYPE ? [child] : productBlocks(child, depth + 1);
+  });
+}
+/**
+ * The organic product cards of every ChatGPT shopping carousel in a stored
+ * LLM-scraper Task GET envelope, in answer order. Sponsored items keep the
+ * ads path, never appear here and hold no organic position; an untitled or
+ * malformed organic card is skipped but keeps its position. Empty when the
+ * envelope has no single result page.
+ */
+export function parseShoppingResults(envelope: unknown): ShoppingResult[] {
+  const task = onlyOf(objects(record(envelope).tasks));
+  const page = task ? onlyOf(objects(task.result)) : undefined;
+  if (!page) return [];
+  return productBlocks(page).flatMap((block) => {
+    const organic = objects(block.items).filter((node) => !isAd(node));
+    return organic.flatMap((node, index) => {
+      const card = shoppingResult(node, index + 1);
+      return card ? [card] : [];
+    });
+  });
+}
 export function parseScraper(
   payload: unknown,
   expectedId: string,

@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import type { Selectable } from 'kysely';
+import { sql, type Selectable } from 'kysely';
 import type { Database } from '../db/database.ts';
 import type { Audits, CommerceRecommendationObservations } from '../generated/db-schema.ts';
+import { policy } from '../config.ts';
 import { record } from '../db/json.ts';
 import { auditPolicy } from '../audits/config.ts';
 import { frozenShelfIds } from './shelf.ts';
@@ -15,11 +16,27 @@ type Observation = Pick<
   | 'order_observable'
   | 'product_id'
   | 'competitor_candidate_id'
+  | 'surface_kind'
 >;
 
 /** A rank only an ordered answer supplies. */
-export const orderedRank = (row: Pick<Observation, 'order_observable' | 'rank'>) =>
+const orderedRank = (row: Pick<Observation, 'order_observable' | 'rank'>) =>
   row.order_observable ? row.rank : null;
+
+/**
+ * Whether `row` ranks ahead of `other` in the same execution: a ranked slot
+ * beats an unranked one, a carousel card's rank wins over a text-list rank
+ * (both start at 1), then the lower rank wins.
+ */
+function outranks(row: Observation, other: Observation) {
+  const rank = orderedRank(row),
+    otherRank = orderedRank(other);
+  if (rank === null) return false;
+  if (otherRank === null) return true;
+  const card = row.surface_kind === 'shopping_result',
+    otherCard = other.surface_kind === 'shopping_result';
+  return card === otherCard ? rank < otherRank : card;
+}
 
 /**
  * The product or competitor an observation recommends, or null when it names
@@ -27,7 +44,7 @@ export const orderedRank = (row: Pick<Observation, 'order_observable' | 'rank'>)
  * does not recognize. A pending AI-observed competitor has an identity but
  * holds no slot (`shelfMetrics`).
  */
-export function holderIdentity(
+function holderIdentity(
   row: Pick<Observation, 'classification' | 'product_id' | 'competitor_candidate_id'>,
 ): string | null {
   if (row.classification === 'owned') return row.product_id;
@@ -50,9 +67,7 @@ function shelfSlots(observations: Observation[]) {
     if (holder === null) continue;
     const key = JSON.stringify([row.task_id, row.classification, holder]);
     const kept = held.get(key);
-    const rank = orderedRank(row),
-      keptRank = kept ? orderedRank(kept) : null;
-    if (!kept || (rank !== null && (keptRank === null || rank < keptRank))) held.set(key, row);
+    if (!kept || outranks(row, kept)) held.set(key, row);
   }
   return [...held.values()];
 }
@@ -68,11 +83,13 @@ export function shelfMetrics(taskIds: string[], observations: Observation[]) {
   const rankedOwned = owned.filter((row) => orderedRank(row) !== null);
   // The first-ranked observation of each execution that ranked any.
   const ranked = taskIds
-    .map(
-      (id) =>
-        observations
-          .filter((row) => row.task_id === id && row.order_observable && row.rank !== null)
-          .sort((a, b) => a.rank! - b.rank!)[0],
+    .map((id) =>
+      observations
+        .filter((row) => row.task_id === id && orderedRank(row) !== null)
+        .reduce<Observation | undefined>(
+          (first, row) => (!first || outranks(row, first) ? row : first),
+          undefined,
+        ),
     )
     .filter((row) => row !== undefined);
   return {
@@ -94,6 +111,33 @@ export function shelfMetrics(taskIds: string[], observations: Observation[]) {
     ranked_execution_count: ranked.length,
     source_observation_ids: JSON.stringify(observations.map((row) => row.id)),
   };
+}
+
+/**
+ * The latest match pass of each answer of one audit: the pass of the highest
+ * catalog revision, then the most recent. Older passes stay as history and
+ * are never read for current numbers.
+ */
+function latestPasses(
+  db: Database,
+  audit: Pick<Selectable<Audits>, 'workspace_id' | 'project_id' | 'id'>,
+) {
+  return db
+    .selectFrom('commerce_match_passes as p')
+    .leftJoin('commerce_catalog_revisions as r', (join) =>
+      join
+        .onRef('r.id', '=', 'p.catalog_revision_id')
+        .onRef('r.workspace_id', '=', 'p.workspace_id'),
+    )
+    .distinctOn('p.artifact_id')
+    .select('p.id')
+    .where('p.workspace_id', '=', audit.workspace_id)
+    .where('p.project_id', '=', audit.project_id)
+    .where('p.audit_id', '=', audit.id)
+    .orderBy('p.artifact_id')
+    .orderBy(sql`r.revision_number desc nulls last`)
+    .orderBy('p.created_at', 'desc')
+    .orderBy('p.id', 'desc');
 }
 
 /** Caller holds the workspace-scoped audit lock. Historical snapshots never read the current catalog. */
@@ -144,8 +188,12 @@ export async function finalizeCommerceShelf(db: Database, audit: Selectable<Audi
       .where('c.id', 'in', ids)
       .where('c.target_kind', '=', target.target_kind)
       .where('c.target_id', '=', target.target_id)
+      // A branded comparison names the owned brand, so it would always find the
+      // owned product: like brand Visibility, the shelf counts unbranded prompts only.
+      .where('s.cohort', 'not in', policy.prompts.branded_cohorts)
       .execute();
-    const observations = await db
+    const taskIds = new Set(tasks.map((task) => task.id));
+    const observations = await db // NOSONAR -- Runs on the caller's audit-lock transaction.
       .selectFrom('commerce_recommendation_observations')
       .selectAll()
       .where('workspace_id', '=', audit.workspace_id)
@@ -153,8 +201,13 @@ export async function finalizeCommerceShelf(db: Database, audit: Selectable<Audi
       .where('audit_id', '=', audit.id)
       .where('target_kind', '=', target.target_kind)
       .where('target_id', '=', target.target_id)
-      .where('parser_version', '=', versions.parser_version!)
-      .where('matcher_version', '=', versions.matcher_version!)
+      .where(
+        'pass_id',
+        'in',
+        latestPasses(db, audit)
+          .where('p.parser_version', '=', versions.parser_version!)
+          .where('p.matcher_version', '=', versions.matcher_version!),
+      )
       .orderBy('created_at')
       .orderBy('id')
       .execute();
@@ -169,8 +222,8 @@ export async function finalizeCommerceShelf(db: Database, audit: Selectable<Audi
         target_id: target.target_id,
         formula_version: versions.formula_version!,
         ...shelfMetrics(
-          tasks.map((task) => task.id),
-          observations,
+          [...taskIds],
+          observations.filter((row) => taskIds.has(row.task_id)),
         ),
         context_snapshot: JSON.stringify({
           target: { kind: target.target_kind, id: target.target_id },

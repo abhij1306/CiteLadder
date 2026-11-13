@@ -9,14 +9,18 @@ import { Button } from './button';
 import { Card, CardHeader, CardTitle } from './card';
 import { ChartSwatch } from './chart';
 import { Delta } from './delta';
+import { choiceFilter } from './all-filters';
 import { FilterBar, FilterTrigger } from './filter-bar';
 import { DataTable } from './data-table';
 import { Meter } from './meter';
 import { Pager, pageNumberControls } from './pager';
 import { QueryState } from './query-state';
+import { SearchField } from './search-field';
 import { StatRow } from './stat-row';
 import { Table, TableCell, TableHeader, TableRow } from './table';
 import { SortableTableHead } from './table-heads';
+import { SegmentedControl } from './tabs';
+import { focusByKeyboard } from '@/test/keyboard-focus';
 import { renderWithProviders } from '@/test/render';
 
 import { ArrowLink, TextLink } from './text-link';
@@ -177,7 +181,7 @@ describe('DataTable', () => {
       </TooltipProvider>,
     );
     const head = screen.getByRole('columnheader', { name: 'Type' });
-    fireEvent.focus(within(head).getByRole('button', { name: 'Type' }));
+    focusByKeyboard(within(head).getByRole('button', { name: 'Type' }));
     expect(await screen.findByRole('tooltip')).toHaveTextContent(
       'How the publisher is classified.',
     );
@@ -292,20 +296,93 @@ describe('ArrowLink', () => {
 });
 
 describe('FilterBar and FilterTrigger', () => {
-  it('names the trigger by its visible value and announces the active count', () => {
+  it('lays every row out in one order: view, search, All filters, count, action', () => {
     render(
       <FilterBar
-        filters={
-          <>
-            <FilterTrigger label="Surface" value="ChatGPT" hideLabel active />
-            <FilterTrigger label="Filter" count={2} />
-          </>
-        }
         actions={<Button>Export</Button>}
+        status="12 pages"
+        filters={[
+          choiceFilter({
+            id: 'kind',
+            label: 'Page kind',
+            value: 'faq',
+            defaultValue: 'all',
+            groups: [
+              {
+                options: [
+                  { value: 'all', label: 'All page kinds' },
+                  { value: 'faq', label: 'FAQ' },
+                ],
+              },
+            ],
+            onChange: () => undefined,
+          }),
+        ]}
+        search={<SearchField value="" onValueChange={() => undefined} aria-label="Search pages" />}
+        view={
+          <SegmentedControl
+            ariaLabel="Pages shown"
+            value="all"
+            onChange={() => undefined}
+            options={[{ value: 'all', label: 'All' }]}
+          />
+        }
       />,
     );
+    // The row draws its slots in document order, whatever order a page passes them in.
+    const order = [
+      screen.getByRole('radiogroup', { name: 'Pages shown' }),
+      screen.getByRole('searchbox', { name: 'Search pages' }),
+      // A lone filter is its own trigger, named by its value.
+      screen.getByRole('button', { name: 'Page kind: FAQ' }),
+      screen.getByText('12 pages'),
+      screen.getByRole('button', { name: 'Export' }),
+    ];
+    const follows = order
+      .slice(1)
+      .map((node, index) =>
+        Boolean(order[index]!.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING),
+      );
+    expect(follows).toEqual([true, true, true, true]);
+  });
+  it('puts two or more filters behind All filters, counting the changed ones', () => {
+    const filter = (id: string, value: string) =>
+      choiceFilter({
+        id,
+        label: id,
+        value,
+        defaultValue: 'all',
+        groups: [
+          {
+            options: [
+              { value: 'all', label: 'All' },
+              { value: 'one', label: 'One' },
+            ],
+          },
+        ],
+        onChange: () => undefined,
+      });
+    render(<FilterBar filters={[filter('Kind', 'one'), filter('Engine', 'all')]} />);
+    expect(screen.getByRole('button', { name: 'All filters (1)' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Kind: One' })).toBeNull();
+  });
+  it('names a trigger by its visible value', () => {
+    render(<FilterTrigger label="Surface" value="ChatGPT" hideLabel active />);
     expect(screen.getByRole('button', { name: 'Surface: ChatGPT' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /^Filter\W+2 active$/ })).toBeInTheDocument();
+  });
+  it('sizes a trigger to its options without adding them to its text', () => {
+    render(
+      <FilterTrigger
+        label="Surface"
+        value="ChatGPT"
+        hideLabel
+        sizeTo={['All surfaces', 'ChatGPT', 'Google AI Overviews']}
+      />,
+    );
+    const trigger = screen.getByRole('button', { name: 'Surface: ChatGPT' });
+    // The longest option is reserved as generated content, never readable text.
+    expect(trigger.textContent).toBe('Surface: ChatGPT');
+    expect(trigger.querySelector('[data-size="Google AI Overviews"]')).not.toBeNull();
   });
 });
 
@@ -394,6 +471,36 @@ describe('QueryState', () => {
     expect(screen.getByRole('heading', { level: 2, name: 'No issues yet' })).toBeVisible();
     expect(screen.getByText('Run a crawl to find issues.')).toBeVisible();
     expect(screen.getByRole('button', { name: 'Run crawl' })).toBeVisible();
+  });
+
+  it('heads an empty state inside a card one rung under the page, unless told otherwise', () => {
+    render(
+      <>
+        <Card>
+          <QueryState kind="empty" icon={Inbox} heading="No mentions yet" />
+        </Card>
+        <Card>
+          <QueryState kind="empty" icon={Inbox} heading="No sources yet" headingLevel={2} />
+        </Card>
+      </>,
+    );
+    expect(screen.getByRole('heading', { name: 'No mentions yet' }).tagName).toBe('H3');
+    expect(screen.getByRole('heading', { name: 'No sources yet' }).tagName).toBe('H2');
+  });
+
+  it('says a compact absence in one line with its action and no heading', () => {
+    render(
+      <QueryState
+        kind="empty"
+        inline
+        compact
+        message="No competitors tracked."
+        action={<Button>Add competitor</Button>}
+      />,
+    );
+    expect(screen.getByText('No competitors tracked.')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Add competitor' })).toBeVisible();
+    expect(screen.queryByRole('heading')).toBeNull();
   });
 });
 

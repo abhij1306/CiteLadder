@@ -1,3 +1,4 @@
+import { retryAfterSeconds } from '@citeladder/contracts/retry-after';
 import { z } from 'zod';
 
 import type { SettingSource } from '../config/settings.ts';
@@ -81,7 +82,6 @@ function approvedIntegrationUrl(value: string): URL {
 }
 
 function statusError(status: number, retryAfter: string | null): IntegrationError {
-  const seconds = !retryAfter?.trim() ? Number.NaN : Number(retryAfter);
   let code = codes.ERROR_PROVIDER_API;
   if (status === 429) code = codes.ERROR_RATE_LIMITED;
   // A 401 is the credential; a 403 is this property's permission, which must
@@ -92,9 +92,21 @@ function statusError(status: number, retryAfter: string | null): IntegrationErro
     code,
     `Integration provider returned HTTP ${status}`,
     status === 429 || [500, 502, 503, 504].includes(status),
-    Number.isFinite(seconds) && seconds >= 0 ? seconds : null,
+    retryAfterSeconds(retryAfter) ?? null,
     status,
   );
+}
+
+const oauthErrorSchema = z.object({ error: z.string() });
+
+/** Whether an OAuth token error body names `invalid_grant`; never surfaces the body. */
+async function isInvalidGrant(response: Response): Promise<boolean> {
+  try {
+    const parsed = oauthErrorSchema.safeParse(await response.json());
+    return parsed.success && parsed.data.error === 'invalid_grant';
+  } catch {
+    return false;
+  }
 }
 
 export function providerNumber(raw: unknown): number | null {
@@ -191,6 +203,21 @@ export class IntegrationClient {
         client_secret: credential.secret,
       }),
     });
+    // RFC 6749 answers a revoked or expired refresh token with 400
+    // `invalid_grant`: the credential is gone, so the user must reconnect. Any
+    // other refusal keeps its status classification below.
+    if (
+      form.grant_type === 'refresh_token' &&
+      response.status === 400 &&
+      (await isInvalidGrant(response))
+    )
+      throw new IntegrationError(
+        codes.ERROR_GRANT_AUTH_FAILED,
+        'Integration refresh token was refused',
+        false,
+        null,
+        400,
+      );
     const parsed = tokenSchema.safeParse(await this.#json(response));
     if (!parsed.success)
       throw new IntegrationError(codes.ERROR_PROVIDER_API, 'Malformed OAuth token response');

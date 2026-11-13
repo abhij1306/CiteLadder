@@ -1,5 +1,3 @@
-'use client';
-
 import type { ComponentProps, ReactNode } from 'react';
 
 import { Badge } from '@/components/ui/badge';
@@ -7,7 +5,6 @@ import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
 import { Inline } from '@/components/ui/layout';
 import { Pressable } from '@/components/ui/pressable';
 import { TextLink } from '@/components/ui/text-link';
-import { BrandMark } from '@/components/ui/brand-mark';
 import { ClampText, TableCell, TableRow } from '@/components/ui/table';
 import { Tooltip } from '@/components/ui/tooltip';
 import { MissingValue } from '@/components/ui/unavailable-value';
@@ -32,6 +29,7 @@ import {
   SourceName,
   sortProps,
 } from '@/components/visibility/source-cells';
+import { NamedBrandMarks } from '@/components/visibility/named-brand-marks';
 import { useEngineCatalog } from '@/lib/providers/engines';
 import { standingLabel } from '@/lib/visibility/source-pages';
 import { pageFormatBasis } from '@/lib/visibility/vocabulary';
@@ -93,10 +91,11 @@ function domainColumns(
   engineLabel: (key: string) => string,
 ): DataTableColumn[] {
   return [
-    // Every figure takes the `metric` role: a sortable header with its hint
-    // needs that width to show its label whole, and the table scrolls in its
-    // frame behind the pinned source rather than cutting headers to "Cited…"
-    // (2026-11-03 app review).
+    // Every figure takes the `figure` role and the source is the one flexible
+    // column; the hint sits on the header button, so a figure's width holds
+    // its label. Below the `xl` width the table scrolls behind the pinned
+    // source rather than squeezing it: at `lg` the source kept too little
+    // room for a domain on one line.
     { key: 'source', label: 'Source', sort: sortProps(sort, onSort, 'key') },
     {
       key: 'type',
@@ -107,7 +106,9 @@ function domainColumns(
     {
       key: 'cited',
       label: 'Cited in',
-      width: 'metric',
+      // A share here, a count in the URL table: the unit is on the header.
+      sublabel: '% of answers',
+      width: 'figure',
       numeric: true,
       sort: sortProps(sort, onSort, 'response_rate'),
       hint: 'Answers that cited at least one page from this domain, as a share of all answers in the selection.',
@@ -115,7 +116,8 @@ function domainColumns(
     {
       key: 'retrieved',
       label: 'Retrieved',
-      width: 'metric',
+      sublabel: '% of answers',
+      width: 'figure',
       numeric: true,
       sort: sortProps(sort, onSort, 'retrieved'),
       hint: retrievedHint(
@@ -127,7 +129,7 @@ function domainColumns(
     {
       key: 'pages',
       label: 'Pages cited',
-      width: 'metric',
+      width: 'figure',
       numeric: true,
       desktopOnly: true,
       sort: sortProps(sort, onSort, 'retrieval_rate'),
@@ -136,7 +138,7 @@ function domainColumns(
     {
       key: 'citations',
       label: 'Citations',
-      width: 'metric',
+      width: 'figure',
       numeric: true,
       sort: sortProps(sort, onSort, 'annotations'),
       hint: 'Every inline citation belonging to this domain.',
@@ -144,7 +146,7 @@ function domainColumns(
     {
       key: 'share',
       label: 'Citation share',
-      width: 'metric',
+      width: 'figure',
       numeric: true,
       desktopOnly: true,
       sort: sortProps(sort, onSort, 'citation_share'),
@@ -153,7 +155,7 @@ function domainColumns(
     {
       key: 'rate',
       label: 'Citation rate',
-      width: 'metric',
+      width: 'figure',
       numeric: true,
       desktopOnly: true,
       sort: sortProps(sort, onSort, 'citation_rate'),
@@ -221,43 +223,6 @@ export function DomainTable({
   );
 }
 
-/**
- * The brands named alongside this source, as the marks a reader recognises.
- *
- * Real logos only — `BrandMark` falls back to initials rather than inventing a
- * mark. The overflow count is the rest of the distinct brands, so the cell
- * never grows past three chips no matter how crowded the answer was.
- */
-function MentionedChips({
-  brands,
-  total,
-}: Readonly<{ brands: SourceItem['brands']; total: number }>) {
-  if (!brands.length) return <MissingValue />;
-  const overflow = total - brands.length;
-  return (
-    <Inline as="span" gap="tight">
-      {brands.map((brand) => (
-        <Tooltip
-          key={`${brand.kind}:${brand.name}`}
-          content={`${brand.name} — named in ${brand.responses} of the answers citing this URL`}
-        >
-          <span className="inline-flex">
-            <BrandMark
-              name={brand.name}
-              logoUrl={brand.logo_url}
-              websiteUrl={brand.website}
-              placement="inline"
-            />
-          </span>
-        </Tooltip>
-      ))}
-      {overflow > 0 ? (
-        <span className={textRole('caption', 'text-ink-secondary tabular-nums')}>+{overflow}</span>
-      ) : null}
-    </Inline>
-  );
-}
-
 function standingTone(standing: SourceItem['standing']) {
   if (standing === 'gap') return 'warning';
   if (standing === 'listed') return 'success';
@@ -296,8 +261,11 @@ function urlColumns(
   retrieval: SourcesData['retrieval'] | undefined,
   engineLabel: (key: string) => string,
 ): DataTableColumn[] {
+  // The URL is the one flexible column; every other column holds a role's
+  // width. Nine columns cannot fit beside a readable URL at the owner's 982px,
+  // so the table keeps a minimum width and scrolls behind the pinned URL.
   return [
-    { key: 'url', label: 'URL', width: 'lead', sort: sortProps(sort, onSort, 'key') },
+    { key: 'url', label: 'URL', sort: sortProps(sort, onSort, 'key') },
     {
       key: 'type',
       label: 'URL type',
@@ -314,6 +282,8 @@ function urlColumns(
     {
       key: 'cited',
       label: 'Cited in',
+      sublabel: 'Answers',
+      width: 'figure',
       numeric: true,
       sort: sortProps(sort, onSort, 'responses'),
       hint: 'Answers that cited this URL.',
@@ -321,6 +291,8 @@ function urlColumns(
     {
       key: 'retrieved',
       label: 'Retrieved',
+      sublabel: 'Answers',
+      width: 'figure',
       numeric: true,
       sort: sortProps(sort, onSort, 'retrieved'),
       hint: retrievedHint(
@@ -332,6 +304,7 @@ function urlColumns(
     {
       key: 'rate',
       label: 'Citation rate',
+      width: 'figure',
       numeric: true,
       sort: sortProps(sort, onSort, 'citation_rate'),
       hint: 'Citations of this URL per answer that cited it.',
@@ -339,6 +312,7 @@ function urlColumns(
     {
       key: 'mentions',
       label: 'Mentions',
+      width: 'figure',
       numeric: true,
       desktopOnly: true,
       sort: sortProps(sort, onSort, 'mentions'),
@@ -347,12 +321,14 @@ function urlColumns(
     {
       key: 'mentioned',
       label: 'Mentioned',
+      width: 'status',
       desktopOnly: true,
       hint: 'The brands named in the answers that cited this URL. Co-occurrence in the answer, not presence on the page.',
     },
     {
       key: 'seen',
       label: 'Last seen',
+      width: 'figure',
       numeric: true,
       desktopOnly: true,
       sort: sortProps(sort, onSort, 'last_cited_at'),
@@ -389,6 +365,8 @@ export function UrlTable({
     <DataTable
       label="Cited URLs"
       columns={urlColumns(sort, onSort, retrieval, engines.label)}
+      minWidth="xl"
+      pinFirstColumn
       rowCount={rows.length}
       {...frame}
     >
@@ -414,7 +392,11 @@ export function UrlTable({
           <NumericCell value={ratio(row.citation_rate)} />
           <NumericCell value={count(row.mentions)} desktopOnly />
           <TableCell desktopOnly>
-            <MentionedChips brands={row.brands} total={row.mentions} />
+            <NamedBrandMarks
+              brands={row.brands}
+              total={row.mentions}
+              answers="the answers citing this URL"
+            />
           </TableCell>
           <NumericCell value={sinceLabel(row.last_cited_at)} desktopOnly />
         </TableRow>

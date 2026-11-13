@@ -8,6 +8,7 @@ import {
   ancestors,
   attribute,
   childElements,
+  documentBaseUrl,
   elements,
   hasAttribute,
   parentElement,
@@ -252,13 +253,15 @@ function isCardList(candidate: HtmlElement) {
   );
 }
 
-function headingNamesAnotherDocument(heading: HtmlElement, finalUrl: string) {
+type DocumentUrls = { finalUrl: string; baseUrl: string };
+
+function headingNamesAnotherDocument(heading: HtmlElement, { finalUrl, baseUrl }: DocumentUrls) {
   const headingText = squash(textContent(heading));
   if (!headingText) return false;
   for (const anchor of elements(heading, 'a')) {
     if (squash(textContent(anchor)) !== headingText) continue;
     try {
-      const target = new URL(attribute(anchor, 'href'), finalUrl);
+      const target = new URL(attribute(anchor, 'href'), baseUrl);
       if (
         ['http:', 'https:'].includes(target.protocol) &&
         comparableUrl(target.href) !== comparableUrl(finalUrl)
@@ -272,13 +275,13 @@ function headingNamesAnotherDocument(heading: HtmlElement, finalUrl: string) {
 }
 
 /** A featured article whose heading names another document is an excerpt, even on its own. */
-function linkedArticleExcerpt(node: HtmlElement, finalUrl: string) {
+function linkedArticleExcerpt(node: HtmlElement, urls: DocumentUrls) {
   if (node.tagName !== 'article') return false;
   let scanned = 0;
   for (const heading of elements(node)) {
     if (++scanned > r.max_containers_scanned) break;
     if (!HEADINGS.has(heading.tagName) || !regionNodeIsVisible(heading)) continue;
-    return heading.tagName !== 'h1' && headingNamesAnotherDocument(heading, finalUrl);
+    return heading.tagName !== 'h1' && headingNamesAnotherDocument(heading, urls);
   }
   return false;
 }
@@ -294,14 +297,14 @@ const isRecommendation = (node: HtmlElement) => {
 };
 
 /** Repeated item collections, recommendation modules and isolated linked article excerpts. */
-function cardListContainers(region: HtmlNode, finalUrl: string): HtmlElement[] {
+function cardListContainers(region: HtmlNode, urls: DocumentUrls): HtmlElement[] {
   const containers: HtmlElement[] = [];
   const excerpts: HtmlElement[] = [];
   let scanned = 0;
   for (const candidate of elements(region)) {
     if (++scanned > r.max_containers_scanned) break;
     if (candidate === region) continue;
-    if (linkedArticleExcerpt(candidate, finalUrl)) excerpts.push(candidate);
+    if (linkedArticleExcerpt(candidate, urls)) excerpts.push(candidate);
     if (isCardList(candidate) || isRecommendation(candidate)) containers.push(candidate);
   }
   // Repeated sections can resemble cards when each contains links. Keep the
@@ -326,16 +329,20 @@ export type PageScope = {
   region: HtmlNode;
   source: string;
   finalUrl: string;
+  /** What the page's relative links resolve against: its `<base href>`, else `finalUrl`. */
+  baseUrl: string;
   cards: ReadonlySet<HtmlElement>;
 };
 export function pageScope(root: HtmlNode, finalUrl: string): PageScope {
   const { node, source } = primaryRegion(root);
+  const baseUrl = documentBaseUrl(root, finalUrl);
   return {
     root,
     region: node,
     source,
     finalUrl,
-    cards: new Set(cardListContainers(node, finalUrl)),
+    baseUrl,
+    cards: new Set(cardListContainers(node, { finalUrl, baseUrl })),
   };
 }
 

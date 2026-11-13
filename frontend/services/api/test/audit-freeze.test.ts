@@ -57,6 +57,7 @@ describe('audit admission freeze', () => {
       project_id: t.projectId,
       prompt_set_id: t.setId,
       engines: ['chatgpt'],
+      repetitions: 2,
       random_seed: '42',
     });
     const plan = await prepareAudit(db, t.workspaceId, input, settings, providers, 'manual', {
@@ -65,7 +66,9 @@ describe('audit admission freeze', () => {
     expect(plan.configuration).toMatchObject({
       brand_name: 'Acme Running',
       engines: ['chatgpt'],
-      measurement_policy: { retrieval_enabled: true },
+      repetitions: 2,
+      // The run's own repetition count, not the configured default.
+      measurement_policy: { retrieval_enabled: true, repetitions: 2 },
       anthropic_max_uses: providers.anthropicMaxUses,
       openai_max_tool_calls: 1,
     });

@@ -1,12 +1,14 @@
 import type { LucideIcon } from 'lucide-react';
 import { useId, type ReactNode } from 'react';
 
+import { CARD_FACE } from '@/components/ui/card';
 import { Icon } from '@/components/ui/icon';
 import { LogoMark } from '@/components/ui/logo-mark';
 import { ThemeSwitch } from '@/components/ui/theme-switch';
+import { cn } from '@/lib/utils';
 
 /** The CiteLadder logo linking to the product root. */
-function AuthLogo() {
+export function AuthLogo() {
   return (
     <a
       href="/"
@@ -59,9 +61,9 @@ export function AuthShell({
 }
 
 /**
- * The card's head: an optional 40px icon tile, the title in Cal Sans 32/38
- * (decision D37; the setup cards are the app's only Cal Sans besides the
- * PageHeader title) and a 16/26 line under it. The title is the page's one `h1`; it takes focus by
+ * The card's head: an optional 40px icon tile, the title 32/38 in the sans
+ * face at 500 (the app sets no display face, decision D54) and a 16/26 line
+ * under it. The title is the page's one `h1`; it takes focus by
  * script (`tabIndex -1`) when a flow moves to a new step.
  */
 function AuthHead({
@@ -85,7 +87,11 @@ function AuthHead({
           <Icon icon={icon} />
         </span>
       ) : null}
-      <h1 id={id} tabIndex={-1} className="text-display-lg text-ink font-display text-balance">
+      <h1
+        id={id}
+        tabIndex={-1}
+        className="text-display-lg text-ink font-sans font-medium text-balance"
+      >
         {title}
       </h1>
       {sub ? <p className="text-body text-ink-secondary">{sub}</p> : null}
@@ -99,31 +105,31 @@ type AuthCardProps = Readonly<{
   titleId?: string;
   sub?: ReactNode;
   icon?: LucideIcon;
-  /** The card's last row, under a rule (OnboardingStep's Back and Continue). */
-  footer?: ReactNode;
   /** One line under the card. */
   after?: ReactNode;
   children?: ReactNode;
 }>;
 
 /**
- * AuthCard — one setup step on `surface` with `shadow-card`, `radius-lg` and
+ * AuthCard — one card on the Card's face (`surface`, 1px `line`), `radius-lg` and
  * `space-10` padding (`space-6` on phones): the head, then the body
- * (`space-6` apart), and an optional line under the card (`after`).
- * OnboardingStep shares it.
+ * (`space-6` apart), and an optional line under the card (`after`). Used by
+ * the setup screens' loading, failure and blocked states.
  */
-export function AuthCard({ title, titleId, sub, icon, footer, after, children }: AuthCardProps) {
+export function AuthCard({ title, titleId, sub, icon, after, children }: AuthCardProps) {
   const generatedId = useId();
   const headingId = titleId ?? generatedId;
   return (
     <div className="flex flex-col gap-[var(--card-padding)]">
       <section
         aria-labelledby={headingId}
-        className="bg-surface text-ink shadow-card desktop:p-10 flex flex-col gap-[var(--card-padding)] rounded-lg p-[var(--card-padding)]"
+        className={cn(
+          CARD_FACE,
+          'surface-card desktop:p-10 flex flex-col gap-[var(--card-padding)] p-[var(--card-padding)]',
+        )}
       >
         <AuthHead id={headingId} title={title} sub={sub} icon={icon} />
         {children}
-        {footer}
       </section>
       {after ? <p className="text-body-sm text-ink-secondary text-center">{after}</p> : null}
     </div>

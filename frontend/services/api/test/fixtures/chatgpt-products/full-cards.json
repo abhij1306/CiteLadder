@@ -1,0 +1,122 @@
+{
+  "status_code": 20000,
+  "status_message": "Ok.",
+  "tasks": [
+    {
+      "id": "11110536-2641-0626-0000-baa873bd4d4b",
+      "status_code": 20000,
+      "status_message": "Ok.",
+      "cost": 0.0012,
+      "result_count": 1,
+      "result": [
+        {
+          "keyword": "best running shoes for beginners under $120",
+          "language_code": "en",
+          "model": "gpt-6",
+          "datetime": "2026-11-11 05:36:36 +00:00",
+          "markdown": "If you're just getting into running, I'd prioritize **comfort, cushioning, stability, and durability** over speed.\n\n**1\\. Nike Men's Winflo 12 Road Running Shoes in Grey, Size: 14 | …**\n\n# \\$110.00\n\nNike",
+          "fan_out_queries": [
+            "best beginner running shoes under $120 2026 reviews Brooks Ghost ASICS Gel-Cumulus Saucony Ride Nike Pegasus"
+          ],
+          "search_results": [],
+          "sources": [],
+          "item_types": ["chat_gpt_text", "chat_gpt_products"],
+          "items_count": 2,
+          "items": [
+            {
+              "type": "chat_gpt_text",
+              "rank_group": 1,
+              "rank_absolute": 11,
+              "markdown": "These are my top picks under \\$120."
+            },
+            {
+              "type": "chat_gpt_products",
+              "rank_group": 1,
+              "rank_absolute": 12,
+              "items": [
+                {
+                  "type": "chat_gpt_products_element",
+                  "product_id": "1015989646-00198966953284",
+                  "merchants": "Nike",
+                  "id_to_token_map": null,
+                  "title": "Nike Men's Winflo 12 Road Running Shoes in Grey, Size: 14 | …",
+                  "rating": null,
+                  "price": 110,
+                  "currency": "USD",
+                  "tag": "Best overall value",
+                  "url": "https://www.nike.com/t/winflo-12-mens-road-running-shoes-GYVSurvY/HV9272-007?nikegos=true&utm_medium=feed&utm_source=chatgpt.com",
+                  "domain": "www.nike.com",
+                  "images": [
+                    "https://images.example/card-1.jpg",
+                    "https://images.example/card-2.jpg"
+                  ],
+                  "product_ids": null
+                },
+                {
+                  "type": "chat_gpt_products_element",
+                  "product_id": "gid://shopify/p/7ztm5LWqeEc9BaRGj0hce",
+                  "merchants": "Fleet Feet",
+                  "id_to_token_map": null,
+                  "title": "Brooks Revel 9 Mens Soft-Cushioned Running Shoes",
+                  "rating": null,
+                  "price": 100,
+                  "currency": "USD",
+                  "tag": "Best balanced beginner shoe",
+                  "url": "https://store.fleetfeet.com/products/mens-brooks-revel-58?utm_campaign=openai_catalog&utm_content=product_card&utm_medium=feed&variant=43599821996091&utm_source=chatgpt.com",
+                  "domain": "store.fleetfeet.com",
+                  "images": ["https://images.example/card-3.jpg"],
+                  "product_ids": null
+                },
+                {
+                  "type": "chat_gpt_products_element",
+                  "product_id": "A9644039",
+                  "merchants": "Nordstrom Rack",
+                  "id_to_token_map": null,
+                  "title": "New Balance 880 Running Shoe in Slate Grey/Reflection at Nor…",
+                  "rating": null,
+                  "price": 99.97,
+                  "currency": "USD",
+                  "tag": null,
+                  "url": "https://www.nordstromrack.com/s/new-balance-880/9300256?color=slate+grey%2F+reflection&size=7&width=d&utm_medium=organic&utm_campaign=genai_shopping&utm_source=chatgpt.com",
+                  "domain": "www.nordstromrack.com",
+                  "images": ["https://images.example/card-4.jpg"],
+                  "product_ids": null
+                },
+                {
+                  "type": "chat_gpt_products_element",
+                  "product_id": "7708944",
+                  "merchants": "Big 5 Sporting Goods",
+                  "id_to_token_map": null,
+                  "title": "ASICS Gel Contend 10 D Men's Running Shoes | Big 5 Sporting …",
+                  "rating": null,
+                  "price": 69.99,
+                  "currency": "USD",
+                  "tag": null,
+                  "url": "https://www.big5sportinggoods.com/store/details/asics-gel-contend-10-d-mens-running-shoes/5330100530247?utm_source=chatgpt.com",
+                  "domain": "www.big5sportinggoods.com",
+                  "images": ["https://images.example/card-5.jpg"],
+                  "product_ids": null
+                },
+                {
+                  "type": "chat_gpt_products_element",
+                  "product_id": "1015913492-00198958797094",
+                  "merchants": "Nike",
+                  "id_to_token_map": null,
+                  "title": "Nike Men's Downshifter 14 Road Running Shoes in White, Size:…",
+                  "rating": null,
+                  "price": 49.97,
+                  "currency": "USD",
+                  "tag": null,
+                  "url": "https://www.nike.com/t/downshifter-14-mens-road-running-shoe-wrouoOtz/IB1895-108?nikegos=true&utm_medium=feed&utm_source=chatgpt.com",
+                  "domain": "www.nike.com",
+                  "images": ["https://images.example/card-6.jpg"],
+                  "product_ids": null
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

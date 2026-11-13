@@ -19,6 +19,8 @@ import { chatDocuments, latestDocument, revisionRefs, revisionWebSources } from 
 import { active } from './queue.ts';
 import { workspaceChat } from './messages.ts';
 import { manifestSchema } from './context.ts';
+import { pageFetchView } from '../page-documents/reads.ts';
+import { openTargetChoice } from './target-adapter.ts';
 
 const iso = (date: Date | null) => date?.toISOString() ?? null;
 function summary(chat: Chat, outputKind: string | null, label: string | null, running: boolean) {
@@ -184,6 +186,19 @@ export async function readChat(
         .execute()
     : [];
   const generatedBy = new Map(generated.map((row) => [row.output_id, row.message_id]));
+  const outputActionIds = [
+    ...new Set(documents.flatMap(({ output }) => (output.action_id ? [output.action_id] : []))),
+  ];
+  const outputActions = outputActionIds.length
+    ? await db
+        .selectFrom('actions')
+        .select(['id', 'target_kind', 'target_label'])
+        .where('workspace_id', '=', scope.workspaceId)
+        .where('project_id', '=', scope.projectId)
+        .where('id', 'in', outputActionIds)
+        .execute()
+    : [];
+  const actionTargets = new Map(outputActions.map((row) => [row.id, row]));
   const parsedManifest = run ? manifestSchema.safeParse(run.context_manifest) : null;
   const manifest = parsedManifest?.success ? parsedManifest.data : null;
   let limitations = manifest?.package.summary.omissions ?? [];
@@ -235,10 +250,15 @@ export async function readChat(
       }),
     ),
     latest_run: run ? runView(run, await progress(db, run)) : null,
+    page_fetch: await pageFetchView(db, chat),
     outputs: documents.map(({ output, revision }) =>
       agentOutputSchema.parse({
         ...output,
         message_id: generatedBy.get(output.id) ?? null,
+        named_target: openTargetChoice(
+          output,
+          output.action_id ? actionTargets.get(output.action_id) : undefined,
+        ),
         latest_revision: revisionView(revision),
       }),
     ),

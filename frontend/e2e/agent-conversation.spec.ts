@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 
 import type { AgentChatDetail } from '../lib/api/agent';
 import { detail, revision, REV1 } from '../test/agent-chat-fixture';
+import { actionsPage } from '../test/fixtures/actions';
 import { FIXTURE_PROJECT, fixtureProjectPath, stubAuthedShell } from './helpers/app-fixture';
 
 const CHAT = '22222222-2222-4222-8222-222222222222';
@@ -44,6 +45,7 @@ function chatDetail(): AgentChatDetail {
       },
     },
     outputs: [],
+    page_fetch: null,
     messages: Array.from({ length: 24 }, (_, index) => ({
       id: `77777777-7777-4777-8777-${String(index + 1).padStart(12, '0')}`,
       sequence: index + 1,
@@ -56,7 +58,8 @@ function chatDetail(): AgentChatDetail {
       skill_source: 'chat',
       evidence_refs: [],
       web_sources: [],
-      steps: [],
+      // A written reply records its model call; only an unanswered turn's reply has none.
+      steps: index % 2 ? [{ kind: 'model', ordinal: 1 }] : [],
       mentions: [],
       created_at: NOW,
     })),
@@ -90,10 +93,7 @@ for (const width of [1280, 390]) {
     let reading = false;
     await stubAuthedShell(page, [
       ['**/api/v1/agent/skills', { skills: SKILLS, limits: { mentions_max: 5 } }],
-      [
-        `**/api/v1/projects/${FIXTURE_PROJECT.id}/actions*`,
-        { items: [], next_cursor: null, status_counts: {} },
-      ],
+      [`**/api/v1/projects/${FIXTURE_PROJECT.id}/actions*`, actionsPage()],
       [`**/api/v1/projects/${FIXTURE_PROJECT.id}/agent/chats?*`, { items: [], next_cursor: null }],
     ]);
     await page.route(`**/api/v1/agent/chats/${CHAT}`, async (route) => {
@@ -163,10 +163,7 @@ for (const width of [1280, 390]) {
       let reads = 0;
       await stubAuthedShell(page, [
         ['**/api/v1/agent/skills', { skills: SKILLS, limits: { mentions_max: 5 } }],
-        [
-          `**/api/v1/projects/${FIXTURE_PROJECT.id}/actions*`,
-          { items: [], next_cursor: null, status_counts: {} },
-        ],
+        [`**/api/v1/projects/${FIXTURE_PROJECT.id}/actions*`, actionsPage()],
         [
           `**/api/v1/projects/${FIXTURE_PROJECT.id}/agent/chats?*`,
           { items: [], next_cursor: null },
@@ -187,6 +184,7 @@ for (const width of [1280, 390]) {
           id: '77777777-7777-4777-8777-999999999997',
           sequence: 27,
           content: 'Stopped. Nothing from this turn was saved.',
+          steps: [],
         });
         return route.fulfill({ json: current.latest_run });
       });
@@ -221,6 +219,13 @@ for (const width of [1280, 390]) {
       await reply.fill('Draft kept while working');
       // While the turn runs, Stop takes Send's place and drafting continues.
       await expect(page.getByRole('button', { name: 'Send', exact: true })).toHaveCount(0);
+      // A long skill label truncates beside Stop rather than wrapping the control row.
+      const skillBox = await page
+        .getByRole('button', { name: 'Skill: Continue with Growth plan' })
+        .boundingBox();
+      const stopBox = await page.getByRole('button', { name: 'Stop', exact: true }).boundingBox();
+      expect(Math.abs(skillBox!.y - stopBox!.y)).toBeLessThanOrEqual(1);
+      expect(skillBox!.x + skillBox!.width).toBeLessThanOrEqual(stopBox!.x);
       // Only the thread scrolls, in its own region on both surfaces.
       const thread = page.getByRole('region', { name: 'Agent conversation' });
       await thread.evaluate((element) => element.scrollTo(0, 0));

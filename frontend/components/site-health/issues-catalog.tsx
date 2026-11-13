@@ -1,265 +1,380 @@
-'use client';
-
 import { useMemo, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { X } from 'lucide-react';
 
 import { ListScreen } from '@/components/layout/page-shell';
 import { Inline, Stack } from '@/components/ui/layout';
-import { IssueDetailRail } from '@/components/site-health/issue-detail-rail';
+import {
+  IssueDetailDialog,
+  PendingIssueDialog,
+  type IssueHead,
+} from '@/components/site-health/issue-detail-dialog';
 import { IssueMetadata } from '@/components/site-health/issue-metadata';
-import { PageKindSelect } from '@/components/site-health/page-kind-select';
-import { Button } from '@/components/ui/button';
-import { Icon } from '@/components/ui/icon';
-import { ListDetailCard, ListDetailRow } from '@/components/ui/list-detail';
-import { Pager } from '@/components/ui/pager';
-import { QueryState } from '@/components/ui/query-state';
+import { IssuesSummary } from '@/components/site-health/issues-summary';
+import { pageKindFilter } from '@/components/site-health/page-kind-select';
+import { choiceFilter, type FilterDefinition } from '@/components/ui/all-filters';
+import {
+  DataTable,
+  type DataTableColumn,
+  type DataTablePager,
+  type DataTableState,
+} from '@/components/ui/data-table';
+import { InfoHint } from '@/components/ui/info-hint';
+import { Pressable } from '@/components/ui/pressable';
 import { SearchField } from '@/components/ui/search-field';
+import { ClampText, TableCell, TableRow } from '@/components/ui/table';
 import { SegmentedControl } from '@/components/ui/tabs';
 import { siteHealthQueries } from '@/lib/api/site-health-queries';
 import { ICONS } from '@/lib/icons';
-import { ISSUE_OCCURRENCE_LIMIT } from '@/lib/config/site-health';
-import type { IssuesSummary, SiteIssue } from '@citeladder/contracts';
+import { ISSUE_OCCURRENCE_LIMIT, ISSUE_PAGE_LIMIT } from '@/lib/config/site-health';
+import type {
+  IssueSection,
+  IssueSort,
+  IssuesSummary as Summary,
+  SiteIssue,
+} from '@citeladder/contracts';
 import {
   findingClassChange,
-  issueFilterClass,
-  issueFilterClassChange,
-  issueFilterClasses,
+  ISSUE_PRIORITY_PARAMS,
+  ISSUE_SECTIONS,
+  ISSUE_SEVERITY_CHOICES,
   issueCatalogParams,
+  issueSeverityChange,
+  issueSeverityChoice,
   useIssueFilters,
   type FindingClass,
-  type IssueFilterClass,
   type IssueFilters,
 } from '@/lib/site-health/issue-filters';
-import { issueTitle } from '@/lib/site-health/issues';
+import { issueTitle, severityCount } from '@/lib/site-health/issues';
 import { InlineFigure, textRole } from '@/components/ui/typography';
-import { FilterChoice } from '@/components/ui/filter-bar';
 import { formatCount } from '@/lib/format';
 
-/** The toggle's count, only once a summary has landed. */
-function findingViewCount(view: FindingClass, summary: IssuesSummary | null): number | undefined {
-  if (!summary) return undefined;
-  return view === 'defect' ? summary.defect_issue_type_count : summary.advisory_issue_type_count;
-}
-
-function filterCount(filter: IssueFilterClass, summary: IssuesSummary, view: FindingClass): number {
-  if (filter === 'high')
-    return (summary.severity_counts.high ?? 0) + (summary.severity_counts.critical ?? 0);
-  if (filter === 'medium' || filter === 'low') return summary.severity_counts[filter] ?? 0;
-  if (filter === 'technical' || filter === 'aeo') return summary.dimension_counts[filter] ?? 0;
-  return view === 'defect' ? summary.defect_issue_type_count : summary.advisory_issue_type_count;
-}
-
 /**
- * The issue page and the occurrences of whichever issue the rail shows, with
- * no request waiting on another: a selection named in the address starts its
- * detail alongside the list, and the default selection (the first row) rides
- * the list response itself.
+ * The Issues screen's reads, none waiting on another: the listed page, the
+ * crawl's unfiltered summary with its worst issues, and — while one is open —
+ * the open issue's occurrences.
  */
-function useIssuesCatalogQueries(
-  workspaceId: string,
-  crawlId: string,
-  filters: IssueFilters,
-  cursor: string | null,
-  selectedGroupId: string | null,
-  occurrenceCursor: string | undefined,
-) {
+function useIssuesCatalogQueries({
+  workspaceId,
+  crawlId,
+  filters,
+  cursor,
+  selectedGroupId,
+  occurrenceCursor,
+}: Readonly<{
+  workspaceId: string;
+  crawlId: string;
+  filters: IssueFilters;
+  cursor: string | null;
+  selectedGroupId: string | null;
+  occurrenceCursor: string | undefined;
+}>) {
   const params = useMemo(() => issueCatalogParams(filters, cursor), [filters, cursor]);
   const issuesQuery = useQuery(siteHealthQueries.issues(workspaceId, crawlId, params));
-  const summary = issuesQuery.data?.summary ?? null;
-  const rows = issuesQuery.data?.items ?? [];
-  const selected = rows.find((issue) => issue.group_id === selectedGroupId) ?? rows[0] ?? null;
-  // Until the list lands, the address names the issue to read. Once it has,
-  // the row actually selected does: an address issue missing from this page
-  // falls back to the first row, as the highlight does.
-  const detailGroupId = issuesQuery.data ? (selected?.group_id ?? null) : selectedGroupId;
-  const embedded = issuesQuery.data?.first_issue;
+  const priorityQuery = useQuery(
+    siteHealthQueries.issues(workspaceId, crawlId, ISSUE_PRIORITY_PARAMS),
+  );
   const detailQuery = useQuery({
-    // The rail lists the pages its row counted, so it takes the row's page-kind filter.
-    ...siteHealthQueries.issue(workspaceId, crawlId, detailGroupId ?? '', {
+    // The dialog lists the pages its row counted, so it takes the row's page-kind filter.
+    ...siteHealthQueries.issue(workspaceId, crawlId, selectedGroupId ?? '', {
       cursor: occurrenceCursor,
       limit: ISSUE_OCCURRENCE_LIMIT,
       page_kind: filters.page_kind || undefined,
     }),
-    enabled: detailGroupId !== null,
-    // The list carried this exact first page of the first row's detail.
-    initialData: () =>
-      embedded && embedded.group_id === detailGroupId && !occurrenceCursor ? embedded : undefined,
-    initialDataUpdatedAt: issuesQuery.dataUpdatedAt,
+    enabled: selectedGroupId !== null,
   });
-  // The rail describes ONE issue, so its header and its occurrences must come
-  // from the same one. The detail lags the selection by a request and the
-  // previous page is retained meanwhile, so the rail keeps the pair it already
-  // has — and marks itself busy — rather than captioning one issue's title
-  // over another issue's pages. The list highlight moves on the click.
-  const shown = rows.find((issue) => issue.group_id === detailQuery.data?.group_id) ?? selected;
-  return { issuesQuery, detailQuery, summary, rows, selected, shown };
+  const rows = issuesQuery.data?.items ?? [];
+  // The open issue as its list row says it, or — named by the address but on
+  // another page or tab — as its own detail says it. Never another issue's
+  // detail retained while this one loads.
+  const detail = detailQuery.data?.group_id === selectedGroupId ? detailQuery.data : undefined;
+  const open: IssueHead | null =
+    rows.find((issue) => issue.group_id === selectedGroupId) ??
+    priorityQuery.data?.items.find((issue) => issue.group_id === selectedGroupId) ??
+    detail ??
+    null;
+  return { issuesQuery, priorityQuery, detailQuery, rows, open };
 }
 
 export function IssuesCatalog({
   workspaceId,
+  projectId,
   crawlId,
   notice,
 }: Readonly<{
   workspaceId: string;
+  projectId: string;
   crawlId: string;
   /** A refresh failure to report above the catalog it could not refresh. */
   notice?: ReactNode;
 }>) {
   const catalog = useIssueFilters();
   const { filters, cursor, selectedGroupId, updateFilters } = catalog;
-  const findingView = filters.finding_class;
-  const { issuesQuery, detailQuery, summary, rows, selected, shown } = useIssuesCatalogQueries(
+  const { issuesQuery, priorityQuery, detailQuery, rows, open } = useIssuesCatalogQueries({
     workspaceId,
     crawlId,
     filters,
     cursor,
     selectedGroupId,
-    catalog.occurrenceCursor,
-  );
-
-  const controls = {
-    search: (
-      <IssueSearch
-        key={filters.query}
-        query={filters.query}
-        onApply={(query) => updateFilters({ query })}
-      />
-    ),
-    filters: (
-      <>
-        <PageKindSelect
-          value={filters.page_kind}
-          onChange={(page_kind) => updateFilters({ page_kind })}
-        />
-        <FindingClassFilter
-          value={findingView}
-          summary={summary}
-          onChange={(value) => updateFilters(findingClassChange(value))}
-        />
-        {/* Severity and category share one menu: as three segmented groups
-            the band wrapped to two rows at the owner's 982px. */}
-        <FilterChoice
-          label="Severity or category"
-          value={issueFilterClass(filters)}
-          defaultValue="all"
-          onChange={(value) => updateFilters(issueFilterClassChange(value))}
-          options={issueFilterClasses(findingView).map((item) => ({
-            value: item.key,
-            label: summary
-              ? `${item.label} (${filterCount(item.key, summary, findingView)})`
-              : item.label,
-          }))}
-        />
-        {/* Last in the strip, so clearing it moves no other control. */}
-        {filters.rule_id ? (
-          <RuleFilterChip
-            title={ruleFilterTitle(rows, filters.rule_id)}
-            onClear={() => updateFilters({ rule_id: '' })}
-          />
-        ) : null}
-      </>
-    ),
-  };
-
-  // Wait for the issues page, and only for that.
-  //
-  // This used to wait for the first issue's OCCURRENCES as well — a third
-  // request that cannot even begin until the second one names an issue. So the
-  // whole screen was withheld for three sequential round trips to show a list
-  // that the second one had already fully answered.
-  //
-  // The reason given for waiting was layout: painting the list alone shoved
-  // everything down when the summary arrived and left the rail short until the
-  // occurrences did. That is an argument for reserving the space, not for
-  // showing nothing — and the filters stay in place while it loads.
-  if (issuesQuery.isPending && !issuesQuery.data)
-    return (
-      <ListScreen controls={controls}>
-        <Stack gap="section" className="min-w-0" aria-busy="true">
-          {notice}
-          <QueryState kind="loading" label="Loading issues…" />
-        </Stack>
-      </ListScreen>
-    );
-
-  let issuesBody: ReactNode = (
-    <ListDetailCard
-      busy={issuesQuery.isFetching}
-      list={
-        <IssueGroupList
-          rows={rows}
-          selectedGroupId={selected?.group_id}
-          onSelect={catalog.selectIssue}
-        />
-      }
-      detail={
-        shown ? (
-          <IssueDetailRail
-            issue={shown}
-            crawlId={crawlId}
-            detailQuery={detailQuery}
-            canPrevious={catalog.canPageOccurrencesBack}
-            onPrevious={catalog.previousOccurrences}
-            onNext={() => {
-              const next = detailQuery.data?.next_cursor;
-              if (next) catalog.nextOccurrences(next);
-            }}
-          />
-        ) : null
-      }
-    />
-  );
-  if (issuesQuery.isError) {
-    issuesBody = (
-      <QueryState
-        kind="error"
-        error={issuesQuery.error}
-        fallback="Could not load issues for this crawl."
-        onRetry={() => void issuesQuery.refetch()}
-        pending={issuesQuery.isFetching}
-      />
-    );
-  } else if (rows.length === 0) {
-    issuesBody = (
-      <QueryState kind="empty" icon={ICONS.issues} heading="No issues match this view" />
-    );
-  }
+    occurrenceCursor: catalog.occurrenceCursor,
+  });
+  // Fix progress is a side read: while it loads or fails, the summary shows no fix lines.
+  const fixesQuery = useQuery(siteHealthQueries.issueFixes(workspaceId, crawlId));
+  const summary = issuesQuery.data?.summary ?? null;
+  const pager = useCatalogPager(cursor, issuesQuery.data?.next_cursor ?? null, catalog.goToPage);
 
   return (
-    <ListScreen controls={controls}>
-      <Stack gap="section" className="min-w-0">
+    <ListScreen narrow>
+      <Stack gap="workspace" className="min-w-0">
         {notice}
-        {/* The summary line belongs to the list it counts: it sits the
-            Overview crawl line's compact gap above it, not a section apart. */}
-        <Stack className="min-w-0">
-          {summary ? <IssueSummary summary={summary} findingView={findingView} /> : null}
-          {issuesBody}
-        </Stack>
-
-        {rows.length > 0 ? (
-          <CatalogPager cursor={cursor} page={issuesQuery.data} onGo={catalog.goToPage} />
-        ) : null}
+        <IssuesSummary
+          query={priorityQuery}
+          fixes={fixesQuery.data?.items}
+          onOpen={catalog.selectIssue}
+        />
+        <DataTable
+          label="Issues"
+          // Keeps the Issue column readable beside the fixed severity and pages
+          // columns; narrower screens scroll the table instead.
+          minWidth="sm"
+          columns={issueColumns(filters.sort, (sort) => updateFilters({ sort }))}
+          toolbar={{
+            view: (
+              <SectionControl
+                value={filters.section}
+                summary={summary}
+                onChange={(section) => updateFilters({ section })}
+              />
+            ),
+            search: (
+              <IssueSearch
+                key={filters.query}
+                query={filters.query}
+                onApply={(query) => updateFilters({ query })}
+              />
+            ),
+            filters: catalogFilters(filters, rows, updateFilters),
+            status: summary ? (
+              <IssueCount summary={summary} findingView={filters.finding_class} />
+            ) : null,
+          }}
+          state={tableState(issuesQuery)}
+          rowCount={rows.length}
+          pageSize={ISSUE_PAGE_LIMIT}
+          pager={pager}
+          busy={{ active: issuesQuery.isFetching, label: 'Updating issues' }}
+        >
+          {rows.map((issue, index) => (
+            <IssueRow
+              key={issue.group_id}
+              issue={issue}
+              index={index}
+              onOpen={catalog.selectIssue}
+            />
+          ))}
+        </DataTable>
       </Stack>
+      {selectedGroupId !== null && open === null ? (
+        <PendingIssueDialog detailQuery={detailQuery} onClose={() => catalog.selectIssue(null)} />
+      ) : null}
+      {open ? (
+        <IssueDetailDialog
+          issue={open}
+          scope={{ workspaceId, projectId }}
+          crawlId={crawlId}
+          detailQuery={detailQuery}
+          canPrevious={catalog.canPageOccurrencesBack}
+          onPrevious={catalog.previousOccurrences}
+          onNext={() => {
+            const next = detailQuery.data?.next_cursor;
+            if (next) catalog.nextOccurrences(next);
+          }}
+          onClose={() => catalog.selectIssue(null)}
+        />
+      ) : null}
     </ListScreen>
   );
 }
 
-/** The deep-linked issue's title, from the rows it filtered to; never its rule id. */
-function ruleFilterTitle(rows: SiteIssue[], ruleId: string): string {
-  const row = rows.find((issue) => issue.rule_id === ruleId);
-  return row ? issueTitle(row) : 'one issue';
+/** The list's read as the table states it: loading and failure before rows, then "none match". */
+function tableState(query: ReturnType<typeof useIssuesCatalogQueries>['issuesQuery']) {
+  if (query.isError && !query.data)
+    return {
+      kind: 'error',
+      error: query.error,
+      fallback: 'Could not load issues for this crawl.',
+      onRetry: () => void query.refetch(),
+      pending: query.isFetching,
+    } satisfies DataTableState;
+  if (!query.data) return { kind: 'loading', label: 'Loading issues…' } satisfies DataTableState;
+  if (query.data.items.length === 0)
+    return {
+      kind: 'empty',
+      icon: ICONS.issues,
+      heading: 'No issues match this view',
+    } satisfies DataTableState;
+  return undefined;
 }
 
-/** A deep link's one-issue filter, visible and removable rather than silent. */
-function RuleFilterChip({ title, onClear }: Readonly<{ title: string; onClear: () => void }>) {
+/** Ordinal, the issue, its severity, its pages; severity and pages order the list. */
+function issueColumns(sort: IssueSort, onSort: (sort: IssueSort) => void): DataTableColumn[] {
+  return [
+    { key: 'index', label: '#', width: 'index', numeric: true },
+    { key: 'issue', label: 'Issue' },
+    {
+      key: 'severity',
+      label: 'Severity',
+      width: 'statusLabel',
+      sort: { active: sort === 'severity', descending: true, onSort: () => onSort('severity') },
+    },
+    {
+      key: 'pages',
+      label: 'Pages',
+      width: 'figure',
+      numeric: true,
+      sort: { active: sort === 'pages', descending: true, onSort: () => onSort('pages') },
+    },
+  ];
+}
+
+/** One issue: the whole row opens its detail, the title is the keyboard's way in. */
+function IssueRow({
+  issue,
+  index,
+  onOpen,
+}: Readonly<{ issue: SiteIssue; index: number; onOpen: (groupId: string) => void }>) {
+  const title = issueTitle(issue);
   return (
-    <Button variant="secondary" onClick={onClear}>
-      Showing: {title}
-      <Icon icon={X} />
-      <span className="sr-only">(show all issues)</span>
-    </Button>
+    <TableRow onClick={() => onOpen(issue.group_id)} className="cursor-pointer">
+      <TableCell numeric className="type-caption tabular-nums">
+        {index + 1}
+      </TableCell>
+      <TableCell>
+        <Inline gap="tight">
+          <Pressable
+            aria-haspopup="dialog"
+            onClick={(event) => {
+              event.stopPropagation();
+              onOpen(issue.group_id);
+            }}
+            className="min-w-0"
+          >
+            <ClampText lines={1} className={textRole('emphasis')}>
+              {title}
+            </ClampText>
+          </Pressable>
+          {issue.description ? (
+            // The rule's description states the passing check, so it is
+            // offered as what the check looks for, never under the title.
+            <InfoHint label={`What “${title}” checks`}>{issue.description}</InfoHint>
+          ) : null}
+        </Inline>
+      </TableCell>
+      <TableCell className="whitespace-nowrap">
+        <IssueMetadata issue={issue} />
+      </TableCell>
+      <TableCell numeric className="tabular-nums">
+        {formatCount(issue.affected_url_count)}
+      </TableCell>
+    </TableRow>
   );
+}
+
+/** Technical | Content | AEO, each with its issue count under the other filters. */
+function SectionControl({
+  value,
+  summary,
+  onChange,
+}: Readonly<{
+  value: IssueSection;
+  summary: Summary | null;
+  onChange: (value: IssueSection) => void;
+}>) {
+  return (
+    <SegmentedControl
+      value={value}
+      onChange={onChange}
+      ariaLabel="Issue type"
+      options={ISSUE_SECTIONS.map((section) => ({
+        value: section.value,
+        label: section.label,
+        count: summary?.section_counts[section.value],
+      }))}
+    />
+  );
+}
+
+/**
+ * The list's narrowing: severity (issues only — advisories carry none), the
+ * page type, whether it lists issues or advisories, and a deep link's
+ * one-issue filter while it holds.
+ */
+function catalogFilters(
+  filters: IssueFilters,
+  rows: readonly SiteIssue[],
+  updateFilters: (change: Partial<IssueFilters>) => void,
+): FilterDefinition[] {
+  const defects = filters.finding_class === 'defect';
+  return [
+    ...(defects
+      ? [
+          choiceFilter({
+            id: 'severity',
+            label: 'Severity',
+            value: issueSeverityChoice(filters),
+            defaultValue: 'all',
+            onChange: (value) => updateFilters(issueSeverityChange(value)),
+            groups: [
+              { options: ISSUE_SEVERITY_CHOICES.map(({ key, label }) => ({ value: key, label })) },
+            ],
+          }),
+        ]
+      : []),
+    pageKindFilter({
+      value: filters.page_kind,
+      onChange: (page_kind) => updateFilters({ page_kind }),
+    }),
+    choiceFilter<FindingClass>({
+      id: 'finding_class',
+      label: 'Show',
+      value: filters.finding_class,
+      defaultValue: 'defect',
+      onChange: (value) => updateFilters(findingClassChange(value)),
+      groups: [
+        {
+          options: [
+            { value: 'defect', label: 'Issues' },
+            { value: 'advisory', label: 'Advisories' },
+          ],
+        },
+      ],
+    }),
+    // A deep link's one-issue filter, counted on the button and cleared in its menu.
+    ...(filters.rule_id
+      ? [
+          choiceFilter({
+            id: 'rule',
+            label: 'Issue',
+            value: filters.rule_id,
+            defaultValue: '',
+            onChange: (rule_id) => updateFilters({ rule_id }),
+            groups: [
+              {
+                options: [
+                  { value: '', label: 'All issues' },
+                  { value: filters.rule_id, label: ruleFilterTitle(rows, filters.rule_id) },
+                ],
+              },
+            ],
+          }),
+        ]
+      : []),
+  ];
+}
+
+/** The deep-linked issue's title, from the rows it filtered to; never its rule id. */
+function ruleFilterTitle(rows: readonly SiteIssue[], ruleId: string): string {
+  const row = rows.find((issue) => issue.rule_id === ruleId);
+  return row ? issueTitle(row) : 'one issue';
 }
 
 function IssueSearch({
@@ -276,7 +391,11 @@ function IssueSearch({
     >
       <SearchField
         value={draft}
-        onValueChange={setDraft}
+        onValueChange={(value) => {
+          setDraft(value);
+          // An emptied box lists everything again: there is nothing to submit.
+          if (value === '' && query !== '') onApply('');
+        }}
         placeholder="Search issues…"
         aria-label="Search issues"
       />
@@ -285,67 +404,60 @@ function IssueSearch({
 }
 
 /**
- * The catalog's page controls.
- *
- * Renders nothing at all when there is no page to go to. It used to render
- * whenever there were rows and then disable both buttons, so a crawl whose
- * issues all fit on one page showed two permanently dead controls — the same
- * noise the one-point trend chart rule exists to prevent.
- *
- * The cursor lives in the URL and the API pages forward only, so the way back
- * is the trail of cursors this view followed; a deep-linked page has none and
- * steps back to the first page.
+ * The catalog's page controls. The cursor lives in the URL and the API pages
+ * forward only, so the way back is the trail of cursors this view followed; a
+ * deep-linked page has none and steps back to the first page.
  */
-function CatalogPager({
-  cursor,
-  page,
-  onGo,
-}: Readonly<{
-  cursor: string | null;
-  page: { next_cursor?: string | null } | undefined;
-  onGo: (cursor: string | null) => void;
-}>) {
+function useCatalogPager(
+  cursor: string | null,
+  nextCursor: string | null,
+  onGo: (cursor: string | null) => void,
+): DataTablePager {
   const [trail, setTrail] = useState<(string | null)[]>([]);
-  const nextCursor = page?.next_cursor ?? null;
   // A filter change drops the cursor, which starts a new trail.
   const followed = cursor ? trail : [];
-  return (
-    <Pager
-      hideWhenSinglePage
-      canPrev={Boolean(cursor)}
-      canNext={Boolean(nextCursor)}
-      onFirst={() => {
-        setTrail([]);
-        onGo(null);
-      }}
-      onPrev={() => {
-        setTrail(followed.slice(0, -1));
-        onGo(followed.at(-1) ?? null);
-      }}
-      onNext={() => {
-        if (!nextCursor) return;
-        setTrail([...followed, cursor]);
-        onGo(nextCursor);
-      }}
-    />
-  );
+  return {
+    canPrev: Boolean(cursor),
+    canNext: Boolean(nextCursor),
+    onFirst: () => {
+      setTrail([]);
+      onGo(null);
+    },
+    onPrev: () => {
+      setTrail(followed.slice(0, -1));
+      onGo(followed.at(-1) ?? null);
+    },
+    onNext: () => {
+      if (!nextCursor) return;
+      setTrail([...followed, cursor]);
+      onGo(nextCursor);
+    },
+  };
 }
 
-function IssueSummary({
+/** The listed view's size: issue types, their occurrences and the pages they reach. */
+function IssueCount({
   summary,
   findingView,
-}: Readonly<{ summary: IssuesSummary; findingView: FindingClass }>) {
+}: Readonly<{ summary: Summary; findingView: FindingClass }>) {
   const defects = findingView === 'defect';
   const typeCount = defects ? summary.defect_issue_type_count : summary.advisory_issue_type_count;
+  const high = severityCount(summary.severity_counts, 'high');
   return (
-    <p className="type-body">
+    <p className="type-caption whitespace-nowrap">
       <SummaryCount
         value={typeCount}
         singular={defects ? 'issue' : 'advisory'}
         plural={defects ? 'issues' : 'advisories'}
       />
-      <span aria-hidden> · </span>
-      <SummaryCount value={summary.occurrence_count} singular="occurrence" plural="occurrences" />
+      {defects && high > 0 ? (
+        <>
+          <span aria-hidden> · </span>
+          <span>
+            <InlineFigure className={textRole('emphasis')}>{formatCount(high)}</InlineFigure> high
+          </span>
+        </>
+      ) : null}
       <span aria-hidden> · </span>
       <SummaryCount value={summary.affected_url_count} singular="page" plural="pages" />
     </p>
@@ -363,54 +475,4 @@ function SummaryCount({
       {value === 1 ? singular : plural}
     </span>
   );
-}
-
-function FindingClassFilter({
-  value,
-  summary,
-  onChange,
-}: Readonly<{
-  value: FindingClass;
-  summary: IssuesSummary | null;
-  onChange: (value: FindingClass) => void;
-}>) {
-  return (
-    <SegmentedControl
-      value={value}
-      onChange={onChange}
-      ariaLabel="Finding class"
-      options={(['defect', 'advisory'] as const).map((view) => ({
-        value: view,
-        label: view === 'defect' ? 'Issues' : 'Advisories',
-        count: findingViewCount(view, summary),
-      }))}
-    />
-  );
-}
-
-function IssueGroupList({
-  rows,
-  selectedGroupId,
-  onSelect,
-}: Readonly<{
-  rows: SiteIssue[];
-  selectedGroupId: string | undefined;
-  onSelect: (groupId: string) => void;
-}>) {
-  return rows.map((issue) => (
-    <ListDetailRow
-      key={issue.group_id}
-      selected={issue.group_id === selectedGroupId}
-      onSelect={() => onSelect(issue.group_id)}
-    >
-      <span className={textRole('itemTitle')}>{issueTitle(issue)}</span>
-      <Inline as="span" className="flex-wrap justify-between">
-        <IssueMetadata issue={issue} />
-        <span className="type-caption whitespace-nowrap">
-          <InlineFigure>{formatCount(issue.affected_url_count)}</InlineFigure>{' '}
-          {issue.affected_url_count === 1 ? 'page' : 'pages'}
-        </span>
-      </Inline>
-    </ListDetailRow>
-  ));
 }

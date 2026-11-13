@@ -34,6 +34,7 @@ async function derive(tenant: Tenant, auditId: string, engine: string, rawRespon
     .insertInto('raw_response_artifacts')
     .values({
       id: artifactId,
+      workspace_id: tenant.workspaceId,
       audit_id: auditId,
       task_id: taskId,
       logical_engine: engine,

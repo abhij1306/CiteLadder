@@ -1,34 +1,32 @@
-'use client';
-
 import { Pencil, RotateCcw } from 'lucide-react';
-import { useEffect, useState, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 
 import { EvidenceChips } from '@/components/agent/evidence-chips';
+import { LiveActivity } from '@/components/agent/live-activity';
+import { MessageTime } from '@/components/agent/message-time';
 import { skillLabel, useSkillCatalog } from '@/components/agent/skill-picker';
-import { LiveReply } from '@/components/agent/live-reply';
+import { threadItems } from '@/components/agent/thread-items';
+import { TurnFailure } from '@/components/agent/turn-failure';
 import { useAgentCatalog } from '@/components/agent/use-agent-catalog';
 import { WebSources } from '@/components/agent/web-sources';
 import { ProjectLink } from '@/components/ui/project-link';
 import { Button } from '@/components/ui/button';
-import { Callout } from '@/components/ui/callout';
 import { cardClasses } from '@/components/ui/card';
 import { AgentThread, AgentTurn, UserTurn } from '@/components/ui/chat-dock';
 import { CopyButton } from '@/components/ui/copy-button';
 import { Disclosure } from '@/components/ui/disclosure';
-import { DisplayTime } from '@/components/ui/display-time';
 import { Icon } from '@/components/ui/icon';
 import { Inline, Stack } from '@/components/ui/layout';
 import { Pressable } from '@/components/ui/pressable';
-import { Spinner } from '@/components/ui/spinner';
 import { TextLink } from '@/components/ui/text-link';
 import { textRole } from '@/components/ui/typography';
 import { treeBranchClasses } from '@/components/ui/workspace';
 import { documentAnchor, latestOutput, outputPlacements } from '@/lib/agent/documents';
 import { agentHandoffHref } from '@/lib/agent/handoff';
-import { runErrorCopy, runStepLabel, toolCallLabel } from '@/lib/agent/vocabulary';
+import { runStepLabel, toolCallLabel } from '@/lib/agent/vocabulary';
 import { runOutcome } from '@/lib/agent/run-state';
-import { useLiveTurn, type LiveTurn } from '@/lib/agent/live-turns';
-import type { AgentChatDetail, AgentMessage, AgentOutput, AgentRun } from '@/lib/api/agent';
+import type { AgentChatDetail, AgentMessage, AgentOutput } from '@/lib/api/agent';
+import { useAgentLinkHosts } from '@/lib/agent/link-hosts';
 import { ContentMarkdown } from '@/lib/markdown/markdown';
 import { cn } from '@/lib/utils';
 
@@ -80,12 +78,22 @@ export function Conversation({
       <ContextUsed context={detail.context} />
       {renderOutput ? <DocumentList outputs={detail.outputs} /> : null}
       <Stack as="ol" gap="workspace" aria-label="Messages">
-        {detail.messages.map((message) => (
-          <Stack as="li" gap="workspace" key={message.id}>
-            <MessageBubble message={message} skill={skillLabel(skills, message.skill_id)} />
-            {documents(byMessage.get(message.id))}
-          </Stack>
-        ))}
+        {threadItems(detail, new Set(byMessage.keys())).map((item) =>
+          item.kind === 'message' ? (
+            <Stack as="li" gap="workspace" key={item.message.id}>
+              <MessageBubble
+                message={item.message}
+                skill={skillLabel(skills, item.message.skill_id)}
+              />
+              {documents(byMessage.get(item.message.id))}
+            </Stack>
+          ) : (
+            <Stack as="li" gap="workspace" key={item.request?.id ?? item.failures[0].id}>
+              {item.request ? <MessageBubble message={item.request} skill={null} /> : null}
+              <TurnFailure failures={item.failures} outcome={item.outcome} />
+            </Stack>
+          ),
+        )}
       </Stack>
       {documents(unplaced)}
       {pendingMessage ? <PendingMessage text={pendingMessage} /> : null}
@@ -201,25 +209,11 @@ function PendingMessage({ text }: Readonly<{ text: string }>) {
   );
 }
 
-/**
- * The running turn's live events. Subscribed here, not in the conversation, so
- * each streamed delta re-renders only this activity, never the earlier messages.
- */
-function LiveActivity({ detail }: Readonly<{ detail: AgentChatDetail }>) {
-  const outcome = runOutcome(detail.latest_run);
-  const live = useLiveTurn(outcome.kind === 'running' ? outcome.run.id : null);
-  return (
-    <>
-      <LiveReply live={live} />
-      <RunState detail={detail} live={live} />
-    </>
-  );
-}
-
 function MessageBubble({
   message,
   skill,
 }: Readonly<{ message: AgentMessage; skill: string | null }>) {
+  const knownHosts = useAgentLinkHosts(message.web_sources);
   if (message.role === 'user')
     return (
       <UserTurn
@@ -241,10 +235,10 @@ function MessageBubble({
     );
   return (
     <AgentTurn
-      time={<DisplayTime value={message.created_at} />}
+      time={<MessageTime value={message.created_at} />}
       meta={skill ? `Skill: ${skill}` : undefined}
     >
-      <ContentMarkdown markdown={message.content} density="compact" />
+      <ContentMarkdown markdown={message.content} density="compact" knownHosts={knownHosts} />
       <Inline className="flex-wrap">
         <EvidenceChips refs={message.evidence_refs} />
         <CopyButton value={message.content} variant="ghost">
@@ -266,6 +260,7 @@ function MessageBubble({
     </AgentTurn>
   );
 }
+
 function ContextUsed({ context }: Readonly<{ context: AgentChatDetail['context'] }>) {
   const prompt = context.prompt ?? {};
   const included = promptItems(prompt, 'included_sections');
@@ -394,6 +389,8 @@ function stepLabel(step: MessageStep): string {
   if (step.kind === 'skill') return toolCallLabel({ tool: 'load_skill', status: 'completed' });
   if (step.kind === 'document')
     return toolCallLabel({ tool: 'save_document', status: 'completed' });
+  if (step.kind === 'suggestion')
+    return toolCallLabel({ tool: 'suggest_edits', status: 'completed' });
   if (step.kind === 'search')
     return step.query ? `Searched the web: ${step.query}` : 'Searched the web';
   if (step.kind === 'tool')
@@ -402,100 +399,4 @@ function stepLabel(step: MessageStep): string {
       status: step.status ?? 'unknown',
     });
   return step.ordinal ? `Model call ${step.ordinal}` : 'Worked on the reply';
-}
-
-function RunState({
-  detail,
-  live,
-}: Readonly<{ detail: AgentChatDetail; live: LiveTurn | undefined }>) {
-  const outcome = runOutcome(detail.latest_run);
-  const answered = detail.messages.at(-1)?.role === 'agent';
-  switch (outcome.kind) {
-    case 'running':
-      return <RunningState run={outcome.run} queued={outcome.queued} live={live} />;
-    // Every ended turn now answers with its own reply; older ones may not have.
-    case 'stopped_at_limit':
-      return answered ? null : <Callout tone="warning">{runErrorCopy('stopped_at_limit')}</Callout>;
-    case 'failed':
-      return answered ? null : <Callout tone="negative">{runErrorCopy(outcome.code)}</Callout>;
-    default:
-      return null;
-  }
-}
-function RunningState({
-  run,
-  queued,
-  live,
-}: Readonly<{ run: AgentRun; queued: boolean; live: LiveTurn | undefined }>) {
-  const label =
-    queued && !live?.step
-      ? 'Waiting to start…'
-      : (liveStepLabel(live) ?? activeStepLabel(run.progress, run.attempt_count));
-  // The current model call's tool calls run at the same time.
-  const current = live?.tools.filter((tool) => tool.ordinal === live.step) ?? [];
-  return (
-    <Stack gap="compact">
-      <Inline as="span" gap="compact" className={textRole('caption')}>
-        <Spinner className="text-ink-muted" />
-        <output aria-live="polite" className="flex-1">
-          {label}
-          <Elapsed since={live?.startedAt ?? Date.parse(run.created_at)} />
-        </output>
-      </Inline>
-      {current.length > 1 ? (
-        <Stack as="ul" gap="tight" aria-label="Current reads" className={treeBranchClasses()}>
-          {current.map((tool) => (
-            <li key={tool.call_id} className={textRole('caption')}>
-              {toolCallLabel(tool)}
-            </li>
-          ))}
-        </Stack>
-      ) : null}
-      {run.progress.length > 0 ? <RunActivity progress={run.progress} /> : null}
-    </Stack>
-  );
-}
-/** What the newest model call is doing: its running reads, else deciding. */
-function liveStepLabel(live: LiveTurn | undefined) {
-  if (!live?.step) return null;
-  const running = live.tools.filter(
-    (tool) => tool.ordinal === live.step && tool.status === 'started',
-  );
-  if (running.length > 1) return `Running ${running.length} reads at once…`;
-  if (running[0]) return toolCallLabel(running[0]);
-  return runStepLabel({ status: 'working', tool: null });
-}
-function Elapsed({ since }: Readonly<{ since: number }>) {
-  const now = useNow(1000);
-  const seconds = Math.max(0, Math.round((now - since) / 1000));
-  return seconds >= 3 ? <span className="text-ink-muted"> · {seconds}s</span> : null;
-}
-function useNow(intervalMs: number) {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), intervalMs);
-    return () => clearInterval(timer);
-  }, [intervalMs]);
-  return now;
-}
-function activeStepLabel(progress: AgentRun['progress'], attemptCount: number | undefined) {
-  const currentAttempt = attemptCount ?? progress.at(-1)?.run_attempt;
-  const current = [...progress].reverse().find((step) => step.run_attempt === currentAttempt);
-  return current ? runStepLabel(current) : 'The agent is working…';
-}
-function RunActivity({ progress }: Readonly<{ progress: AgentRun['progress'] }>) {
-  return (
-    <Disclosure title="View activity">
-      <Stack as="ol" gap="tight" aria-label="Agent progress" className={treeBranchClasses()}>
-        {progress.map((step) => (
-          <li
-            key={`${step.run_attempt}:${step.ordinal}:${step.call_id ?? 'model'}`}
-            className={textRole('caption')}
-          >
-            {runStepLabel(step)}
-          </li>
-        ))}
-      </Stack>
-    </Disclosure>
-  );
 }

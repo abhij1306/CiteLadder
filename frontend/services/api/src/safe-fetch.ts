@@ -6,8 +6,8 @@ import { isIP } from 'node:net';
 import { brotliDecompressSync, gunzipSync, inflateSync } from 'node:zlib';
 
 import ipaddr from 'ipaddr.js';
-import { getDomain } from 'tldts';
 
+import { siteDomain } from './analysis/domains.ts';
 import { policy } from './config.ts';
 import { isNonEmpty } from './lists.ts';
 
@@ -27,6 +27,7 @@ export type FetchOptions = {
   redirects: number;
   /** Media types a 2xx may carry; `*` accepts any. */
   contentTypes: readonly string[];
+  /** The site (`siteDomain`) every hop must stay on. */
   domain?: string;
   signal?: AbortSignal;
   maxDecodedBytes?: number;
@@ -81,6 +82,12 @@ const EVIDENCE_HEADERS = [
   'last-modified',
   'strict-transport-security',
 ];
+/**
+ * Headers whose separate lines carry separate scopes: an agent-scoped
+ * `X-Robots-Tag` line does not cover a generic one. Their lines are kept apart,
+ * one per line, rather than comma-joined.
+ */
+const LINE_SCOPED_HEADERS = new Set(['x-robots-tag']);
 export type WebsiteFetcher = (url: string, options: FetchOptions) => Promise<FetchedPage>;
 type Dns = (host: string) => Promise<readonly { address: string; family: number }[]>;
 
@@ -112,7 +119,7 @@ export function publicUrl(value: string, base?: string): URL {
 }
 export function websiteIdentity(value: string) {
   const url = publicUrl(value.includes('://') ? value.trim() : `https://${value.trim()}`);
-  const domain = getDomain(url.hostname);
+  const domain = siteDomain(url.hostname);
   if (!domain || isIP(url.hostname.replaceAll(/[[\]]/gu, ''))) throw new FetchError('invalid_url');
   return { url: url.href, domain };
 }
@@ -244,9 +251,13 @@ export async function pinnedRequest(
                   String(response.headers['content-type'] ?? ''),
                 )?.[1] ?? '',
               headers: Object.fromEntries(
-                (options.headerNames ?? EVIDENCE_HEADERS).flatMap((key) =>
-                  typeof response.headers[key] === 'string' ? [[key, response.headers[key]]] : [],
-                ),
+                (options.headerNames ?? EVIDENCE_HEADERS).flatMap((key) => {
+                  const lines = response.headersDistinct[key];
+                  if (LINE_SCOPED_HEADERS.has(key) && lines) return [[key, lines.join('\n')]];
+                  return typeof response.headers[key] === 'string'
+                    ? [[key, response.headers[key]]]
+                    : [];
+                }),
               ),
             });
           } catch (error) {
@@ -274,7 +285,7 @@ export function createWebsiteFetcher(
     const redirectChain: { from: string; to: string; status: number }[] = [];
     for (let hop = 0; hop <= options.redirects; hop++) {
       signal.throwIfAborted();
-      if (options.domain && getDomain(url.hostname) !== options.domain)
+      if (options.domain && siteDomain(url.hostname) !== options.domain)
         throw new FetchError('out_of_scope');
       const sendHop = async () => {
         const hopSignal = AbortSignal.any([

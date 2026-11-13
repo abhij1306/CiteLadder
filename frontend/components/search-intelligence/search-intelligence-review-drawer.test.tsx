@@ -30,10 +30,15 @@ const readiness: SearchIntelligenceReadiness = {
     location_code: 2840,
     language_code: 'en',
     reuse_recent: true,
-    depths: {},
+    depths: { ranking_keywords: 200, missing_keywords: 100, shared_keywords: 100 },
   },
   latest_run: null,
   datasets: [],
+  markets: [
+    { country_code: 'US', location_code: 2840 },
+    { country_code: 'AU', location_code: 2036 },
+  ],
+  max_depth: 1_000_000,
 };
 const reviewedRun: SearchIntelligenceRun = {
   id: RUN_ID,

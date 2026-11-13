@@ -38,6 +38,13 @@ export function storedFacts(override: Record<string, unknown> = {}): Record<stri
   });
   return overlay(empty, override) as Record<string, unknown>;
 }
+/** Page facts the extractor persists for an English page whose body is `body`. */
+export const bodyFacts = (body: string) =>
+  extractPageFacts(Buffer.from(`<html lang="en"><body>${body}</body></html>`), {
+    finalUrl: 'https://example.test/',
+    contentType: 'text/html',
+    statusCode: 200,
+  });
 export type SiteSeed = Tenant & { crawlId: string; profileId: string; root: string };
 export class SiteFixtures extends VisibilityFixtures {
   readonly siteDb: Database;
@@ -59,7 +66,7 @@ export class SiteFixtures extends VisibilityFixtures {
         root_host: 'example.test',
         root_url: root,
         registrable_domain: 'example.test',
-        selection_version: 1,
+        selection_version: 0,
         created_at: now,
         updated_at: now,
       })
@@ -364,6 +371,45 @@ export class SiteFixtures extends VisibilityFixtures {
     return { id, artifactId, taskId, analysisId };
   }
 
+  /** Make exactly these URLs the project's active monitored set, as a crawl's admission would. */
+  /** Make exactly these pages the project's tracked set, in this fill order. */
+  async monitor(seed: SiteSeed, siteUrlIds: string[]) {
+    const now = new Date();
+    await this.siteDb
+      .updateTable('monitored_site_urls')
+      .set({ active: false, deselected_at: now, fill_order: null })
+      .where('workspace_id', '=', seed.workspaceId)
+      .where('project_id', '=', seed.projectId)
+      .execute();
+    if (!siteUrlIds.length) return;
+    await this.siteDb
+      .insertInto('monitored_site_urls')
+      .values(
+        siteUrlIds.map((siteUrlId, fillOrder) => ({
+          id: randomUUID(),
+          workspace_id: seed.workspaceId,
+          project_id: seed.projectId,
+          profile_id: seed.profileId,
+          site_url_id: siteUrlId,
+          active: true,
+          selection_source: 'bootstrap',
+          fill_order: fillOrder,
+          selected_at: now,
+          created_at: now,
+          updated_at: now,
+        })),
+      )
+      .onConflict((conflict) =>
+        conflict.columns(['project_id', 'site_url_id']).doUpdateSet((eb) => ({
+          active: true,
+          deselected_at: null,
+          selected_at: now,
+          fill_order: eb.ref('excluded.fill_order'),
+        })),
+      )
+      .execute();
+  }
+
   /** A monitored page with its queued analyze task, under a runtime entitled to analyze. */
   async analyzable(
     seed: SiteSeed,
@@ -425,7 +471,7 @@ export class SiteFixtures extends VisibilityFixtures {
         profile_id: seed.profileId,
         site_url_id: siteUrlId,
         active: true,
-        selection_source: options.source ?? 'user',
+        selection_source: options.source ?? 'bootstrap',
         selected_at: now,
         created_at: now,
         updated_at: now,
@@ -568,6 +614,40 @@ export class SiteFixtures extends VisibilityFixtures {
       .where('workspace_id', '=', seed.workspaceId)
       .execute();
     return id;
+  }
+  /** The issue a failing `evaluation` of the page raises, as the analyze task writes it. */
+  async issue(
+    seed: SiteSeed,
+    page: { id: string; analysisId: string; artifactId: string },
+    ruleId: string,
+    evaluationId: string,
+  ) {
+    const rule = policy.site_health.rule_catalog.find((item) => item.rule_id === ruleId);
+    if (!rule) throw new Error(`Unknown rule: ${ruleId}`);
+    await this.siteDb
+      .insertInto('site_issues')
+      .values({
+        id: randomUUID(),
+        workspace_id: seed.workspaceId,
+        project_id: seed.projectId,
+        crawl_id: seed.crawlId,
+        site_url_id: page.id,
+        analysis_id: page.analysisId,
+        evaluation_id: evaluationId,
+        source_artifact_id: page.artifactId,
+        rule_id: ruleId,
+        dimension: rule.dimension,
+        category: rule.category,
+        severity: rule.severity,
+        finding_class: rule.finding_class,
+        evidence: JSON.stringify({}),
+        description: rule.description,
+        remediation: rule.remediation,
+        analyzer_version: policy.site_health.versions.analyzer,
+        rule_version: rule.rule_version,
+        created_at: new Date(),
+      })
+      .execute();
   }
   async businessProfile(seed: SiteSeed, context: Record<string, unknown>) {
     const brand = randomUUID();

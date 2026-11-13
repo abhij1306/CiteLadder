@@ -1,4 +1,4 @@
-import type { AgentMessage } from '@/lib/api/agent';
+import type { AgentMessage, AgentOutput } from '@/lib/api/agent';
 
 export const PROJECT = '11111111-1111-4111-8111-111111111111';
 export const CHAT = '22222222-2222-4222-8222-222222222222';
@@ -111,10 +111,53 @@ export function detail(latest: ReturnType<typeof revision>, run: DetailRun = DEF
         format_id: null,
         target_kind: null,
         target_label: null,
+        named_target: null as AgentOutput['named_target'],
         latest_revision: latest,
       },
     ],
   };
+}
+
+/**
+ * A page chat as its read returns it while the page is read, once the fetch
+ * queued the first turn, and after that turn answered with `reply`.
+ */
+export function pageChatPhases(reply: string) {
+  const base = detail(revision(REV1, 1, 'agent', 'Body.'));
+  const request = base.messages[0]!;
+  const reading = {
+    ...base,
+    chat: { ...base.chat, turn_count: 0, output_kind: null },
+    messages: [request],
+    outputs: [],
+    latest_run: null,
+    page_fetch: { status: 'reading' },
+  };
+  const fetched = {
+    ...reading,
+    chat: { ...reading.chat, turn_count: 1, output_kind: 'page' },
+    page_fetch: { status: 'done', outcome: 'fetched', fetched_at: NOW },
+    latest_run: {
+      ...base.latest_run,
+      id: '99999999-9999-4999-8999-999999999992',
+      status: 'queued',
+      completed_at: null,
+    },
+    outputs: [
+      {
+        ...base.outputs[0]!,
+        kind: 'page',
+        message_id: null,
+        latest_revision: { ...revision(REV1, 1, 'agent', 'Fetched body.'), author: 'fetch' },
+      },
+    ],
+  };
+  const answered = {
+    ...fetched,
+    messages: [request, { ...base.messages[1]!, content: reply }],
+    latest_run: { ...fetched.latest_run, status: 'succeeded', completed_at: NOW },
+  };
+  return { reading, fetched, answered };
 }
 
 export const skills = {

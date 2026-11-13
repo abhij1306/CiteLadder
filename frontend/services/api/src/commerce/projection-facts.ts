@@ -46,12 +46,32 @@ function finitePrice(value: unknown): number | null {
   return Number.isFinite(number) && number >= 0 && number <= 999999999999.99 ? number : null;
 }
 
+/**
+ * The thousands marks locales group with: no-break, thin and narrow no-break
+ * spaces (as `Intl.NumberFormat` writes them) and apostrophes (Swiss prices).
+ */
+const GROUPING_MARKS = String.fromCodePoint(0xa0, 0x2009, 0x202f, 0x27, 0x2019);
+/** Characters inside a written amount, as a regular expression class body. */
+export const AMOUNT_CHARACTERS = String.raw`\d,.` + GROUPING_MARKS;
+const GROUPING_MARK = new RegExp(`[${GROUPING_MARKS}]`, 'u');
+const isAmountPunctuation = (char: string) =>
+  char === ',' || char === '.' || GROUPING_MARKS.includes(char);
+
+/** Punctuation after the amount (`$59.`, `$129.99,`) ends the sentence, not the number. */
+function withoutTrailingPunctuation(raw: string): string {
+  let end = raw.length;
+  while (end > 0 && isAmountPunctuation(raw.charAt(end - 1))) end -= 1;
+  return raw.slice(0, end);
+}
+
 /** Currency-qualified visible amounts; grouping must be unambiguous. */
 export function localizedPrice(raw: string): number | null {
-  const lastDot = raw.lastIndexOf('.');
-  const lastComma = raw.lastIndexOf(',');
+  const amount = withoutTrailingPunctuation(raw);
+  if (GROUPING_MARK.test(amount)) return markGroupedPrice(amount);
+  const lastDot = amount.lastIndexOf('.');
+  const lastComma = amount.lastIndexOf(',');
   const separator = lastDot > lastComma ? '.' : ',';
-  const parts = raw.split(separator);
+  const parts = amount.split(separator);
   const [integer, fraction] = parts;
   if (
     parts.length === 2 &&
@@ -64,12 +84,26 @@ export function localizedPrice(raw: string): number | null {
     return finitePrice(`${groups.join('')}.${fraction}`);
   }
   if (parts.length > 1) return validGroups(parts) ? finitePrice(parts.join('')) : null;
-  return /^\d+$/u.test(raw) ? finitePrice(raw) : null;
+  return /^\d+$/u.test(amount) ? finitePrice(amount) : null;
 }
+/** `1 299,50` or `1'299.50`: the mark groups thousands, so `.` or `,` can only be the decimal. */
+function markGroupedPrice(amount: string): number | null {
+  const [, integer, fraction] = /^([^,.]+)(?:[,.](\d{1,2}))?$/u.exec(amount) ?? [];
+  if (integer === undefined) return null;
+  const groups = integer.split(GROUPING_MARK);
+  if (!validGroups(groups)) return null;
+  const digits = groups.join('');
+  return finitePrice(fraction === undefined ? digits : `${digits}.${fraction}`);
+}
+/** Thousands groups (`1,299,000`), or Indian lakh groups (`12,34,567`). */
 function validGroups(groups: string[]): boolean {
   const [head, ...rest] = groups;
+  if (head === undefined || !rest.length) return false;
+  if (/^\d{1,3}$/u.test(head) && rest.every((group) => /^\d{3}$/u.test(group))) return true;
   return (
-    head !== undefined && /^\d{1,3}$/u.test(head) && rest.every((group) => /^\d{3}$/u.test(group))
+    /^\d{1,2}$/u.test(head) &&
+    rest.every((group, index) => /^\d{2}$/u.test(group) || index === rest.length - 1) &&
+    /^\d{3}$/u.test(rest.at(-1) ?? '')
   );
 }
 const markerSource = policy.commerce.price_markers
@@ -77,11 +111,14 @@ const markerSource = policy.commerce.price_markers
   .join('|');
 const visiblePattern = new RegExp(markerSource, 'giu');
 
+const amountCharacter = new RegExp(`[${AMOUNT_CHARACTERS}]`, 'u');
+
 function adjacentAmount(text: string, start: number, direction: 1 | -1): string {
   let index = start;
   while (index >= 0 && index < text.length && /\s/u.test(text[index]!)) index += direction;
   const boundary = index;
-  while (index >= 0 && index < text.length && /[\d,.]/u.test(text[index]!)) index += direction;
+  while (index >= 0 && index < text.length && amountCharacter.test(text[index]!))
+    index += direction;
   return direction === 1 ? text.slice(boundary, index) : text.slice(index + 1, boundary + 1);
 }
 
@@ -92,12 +129,15 @@ function visiblePrice(facts: CatalogFacts) {
     return { price: null, currency: '' };
   const amounts = [...text.matchAll(visiblePattern)].flatMap((match) => {
     const marker = match[0].toUpperCase();
-    return [
-      adjacentAmount(text, match.index + match[0].length, 1),
-      adjacentAmount(text, match.index - 1, -1),
-    ]
-      .filter(Boolean)
-      .map((amount) => ({ marker, amount }));
+    return (
+      [
+        adjacentAmount(text, match.index + match[0].length, 1),
+        adjacentAmount(text, match.index - 1, -1),
+      ]
+        // A quote or full stop beside the marker with no digit is not an amount.
+        .filter((amount) => /\d/u.test(amount))
+        .map((amount) => ({ marker, amount }))
+    );
   });
   const only = onlyOf(amounts);
   if (!only) return { price: null, currency: '' };
@@ -166,7 +206,28 @@ export function categoryTitle(facts: CatalogFacts, fallback: string): string {
   return (crumb || heading || (isCategoryName(title) ? title : '')).trim().slice(0, 255);
 }
 
-export function productCategories(facts: CatalogFacts, url: string, aliases: string[]): string[] {
+/** The category a listing's breadcrumb trail names one level above `name`; '' at the top. */
+export function breadcrumbParent(facts: CatalogFacts, name: string): string {
+  const crumbs = facts.commerce.breadcrumbs.filter(
+    (crumb) => isCategoryName(crumb) && !indexNames.has(categoryKey(crumb)),
+  );
+  const position = crumbs.findLastIndex((crumb) => categoryKey(crumb) === categoryKey(name));
+  return position > 0 ? crumbs[position - 1]!.trim().replaceAll(/\s+/gu, ' ').slice(0, 255) : '';
+}
+
+/** A product page's categories: its structured categories, then its breadcrumb path top first. */
+export function productCategories(facts: CatalogFacts, url: string, aliases: string[]) {
+  const path = breadcrumbPath(facts, url, aliases);
+  return {
+    names: [...new Set([...facts.structured_data.product.category, ...path])].filter(
+      (name) => isCategoryName(name) && !indexNames.has(categoryKey(name)),
+    ),
+    path,
+  };
+}
+
+/** The breadcrumb categories above a product page, top first. */
+function breadcrumbPath(facts: CatalogFacts, url: string, aliases: string[]): string[] {
   const crumbs = facts.commerce.breadcrumbs
     .map((value) => value.trim().replaceAll(/\s+/gu, ' '))
     .filter(named);
@@ -183,10 +244,9 @@ export function productCategories(facts: CatalogFacts, url: string, aliases: str
     const target = canonicalUrl(link.url, base);
     if (target && !ownUrls.has(target) && !ownUrls.has(productAlias(target))) linked.add(position);
   }
-  const ancestors = crumbs.slice(1, linked.has(crumbs.length - 1) ? undefined : -1);
-  return [...new Set([...facts.structured_data.product.category, ...ancestors])].filter(
-    (name) => isCategoryName(name) && !indexNames.has(categoryKey(name)),
-  );
+  return crumbs
+    .slice(1, linked.has(crumbs.length - 1) ? undefined : -1)
+    .filter((name) => isCategoryName(name) && !indexNames.has(categoryKey(name)));
 }
 
 export function shelfLinks(facts: CatalogFacts, base: string): string[] {

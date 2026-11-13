@@ -1,5 +1,3 @@
-'use client';
-
 import * as TooltipPrimitive from '@radix-ui/react-tooltip';
 import {
   type ComponentProps,
@@ -11,17 +9,26 @@ import {
   useState,
 } from 'react';
 
+import { focusFromKeyboard } from '@/components/ui/input-modality';
+
 /**
  * Tooltip — a short `ink` label that names an icon button or explains a
  * number: `on-ink` 12/16 medium, `radius-sm`, 4/8px padding, 8px from its
  * anchor, no arrow and no shadow. It shows after 300ms on hover and at once on
  * keyboard focus; a shortcut prints as mono `on-ink` text, never a Kbd cap.
+ * Only keyboard focus opens it: the focus a browser restores when the reader
+ * returns to the tab, or one a script moves after a press, does not.
  *
  * Every open goes through Radix's pointer and focus handling, which closes any
  * other open tooltip first, so only one is ever open. A tooltip outside any
  * provider brings a provider of its own; the one-open rule still holds.
  */
 const Provided = createContext(false);
+
+/** True when a clamped or truncated element is not showing all of its text. */
+export function isTextCut(node: Element): boolean {
+  return node.scrollHeight > node.clientHeight + 1 || node.scrollWidth > node.clientWidth + 1;
+}
 
 export function TooltipProvider(props: Readonly<ComponentProps<typeof TooltipPrimitive.Provider>>) {
   return (
@@ -75,6 +82,10 @@ export function Tooltip({
       <TooltipPrimitive.Trigger
         asChild
         ref={setTrigger}
+        // A handled focus skips Radix's own, which opens on any focus.
+        onFocus={(event) => {
+          if (!focusFromKeyboard()) event.preventDefault();
+        }}
         {...(describe ? {} : { 'aria-describedby': undefined })}
       >
         {children}
@@ -83,10 +94,10 @@ export function Tooltip({
         <TooltipPrimitive.Content
           side={side}
           sideOffset={8}
-          className="tooltip-panel bg-ink text-on-ink z-modal text-caption inline-flex max-w-72 items-center gap-2 rounded-sm px-2 py-1 font-medium"
+          className="tooltip-panel bg-ink text-on-ink z-modal text-caption inline-flex max-w-72 items-center gap-2 rounded-sm px-2 py-1"
         >
           {content}
-          {shortcut ? <span className="text-eyebrow font-mono font-medium">{shortcut}</span> : null}
+          {shortcut ? <span className="text-eyebrow font-mono font-normal">{shortcut}</span> : null}
         </TooltipPrimitive.Content>
       </TooltipPrimitive.Portal>
     </TooltipPrimitive.Root>

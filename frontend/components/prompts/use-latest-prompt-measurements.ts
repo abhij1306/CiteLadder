@@ -45,6 +45,9 @@ export function useLatestPromptMeasurements(
         ownedCitationRate: row.owned_citation_rate ?? null,
         change: row.visibility_delta ?? null,
         position: row.avg_position ?? null,
+        mentions: row.mentions,
+        brands: row.brands,
+        answer: { auditId: row.audit_id, promptIndex: row.prompt_index },
       });
     }
     return map;

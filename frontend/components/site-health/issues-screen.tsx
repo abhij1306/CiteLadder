@@ -1,5 +1,3 @@
-'use client';
-
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import { ProjectLink } from '@/components/ui/project-link';
 
@@ -25,19 +23,23 @@ import { useProjectScope } from '@/lib/project/active-project-scope';
 export function IssuesScreen() {
   const { workspaceId, projectId } = useProjectScope();
   const dashboardQuery = useQuery(siteHealthQueries.dashboard({ workspaceId, projectId }));
-  return <IssuesDataRegion workspaceId={workspaceId} dashboard={dashboardQuery} />;
+  return (
+    <IssuesDataRegion workspaceId={workspaceId} projectId={projectId} dashboard={dashboardQuery} />
+  );
 }
 
 function IssuesDataRegion({
   workspaceId,
+  projectId,
   dashboard,
 }: Readonly<{
   workspaceId: string;
+  projectId: string;
   dashboard: UseQueryResult<SiteHealthDashboard, Error>;
 }>) {
   if (dashboard.isLoading)
     return (
-      <ListScreen>
+      <ListScreen narrow>
         <QueryState kind="loading" label="Loading issues…" />
       </ListScreen>
     );
@@ -46,7 +48,7 @@ function IssuesDataRegion({
   const accessDenied = status === 401 || status === 403;
   if (dashboard.isError && (accessDenied || !dashboard.data)) {
     return (
-      <ListScreen>
+      <ListScreen narrow>
         <QueryState
           kind="error"
           error={dashboard.error}
@@ -62,14 +64,18 @@ function IssuesDataRegion({
     );
   }
 
-  return <IssuesLoadedRegion workspaceId={workspaceId} dashboard={dashboard} />;
+  return (
+    <IssuesLoadedRegion workspaceId={workspaceId} projectId={projectId} dashboard={dashboard} />
+  );
 }
 
 function IssuesLoadedRegion({
   workspaceId,
+  projectId,
   dashboard,
 }: Readonly<{
   workspaceId: string;
+  projectId: string;
   dashboard: UseQueryResult<SiteHealthDashboard, Error>;
 }>) {
   const crawl = dashboard.data?.crawl ?? null;
@@ -77,6 +83,7 @@ function IssuesLoadedRegion({
     return crawl ? (
       <IssuesCatalog
         workspaceId={workspaceId}
+        projectId={projectId}
         crawlId={crawl.id}
         notice={
           <ReadError
@@ -88,7 +95,7 @@ function IssuesLoadedRegion({
         }
       />
     ) : (
-      <ListScreen>
+      <ListScreen narrow>
         <QueryState
           kind="error"
           error={dashboard.error}
@@ -101,7 +108,7 @@ function IssuesLoadedRegion({
   }
   if (!crawl) {
     return (
-      <ListScreen>
+      <ListScreen narrow>
         <QueryState
           kind="empty"
           icon={ICONS.issues}
@@ -116,5 +123,5 @@ function IssuesLoadedRegion({
       </ListScreen>
     );
   }
-  return <IssuesCatalog workspaceId={workspaceId} crawlId={crawl.id} />;
+  return <IssuesCatalog workspaceId={workspaceId} projectId={projectId} crawlId={crawl.id} />;
 }

@@ -406,8 +406,7 @@ export const definitions = {
   }),
   read_source_url: projectTool({
     title: 'Read a cited page',
-    description:
-      'Read one cited page in depth, after read_visibility_sources or an answer names it: how often it was retrieved and cited, when first and last seen, the engines and models that cite it, the prompts it is cited for (up to 50), the brands it names (up to 12, including whether yours is there), and what CiteLadder read on the page itself. Omit audit_id to cover every run in the market, not just the latest. The URL must match the cited URL exactly; unavailable url_not_cited_in_selection means it was not cited in that selection.',
+    description: `Read one cited page in depth, after read_visibility_sources or an answer names it: how often it was retrieved and cited, when first and last seen, the engines and models that cite it, the prompts it is cited for (up to ${policy.visibility.source_url_max_prompts}), the brands it names (up to ${policy.visibility.source_url_max_brands}, including whether yours is there), and what CiteLadder read on the page itself. Omit audit_id to cover every run in the market, not just the latest. The URL must match the cited URL exactly; unavailable url_not_cited_in_selection means it was not cited in that selection.`,
     schema: z.strictObject({
       ...project,
       market_id,
@@ -485,33 +484,44 @@ export const definitions = {
   }),
   read_ai_shelf: projectTool({
     title: 'Read the AI Shelf',
-    description: `Read how AI answers recommend products for an ecommerce project: which products and merchants hold the "shelf" when buyers ask for a product category. Call it first with no target to get the catalog: categories with product counts, and up to ${mcpPolicy.max_list_limit} products with their category ids (products_omitted counts the rest). Then call it again with target_kind and target_id for one category or product: product visibility, share of shelf, average position, first-position win rate, the answer counts they rest on, when it was measured, and the holders (your products, competitors, merchants) with their best rank. unavailable no_product_catalog means the project has no product catalog, which is normal for non-ecommerce brands; use read_visibility_overview for brand mentions instead.`,
+    description: `Read how AI answers recommend products for an ecommerce project, per product over a window of days. Without holder_id it returns the categories with product counts and one page of products, most visible first: for each, its holder_id, kind (owned, approved_competitor or ai_observed_competitor), visibility (share of the answers in scope that named it), appearances, win rate (share of its ordered appearances at rank 1), mean position, the median mentioned price beside the catalog price, and the merchant domains answers send shoppers to; executions is the number of answers in scope. source all adds competitors to your catalog; category_id narrows to one category; pass next_cursor for more. With holder_id it returns that product's page: the same metrics, its description and image, the products competing in the same answers, merchants, cited sources, fan-out queries, per-prompt metrics, the answers it appeared in (won, lost or unranked, with rank) and its open Actions. A null metric is unavailable (no answer in scope, or no ordered appearance), never zero. unavailable no_product_catalog means the project has no product catalog, which is normal for non-ecommerce brands; use read_visibility_overview for brand mentions instead.`,
     schema: z.strictObject({
       ...project,
-      target_kind: optional(
+      holder_id: optional(
+        uuid.describe('A holder_id from a previous product list, to read that product in full.'),
+      ),
+      source: optional(
         z
-          .enum(['category', 'product'])
-          .describe('Pass together with target_id: whether it names a category or a product.'),
+          .enum(['catalog', 'all'])
+          .describe(
+            'catalog (the default) lists your products; all adds approved and AI-observed competitors.',
+          ),
       ),
-      target_id: optional(
-        uuid.describe(
-          'A category or product id from the catalog this tool returns without a target; pass together with target_kind.',
-        ),
+      category_id: optional(
+        uuid.describe('A category id from this tool, to list only its products.'),
       ),
+      window_days: optional(
+        z
+          .number()
+          .int()
+          .describe(
+            `Days of answers to read, one of ${policy.commerce.products.window_days.join(', ')}; omit for ${policy.commerce.products.default_window_days}.`,
+          ),
+      ),
+      ...page,
     }),
     read: shelfRead,
   }),
   read_site_health: projectTool({
     title: 'Read Site Health',
-    description:
-      'Read the Site Health summary of the latest crawl, or a chosen snapshot: the web fundamentals and AI-readiness scores with their measurement state, how many pages were selected and analyzed, and the top 10 issues, each with its rule_id, severity, description, remediation and how many pages it affects. unavailable no_site_snapshot means no crawl was analyzed yet; this tool never starts one. Use read_site_pages with a rule_id to list the affected pages, read_ai_crawlability for robots access, and render_site_health to show the user the interactive view.',
+    description: `Read the Site Health summary of the latest crawl, or a chosen snapshot: the web fundamentals and AI-readiness scores with their measurement state, how many pages were selected and analyzed, and the top ${policy.site_health.reads.snapshot_top_issues} issues, each with its rule_id, severity, description, remediation and how many pages it affects. unavailable no_site_snapshot means no crawl was analyzed yet; this tool never starts one. Use read_site_pages with a rule_id to list the affected pages, read_ai_crawlability for robots access, and render_site_health to show the user the interactive view.`,
     schema: z.strictObject({ ...project, snapshot_id }),
     read: siteSnapshot,
   }),
   read_site_pages: projectTool({
     title: 'Read site pages',
     description:
-      "Pages from a crawl, paged: URL, title, page type, status, scores, issue count and the rule ids of each page's issues by finding class. Pass url to find a page by its address, rule_id (from read_site_health top_issues or an issue group) to list exactly the pages affected by that issue, each with rule_evidence: what that check found on that page (a site-level architecture issue is recorded once on the home page, and its rule_evidence names the affected pages); filter by page_kind or status to find pages by type or status. This returns metadata, not page copy: use read_page_text for a page's words. read_site_health gives the totals.",
+      "Pages from a crawl, paged: URL, title, page type, status, scores, issue count and the rule ids of each page's issues by finding class. Pass url to find a page by its address, rule_id (from read_site_health top_issues or an issue group) to list exactly the pages affected by that issue, each with rule_evidence: what that check found on that page (a site-level architecture issue is recorded once on the home page, and its rule_evidence names the affected pages), and, when the crawl kept one, a reference_snippet: redacted markup of the failing element and its label context from one affected page (text and attribute values replaced by [text] and [redacted]), to write an exact fix; filter by page_kind or status to find pages by type or status. This returns metadata, not page copy: use read_page_text for a page's words. read_site_health gives the totals.",
     schema: z.strictObject({
       ...project,
       crawl_id,
@@ -594,7 +604,7 @@ export const definitions = {
   }),
   read_crawl_logs: projectTool({
     title: 'Read AI crawler visits',
-    description: `Read the AI crawler requests your server logs recorded, to see which crawlers actually visited, what they fetched and what they got back. View summary (the default) gives totals: requests, pages, active crawlers, error share and a daily series by purpose. View crawlers gives one row per crawler with status codes and verification. View coverage says how complete each day of logs is. View requests lists individual requests. The window defaults to the last ${crawlLogs.default_range}, except that requests without range or dates reads every retained day. The paged views return ${crawlLogs.default_page_size} rows by default (up to ${crawlLogs.max_page_size}) with a top-level next_cursor; changing a filter needs a new first page, while a continuation may change limit. Failed-verification requests are left out unless verification asks for them. connection not_connected or missing coverage means unknown, not zero. Use read_ai_crawlability for robots permission and read_ai_traffic_pages for activity per page.`,
+    description: `Read the AI crawler requests your server logs recorded, to see which crawlers actually visited, what they fetched and what they got back. View summary (the default) gives totals: requests, pages, active crawlers, error share and a daily series by purpose. View crawlers gives one row per crawler with status codes and verification. View coverage says how complete each day of logs is. View requests lists individual requests. The window defaults to the last ${crawlLogs.default_range}, except that requests without range or dates reads every retained day. The paged views return ${crawlLogs.default_page_size} rows by default (up to ${crawlLogs.max_page_size}) with a top-level next_cursor; changing a filter needs a new first page, while a continuation may change limit. Failed-verification requests are left out unless verification asks for them. unavailable not_connected means no crawl-log source is connected and no logs are retained for the window; connection awaiting_data or missing coverage means unknown, not zero. Use read_ai_crawlability for robots permission and read_ai_traffic_pages for activity per page.`,
     schema: z.strictObject({
       ...project,
       view: z
@@ -624,7 +634,7 @@ export const definitions = {
   }),
   read_ai_traffic_pages: projectTool({
     title: 'Read AI traffic by page',
-    description: `Rank the project's own pages by AI activity, to find which pages AI crawlers fetch, AI assistants send visitors to and AI answers cite. Each row is one page (URL, path, folder, resource class) with four measures, each carrying its own coverage: AI crawler requests (server logs), AI referral sessions and key events (GA4), citations in AI answers, and Site Health findings, plus its last crawl. The window defaults to the last ${crawlLogs.default_range}; rows come ${crawlLogs.default_page_size} per page (up to ${crawlLogs.max_page_size}); pass next_cursor for more. observed_crawl_coverage says how complete the logs are, and a measure without a connected source is missing, not zero. Use read_ai_traffic_url for one page's timeline, read_crawl_logs for crawler-level detail, read_ai_referrals for site-wide referral totals, and read_site_pages for crawl data such as titles and scores.`,
+    description: `Rank the project's own pages by AI activity, to find which pages AI crawlers fetch, AI assistants send visitors to and AI answers cite. Each row is one page (URL, path, folder, resource class) with four measures, each carrying its own coverage: AI crawler requests (server logs), AI referral sessions and key events (GA4), citations in AI answers, and Site Health findings, plus its last crawl. The window defaults to the last ${crawlLogs.default_range}; rows come ${crawlLogs.default_page_size} per page (up to ${crawlLogs.max_page_size}); pass next_cursor for more. observed_crawl_coverage says how complete the logs are, and a measure without a connected source is missing, not zero. unavailable not_connected means no crawl logs, no GA4 and no completed AI Visibility run in the window. Use read_ai_traffic_url for one page's timeline, read_crawl_logs for crawler-level detail, read_ai_referrals for site-wide referral totals, and read_site_pages for crawl data such as titles and scores.`,
     schema: z.strictObject({
       ...project,
       range: analyticsRange,
@@ -645,7 +655,7 @@ export const definitions = {
   }),
   read_ai_traffic_url: projectTool({
     title: 'Read AI traffic for a URL',
-    description: `Read the timeline of AI activity on one page of the project site, after read_ai_traffic_pages names it: the page's four measures (crawler requests, referral sessions, citations, Site Health findings) with their coverage and 4xx/5xx errors, then each crawler's first and last visit and request count, each AI source's first referral and sessions, and each citation by date and run. The window defaults to the last ${crawlLogs.default_range}. Each timeline is capped, and provenance.bounded is true when a cap was hit. The URL must be on the project's own site. unavailable url_not_joinable means the path cannot be matched (for example a redacted path); unavailable with no reason means no activity was recorded for that page in the window.`,
+    description: `Read the timeline of AI activity on one page of the project site, after read_ai_traffic_pages names it: the page's four measures (crawler requests, referral sessions, citations, Site Health findings) with their coverage and 4xx/5xx errors, then each crawler's first and last visit and request count, each AI source's first referral and sessions, and each citation by date and run. The window defaults to the last ${crawlLogs.default_range}. Each timeline is capped, and provenance.bounded is true when a cap was hit. The URL must be on the project's own site. unavailable url_not_joinable means the path cannot be matched (for example a redacted path); unavailable not_connected means no crawl logs, no GA4 and no completed AI Visibility run in the window; unavailable with no reason means no activity was recorded for that page in the window.`,
     schema: z.strictObject({
       ...project,
       url: z

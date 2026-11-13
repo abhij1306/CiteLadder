@@ -8,7 +8,7 @@ import { recomputeDemand } from '../src/demand/snapshot.ts';
 import { hash } from '../src/crypto-text.ts';
 import { refreshTrafficSnapshot } from '../src/traffic/snapshot.ts';
 import { enqueue, seedProject } from './referral-fixtures.ts';
-import { Fixtures, testDatabase } from './support.ts';
+import { asOwner, Fixtures, testDatabase } from './support.ts';
 import {
   importSeed,
   metric,
@@ -221,14 +221,16 @@ describe('demand projections and admission', () => {
     );
     expect(page.body.snapshot.state).toBe('unavailable');
     const seed = await importSeed(db, t, 'gsc_query_page_daily');
-    await db
-      .updateTable('integration_import_artifacts')
-      .set({
-        query_snapshot: JSON.stringify({ start_date: WINDOW[0], end_date: WINDOW[1] }),
-        row_count: 0,
-      })
-      .where('id', '=', seed.artifactId)
-      .execute();
+    await asOwner((owner) =>
+      owner
+        .updateTable('integration_import_artifacts')
+        .set({
+          query_snapshot: JSON.stringify({ start_date: WINDOW[0], end_date: WINDOW[1] }),
+          row_count: 0,
+        })
+        .where('id', '=', seed.artifactId)
+        .execute(),
+    );
     await metric(db, seed, {
       values: ['valid', 'https://example.test/page', WINDOW[1]],
       metrics: { impressions: true, clicks: 0 },

@@ -1,4 +1,8 @@
-/** Committed dispatches, bounded concurrent JEV calls, and lease-fenced outcomes. */
+/**
+ * Committed dispatches, JEV calls and lease-fenced outcomes. Every source
+ * page's request goes out at once: JEV judgments are deliberately unthrottled
+ * (docs/decisions.md), bounded by the page cap and the job deadline.
+ */
 import { randomUUID } from 'node:crypto';
 import { sql } from 'kysely';
 import { z } from 'zod';

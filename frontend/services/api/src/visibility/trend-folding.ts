@@ -10,6 +10,7 @@ import type { visibilityTrendPointSchema } from '@citeladder/contracts/visibilit
 import type { z } from 'zod';
 
 import { buildModelProvenance } from '../analysis/provenance.ts';
+import { DAY_MS } from '../calendar-days.ts';
 import { wireUtc } from '../db/timestamps.ts';
 import { compareText } from '../text-order.ts';
 import {
@@ -96,8 +97,6 @@ function trendRow(row: RankingRow): TrendRankingRow {
   } = row;
   return rest;
 }
-
-const DAY_MS = 86_400_000;
 
 /** The UTC start of the bucket holding `at`; weeks start on ISO Monday. */
 export function bucketStart(at: string, granularity: string): string {

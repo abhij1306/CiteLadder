@@ -1,12 +1,11 @@
-'use client';
-
 import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 
 import { AiReferralsContent } from '@/components/ai-traffic/referrals-content';
-import { FilterChoice, type FilterBarProps } from '@/components/ui/filter-bar';
+import { choiceFilter } from '@/components/ui/all-filters';
+import type { FilterBarProps } from '@/components/ui/filter-bar';
 import { Spinner } from '@/components/ui/spinner';
-import { SegmentedControl, type TabRowProps } from '@/components/ui/tabs';
+import type { TabRowProps } from '@/components/ui/tabs';
 import { aiTrafficQueries } from '@/lib/api/ai-traffic';
 import { GRANULARITY_OPTIONS } from '@/lib/format';
 import {
@@ -55,7 +54,9 @@ export function AiReferralsScreen({
         onChangeRange: setRange,
         granularity,
         onChangeGranularity: setGranularity,
-        fetching: dashboardQuery.isFetching,
+        // Only a read that has an answer on screen is "previous data shown";
+        // the first load has none, and the content already says it is loading.
+        refreshing: dashboardQuery.isFetching && dashboardQuery.data !== undefined,
       })}
     />
   );
@@ -66,39 +67,40 @@ function referralsControls({
   onChangeRange,
   granularity,
   onChangeGranularity,
-  fetching,
+  refreshing,
 }: Readonly<{
   range: AiReferralsRange;
   onChangeRange: (range: AiReferralsRange) => void;
   granularity: AiReferralsGranularity;
   onChangeGranularity: (granularity: AiReferralsGranularity) => void;
-  fetching: boolean;
+  refreshing: boolean;
 }>): FilterBarProps {
   return {
-    status: fetching ? (
+    status: refreshing ? (
       <>
         <Spinner />
         Updating data… Previous data shown.
       </>
     ) : null,
-    filters: (
-      // Segments, then the range trigger: the one order Performance uses too.
-      <>
-        <SegmentedControl
-          value={granularity}
-          onChange={onChangeGranularity}
-          options={GRANULARITY_OPTIONS}
-          ariaLabel="Chart interval"
-        />
-        <FilterChoice
-          label="Range"
-          menuLabel="Date range"
-          value={range}
-          defaultValue="latest"
-          options={RANGE_OPTIONS}
-          onChange={onChangeRange}
-        />
-      </>
-    ),
+    // The same control row as the other AI Traffic tabs: the window and the
+    // chart interval in All filters, the live note at the row's end.
+    filters: [
+      choiceFilter({
+        id: 'range',
+        label: 'Reporting range',
+        value: range,
+        defaultValue: 'latest',
+        groups: [{ options: RANGE_OPTIONS }],
+        onChange: onChangeRange,
+      }),
+      choiceFilter({
+        id: 'granularity',
+        label: 'Chart interval',
+        value: granularity,
+        defaultValue: 'week',
+        groups: [{ options: GRANULARITY_OPTIONS }],
+        onChange: onChangeGranularity,
+      }),
+    ],
   };
 }

@@ -149,7 +149,7 @@ describe('Overview library widgets', () => {
     ).toBeVisible();
   });
 
-  it('lists risers and fallers by percentage-point change', () => {
+  it('lists risers and fallers by rounded percentage-point change', () => {
     reads.visibility = {
       data: {
         audit_id: AUDIT,
@@ -161,29 +161,24 @@ describe('Overview library widgets', () => {
       data: {
         dimension: 'domain',
         comparison_status: 'comparable',
+        // Shares over different totals give raw float deltas.
         risers: [
           {
             key: 'review.example',
             current_share: 0.4,
-            previous_share: 0.1,
-            delta: 30,
+            previous_share: 0.1666,
+            delta: 23.333333333333336,
           },
         ],
-        fallers: [
-          {
-            key: 'news.example',
-            current_share: 0.1,
-            previous_share: 0.3,
-            delta: -20,
-          },
-        ],
+        fallers: [{ key: 'news.example', current_share: 0.1, previous_share: 0.3, delta: -20 }],
       },
       isError: false,
     };
     renderWithProviders(<TopMoversWidget project={project} />);
     const region = screen.getByRole('region', { name: 'Top movers' });
-    expect(within(region).getByText('+30 pp')).toBeVisible();
-    expect(within(region).getByText('-20 pp')).toBeVisible();
+    expect(within(region).getByText('23.3 pp')).toBeVisible();
+    expect(within(region).getByText('20.0 pp')).toBeVisible();
+    expect(within(region).queryByText(/23\.33/u)).toBeNull();
   });
 
   it('ranks brands by share of voice and keeps a full list footprint', () => {

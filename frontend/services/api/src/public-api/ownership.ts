@@ -67,6 +67,9 @@ const OWNERS: Readonly<Record<string, { resource: string; project: ProjectOf } |
     candidate_id: BY_OWNER,
     schedule_id: BY_OWNER,
     dataset_id: BY_OWNER,
+    // An issue group is derived from its crawl and found only inside the path
+    // crawl, which `crawl_id` above proves is the path project's.
+    group_id: BY_OWNER,
   };
 
 /**

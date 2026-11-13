@@ -6,6 +6,7 @@
  * lock order (runtime, membership, crawl, task) so a cancelled or lost task
  * writes nothing.
  */
+import { retryAfterSeconds } from '@citeladder/contracts/retry-after';
 import { isActiveCrawl } from '@citeladder/contracts/site-health';
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
@@ -22,8 +23,8 @@ import {
   pageAnalysisContext,
   type AttemptOutcome,
 } from './analysis-rows.ts';
-import { releaseNonPage } from './frontier.ts';
-import { isBotBlock } from './page-fetch.ts';
+import { crawlAdmit, releaseNonPage } from './frontier.ts';
+import { crawlRobotsHandling, isBotBlock } from './page-fetch.ts';
 import type { SiteWorkerSettings } from './runtime.ts';
 import {
   Abandoned,
@@ -36,7 +37,6 @@ import {
   markRunning,
   owned,
   recordCrawlEvent,
-  retryAfterSeconds,
   settleTask,
   startCrawl,
   statuses,
@@ -53,6 +53,7 @@ type Outcome = AttemptOutcome & {
   facts: Facts | null;
   page: Parameters<typeof writeArtifact>[3] | null;
   reusedArtifactId: string | null;
+  robotsExcluded: boolean;
   retryable: boolean;
   errorDetail: string;
   retryAfterSeconds?: number;
@@ -68,8 +69,8 @@ function dependencyDelay(settings: SiteWorkerSettings, waited: number) {
 }
 
 type GuardRows = {
-  monitored: { active: boolean; selection_source: string } | undefined;
-  runtime: { monitored_url_limit: number } | undefined;
+  monitored: { active: boolean } | undefined;
+  runtime: { id: string } | undefined;
 };
 async function guardRows(
   db: Database,
@@ -79,22 +80,25 @@ async function guardRows(
 ): Promise<GuardRows> {
   const runtimeQuery = db
     .selectFrom('workspace_site_health_runtime')
-    .select('monitored_url_limit')
+    .select('id')
     .where('workspace_id', '=', crawl.workspace_id);
   const runtime = await (lock ? runtimeQuery.forUpdate() : runtimeQuery).executeTakeFirst();
   const monitoredQuery = db
     .selectFrom('monitored_site_urls')
-    .select(['active', 'selection_source'])
+    .select('active')
     .where('workspace_id', '=', crawl.workspace_id)
     .where('project_id', '=', crawl.project_id)
     .where('site_url_id', '=', task.site_url_id ?? '00000000-0000-0000-0000-000000000000');
   const monitored = await (lock ? monitoredQuery.forUpdate() : monitoredQuery).executeTakeFirst();
   return { runtime, monitored };
 }
-/** Live crawl, active membership, and a monitored-URL limit that still allows analysis. */
+/**
+ * Live crawl, active membership and a resolved runtime. Every membership is
+ * system-picked, and admission already spent its allowance, so a later limit
+ * change never strands its analysis.
+ */
 function guardAllows(crawl: Crawl, rows: GuardRows) {
-  if (!isActiveCrawl(crawl.status) || !rows.monitored?.active || !rows.runtime) return false;
-  return rows.runtime.monitored_url_limit > 0;
+  return isActiveCrawl(crawl.status) && Boolean(rows.monitored?.active) && Boolean(rows.runtime);
 }
 
 /** A discover artifact of this URL to reuse, or whether its discover task is still in flight. */
@@ -164,9 +168,13 @@ async function setupPending(db: Database, crawl: Crawl, task: SiteTask) {
 const expectClassification = (db: Database, task: SiteTask, owner: string) =>
   owned(db, task, owner).set({ classification_expected: true, updated_at: new Date() }).execute();
 
-async function acquire(ctx: SiteTaskContext, task: SiteTask): Promise<Outcome> {
-  const fetched = await ctx.fetcher.fetch(task.requested_url, { signal: ctx.signal });
-  const base = { facts: null, page: null, reusedArtifactId: null };
+async function acquire(ctx: SiteTaskContext, crawl: Crawl, task: SiteTask): Promise<Outcome> {
+  const fetched = await ctx.fetcher.fetch(task.requested_url, {
+    signal: ctx.signal,
+    admit: crawlAdmit(crawl),
+    robots: crawlRobotsHandling(crawl.configuration),
+  });
+  const base = { facts: null, page: null, reusedArtifactId: null, robotsExcluded: false };
   if (!fetched.ok)
     return {
       ...base,
@@ -185,6 +193,7 @@ async function acquire(ctx: SiteTaskContext, task: SiteTask): Promise<Outcome> {
     latencyMs: fetched.latencyMs,
     calls: fetched.calls,
     page,
+    robotsExcluded: fetched.robotsExcluded,
   };
   if (failure)
     return {
@@ -273,6 +282,7 @@ async function persist(ctx: SiteTaskContext, claimed: SiteTask, outcome: Outcome
         policyVersion: ctx.fetcher.settings.policyVersion,
         latencyMs: outcome.latencyMs ?? 0,
         purpose: 'analyze',
+        robotsExcluded: outcome.robotsExcluded,
       });
       const analysis = await writePageAnalysis(
         trx,
@@ -352,13 +362,14 @@ async function prepare(
     });
     return deferred ? 'deferred' : null;
   }
-  if (!(await markRunning(ctx, task))) return null;
-  if (!artifact) return acquire(ctx, task);
+  if (!(await markRunning(ctx, claimed))) return null;
+  if (!artifact) return acquire(ctx, crawl, task);
   if (artifact.facts.has_html) await expectClassification(ctx.db, task, ctx.owner);
   return {
     facts: artifact.facts,
     page: null,
     reusedArtifactId: artifact.id,
+    robotsExcluded: false,
     succeeded: true,
     errorCode: '',
     errorDetail: '',

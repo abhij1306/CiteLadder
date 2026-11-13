@@ -1,13 +1,18 @@
 import type { Database } from '../db/database.ts';
 import { record } from '../db/json.ts';
 import { policy } from '../config.ts';
-import { scalarText } from '../text-order.ts';
 import { auditPolicy } from '../audits/config.ts';
 import type { DeriveExecution } from '../audits/result-persistence.ts';
 import type { MeterableShelfResolver } from './shelf.ts';
-import { prepareShelfExecution } from './shelf.ts';
+import { frozenRevisionId, frozenVersions, prepareShelfExecution } from './shelf.ts';
 
-/** Older writers saved answers before derivation. Prepare recovery outside the audit transaction. */
+/**
+ * Older writers saved answers before derivation. Prepare recovery outside the
+ * audit transaction for every succeeded answer that no pass covers yet under
+ * the audit's frozen versions: Commerce audits, and any audit that froze a
+ * catalog revision. A backfill pass counts, so recovery never spends resolver
+ * quota on an answer whose derivation would be discarded.
+ */
 export async function prepareSavedShelf(
   db: Database,
   workspaceId: string,
@@ -22,7 +27,8 @@ export async function prepareSavedShelf(
     .where('id', '=', auditId)
     .executeTakeFirst();
   if (
-    audit?.audit_scope !== 'commerce' ||
+    !audit ||
+    (audit.audit_scope !== 'commerce' && !frozenRevisionId(audit.configuration)) ||
     auditPolicy.constants.audit_terminal_statuses.includes(audit.status)
   )
     return prepared;
@@ -33,22 +39,28 @@ export async function prepareSavedShelf(
     .where('audit_id', '=', auditId)
     .execute();
   if (tasks.some((task) => !policy.task_queue.terminal.includes(task.status))) return prepared;
-  const frozen = record(record(audit.configuration).commerce_measurement);
-  const versions = auditPolicy.commerce_versions;
-  const observations = await db
-    .selectFrom('commerce_recommendation_observations')
-    .select(['task_id', 'artifact_id'])
+  const config = record(audit.configuration);
+  const passes = await db
+    .selectFrom('commerce_match_passes')
+    .select(['task_id', 'artifact_id', 'parser_version', 'matcher_version'])
     .where('workspace_id', '=', workspaceId)
     .where('audit_id', '=', auditId)
-    .where('parser_version', '=', scalarText(frozen.parser_version ?? versions.parser_version))
-    .where('matcher_version', '=', scalarText(frozen.matcher_version ?? versions.matcher_version))
     .execute();
+  const { parser, matcher } = frozenVersions(
+    record(
+      audit.audit_scope === 'commerce' ? config.commerce_measurement : config.commerce_catalog,
+    ),
+  );
   for (const task of tasks) {
     if (
       task.status !== 'succeeded' ||
       !task.result_artifact_id ||
-      observations.some(
-        (row) => row.task_id === task.id && row.artifact_id === task.result_artifact_id,
+      passes.some(
+        (row) =>
+          row.task_id === task.id &&
+          row.artifact_id === task.result_artifact_id &&
+          row.parser_version === parser &&
+          row.matcher_version === matcher,
       )
     )
       continue;

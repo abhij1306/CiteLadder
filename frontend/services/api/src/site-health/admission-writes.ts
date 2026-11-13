@@ -180,6 +180,74 @@ export async function activateMemberships(
   return rows.length;
 }
 
+/**
+ * Append pages to the project's tracked set, in the given order, after its last
+ * fill position. A page tracked before keeps its row and position (it is never
+ * re-picked); a sample membership, which has no position, is taken over.
+ * Returns the site URL ids that joined.
+ */
+export async function joinTrackedSet(trx: Database, crawl: Crawl, siteUrlIds: string[]) {
+  if (!siteUrlIds.length) return [];
+  const now = new Date();
+  const { rows } = await sql<{ site_url_id: string }>`
+    INSERT INTO monitored_site_urls (
+      id, workspace_id, project_id, profile_id, site_url_id, active, selection_source,
+      fill_order, selected_at, created_at, updated_at
+    )
+    SELECT v.id, ${crawl.workspace_id}::uuid, ${crawl.project_id}::uuid, ${crawl.profile_id}::uuid,
+      v.site_url_id, true, 'bootstrap', last.position + v.ordinal::int, ${now}, ${now}, ${now}
+    FROM unnest(${siteUrlIds.map(() => randomUUID())}::uuid[], ${siteUrlIds}::uuid[])
+      WITH ORDINALITY AS v(id, site_url_id, ordinal)
+    CROSS JOIN (
+      SELECT coalesce(max(fill_order), -1) AS position FROM monitored_site_urls
+      WHERE workspace_id = ${crawl.workspace_id}::uuid AND project_id = ${crawl.project_id}::uuid
+    ) AS last
+    ON CONFLICT (project_id, site_url_id) DO UPDATE
+      SET active = true, selection_source = excluded.selection_source,
+          fill_order = excluded.fill_order, selected_at = excluded.selected_at,
+          deselected_at = NULL, updated_at = excluded.updated_at
+      WHERE monitored_site_urls.fill_order IS NULL
+        AND monitored_site_urls.workspace_id = ${crawl.workspace_id}::uuid
+    RETURNING site_url_id`.execute(trx);
+  return rows.map((row) => row.site_url_id);
+}
+
+/**
+ * Fit the tracked set to the monitored-URL limit: the first `limit` pages in fill
+ * order are active, the rest have left (`deselected_at` is when). A lower limit
+ * trims the set from its end and a higher one restores those pages first. A full
+ * crawl tracks nothing else, so a leftover sample membership is released.
+ * The caller holds the project's membership rows.
+ */
+export async function fitTrackedSet(
+  trx: Database,
+  scope: { workspaceId: string; projectId: string },
+  limit: number,
+  options: { releaseSample: boolean },
+) {
+  const now = new Date();
+  await sql`
+    UPDATE monitored_site_urls m
+    SET active = r.rank <= ${limit},
+        deselected_at = CASE WHEN r.rank <= ${limit} THEN NULL ELSE ${now}::timestamptz END,
+        updated_at = ${now}
+    FROM (
+      SELECT id, row_number() OVER (ORDER BY fill_order) AS rank FROM monitored_site_urls
+      WHERE workspace_id = ${scope.workspaceId}::uuid AND project_id = ${scope.projectId}::uuid
+        AND fill_order IS NOT NULL
+    ) AS r
+    WHERE m.id = r.id AND m.active <> (r.rank <= ${limit})`.execute(trx);
+  if (options.releaseSample)
+    await trx
+      .updateTable('monitored_site_urls')
+      .set({ active: false, deselected_at: now, updated_at: now })
+      .where('workspace_id', '=', scope.workspaceId)
+      .where('project_id', '=', scope.projectId)
+      .where('fill_order', 'is', null)
+      .where('active', '=', true)
+      .execute();
+}
+
 /** One sighting of a URL in a crawl, as `site_url_observations` keeps it. */
 export type Observation = {
   siteUrlId: string;

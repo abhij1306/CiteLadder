@@ -1,5 +1,3 @@
-'use client';
-
 import { X } from 'lucide-react';
 import type { FormEvent, ReactNode, RefObject } from 'react';
 
@@ -118,7 +116,8 @@ export function ComposerFrame({
       ) : null}
       {field}
       <div className="flex min-h-[var(--control-md)] flex-wrap items-center gap-2">
-        <div className="flex min-w-0 flex-wrap items-center gap-1">{tools}</div>
+        {/* Takes the room Send leaves, so a long tool truncates instead of wrapping the row. */}
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">{tools}</div>
         <div className="ms-auto shrink-0">{submit}</div>
       </div>
     </form>
@@ -126,27 +125,30 @@ export function ComposerFrame({
 }
 
 /**
- * AgentThread — the conversation's column: the thread measure (1040), centred
- * in the page or panel, its turns 24 apart.
+ * AgentThread — the conversation's column: the composer's measure (1040),
+ * centred in the page or panel, inset 16 on each side so the turns sit inside
+ * the composer's edges, level with its text; its turns 16 apart.
  */
 export function AgentThread({ children }: Readonly<{ children: ReactNode }>) {
   return (
-    <div className="max-w-thread mx-auto flex w-full min-w-0 flex-col gap-[var(--card-padding)]">
+    <div className="max-w-thread mx-auto flex w-full min-w-0 flex-col gap-[var(--card-padding)] px-4">
       {children}
     </div>
   );
 }
 
 /**
- * The person's turn: a right-aligned bubble (`surface`, `shadow-xs`,
- * `radius-lg`) at most 80% of the column, the message as written (its line
- * breaks kept) over its `footer` (mentions, a sending state).
+ * The person's turn: a right-aligned bubble (`surface`, a 1px `line` border,
+ * `radius-lg`) at most 80% of the column and never wider than the prose
+ * measure (720), the message as written (its line breaks kept) in the
+ * primary ink, as the reply's prose is, over its `footer` (mentions, a
+ * sending state).
  */
 export function UserTurn({ text, footer }: Readonly<{ text: string; footer?: ReactNode }>) {
   return (
     <div className="flex justify-end">
-      <div className="bg-surface flex max-w-[80%] min-w-0 flex-col gap-2 rounded-lg px-4 py-3 shadow-xs">
-        <p className={textRole('body', 'whitespace-pre-wrap')}>{text}</p>
+      <div className="bg-surface border-line flex max-w-[min(80%,var(--container-prose))] min-w-0 flex-col gap-2 rounded-lg border px-4 py-3">
+        <p className={textRole('body', 'text-ink whitespace-pre-wrap')}>{text}</p>
         {footer}
       </div>
     </div>

@@ -11,6 +11,7 @@ import type { visibilitySourceUrlSchema } from '@citeladder/contracts/visibility
 import { sql } from 'kysely';
 import type { z } from 'zod';
 
+import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { latestReadings, pageEntities, readAt, readingPresences } from '../source-pages/reading.ts';
 import { wireUtcOrNull, utcText } from '../db/timestamps.ts';
@@ -21,8 +22,10 @@ import { authorizedSelection, evidenceScope, observedAt, type RunSelection } fro
 import { compareText } from '../text-order.ts';
 
 // A detail page shows what a person can take in; its tables do not page.
-const SOURCE_URL_MAX_PROMPTS = 50;
-const SOURCE_URL_MAX_BRANDS = 12;
+const limits = {
+  prompts: policy.visibility.source_url_max_prompts,
+  brands: policy.visibility.source_url_max_brands,
+};
 
 export type SourceUrlDetail = z.input<typeof visibilitySourceUrlSchema>;
 
@@ -93,7 +96,7 @@ async function promptRows(db: Database, cited: Cited): Promise<SourceUrlDetail['
     ])
     .groupBy(['cited.prompt_text', 'cited.theme'])
     .orderBy(responses, 'desc')
-    .limit(SOURCE_URL_MAX_PROMPTS)
+    .limit(limits.prompts)
     .execute();
   return rows.map((row) => ({
     prompt_text: row.prompt_text || '',
@@ -160,8 +163,8 @@ async function brands(
     .toSorted(
       (left, right) => right.responses - left.responses || compareText(left.name, right.name),
     )
-    .slice(0, SOURCE_URL_MAX_BRANDS);
-  const identities = await brandIdentities(db, selection.projectId);
+    .slice(0, limits.brands);
+  const identities = await brandIdentities(db, selection);
   return ordered.map((entry) => {
     const identity = identities.get(identityKey(entry.name));
     return { ...entry, logo_url: identity?.logo_url ?? null, website: identity?.website ?? null };

@@ -33,16 +33,7 @@ const p = policy.site_health.change_intel;
 // The page limit and the automatic monitor limit derived from it are left out:
 // they follow the fetch budget left at admission, so they vary between
 // otherwise identical crawls, and the comparison reads only pages both analyzed.
-const SCOPE_KEYS = [
-  'discovery_mode',
-  'sample_mode',
-  'root_registrable_domain',
-  'include_globs',
-  'exclude_globs',
-  'input_mode',
-  'seed_urls',
-  'page_kinds',
-] as const;
+const SCOPE_KEYS = ['discovery_mode', 'sample_mode', 'root_registrable_domain'] as const;
 const RULE_FIELDS = new Map(Object.entries(p.field_rules).map(([field, rule]) => [rule, field]));
 
 const sha256 = (text: string) => createHash('sha256').update(text).digest('hex');
@@ -57,7 +48,9 @@ function crawlScopeHash(crawl: Pick<Crawl, 'configuration'>) {
     false,
   );
 }
-const sameScope = (a: Crawl, b: Crawl) =>
+type CrawlScope = Pick<Crawl, 'root_url' | 'configuration'>;
+/** Same origin and frozen scope: Changes and the snapshot's change summary compare only such crawls. */
+export const sameScope = (a: CrawlScope, b: CrawlScope) =>
   rootOrigin(a) === rootOrigin(b) && crawlScopeHash(a) === crawlScopeHash(b);
 const sameVersions = (a: Crawl, b: Crawl) =>
   a.analyzer_version === b.analyzer_version && a.extractor_version === b.extractor_version;
@@ -339,8 +332,7 @@ async function insertObservations(
   const chunk = first ? Math.floor(65_535 / Object.keys(first).length) : 1;
   for (let start = 0; start < rows.length; start += chunk) {
     const batch = rows.slice(start, start + chunk);
-    // One transaction connection runs one statement at a time.
-    await db.insertInto('site_change_observations').values(batch).execute(); // NOSONAR
+    await db.insertInto('site_change_observations').values(batch).execute(); // NOSONAR -- One transaction connection runs one statement at a time.
   }
 }
 

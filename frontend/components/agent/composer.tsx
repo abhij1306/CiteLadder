@@ -1,5 +1,3 @@
-'use client';
-
 import { SendHorizontal, Square } from 'lucide-react';
 import type { ReactNode } from 'react';
 
@@ -28,6 +26,7 @@ export function Composer({
   placeholder,
   chips = [],
   onRemoveChip,
+  attachment,
   tools,
   commands,
   onStop,
@@ -45,6 +44,8 @@ export function Composer({
   placeholder: string;
   chips?: ContextChip[];
   onRemoveChip?: (chip: ContextChip) => void;
+  /** The Action the chat is about, first among the chips: one removable line. */
+  attachment?: Readonly<{ label: string; onRemove: () => void }>;
   tools?: ReactNode;
   commands?: ComposerCommands;
   /** While a turn runs, the send button stops it instead. */
@@ -52,7 +53,8 @@ export function Composer({
   stopping?: boolean;
 }>) {
   const canSend = !disabled && !submissionDisabled && !pending && value.trim().length > 0;
-  const hasChips = chips.length > 0 || (commands?.mentions.length ?? 0) > 0;
+  const hasChips =
+    attachment !== undefined || chips.length > 0 || (commands?.mentions.length ?? 0) > 0;
   return (
     <ComposerFrame
       onSubmit={() => {
@@ -62,6 +64,9 @@ export function Composer({
       chips={
         hasChips ? (
           <>
+            {attachment ? (
+              <RemovableChip label={attachment.label} onRemove={attachment.onRemove} />
+            ) : null}
             {chips.map((chip) => (
               <RemovableChip
                 key={chip.key}

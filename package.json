@@ -1,6 +1,6 @@
 {
   "name": "citeladder",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "description": "Self-hosted AI search visibility and evidence-grounded growth intelligence. Root manifest: delegates to the pnpm workspace in frontend/ and declares no dependencies of its own.",
   "license": "AGPL-3.0-only",
@@ -8,7 +8,7 @@
     "type": "git",
     "url": "git+https://github.com/abhij1306/CiteLadder.git"
   },
-  "packageManager": "pnpm@12.16.1",
+  "packageManager": "pnpm@12.18.0",
   "engines": {
     "node": ">=26"
   },

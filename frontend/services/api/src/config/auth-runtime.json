@@ -39,11 +39,15 @@
   "secret_policy": {
     "min_bytes": 32,
     "min_unique_chars": 12,
-    "insecure_values": [
-      "change-me",
-      "replace-with-32-byte-minimum-secret",
-      "replace-with-64-byte-random-secret",
-      "replace-with-a-32-byte-minimum-api-key-pepper"
+    "placeholder_patterns": [
+      "^change[-_ ]?me",
+      "^replace[-_ ]?with",
+      "^<.*>$",
+      "your[-_ ]",
+      "placeholder",
+      "example",
+      "dev[-_ ]?only",
+      "not[-_ ]?for[-_ ]?production"
     ],
     "weak_words": ["changeme", "citeladder", "password", "secret"]
   }

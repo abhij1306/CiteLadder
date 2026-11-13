@@ -1,5 +1,20 @@
-import type { AgentRun } from '@/lib/api/agent';
+import type { AgentChatDetail, AgentRun } from '@/lib/api/agent';
 import { AGENT_RUN_POLL_MAX_MS, AGENT_RUN_POLL_STEPS } from '@/lib/config/agent';
+
+/** A page chat still reading its page: it has no turn yet, and nothing can be sent. */
+export function isPageReading(pageFetch: AgentChatDetail['page_fetch'] | undefined): boolean {
+  return pageFetch?.status === 'reading';
+}
+
+/**
+ * The first turn of a page chat, which the server queued once the page was
+ * read and no request of this tab started: the chat screen opens its stream.
+ */
+export function fetchedTurnToStart(detail: AgentChatDetail | undefined): string | null {
+  const run = detail?.latest_run;
+  if (detail?.page_fetch?.status !== 'done' || detail.chat.turn_count !== 1) return null;
+  return run?.status === 'queued' ? run.id : null;
+}
 
 const ACTIVE_STATUSES = new Set<AgentRun['status']>(['queued', 'leased', 'running', 'retry_wait']);
 

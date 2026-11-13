@@ -76,6 +76,7 @@ describe('Ads view', () => {
     expect(tiles.getByText('No ads of yours were seen.')).toBeVisible();
     expect(screen.getByText('Claude API: Not applicable')).toBeVisible();
     expect(screen.getByText('1 of 3 answers')).toBeVisible();
+    expect(screen.getByRole('columnheader', { name: 'Mentioned you' })).toBeVisible();
     expect(screen.getByText('Rival Runner 3')).toBeVisible();
     expect(screen.getByText('Rival · shop.rival.example/runner-3 · 3 appearances')).toBeVisible();
     expect(screen.queryByRole('img')).toBeNull();

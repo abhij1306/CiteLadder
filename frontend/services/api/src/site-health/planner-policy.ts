@@ -1,17 +1,12 @@
-/** Bounded request normalization and persisted-only URL previews. */
-import { randomBytes } from 'node:crypto';
-import { parse } from 'csv-parse/sync';
+/** Bounded crawl request normalization and the policy frozen on each crawl. */
 import { getDomain } from 'tldts';
 import { z } from 'zod';
 import { asApiErrorCode } from '@citeladder/contracts/error-codes';
-import {
-  siteCrawlCreateRequestSchema,
-  urlPreviewRequestSchema,
-} from '@citeladder/contracts/site-health-requests';
+import type { CrawlRobotsHandling } from '@citeladder/contracts/site-health';
+import { siteCrawlCreateRequestSchema } from '@citeladder/contracts/site-health-requests';
 import { policy } from '../config.ts';
 import { resolveSettingSpec } from '../config/settings.ts';
-import { ApiError, notFound } from '../errors.ts';
-import type { Database } from '../db/database.ts';
+import { ApiError } from '../errors.ts';
 import type { Selectable } from 'kysely';
 import type { WorkspaceSiteHealthRuntime } from '../generated/db-schema.ts';
 import { classifyUrlAdmission, type Scope } from './url-admission.ts';
@@ -29,58 +24,36 @@ export function crawlError(
     details,
   });
 }
-// Seed, glob and page-kind bounds are configured, so `controls`/`normalizeGlobs` check them.
 export const createCrawlRequest = siteCrawlCreateRequestSchema;
-export const previewRequest = urlPreviewRequestSchema;
-export type CreateCrawlRequest = z.infer<typeof createCrawlRequest>;
+type CreateCrawlRequest = z.infer<typeof createCrawlRequest>;
 
-export function normalizeGlobs(values: string[] | null | undefined) {
-  const result = (values ?? []).map((value) => value.trim()).filter(Boolean);
-  if (
-    result.length > Number(crawlSetting('max_narrowing_globs')) ||
-    result.some((value) => value.length > Number(crawlSetting('max_glob_length')))
-  )
-    crawlError('Crawl narrowing globs exceed the allowed bounds');
-  return result;
-}
-export function normalizedSeed(seed: string | null | undefined) {
-  if (!seed?.trim()) return randomBytes(8).readBigUInt64BE().toString();
-  if (!/^[+-]?\d+$/u.test(seed.trim())) crawlError('random_seed must be an integer');
-  return BigInt.asUintN(64, BigInt(seed.trim())).toString();
-}
-export function controls(request: CreateCrawlRequest, developmentAccess = false) {
-  const mode = request.input_mode ?? 'auto';
-  const seeds = request.seed_urls ?? [];
-  const kinds = request.page_kinds ?? [];
-  const advanced = developmentAccess || crawlSetting('advanced_controls_enabled') === true;
-  if (seeds.length > Number(crawlSetting('max_seed_urls'))) crawlError('too many seed_urls');
-  if (
-    kinds.some((kind) => !policy.site_health.page_analysis.classification.page_kinds.includes(kind))
-  )
-    crawlError('unknown page kind');
-  if (!advanced && (mode !== 'auto' || seeds.length || kinds.length))
-    crawlError('advanced crawl controls are unavailable', 'advanced_controls_unavailable');
-  if (mode === 'exact_urls' && !seeds.length) crawlError('exact_urls requires seed_urls');
-  const limit =
-    request.discovery_count ??
-    request.requested_page_limit ??
-    Number(crawlSetting('automatic_page_limit'));
-  const maximum = Number(
-    crawlSetting(advanced ? 'max_advanced_requested_page_limit' : 'max_requested_page_limit'),
-  );
-  if (limit <= 0 || limit > maximum)
-    crawlError('requested_page_limit is outside the allowed range', 'discovery_limit_exceeded');
-  return { mode, seeds, kinds, limit };
-}
-async function projectRoot(db: Database, workspaceId: string, projectId: string, lock = false) {
-  const query = db
-    .selectFrom('projects')
-    .selectAll()
-    .where('workspace_id', '=', workspaceId)
-    .where('id', '=', projectId);
-  const project = await (lock ? query.forUpdate() : query).executeTakeFirst();
-  if (!project) throw notFound('Project');
-  return { project, ...projectWebsiteRoot(project.website_url) };
+/** Who confirmed being authorized to crawl the site while ignoring robots.txt, and when. */
+export const robotsDecisionSchema = z.object({
+  user_id: z.uuid(),
+  email: z.string(),
+  decided_at: z.iso.datetime(),
+});
+export type RobotsDecision = z.infer<typeof robotsDecisionSchema>;
+
+/**
+ * A crawl to admit: the request plus the robots decision behind an `ignore`.
+ * The decision comes from the signed-in person on Start crawl, or is kept from
+ * the shown crawl (`crawlRequest`); never from the request body.
+ */
+export type CrawlAdmission = CreateCrawlRequest & { robots_decision?: RobotsDecision | null };
+
+/** The crawl's robots handling; the page limit is the configured automatic one (SH-B13). */
+export function controls(request: CrawlAdmission) {
+  const robots = request.robots ?? 'respect';
+  // Ignoring robots.txt is recorded against the person who confirmed authorization.
+  const decision = robots === 'ignore' ? (request.robots_decision ?? null) : null;
+  if (robots === 'ignore' && !decision)
+    crawlError('ignoring robots.txt needs a confirmed, signed-in person');
+  return {
+    limit: Number(crawlSetting('automatic_page_limit')),
+    robots,
+    robotsDecision: decision,
+  };
 }
 
 export function projectWebsiteRoot(websiteUrl: string | null) {
@@ -98,7 +71,11 @@ export function projectWebsiteRoot(websiteUrl: string | null) {
 export function frozenConfiguration(
   scope: Scope,
   runtime: Selectable<WorkspaceSiteHealthRuntime>,
-  selected: { mode: string; limit: number; seeds: string[]; kinds: string[] },
+  selected: {
+    limit: number;
+    robots: CrawlRobotsHandling;
+    robotsDecision: RobotsDecision | null;
+  },
 ) {
   const sample = runtime.discovery_mode === 'sample';
   const configuration: Record<string, unknown> = {
@@ -109,15 +86,13 @@ export function frozenConfiguration(
     monitored_url_limit: runtime.monitored_url_limit,
     discovery_url_cap: runtime.discovery_url_cap,
     root_registrable_domain: scope.domain,
-    include_globs: scope.include,
-    exclude_globs: scope.exclude,
     url_admission_policy_version: policy.site_health.crawl.admission_policy_version,
     page_kind_classifier_version: policy.site_health.page_analysis.classification.version,
     page_profile_rule_version: policy.site_health.versions.rules,
-    input_mode: selected.mode,
     requested_page_limit: selected.limit,
-    seed_urls: selected.seeds,
-    page_kinds: selected.kinds,
+    // Read per fetch by the site crawl's discover and analyze tasks.
+    robots: selected.robots,
+    robots_decision: selected.robotsDecision,
     extractor_version: policy.site_health.versions.extractor,
     analyzer_version: policy.site_health.versions.analyzer,
     rule_catalog_version: policy.site_health.versions.rules,
@@ -139,121 +114,9 @@ export function frozenConfiguration(
     'max_attempts',
   ] as const;
   for (const key of frozen) configuration[key] = crawlSetting(key);
-  if (selected.mode === 'auto')
-    configuration[policy.site_health.crawl.automatic_monitor_limit_key] = Math.min(
-      selected.limit,
-      sample ? runtime.sample_url_limit : runtime.monitored_url_limit,
-    );
+  configuration[policy.site_health.crawl.automatic_monitor_limit_key] = Math.min(
+    selected.limit,
+    sample ? runtime.sample_url_limit : runtime.monitored_url_limit,
+  );
   return configuration;
-}
-
-function previewChunkBytes(value: unknown, pending: unknown[]) {
-  if (Array.isArray(value)) {
-    for (const item of value) pending.push(item);
-    return 2 + Math.max(0, value.length - 1);
-  }
-  if (value && typeof value === 'object') {
-    const entries = Object.entries(value);
-    let bytes = 2 + Math.max(0, entries.length - 1);
-    for (const [key, item] of entries) {
-      bytes += Buffer.byteLength(JSON.stringify(key)) + 1;
-      pending.push(item);
-    }
-    return bytes;
-  }
-  return Buffer.byteLength(JSON.stringify(value) ?? 'null');
-}
-
-/** Count bounded JSON chunks without constructing one potentially huge encoding. */
-function ensurePreviewSize(content: unknown) {
-  const maximum = Number(crawlSetting('max_preview_input_bytes'));
-  if (typeof content === 'string') {
-    if (Buffer.byteLength(content) > maximum) crawlError('preview input is too large');
-    return;
-  }
-  const pending = [content];
-  let bytes = 0;
-  while (pending.length) {
-    bytes += previewChunkBytes(pending.pop(), pending);
-    if (bytes > maximum) crawlError('preview input is too large');
-  }
-}
-
-function previewRows(content: unknown, format: string): string[] {
-  ensurePreviewSize(content);
-  if (Array.isArray(content)) return content.map(String);
-  if (content && typeof content === 'object') {
-    const object = content as Record<string, unknown>;
-    const values = object.urls ?? object.items ?? [];
-    if (!Array.isArray(values)) crawlError('JSON preview input must contain a URL list');
-    return values.map((value) =>
-      value && typeof value === 'object' ? String(value.url ?? '') : String(value),
-    );
-  }
-  if (typeof content !== 'string') crawlError('preview input must be text or a URL list');
-  const raw = content;
-  if (format === 'json') {
-    let decoded: unknown;
-    try {
-      decoded = JSON.parse(raw);
-    } catch {
-      crawlError('invalid JSON preview input');
-    }
-    if (!decoded || typeof decoded !== 'object')
-      crawlError('JSON preview input must contain a URL list');
-    return previewRows(decoded, 'text');
-  }
-  if (format === 'csv') {
-    try {
-      return (parse(raw, { relax_column_count: true, skip_empty_lines: false }) as string[][]).map(
-        (row) => row[0] ?? '',
-      );
-    } catch {
-      crawlError('invalid CSV preview input');
-    }
-  }
-  return raw
-    .split(/\r\n|[\n\r\v\f\u0085\u2028\u2029]/u)
-    .filter((_, index, rows) => index !== rows.length - 1 || rows[index] !== '');
-}
-export async function previewCrawlUrls(
-  db: Database,
-  workspaceId: string,
-  request: z.infer<typeof previewRequest>,
-) {
-  const { domain } = await projectRoot(db, workspaceId, request.project_id);
-  const scope: Scope = {
-    domain,
-    include: normalizeGlobs(request.include_globs),
-    exclude: normalizeGlobs(request.exclude_globs),
-  };
-  const seen = new Set<string>();
-  const counts = { accepted: 0, duplicate: 0, rejected: 0 };
-  const maximum = Number(crawlSetting('max_preview_rows'));
-  const parsed = previewRows(request.content, request.input_format);
-  const rows = parsed.slice(0, maximum);
-  const items = rows.map((raw, index) => {
-    const decision = classifyUrlAdmission(raw, scope);
-    const duplicate = decision.accepted && decision.url !== null && seen.has(decision.url);
-    if (duplicate) counts.duplicate++;
-    else if (decision.accepted) {
-      counts.accepted++;
-      seen.add(decision.url!);
-    } else counts.rejected++;
-    return {
-      row: index + 1,
-      input: raw.slice(0, Number(crawlSetting('max_glob_length'))),
-      accepted: decision.accepted && !duplicate,
-      canonical_url: decision.url,
-      reason_code: duplicate ? policy.site_health.crawl.exclusions.duplicate : decision.reason,
-      value_kind: decision.valueKind,
-      priority: decision.priority,
-    };
-  });
-  return {
-    items,
-    truncated: parsed.length > maximum,
-    counts,
-    policy_version: policy.site_health.crawl.admission_policy_version,
-  };
 }

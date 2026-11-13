@@ -69,17 +69,22 @@ export function parseSitemap(body: Buffer, contentType: string, limits: SitemapL
   const [rootName, root] = Object.entries(document).find(([key]) => !key.startsWith('?')) ?? [];
   const isIndex = rootName?.toLowerCase() === 'sitemapindex';
   const children = root && typeof root === 'object' ? (root as Record<string, unknown>) : {};
-  const take = (entries: unknown) =>
-    (Array.isArray(entries) ? entries : []).map(loc).filter(Boolean).slice(0, limits.maxUrls);
+  const all = (entries: unknown) =>
+    (Array.isArray(entries) ? entries : []).map(loc).filter(Boolean);
   // A `<sitemap>` entry is a reference whichever root it appears under.
-  const refs = take(children.sitemap);
-  const urls = isIndex ? [] : take(children.url);
+  const refs = all(children.sitemap);
+  const urls = isIndex ? [] : all(children.url);
+  const references = isIndex ? [...refs, ...all(children.url)] : refs;
   return {
-    urls,
+    urls: urls.slice(0, limits.maxUrls),
     lastmod: isIndex ? new Map<string, string>() : lastmods(children.url, limits.maxUrls),
-    refs: isIndex ? [...refs, ...take(children.url)].slice(0, limits.maxUrls) : refs,
+    refs: references.slice(0, limits.maxUrls),
+    /** The document listed more URLs or references than the cap kept. */
+    truncated: urls.length > limits.maxUrls || references.length > limits.maxUrls,
   };
 }
+
+export type SitemapDocument = ReturnType<typeof parseSitemap>;
 
 /** A sitemap reference as one fetchable identity (WHATWG-normalized, no fragment), or null. */
 export function sitemapRef(value: string) {
@@ -99,22 +104,33 @@ export class SitemapCollector {
   readonly lastmod = new Map<string, string>();
   readonly #visited = new Set<string>();
   readonly limits: SitemapLimits;
+  /** A safety ceiling dropped URLs or references, so the collected list is a lower bound. */
+  truncated = false;
   constructor(limits: SitemapLimits) {
     this.limits = limits;
   }
-  /** Ingest one fetched document; return the unvisited child references still within depth. */
-  add(source: string, body: Buffer, contentType: string, depth: number) {
+  /**
+   * Ingest one parsed document (the caller parses, off the event loop); return
+   * the unvisited child references still within depth.
+   */
+  add(source: string, document: SitemapDocument, depth: number) {
     this.#visited.add(sitemapRef(source) ?? source);
-    const document = parseSitemap(body, contentType, this.limits);
     const room = Math.max(0, this.limits.maxUrls - this.urls.length);
     const kept = document.urls.slice(0, room);
+    if (document.truncated || kept.length < document.urls.length) this.truncated = true;
     this.urls.push(...kept);
     for (const url of kept) {
       const declared = document.lastmod.get(url);
       if (declared && !this.lastmod.has(url)) this.lastmod.set(url, declared);
     }
-    if (depth >= this.limits.maxIndexDepth) return [];
-    const refs = document.refs.flatMap((ref) => sitemapRef(ref) ?? []);
-    return [...new Set(refs)].filter((ref) => !this.#visited.has(ref));
+    const refs = [...new Set(document.refs.flatMap((ref) => sitemapRef(ref) ?? []))].filter(
+      (ref) => !this.#visited.has(ref),
+    );
+    // Only an unread reference past the depth bound leaves the list short.
+    if (depth >= this.limits.maxIndexDepth) {
+      if (refs.length) this.truncated = true;
+      return [];
+    }
+    return refs;
   }
 }

@@ -2,14 +2,13 @@
 import { sql } from 'kysely';
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
-import { record } from '../db/json.ts';
+import { record, strings } from '../db/json.ts';
 import { compareText } from '../text-order.ts';
 import type { Crawl } from './site-task.ts';
 import { failedAs } from './task-outcome.ts';
 
 export type CoverageSignals = {
   sampleMode: boolean;
-  inputMode: string;
   cancelled: boolean;
   discoveryStatus: string;
   requestedPageLimit: number;
@@ -21,26 +20,62 @@ export type CoverageSignals = {
   failedDiscoveryTaskCount: number;
   analyzedUrlCount: number;
   failedUrlCount: number;
-  /** This crawl's automatic analysis allowance (the plan's monitored pages); null when none was recorded. */
+  /** This crawl's automatic analysis allowance (the monitored-URL limit); null when none was recorded. */
   automaticLimit: number | null;
   /** Found and analyzed URLs per admission value tier; empty when nothing went through the frontier. */
   valueKinds?: ValueKindCoverage[];
+  /**
+   * A crawl whose discovery was its sitemap: how many URLs it listed, whether
+   * a safety ceiling cut the read short, how many documents went unread, and
+   * how many of its URLs this crawl observed. Null for an HTML walk or a sample.
+   */
+  sitemap?: {
+    discovered: number;
+    limitReached: boolean;
+    unreadDocuments: number;
+    observed: number;
+  } | null;
 };
 export type ValueKindCoverage = { kind: string; found: number; analyzed: number };
 
 const BOUNDED_DISCOVERY = new Set(['cancelled', 'sample_completed', 'stopped']);
 
-/** A limit, a pending frontier or an explicit bound cut discovery short. */
-function partialReasons(signals: CoverageSignals) {
+/**
+ * A sitemap crawl covers the site only when its sitemap was read whole and
+ * this crawl observed every URL it lists; a tracked set smaller than the site
+ * is partial coverage, never complete.
+ */
+function sitemapPartialReasons(
+  signals: CoverageSignals,
+  sitemap: NonNullable<CoverageSignals['sitemap']>,
+) {
   const reasons: string[] = [];
-  if (signals.requestedPageLimit > 0 && signals.admittedUrlCount >= signals.requestedPageLimit)
+  if (sitemap.limitReached) reasons.push('sitemap_limit_reached');
+  if (sitemap.unreadDocuments > 0) reasons.push('sitemap_documents_unread');
+  if (sitemap.observed < sitemap.discovered) reasons.push('tracked_pages_below_site');
+  if (signals.cancelled) reasons.push('discovery_bounded_or_stopped');
+  return reasons;
+}
+
+/**
+ * A limit, a pending frontier or an explicit bound cut discovery short. The
+ * requested page limit only cut it short when frontier URLs were left: a site
+ * with exactly that many pages exhausted its frontier.
+ */
+function partialReasons(signals: CoverageSignals) {
+  if (signals.sitemap) return sitemapPartialReasons(signals, signals.sitemap);
+  const reasons: string[] = [];
+  if (
+    signals.requestedPageLimit > 0 &&
+    signals.admittedUrlCount >= signals.requestedPageLimit &&
+    signals.pendingFrontierCount > 0
+  )
     reasons.push('requested_page_limit_reached');
   if (signals.frontierLimit > 0 && signals.admittedUrlCount >= signals.frontierLimit)
     reasons.push('frontier_limit_reached');
   if (signals.pendingFrontierCount > 0) reasons.push('frontier_not_exhausted');
   const bounded =
     signals.sampleMode ||
-    signals.inputMode !== 'auto' ||
     signals.cancelled ||
     BOUNDED_DISCOVERY.has(signals.discoveryStatus) ||
     !signals.discoveryTaskCount;
@@ -68,7 +103,8 @@ export function assessCoverage(signals: CoverageSignals) {
   let state = 'complete';
   if (partial.length) state = 'partial';
   else if (unknown.length) state = 'unknown';
-  const reasons = state === 'complete' ? ['frontier_exhausted'] : [...partial, ...unknown];
+  const exhausted = signals.sitemap ? 'sitemap_exhausted' : 'frontier_exhausted';
+  const reasons = state === 'complete' ? [exhausted] : [...partial, ...unknown];
   return {
     state,
     evidence: {
@@ -84,6 +120,7 @@ export function assessCoverage(signals: CoverageSignals) {
       failed_url_count: signals.failedUrlCount,
       automatic_limit: signals.automaticLimit,
       value_kinds: signals.valueKinds ?? [],
+      sitemap: signals.sitemap ?? null,
     },
   };
 }
@@ -165,6 +202,27 @@ export async function inventoryComplete(db: Database, crawl: Crawl) {
   return assessCoverage(await coverageSignals(db, crawl)).state === 'complete';
 }
 
+/** A full crawl whose site setup found sitemap URLs discovered through them, not an HTML walk. */
+async function sitemapCoverage(db: Database, crawl: Crawl) {
+  const sitemap = record(record(crawl.site_facts).sitemap);
+  const urls = strings(sitemap.urls);
+  if (crawl.sample_mode || !urls.length) return null;
+  const observed = await db
+    .selectFrom('site_url_observations')
+    .select(sql<number>`count(distinct observed_url)::int`.as('count'))
+    .where('workspace_id', '=', crawl.workspace_id)
+    .where('project_id', '=', crawl.project_id)
+    .where('crawl_id', '=', crawl.id)
+    .where((eb) => eb('observed_url', '=', eb.fn.any(eb.val(urls))))
+    .executeTakeFirstOrThrow();
+  return {
+    discovered: Number(sitemap.discovered_count) || urls.length,
+    limitReached: sitemap.limit_reached === true,
+    unreadDocuments: Number(sitemap.unread_count) || 0,
+    observed: observed.count,
+  };
+}
+
 async function coverageSignals(db: Database, crawl: Crawl): Promise<CoverageSignals> {
   const discovery = await db
     .selectFrom('site_crawl_tasks')
@@ -194,9 +252,8 @@ async function coverageSignals(db: Database, crawl: Crawl): Promise<CoverageSign
     .executeTakeFirstOrThrow();
   const config = record(crawl.configuration);
   return {
+    sitemap: await sitemapCoverage(db, crawl),
     sampleMode: crawl.sample_mode,
-    inputMode:
-      typeof config.input_mode === 'string' && config.input_mode ? config.input_mode : 'auto',
     cancelled: crawl.status === 'cancelled',
     discoveryStatus: crawl.discovery_status,
     requestedPageLimit: Number(crawl.discovery_requested_count || config.requested_page_limit || 0),

@@ -55,6 +55,8 @@ const readiness = (datasets: SearchIntelligenceDataset[]): SearchIntelligenceRea
   },
   latest_run: null,
   datasets,
+  markets: [{ country_code: 'US', location_code: 2840 }],
+  max_depth: 1_000_000,
 });
 
 it('refreshes a comparison saved for the website under review', () => {

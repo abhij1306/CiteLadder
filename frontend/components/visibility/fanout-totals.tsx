@@ -1,5 +1,3 @@
-'use client';
-
 import { SearchX } from 'lucide-react';
 
 import type { DataTableState } from '@/components/ui/data-table';

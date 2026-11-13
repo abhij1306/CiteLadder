@@ -4,10 +4,10 @@
  *
  * Inspection stamps `roster_version` on every presence: the names, aliases and
  * mention rules it matched with, and the detector version. A reading counts
- * only against the roster in force now.
+ * only against the roster in force now (`judgedUnderCurrentRoster`).
  */
 import { createHash } from 'node:crypto';
-import { sql } from 'kysely';
+import { sql, type RawBuilder } from 'kysely';
 
 import { policy } from '../config.ts';
 import { sourcePageVocabulary } from '../config/source-pages.ts';
@@ -77,8 +77,32 @@ export type ReadingPresence = {
 };
 
 /**
- * The latest SUCCESSFUL reading of each page. `source_pages.latest_snapshot_id`
- * is the latest attempt, so a failed read would hide what was learned.
+ * Whether the reading `snapshotId` names was judged against the roster in
+ * force: the roster the project's newest inspection matched with. A roster
+ * change (a competitor removed, an alias added) reaches every page at once,
+ * so no reader judges a page on names the project no longer tracks (BE-604);
+ * the page counts again once it is read under the new roster.
+ */
+export function judgedUnderCurrentRoster(scope: Scope, snapshotId: RawBuilder<unknown>) {
+  return sql<boolean>`exists (
+    select 1 from source_page_entity_presences judged
+    where judged.snapshot_id = ${snapshotId}
+      and judged.workspace_id = ${scope.workspaceId}
+      and judged.roster_version = (
+        select newest.roster_version
+        from source_page_entity_presences newest
+        where newest.workspace_id = ${scope.workspaceId}
+          and newest.project_id = ${scope.projectId}
+        order by newest.created_at desc, newest.id desc
+        limit 1
+      )
+  )`;
+}
+
+/**
+ * The latest SUCCESSFUL reading of each page judged under the roster in
+ * force. `source_pages.latest_snapshot_id` is the latest attempt, so a failed
+ * read would hide what was learned.
  */
 export async function latestReadings(db: Database, scope: Scope, pageIds: string[]) {
   const latest = new Map<string, Reading>();
@@ -92,6 +116,7 @@ export async function latestReadings(db: Database, scope: Scope, pageIds: string
       and project_id = ${scope.projectId}
       and source_page_id in (${sql.join(pageIds)})
       and outcome = ${sourcePageVocabulary.INSPECTION_INSPECTED}
+      and ${judgedUnderCurrentRoster(scope, sql.ref('source_page_snapshots.id'))}
     order by source_page_id asc, fetched_at desc, id desc
   `.execute(db);
   for (const row of rows.rows) latest.set(row.source_page_id, row);

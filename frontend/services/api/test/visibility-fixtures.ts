@@ -234,6 +234,7 @@ export class VisibilityFixtures extends Fixtures {
   }
 
   private async engineSnapshot(
+    tenant: Tenant,
     auditId: string,
     engine: string,
     model: string,
@@ -251,6 +252,7 @@ export class VisibilityFixtures extends Fixtures {
       .insertInto('audit_engine_snapshots')
       .values({
         id,
+        workspace_id: tenant.workspaceId,
         audit_id: auditId,
         logical_engine: engine,
         transport_provider: provider,
@@ -289,6 +291,7 @@ export class VisibilityFixtures extends Fixtures {
         .insertInto('audit_prompt_snapshots')
         .values({
           id: snapshotId,
+          workspace_id: tenant.workspaceId,
           audit_id: input.auditId,
           prompt_index: promptIndex,
           text: input.promptText ?? `prompt ${promptIndex}`,
@@ -310,7 +313,13 @@ export class VisibilityFixtures extends Fixtures {
         workspace_id: tenant.workspaceId,
         project_id: tenant.projectId,
         prompt_snapshot_id: snapshotId,
-        engine_snapshot_id: await this.engineSnapshot(input.auditId, engine, model, provider),
+        engine_snapshot_id: await this.engineSnapshot(
+          tenant,
+          input.auditId,
+          engine,
+          model,
+          provider,
+        ),
         prompt_index: promptIndex,
         repetition: input.repetition ?? 0,
         randomized_position: 0,
@@ -357,6 +366,7 @@ export class VisibilityFixtures extends Fixtures {
       .insertInto('raw_response_artifacts')
       .values({
         id: artifactId,
+        workspace_id: tenant.workspaceId,
         audit_id: input.auditId,
         task_id: taskId,
         logical_engine: engine,
@@ -521,6 +531,11 @@ export class VisibilityFixtures extends Fixtures {
       visibilityScore?: number;
       analyzerVersion?: string;
       scoringRuleVersion?: string;
+      /**
+       * False for a history run only a later run's walk reads: its own
+       * baselines are never compared, so finalizing it is wasted setup.
+       */
+      finalize?: boolean;
     },
   ): Promise<string> {
     const id = randomUUID();
@@ -546,7 +561,8 @@ export class VisibilityFixtures extends Fixtures {
       })
       .execute();
     // Finalization persists the run's comparable baselines once its snapshot exists.
-    await persistComparisonBaselines(this.database, { workspaceId: tenant.workspaceId, auditId });
+    if (input.finalize !== false)
+      await persistComparisonBaselines(this.database, { workspaceId: tenant.workspaceId, auditId });
     return id;
   }
 

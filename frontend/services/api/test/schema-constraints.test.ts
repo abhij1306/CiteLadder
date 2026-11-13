@@ -8,6 +8,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { actionStatusSchema } from '@citeladder/contracts/actions';
+import { agentSuggestionSchema } from '@citeladder/contracts/agent';
 import { auditStatusSchema } from '@citeladder/contracts/audits';
 import { promptStatusSchema } from '@citeladder/contracts/project';
 import { searchRunStatusSchema } from '@citeladder/contracts/search-intelligence';
@@ -20,7 +21,18 @@ import { sql } from 'kysely';
 import { afterAll, describe, expect, it } from 'vitest';
 
 import { policy } from '../src/config.ts';
+import type { Database } from '../src/db/database.ts';
 import type { DB } from '../src/generated/db-schema.ts';
+import {
+  AGENT_LANE,
+  ANALYTICS_LANE,
+  AUDIT_LANE,
+  claimStatement,
+  DISCOVERY_LANE,
+  INTEGRATION_LANE,
+  SITE_HEALTH_LANE,
+} from '../src/queue/task-queue.ts';
+import { expiredBatch } from '../src/referrals/retention.ts';
 import { seedImport, seedMetricRow } from './referral-fixtures.ts';
 import { SiteFixtures } from './site-health-fixtures.ts';
 import { testDatabase } from './support.ts';
@@ -152,6 +164,102 @@ describe('Site Health', () => {
     await expect(
       clone('site_observed_architectures', architectureId, { crawl_id: other.crawlId }),
     ).rejects.toMatchObject(FOREIGN_KEY);
+  });
+});
+
+describe('evidence tenancy keys', () => {
+  it("refuses an answer, event, crawl event or alias naming another workspace's parent", async () => {
+    const owner = await fixtures.tenant();
+    const other = await fixtures.tenant();
+    const auditId = await fixtures.audit(owner);
+    const { taskId } = await fixtures.execution(owner, { auditId });
+    const artifact = await db
+      .selectFrom('raw_response_artifacts')
+      .select('id')
+      .where('task_id', '=', taskId)
+      .executeTakeFirstOrThrow();
+    await clone('raw_response_artifacts', artifact.id);
+    await expect(
+      clone('raw_response_artifacts', artifact.id, { workspace_id: other.workspaceId }),
+    ).rejects.toMatchObject(FOREIGN_KEY);
+
+    const event = (workspaceId: string) =>
+      db
+        .insertInto('audit_events')
+        .values({
+          id: randomUUID(),
+          workspace_id: workspaceId,
+          audit_id: auditId,
+          event_type: 'audit.status',
+          message: 'status',
+          created_at: new Date(),
+        })
+        .execute();
+    await event(owner.workspaceId);
+    await expect(event(other.workspaceId)).rejects.toMatchObject(FOREIGN_KEY);
+
+    await fixtures.brand(owner.projectId, 'Acme');
+    const brand = await db
+      .selectFrom('brands')
+      .select('id')
+      .where('project_id', '=', owner.projectId)
+      .executeTakeFirstOrThrow();
+    const alias = (workspaceId: string) =>
+      db
+        .insertInto('brand_aliases')
+        .values({
+          id: randomUUID(),
+          workspace_id: workspaceId,
+          brand_id: brand.id,
+          alias: 'Acme Co',
+          created_at: new Date(),
+        })
+        .execute();
+    await alias(owner.workspaceId);
+    await expect(alias(other.workspaceId)).rejects.toMatchObject(FOREIGN_KEY);
+
+    const crawl = await fixtures.crawl();
+    const crawlEvent = (workspaceId: string) =>
+      db
+        .insertInto('site_crawl_events')
+        .values({
+          id: randomUUID(),
+          workspace_id: workspaceId,
+          crawl_id: crawl.crawlId,
+          event_type: 'crawl.started',
+          message: 'started',
+          created_at: new Date(),
+        })
+        .execute();
+    await crawlEvent(crawl.workspaceId);
+    await expect(crawlEvent(other.workspaceId)).rejects.toMatchObject(FOREIGN_KEY);
+  });
+
+  it('numbers provider attempts once per task', async () => {
+    const owner = await fixtures.tenant();
+    const auditId = await fixtures.audit(owner);
+    const { taskId } = await fixtures.execution(owner, { auditId });
+    const attempt = (attemptNumber: number) =>
+      db
+        .insertInto('provider_attempts')
+        .values({
+          id: randomUUID(),
+          workspace_id: owner.workspaceId,
+          audit_id: auditId,
+          task_id: taskId,
+          attempt_number: attemptNumber,
+          logical_engine: 'chatgpt',
+          transport_provider: 'test',
+          transport_model: 'test-model',
+          status: 'failed',
+          error_code: 'timeout',
+          error_detail: '',
+          created_at: new Date(),
+        })
+        .execute();
+    await attempt(1);
+    await expect(attempt(1)).rejects.toMatchObject(UNIQUE);
+    await attempt(2);
   });
 });
 
@@ -642,12 +750,25 @@ describe('status vocabularies', () => {
       ['connected', 'needs_reauth', 'pending_revocation', 'revoked', 'error'],
     ],
     ['actions', 'status', actionStatusSchema.options],
+    ['content_angle_runs', 'outcome', ['succeeded', 'failed']],
+    ['content_angle_owned_matches', 'method', ['model_pick', 'none']],
+    ['page_snapshots', 'outcome', policy.content_optimization.page_fetch.outcomes],
+    ['agent_output_suggestions', 'anchor_kind', ['span', 'field', 'page']],
+    ['agent_output_suggestions', 'source', agentSuggestionSchema.shape.source.options],
+    [
+      'agent_output_suggestion_events',
+      'status',
+      ['open', 'applied', 'dismissed', 'reverted', 'stale'],
+    ],
+    ['agent_output_suggestion_events', 'actor', ['agent', 'user', 'system']],
     ['prompts', 'status', promptStatusSchema.options],
     [
       'prompt_candidates',
       'disposition',
       [candidate.pending, candidate.accepted, candidate.rejected, ...candidate.outcomes],
     ],
+    ['agent_model_attempts', 'outcome', ['dispatched', 'completed', 'failed', 'recovered_unknown']],
+    ['execution_cost_projections', 'projection_status', ['complete', 'partial', 'unknown']],
   ];
 
   it.each(columns)(
@@ -656,4 +777,144 @@ describe('status vocabularies', () => {
       expect(await refused(table, column, [...values, UNKNOWN])).toEqual([UNKNOWN]);
     },
   );
+});
+
+describe('project deletion', () => {
+  /**
+   * Parents that gain rows per answer, task, fetched page, rule evaluation,
+   * URL or metric row. Deleting a project removes them row by row, and
+   * PostgreSQL enforces each reference to them with one lookup per removed
+   * row; an unindexed reference scans its whole table, every tenant's rows
+   * included, for each one (migration 0018).
+   */
+  const highVolumeParents: (keyof DB)[] = [
+    'raw_response_artifacts',
+    'audit_tasks',
+    'audit_prompt_snapshots',
+    'audit_engine_snapshots',
+    'site_fetch_artifacts',
+    'site_page_analyses',
+    'site_rule_evaluations',
+    'site_crawl_tasks',
+    'site_urls',
+    'integration_metric_rows',
+    'opportunities',
+    'agent_output_suggestions',
+  ];
+
+  it('indexes every reference to a parent it removes row by row', async () => {
+    // A reference is served when an index leads with exactly its columns, or
+    // with one of its non-tenant columns (the tenant keys alone match a project).
+    const unindexed = await sql<{ reference: string }>`
+      with refs as (
+        select c.conname, c.conrelid, c.conrelid::regclass::text as child,
+          array(select a.attname::text from unnest(c.conkey) k(attnum)
+                join pg_attribute a on a.attrelid = c.conrelid and a.attnum = k.attnum) as cols
+        from pg_constraint c
+        where c.contype = 'f'
+          and c.confrelid::regclass::text = any(${highVolumeParents}::text[])
+      ), index_columns as (
+        select i.indrelid,
+          array(select a.attname::text from unnest(i.indkey) with ordinality k(attnum, ord)
+                join pg_attribute a on a.attrelid = i.indrelid and a.attnum = k.attnum
+                order by k.ord) as cols
+        from pg_index i
+      )
+      select r.child || '.' || array_to_string(r.cols, ',') || ' (' || r.conname || ')' as reference
+      from refs r
+      where not exists (
+        select 1 from index_columns l
+        where l.indrelid = r.conrelid
+          and ((l.cols[1:cardinality(r.cols)] @> r.cols and l.cols[1:cardinality(r.cols)] <@ r.cols)
+            or (l.cols[1] = any(r.cols) and l.cols[1] not in ('workspace_id', 'project_id')))
+      )
+      order by reference`.execute(db);
+    expect(unindexed.rows.map((row) => row.reference)).toEqual([]);
+  });
+
+  it('finds the rows each set-null reference clears through an index', async () => {
+    // Users are deleted only while they own nothing, so their actor references stay unindexed.
+    const references = await sql<{ child: string; cols: string[] }>`
+      select c.conrelid::regclass::text as child,
+        array(select a.attname::text from unnest(c.conkey) k(attnum)
+              join pg_attribute a on a.attrelid = c.conrelid and a.attnum = k.attnum) as cols
+      from pg_constraint c
+      where c.contype = 'f' and c.confdeltype = 'n' and c.confrelid <> 'public.users'::regclass
+      order by 1, 2`.execute(db);
+    const checked: string[] = [];
+    const scanned: string[] = [];
+    for (const { child, cols } of references.rows) {
+      const reference = `${child}.${cols.join(',')}`;
+      checked.push(reference);
+      // The lookup PostgreSQL runs for each deleted parent row.
+      const lookup = sql.join(
+        cols.map((col) => sql`${sql.ref(col)} = ${randomUUID()}::uuid`),
+        sql` and `,
+      );
+      const scans = await indexScans((trx) =>
+        sql`explain (format json) select 1 from ${sql.table(child)} where ${lookup}`.execute(trx),
+      );
+      // A tenant index alone reads the whole workspace or project per deleted parent.
+      const cleared = cols.filter((col) => col !== 'workspace_id' && col !== 'project_id');
+      const served = scans.some(({ condition }) =>
+        cleared.some((col) => condition.includes(`(${col} = `)),
+      );
+      if (!served) scanned.push(reference);
+    }
+    expect(checked).toContain('commerce_categories.workspace_id,project_id,parent_category_id');
+    expect(scanned).toEqual([]);
+  });
+});
+
+/** The index scans in a query's plan, planned with sequential scans priced out. */
+async function indexScans(explain: (trx: Database) => Promise<unknown>) {
+  const plan = await db.transaction().execute(async (trx) => {
+    await sql`set local enable_seqscan = off`.execute(trx);
+    return explain(trx);
+  });
+  const scans: { index: string; condition: string }[] = [];
+  const visit = (node: unknown): void => {
+    if (Array.isArray(node)) node.forEach(visit);
+    else if (node !== null && typeof node === 'object') {
+      if ('Index Name' in node && typeof node['Index Name'] === 'string')
+        scans.push({
+          index: node['Index Name'],
+          condition:
+            'Index Cond' in node && typeof node['Index Cond'] === 'string'
+              ? node['Index Cond']
+              : '',
+        });
+      Object.values(node).forEach(visit);
+    }
+  };
+  visit(plan);
+  return scans;
+}
+
+/** The names of the indexes a query's plan reads. */
+async function indexesRead(explain: (trx: Database) => Promise<unknown>) {
+  return (await indexScans(explain)).map(({ index }) => index);
+}
+
+describe('background reads', () => {
+  it('pages expired referral events through the retention index', async () => {
+    expect(
+      await indexesRead((trx) => expiredBatch(trx, randomUUID(), new Date()).explain('json')),
+    ).toContain('ix_referral_events_retention');
+  });
+
+  it.each([
+    ANALYTICS_LANE,
+    SITE_HEALTH_LANE,
+    DISCOVERY_LANE,
+    AGENT_LANE,
+    INTEGRATION_LANE,
+    AUDIT_LANE,
+  ] as const)('claims $table work through its claimable-only index', async (lane) => {
+    expect(
+      await indexesRead((trx) =>
+        claimStatement(trx, lane, { now: new Date(), limit: 1 }).explain('json'),
+      ),
+    ).toContain(`ix_${lane.table}_claim`);
+  });
 });

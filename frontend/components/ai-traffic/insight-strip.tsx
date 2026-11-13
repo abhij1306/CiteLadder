@@ -56,7 +56,7 @@ export function InsightStrip({
           <ul className={ledgerClasses()}>
             {data.patterns.map((r) => (
               <Stack as="li" key={r.pattern} className={ledgerItemClasses()}>
-                <p className="type-body">{r.copy}</p>
+                <p className="type-body text-ink">{r.copy}</p>
                 <Inline gap="meta">
                   <TextLink
                     aria-label={`Inspect pages: ${patternLabel(r.pattern)}`}

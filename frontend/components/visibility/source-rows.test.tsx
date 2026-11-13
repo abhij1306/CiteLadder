@@ -61,8 +61,16 @@ it('shows reads beside citations, and an engine without exposed reads as unavail
   const columns = within(header!)
     .getAllByRole('columnheader')
     .map((cell) => cell.textContent);
+  // A header reads as its label then its sublabel, so exactly one may match.
+  const column = (label: string) => {
+    const matches = columns.flatMap((name, index) => (name?.startsWith(label) ? [index] : []));
+    expect(matches).toHaveLength(1);
+    return matches[0]!;
+  };
   const cell = (row: HTMLElement, label: string) =>
-    within(row).getAllByRole('cell')[columns.indexOf(label)]!.textContent;
+    within(row).getAllByRole('cell')[column(label)]!.textContent;
+  // Counts here, shares in the domain table: the header names the unit.
+  expect(screen.getByRole('columnheader', { name: /^Cited in\s*Answers$/u })).toBeVisible();
   expect([cell(read!, 'Cited in'), cell(read!, 'Retrieved')]).toEqual(['1', '3']);
   expect([cell(unexposed!, 'Cited in'), cell(unexposed!, 'Retrieved')]).toEqual([
     '2',

@@ -8,14 +8,12 @@ import {
   researchScopeSchema,
   searchDatasetPageSchema,
   searchDatasetSchema,
-  searchPreferencesSchema,
   searchReadinessSchema,
   searchRowSchema,
   searchRunSchema,
 } from '@citeladder/contracts';
 import type {
   SearchCitationMatchRequest,
-  SearchPreferencesRequest,
   SearchReviewRequest,
 } from '@citeladder/contracts/search-intelligence-requests';
 import { strictValidate } from '@citeladder/contracts/validation';
@@ -103,16 +101,6 @@ export const searchIntelligenceApi = {
       searchDatasetSchema,
       await apiClient.post<unknown>(`${root(projectId)}/citation-matches`, input, options),
       'searchIntelligence.deriveCitationMatches',
-    ),
-  savePreferences: async (
-    projectId: string,
-    payload: SearchPreferencesRequest,
-    options?: ApiRequestOptions,
-  ) =>
-    strictValidate(
-      searchPreferencesSchema,
-      await apiClient.put<unknown>(`${root(projectId)}/preferences`, payload, options),
-      'searchIntelligence.savePreferences',
     ),
 };
 

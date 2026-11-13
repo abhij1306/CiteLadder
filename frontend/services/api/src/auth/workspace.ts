@@ -123,6 +123,21 @@ export async function memberCan(
   return member?.allows(capability) ?? false;
 }
 
+/**
+ * Whether a held session still reaches the workspace: the same membership
+ * predicate as any request, and the session's version still current. A
+ * long-lived response (an event stream) re-checks this while it stays open.
+ */
+export async function sessionStillMember(
+  db: Database,
+  access: { userId: string; sessionVersion: number; workspaceId: string },
+): Promise<boolean> {
+  const member = await authorizingMember(db, access.workspaceId, access.userId)
+    .where('users.session_version', '=', access.sessionVersion)
+    .executeTakeFirst();
+  return member !== undefined;
+}
+
 /** The caller's membership, or 404. */
 export async function resolveWorkspaceMember(
   db: Database,

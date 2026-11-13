@@ -1,5 +1,6 @@
 import {
   buyerPromptDecisionRequestSchema,
+  catalogImportApplyRequestSchema,
   catalogImportRequestSchema,
   competitorDecisionRequestSchema,
   competitorDiscoveryExecuteRequestSchema,
@@ -7,12 +8,16 @@ import {
 import {
   buyerPromptSchema,
   catalogImportSchema,
+  catalogImportStageSchema,
   commerceCatalogSchema,
+  commerceProductDetailSchema,
+  commerceProductPageSchema,
+  commerceProductSchema,
   commerceProjectionSchema,
+  commerceShoppingOverviewSchema,
   competitorCandidateSchema,
   competitorDiscoveryTaskSchema,
   competitorDiscoverySchema,
-  shelfSchema,
 } from '@citeladder/contracts/commerce-suite';
 import type { Context } from 'hono';
 import { z } from 'zod';
@@ -26,37 +31,61 @@ import {
   generateBuyerPrompts,
   manualBuyerPrompt,
 } from '../commerce/buyer-prompts.ts';
-import { importCatalog } from '../commerce/import.ts';
+import {
+  editProduct,
+  productEditInput,
+  productLifecycleInput,
+  setProductLifecycle,
+} from '../commerce/edits.ts';
+import { applyImport, stageImport } from '../commerce/import.ts';
+import { fetchShopifyStore } from '../commerce/shopify-store.ts';
+import { shoppingOverview } from '../commerce/overview.ts';
+import { productDetail } from '../commerce/product-detail.ts';
+import { productMetrics } from '../commerce/products.ts';
 import {
   buyerPrompts,
   candidates,
   catalog,
   catalogProjection,
   discoveries,
-  shelf,
 } from '../commerce/reads.ts';
 import { policy } from '../config.ts';
 import type { AppEnv } from '../context.ts';
 import { ApiError } from '../errors.ts';
 import { readBody } from '../http/body.ts';
-
-import { defineGetRoute, definePatchRoute, definePostRoute } from './define.ts';
+import { defineGetRoute, definePatchRoute, definePostRoute, definePutRoute } from './define.ts';
 
 /** Every route here reads the path project inside the active workspace. */
 const family = { family: 'commerce', authorize: 'active-project' } as const;
 const root = '/api/v1/projects/{project_id}/commerce';
 const uuid = { scalar: { kind: 'uuid' }, required: true } as const;
 const projectPath = { project_id: uuid } as const;
-const importBody = catalogImportRequestSchema.extend({
-  content: z
-    .string()
-    .refine(
-      (value) => Buffer.byteLength(value, 'utf8') <= policy.commerce.import_max_bytes,
-      'CSV exceeds the byte limit',
-    ),
-});
+/** The executions a product read covers, shared by the table and the detail page. */
+const windowParam = {
+  scalar: { kind: 'int', ge: 1, le: 366 },
+  default: policy.commerce.products.default_window_days,
+} as const;
+const engineParam = { scalar: { kind: 'str', minLength: 1, maxLength: 64 } } as const;
+const promptSetParam = { scalar: { kind: 'uuid' } } as const;
+const importBody = catalogImportRequestSchema.refine(
+  (body) =>
+    !('content' in body) ||
+    Buffer.byteLength(body.content, 'utf8') <= policy.commerce.import_max_bytes,
+  { message: 'The file exceeds the byte limit', path: ['content'] },
+);
+const applyBody = catalogImportApplyRequestSchema.refine(
+  (body) => body.excluded_categories.length <= policy.commerce.import_max_rows,
+  { message: 'Too many excluded categories', path: ['excluded_categories'] },
+);
 const candidateBody = competitorDecisionRequestSchema;
 const promptBody = buyerPromptDecisionRequestSchema;
+/** A retried generation with the same key replays the prompts its first attempt stored. */
+const buyerGenerateHeaders = z.object({
+  'Idempotency-Key': z
+    .string()
+    .max(policy.commerce.buyer_prompts.idempotency_key_max_chars)
+    .nullish(),
+});
 const executeDiscoveriesBody = competitorDiscoveryExecuteRequestSchema;
 
 function scopeOf(c: Context<AppEnv>, projectId: string) {
@@ -96,12 +125,17 @@ export const commerceRoutes = [
     status: 201,
     params: { path: projectPath, query: {} },
     body: buyerGenerateInput,
+    headers: buyerGenerateHeaders,
     response: z.array(buyerPromptSchema),
     async handle({ c, db }, { path }) {
+      const key = c.req.header('Idempotency-Key')?.trim() || null;
+      if (key && key.length > policy.commerce.buyer_prompts.idempotency_key_max_chars)
+        throw new ApiError(422, 'Idempotency-Key is too long');
       return generateBuyerPrompts(
         db,
         scopeOf(c, path.project_id),
         await readBody(c, buyerGenerateInput),
+        { idempotencyKey: key },
       );
     },
   }),
@@ -141,15 +175,137 @@ export const commerceRoutes = [
   }),
   definePostRoute({
     ...family,
-    path: `${root}/catalog/import`,
+    path: `${root}/catalog/imports`,
     capability: 'run',
     status: 201,
     params: { path: projectPath, query: {} },
     body: importBody,
+    response: catalogImportStageSchema,
+    async handle({ c, db }, { path }) {
+      const scope = scopeOf(c, path.project_id);
+      const body = await readBody(c, importBody);
+      if (body.source !== 'shopify')
+        return stageImport(db, scope, {
+          format: body.source,
+          content: body.content,
+          label: body.filename,
+        });
+      const store = await fetchShopifyStore(db, scope, body.store);
+      return stageImport(db, scope, {
+        format: 'shopify',
+        content: store.content,
+        label: store.host,
+      });
+    },
+  }),
+  definePostRoute({
+    ...family,
+    path: `${root}/catalog/imports/{import_id}/apply`,
+    capability: 'run',
+    params: { path: { ...projectPath, import_id: uuid }, query: {} },
+    body: applyBody,
     response: catalogImportSchema,
     async handle({ c, db }, { path }) {
       const scope = scopeOf(c, path.project_id);
-      return importCatalog(db, scope, await readBody(c, importBody));
+      const { excluded_categories } = await readBody(c, applyBody);
+      return applyImport(db, scope, path.import_id, excluded_categories);
+    },
+  }),
+  defineGetRoute({
+    ...family,
+    path: `${root}/products`,
+    params: {
+      path: projectPath,
+      query: {
+        source: {
+          scalar: { kind: 'literal', values: ['catalog', 'all', 'archived'] },
+          default: 'catalog',
+        },
+        category: { scalar: { kind: 'uuid' } },
+        window: windowParam,
+        engine: engineParam,
+        prompt_set: promptSetParam,
+        q: { scalar: { kind: 'str', maxLength: policy.commerce.products.search_max_chars } },
+        sort: {
+          scalar: { kind: 'literal', values: ['visibility', 'win_rate', 'position', 'name'] },
+          default: 'visibility',
+        },
+        cursor: { scalar: { kind: 'str', minLength: 1, maxLength: 1024 } },
+        limit: {
+          scalar: { kind: 'int', ge: 1, le: policy.commerce.products.max_page_size },
+          default: policy.commerce.products.page_size,
+        },
+      },
+    },
+    response: commerceProductPageSchema,
+    async handle({ c, db }, { path, query }) {
+      return productMetrics(db, scopeOf(c, path.project_id), {
+        source: query.source,
+        category: query.category,
+        windowDays: query.window,
+        engine: query.engine,
+        promptSet: query.prompt_set,
+        q: query.q,
+        sort: query.sort,
+        cursor: query.cursor,
+        limit: query.limit,
+      });
+    },
+  }),
+  defineGetRoute({
+    ...family,
+    path: `${root}/overview`,
+    params: {
+      path: projectPath,
+      query: { category: { scalar: { kind: 'uuid' } }, window: windowParam },
+    },
+    response: commerceShoppingOverviewSchema,
+    async handle({ c, db }, { path, query }) {
+      return shoppingOverview(db, scopeOf(c, path.project_id), {
+        windowDays: query.window,
+        category: query.category,
+      });
+    },
+  }),
+  defineGetRoute({
+    ...family,
+    path: `${root}/products/{holder_id}`,
+    params: {
+      path: { ...projectPath, holder_id: uuid },
+      query: { window: windowParam, engine: engineParam, prompt_set: promptSetParam },
+    },
+    response: commerceProductDetailSchema,
+    async handle({ c, db }, { path, query }) {
+      return productDetail(db, scopeOf(c, path.project_id), path.holder_id, {
+        windowDays: query.window,
+        engine: query.engine,
+        promptSet: query.prompt_set,
+      });
+    },
+  }),
+  definePatchRoute({
+    ...family,
+    path: `${root}/products/{holder_id}`,
+    capability: 'write',
+    params: { path: { ...projectPath, holder_id: uuid }, query: {} },
+    body: productEditInput,
+    response: commerceProductSchema,
+    async handle({ c, db }, { path }) {
+      const scope = scopeOf(c, path.project_id);
+      return editProduct(db, scope, path.holder_id, await readBody(c, productEditInput));
+    },
+  }),
+  definePutRoute({
+    ...family,
+    path: `${root}/products/{holder_id}/lifecycle`,
+    capability: 'write',
+    params: { path: { ...projectPath, holder_id: uuid }, query: {} },
+    body: productLifecycleInput,
+    response: commerceProductSchema,
+    async handle({ c, db }, { path }) {
+      const scope = scopeOf(c, path.project_id);
+      const { lifecycle_state } = await readBody(c, productLifecycleInput);
+      return setProductLifecycle(db, scope, path.holder_id, lifecycle_state);
     },
   }),
   defineGetRoute({
@@ -206,26 +362,6 @@ export const commerceRoutes = [
     async handle({ c, db }, { path }) {
       const scope = scopeOf(c, path.project_id);
       return decideBuyerPrompt(db, scope, path.prompt_id, (await readBody(c, promptBody)).approved);
-    },
-  }),
-  defineGetRoute({
-    ...family,
-    path: `${root}/ai-shelf`,
-    params: {
-      path: projectPath,
-      query: {
-        target_id: { scalar: { kind: 'uuid' } },
-        target_kind: { scalar: { kind: 'literal', values: ['category', 'product'] } },
-      },
-    },
-    response: shelfSchema,
-    async handle({ c, db }, { path, query }) {
-      const scope = scopeOf(c, path.project_id);
-      if (!query.target_kind || !query.target_id)
-        throw new ApiError(422, 'AI Shelf requires a product or category target', {
-          code: 'commerce_target_required',
-        });
-      return shelf(db, scope, { kind: query.target_kind, id: query.target_id });
     },
   }),
 ];

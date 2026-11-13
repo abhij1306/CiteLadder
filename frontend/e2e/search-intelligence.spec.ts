@@ -1,8 +1,15 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { FIXTURE_PROJECT, fixtureProjectPath, stubAuthedShell } from './helpers/app-fixture';
 import type { SearchIntelligenceDataset } from '../lib/api/search-intelligence';
 
 const id = (value: number) => `33333333-3333-4333-8333-${String(value).padStart(12, '0')}`;
+
+/** Picks a saved scope or market from the control row's All filters. */
+async function chooseSaved(page: Page, label: string, option: string) {
+  await page.getByRole('button', { name: /^All filters/ }).click();
+  await page.getByRole('menuitem', { name: new RegExp(`^${label}:`) }).click();
+  await page.getByRole('menuitemradio', { name: option }).click();
+}
 const target = {
   identity: 'primary',
   label: 'Acme Outdoor',
@@ -151,6 +158,11 @@ for (const viewport of [
             },
             latest_run: null,
             datasets,
+            markets: [
+              { country_code: 'US', location_code: 2840 },
+              { country_code: 'AU', location_code: 2036 },
+            ],
+            max_depth: 1_000_000,
           },
         ],
       ],
@@ -176,15 +188,11 @@ for (const viewport of [
     );
     await page.getByRole('tab', { name: 'Keywords', exact: true }).click();
     await expect(page.getByRole('cell', { name: '8', exact: true }).first()).toBeVisible();
-    await page.getByRole('combobox', { name: 'Saved market' }).click();
-    await page.getByRole('option', { name: 'Australia · en' }).click();
-    await page.getByRole('combobox', { name: 'Saved scope' }).click();
-    await page.getByRole('option', { name: 'Domain + subdomains' }).click();
+    await chooseSaved(page, 'Saved market', 'Australia · en');
+    await chooseSaved(page, 'Saved scope', 'Domain + subdomains');
     await expect(page.getByRole('radio', { name: 'Top pages', exact: true })).toBeVisible();
-    await page.getByRole('combobox', { name: 'Saved scope' }).click();
-    await page.getByRole('option', { name: 'Exact host' }).click();
-    await page.getByRole('combobox', { name: 'Saved market' }).click();
-    await page.getByRole('option', { name: 'United States · en' }).click();
+    await chooseSaved(page, 'Saved scope', 'Exact host');
+    await chooseSaved(page, 'Saved market', 'United States · en');
     await page.getByRole('tab', { name: 'Competitors', exact: true }).click();
     await page.getByRole('button', { name: 'Summit Gear: Keywords you both rank for' }).click();
     await expect(
@@ -197,8 +205,7 @@ for (const viewport of [
     await expect(
       page.getByText('The provider returned no data for this saved scope.'),
     ).toBeVisible();
-    await page.getByRole('combobox', { name: 'Saved scope' }).click();
-    await page.getByRole('option', { name: 'Domain + subdomains' }).click();
+    await chooseSaved(page, 'Saved scope', 'Domain + subdomains');
     await page.getByRole('radio', { name: 'Backlinks', exact: true }).click();
     await expect(page.getByText('https://publisher.test/story', { exact: true })).toBeVisible();
     await expect(page.getByText('400', { exact: true })).toBeVisible();

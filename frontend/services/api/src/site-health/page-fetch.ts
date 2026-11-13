@@ -4,7 +4,9 @@
  * per-call trace so each real network request becomes one attempt row. Errors
  * use the Site Health fetch-error vocabulary the read API classifies.
  */
+import type { CrawlRobotsHandling } from '@citeladder/contracts/site-health';
 import { policy } from '../config.ts';
+import { record } from '../db/json.ts';
 import { resolveSettingSpec, type SettingSource } from '../config/settings.ts';
 import type { Database } from '../db/database.ts';
 import {
@@ -18,13 +20,16 @@ import {
   acquisitionSettings,
   authorizeAcquisition,
   PageAcquirer,
+  respectRobots,
+  type RobotsChoice,
 } from '../web-evidence/acquisition.ts';
-import { hardExcluded } from './url-admission.ts';
+import { hardExcluded, inScope } from './url-admission.ts';
 
 const a = policy.site_health.page_analysis.acquisition;
 const codes = a.error_codes;
 const BOT_MARKERS = a.bot_block_body_markers.map((marker) => marker.toLowerCase());
-const RETRYABLE = new Set([codes.timeout, codes.connection_failed]);
+// A redirect hop refused for an unreachable robots.txt (429, 5xx, network) may pass later.
+const RETRYABLE = new Set([codes.timeout, codes.connection_failed, codes.robots_unavailable]);
 const FETCH_ERROR_CODES: Record<string, string> = {
   invalid_url: codes.url_admission_rejected,
   content_type: codes.unsupported_content_type,
@@ -85,7 +90,23 @@ export type SiteFetchResult = {
   page: FetchedPage;
   calls: FetchCall[];
   latencyMs: number;
+  /** Fetched despite a robots.txt exclusion, because the crawl ignores robots.txt. */
+  robotsExcluded: boolean;
 };
+
+/**
+ * The crawl's frozen robots choice, per destination. `ignore` covers only the
+ * project's own site (its registrable domain and subdomains): a redirect off
+ * the site still respects that host's robots.txt. A crawl without the choice
+ * respects robots.txt everywhere.
+ */
+export function crawlRobotsHandling(configuration: unknown): RobotsChoice {
+  const frozen = record(configuration);
+  const domain =
+    typeof frozen.root_registrable_domain === 'string' ? frozen.root_registrable_domain : '';
+  if (frozen.robots !== 'ignore' || !domain) return respectRobots;
+  return (destination) => (inScope(destination.href, domain) ? 'ignore' : 'respect');
+}
 
 export class SitePageFetcher {
   readonly acquirer: PageAcquirer;
@@ -106,12 +127,13 @@ export class SitePageFetcher {
   }
 
   /** The robots decision for the requested URL, before any page request. */
-  async #robotsDenial(url: URL): Promise<SiteFetchFailure | null> {
+  async #robotsDenial(url: URL, handling: CrawlRobotsHandling): Promise<SiteFetchFailure | null> {
     const robots = await this.acquirer.robots(url.origin);
-    if (robots.permits(url.href)) return null;
+    if (robots.admits(url.href, handling)) return null;
     let code: string = codes.robots_denied;
     let detail = 'robots.txt disallows the crawler user-agent for this URL';
-    if (robots.unavailable || robots.delay > this.settings.maxCrawlDelay) {
+    const unreadable = !robots.readable && !robots.restricted;
+    if (unreadable || robots.delay > this.settings.maxCrawlDelay) {
       code = codes.robots_unavailable;
       detail = 'robots.txt could not be retrieved or asks for an unsupported delay; fetches paused';
     } else if (robots.restricted) {
@@ -119,13 +141,29 @@ export class SitePageFetcher {
       detail =
         'robots.txt is access-blocked (401/403); the crawler does not bypass access controls';
     }
-    return { ok: false, code, detail, retryable: false, calls: [], latencyMs: null };
+    // An unreachable robots.txt (429, 5xx, network) may answer later; the task retries.
+    // A refused one (too large, redirect limit, SSRF, suppression) will not.
+    const retryable = robots.transient;
+    return { ok: false, code, detail, retryable, calls: [], latencyMs: null };
+  }
+
+  /** Whether robots.txt excludes any URL this fetch requested under an `ignore` choice. */
+  async #excluded(handling: RobotsChoice, urls: string[]) {
+    for (const href of new Set(urls)) {
+      const url = new URL(href);
+      if (handling(url) !== 'ignore') continue;
+      const robots = await this.acquirer.robots(url.origin);
+      if (robots.excludes(href)) return true;
+    }
+    return false;
   }
 
   /**
    * `admit` screens the page and every redirect hop (default: the hard
    * exclusions); discovery narrows it to the crawl's scope. `contentTypes`
-   * defaults to HTML.
+   * defaults to HTML. `robots` is the crawl's own choice per destination and
+   * defaults to respecting robots.txt; only the project's site crawl passes
+   * `crawlRobotsHandling`.
    */
   async fetch(
     requested: string,
@@ -133,12 +171,14 @@ export class SitePageFetcher {
       admit?: (hop: URL) => boolean;
       contentTypes?: readonly string[];
       signal?: AbortSignal;
+      robots?: RobotsChoice;
     } = {},
   ): Promise<SiteFetchResult | SiteFetchFailure> {
     options.signal?.throwIfAborted();
     const admit = options.admit ?? ((hop: URL) => !hardExcluded(hop));
+    const handling = options.robots ?? respectRobots;
     const url = new URL(requested);
-    const denied = await this.#robotsDenial(url);
+    const denied = await this.#robotsDenial(url, handling(url));
     if (denied) return denied;
     const calls: FetchCall[] = [];
     const started = performance.now();
@@ -156,6 +196,7 @@ export class SitePageFetcher {
           if (!admit(hop)) throw new FetchError(codes.url_admission_rejected);
         },
         onCall: (call) => calls.push(call),
+        robots: handling,
       });
       // A 429 slows every task bound for the host, not just this one.
       if (page.status === 429)
@@ -163,7 +204,13 @@ export class SitePageFetcher {
           new URL(page.url).origin,
           Math.min(this.settings.rateLimitCooldown, this.settings.maxCrawlDelay),
         );
-      return { ok: true, page, calls, latencyMs: Math.round(performance.now() - started) };
+      const latencyMs = Math.round(performance.now() - started);
+      const robotsExcluded = await this.#excluded(handling, [
+        url.href,
+        ...calls.map((call) => call.url),
+        page.url,
+      ]);
+      return { ok: true, page, calls, latencyMs, robotsExcluded };
     } catch (error) {
       const code = errorCode(error);
       return {

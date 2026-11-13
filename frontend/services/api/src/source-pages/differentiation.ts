@@ -10,7 +10,7 @@ import type { SourceScope } from './admission.ts';
 import type { QueueTask } from '../queue/task-queue.ts';
 import { fenceInspectionTask } from './task-fence.ts';
 import { compareText, scalarText } from '../text-order.ts';
-import { lexicalTokens } from '../analysis/lexical.ts';
+import { lexicalTokens, termCoverage } from '../analysis/lexical.ts';
 import { groupBy } from '../lists.ts';
 
 const p = policy.content_differentiation;
@@ -141,15 +141,20 @@ function sourceFacts(id: string, facts: unknown): ComparisonPage {
     domains: strings(raw.outbound_domains),
   };
 }
-export function ownedFacts(id: string, facts: unknown, host: string): ComparisonPage {
-  const raw = record(facts);
-  const ownedDomain = getDomain(host) ?? host;
-  const headings = Array.isArray(raw.primary_heading_outline)
-    ? raw.primary_heading_outline.flatMap((item) => {
+/** The heading texts of a page's stored `primary_heading_outline`. */
+export function outlineHeadings(outline: unknown): string[] {
+  return Array.isArray(outline)
+    ? outline.flatMap((item) => {
         const text = record(item).text;
         return typeof text === 'string' ? [text] : [];
       })
     : [];
+}
+
+export function ownedFacts(id: string, facts: unknown, host: string): ComparisonPage {
+  const raw = record(facts);
+  const ownedDomain = getDomain(host) ?? host;
+  const headings = outlineHeadings(raw.primary_heading_outline);
   const anchors = record(raw.links).anchors;
   const domains = Array.isArray(anchors)
     ? anchors.flatMap((item) => {
@@ -270,9 +275,7 @@ export function refreshDifferentiation(
           return {
             row,
             page,
-            score: terms.size
-              ? [...terms].filter((term) => available.has(term)).length / terms.size
-              : 0,
+            score: termCoverage(terms, available),
           };
         })
         .filter((choice) => choice.score > 0)

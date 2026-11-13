@@ -45,10 +45,10 @@
       }
       :root {
         font-synthesis-weight: none;
-        /* Cal Sans sets the page title and display numbers, Geist everything
-           people read and click, Geist Mono eyebrows, dates and code
-           (globals.css reads these as --font-display, --font-sans and
-           --font-mono). */
+        /* Geist sets everything people read and click, Geist Mono eyebrows,
+           dates and code; Cal Sans stays named as the display face, which
+           no app text sets (globals.css reads these as --font-display,
+           --font-sans and --font-mono). */
         --font-face-display: 'Cal Sans', 'Cal Sans Fallback';
         --font-face-sans: 'Geist Variable', 'Geist', 'Geist Fallback';
         --font-face-mono: 'Geist Mono Variable', 'Geist Mono', 'Geist Mono Fallback';
@@ -57,6 +57,9 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- Below the support matrix, this fills #root with an "Update your
+        browser" notice before the app shell runs, and main.tsx stays out. -->
+    <script src="/browser-support.js"></script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

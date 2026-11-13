@@ -1,9 +1,8 @@
-'use client';
-
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { AlertTriangle, X } from 'lucide-react';
 import { useInsertionEffect, useRef, type ReactNode, type RefObject } from 'react';
 
+import { FLOAT_FACE } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { Button, IconButton } from './button';
 import { Icon } from './icon';
@@ -38,9 +37,11 @@ export function useReturnFocus(open: boolean) {
 }
 
 /**
- * Dialog — a modal panel for one short task, centred on the scrim: `surface`,
- * `radius-lg`, `shadow-pop`, `modal-padding` (16 in the app) padding and gaps, `container-narrow` wide.
- * The title is the section title (Geist 500 22/28), the description
+ * Dialog — a modal panel for one short task, centred across the scrim with its
+ * top edge fixed at 12vh, so content that changes inside it (a tab, a picked
+ * file) grows or shrinks it downward and nothing above moves: `surface`,
+ * `radius-lg`, the floating face (1px `line` border, `shadow-float`), `modal-padding` (16 in the app) padding and gaps, `container-narrow` wide.
+ * The title is the section title (500, 22/28), the description
  * `ink-secondary`, the footer right-aligned (Cancel first, then the action). `tone="danger"` is a
  * confirmation: an `alertdialog`, 440px, a `negative` warning icon by the
  * title and no close button, so the person picks Cancel or the named action.
@@ -89,7 +90,8 @@ export function Dialog({
           }}
           onCloseAutoFocus={returnFocus}
           className={cn(
-            'dialog-panel bg-surface text-ink shadow-pop z-modal fixed top-1/2 left-1/2 flex max-h-[calc(100dvh-3rem)] w-[calc(100vw-3rem)] -translate-x-1/2 -translate-y-1/2 flex-col gap-[var(--card-padding)] rounded-lg p-[var(--card-padding)]',
+            FLOAT_FACE,
+            'dialog-panel z-modal fixed top-[12vh] left-1/2 flex max-h-[calc(88dvh-1.5rem)] w-[calc(100vw-3rem)] -translate-x-1/2 flex-col gap-[var(--card-padding)] rounded-lg p-[var(--card-padding)]',
             danger && 'max-w-110',
             !danger && (width === 'wide' ? 'max-w-180' : 'max-w-narrow'),
           )}
@@ -104,7 +106,7 @@ export function Dialog({
               <DialogPrimitive.Title className="type-section-title">{title}</DialogPrimitive.Title>
               {description ? (
                 <DialogPrimitive.Description asChild>
-                  <div className="text-body-sm text-ink-secondary mt-2">{description}</div>
+                  <div className="text-body-sm text-ink-secondary mt-1">{description}</div>
                 </DialogPrimitive.Description>
               ) : null}
             </div>

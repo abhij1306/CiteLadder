@@ -1,5 +1,3 @@
-'use client';
-
 import * as DropdownPrimitive from '@radix-ui/react-dropdown-menu';
 import { CalendarDays } from 'lucide-react';
 import { useState } from 'react';
@@ -78,7 +76,7 @@ export function DateField({
             type="button"
             aria-label={`${ariaLabel}: open calendar`}
             disabled={disabled}
-            className="focus-ring text-ink-muted enabled:hover:text-ink enabled:hover:bg-surface-sunken data-[state=open]:bg-surface-sunken data-[state=open]:text-ink inline-flex size-[var(--field-end-target)] shrink-0 items-center justify-center rounded-xs transition-colors"
+            className="focus-ring text-ink-muted enabled:hover:text-ink not-data-[state=open]:enabled:hover:overlay-hover data-[state=open]:overlay-pressed data-[state=open]:text-ink inline-flex size-[var(--field-end-target)] shrink-0 items-center justify-center rounded-xs transition-colors"
           >
             <CalendarDays className="size-4" aria-hidden />
           </button>

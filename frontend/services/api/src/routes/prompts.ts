@@ -273,7 +273,8 @@ export const promptRoutes = [
     path: `${api}/projects/{project_id}/topics`,
     params: { path: { project_id: uuid }, query: noQuery },
     response: z.array(topicSchema),
-    handle: ({ db }, { path }) => listTopics(db, path.project_id),
+    handle: ({ c, db }, { path }) =>
+      listTopics(db, { workspaceId: c.get('workspace').workspaceId, projectId: path.project_id }),
   }),
   definePostRoute({
     family,

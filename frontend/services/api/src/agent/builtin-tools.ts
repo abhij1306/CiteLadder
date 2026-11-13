@@ -1,12 +1,15 @@
 /**
- * The Agent's three built-in tools. They are not reads: `load_skill` supplies a
- * methodology, `save_document` stages a whole document and `edit_document`
- * stages exact replacements in one. A chat holds several documents, each
- * named by its number ("Document 2"); the runtime commits every staged
- * document with the reply in one transaction. Each refusal says how to
- * correct the call, so the model fixes it instead of the turn ending.
+ * The Agent's four built-in tools. They are not reads: `load_skill` supplies a
+ * methodology, `save_document` stages a whole document, `edit_document`
+ * stages exact replacements in one and `suggest_edits` stages suggestions on
+ * a page document for the person to apply. A chat holds several documents,
+ * each named by its number ("Document 2"); the runtime commits every staged
+ * document and suggestion with the reply in one transaction (F14). Each
+ * refusal says how to correct the call, so the model fixes it instead of the
+ * turn ending.
  */
 import { z } from 'zod';
+import { policy } from '../config.ts';
 import { argumentProblem } from '../mcp/tools.ts';
 import type { ConversationTool } from '../models/conversation.ts';
 import { compareText } from '../text-order.ts';
@@ -17,13 +20,22 @@ import {
   type Skill,
   type SkillCatalog,
 } from './contracts.ts';
-import { usesFormats } from './skills.ts';
+import { fetchesPage, usesFormats } from './skills.ts';
 import { scrubRecordRefs } from './sources.ts';
+import {
+  checkSuggestion,
+  followEdit,
+  suggestionInputSchema,
+  type PageState,
+  type StagedSuggestion,
+} from './suggest-edits.ts';
 import { toolDefinitions, type ToolRegistry } from './tools.ts';
 
 export const LOAD_SKILL = 'load_skill';
 export const SAVE_DOCUMENT = 'save_document';
 export const EDIT_DOCUMENT = 'edit_document';
+export const SUGGEST_EDITS = 'suggest_edits';
+const suggestionPolicy = policy.content_optimization.suggestions;
 
 /** The short label a document is named by, for the model and the person. */
 export function documentLabel(number: number) {
@@ -54,6 +66,14 @@ export type DocumentState = {
   documents: SavedDocument[];
   /** This turn's staged documents by number; committed only with the reply. */
   staged: Map<number, StagedDocument>;
+  /** UUIDs the person wrote (`writtenIds`): a staged document keeps them. */
+  personIds: ReadonlySet<string>;
+  /** Each page document's SEO fields and stored suggestions, by number. */
+  pages: ReadonlyMap<number, PageState>;
+  /** The rules this turn's `content_rules` section offers, Site Health findings on the page included. */
+  rules: ReadonlySet<string>;
+  /** This turn's staged suggestions; committed only with the reply. */
+  suggestions: StagedSuggestion[];
 };
 export type BuiltinOutcome = { ok: boolean; text: string; document?: number };
 
@@ -95,7 +115,7 @@ function schemas(catalog: SkillCatalog, bounds: OutputBounds) {
               .enum([firstFormat, ...otherFormats])
               .describe('The content format, when the methodology uses formats.'),
       ),
-      target_kind: optional(z.enum(['page', 'planned_page'])),
+      target_kind: optional(z.enum(policy.opportunity.actions.AGENT_TARGET_KINDS)),
       target: optional(z.string().describe('The page this document is for, when it has one.')),
     }),
     edit: z.strictObject({
@@ -118,6 +138,18 @@ function schemas(catalog: SkillCatalog, bounds: OutputBounds) {
         .describe('Replacements applied in order; each sees the result of the ones before it.'),
       title: optional(z.string().describe('A new title, when the title changes.')),
     }),
+    suggest: z.strictObject({
+      document: optional(
+        documentNumber.describe(
+          'The number of the page document; needed when the chat has more than one.',
+        ),
+      ),
+      suggestions: z
+        .array(suggestionInputSchema)
+        .min(1)
+        .max(suggestionPolicy.max_per_call)
+        .describe('Suggestions for the person to review; all are staged or none are.'),
+    }),
   };
 }
 
@@ -127,6 +159,8 @@ const SAVE_DESCRIPTION =
   'Save a whole document, after load_skill: omit document to add a new document to this chat, or give a document’s number to replace it whole. For a change to an existing document, prefer edit_document. It is saved together with your reply.';
 const EDIT_DESCRIPTION =
   'Change one of this chat’s documents with exact replacements instead of rewriting it: each old_string must appear exactly once. All edits apply or none do. It is saved together with your reply.';
+const SUGGEST_DESCRIPTION =
+  'Propose changes to a page document for the person to apply or dismiss, instead of changing it: each names old_string (exact text matching once), an SEO field, or neither for the whole page, with new_string, or needs_input when a fact is missing. All are staged or none are. They are saved together with your reply.';
 
 /** The model's full tool list: the reads plus the built-ins, sorted, so the cached prefix is stable. */
 export function agentToolList(
@@ -134,17 +168,24 @@ export function agentToolList(
   catalog: SkillCatalog,
   bounds: OutputBounds,
 ): ConversationTool[] {
-  const { load, save, edit } = schemas(catalog, bounds);
+  const { load, save, edit, suggest } = schemas(catalog, bounds);
   const builtins = toolDefinitions([
     { name: LOAD_SKILL, description: LOAD_DESCRIPTION, arguments: load },
     { name: SAVE_DOCUMENT, description: SAVE_DESCRIPTION, arguments: save },
     { name: EDIT_DOCUMENT, description: EDIT_DESCRIPTION, arguments: edit },
+    { name: SUGGEST_EDITS, description: SUGGEST_DESCRIPTION, arguments: suggest },
   ]).map((tool) => (tool.name === SAVE_DOCUMENT ? { ...tool, stream_input: true } : tool));
   return [...registry.catalog(), ...builtins].toSorted((a, b) => compareText(a.name, b.name));
 }
 
+const BUILTINS: ReadonlySet<string> = new Set([
+  LOAD_SKILL,
+  SAVE_DOCUMENT,
+  EDIT_DOCUMENT,
+  SUGGEST_EDITS,
+]);
 export function isBuiltin(name: string) {
-  return name === LOAD_SKILL || name === SAVE_DOCUMENT || name === EDIT_DOCUMENT;
+  return BUILTINS.has(name);
 }
 
 /** The method plus the rules for saving it, as `load_skill` returns and a pinned skill is supplied. */
@@ -157,7 +198,9 @@ export function methodology(
     ? `; this chat uses ${state.formatId} unless asked for another`
     : '';
   const rules = [
-    `Save the deliverable with save_document: a title of at most ${bounds.output_title_max_chars} characters and a Markdown body of at most ${bounds.output_body_max_chars} characters. Change an existing document with edit_document.`,
+    fetchesPage(skill)
+      ? `Propose changes to the page document with suggest_edits; change it directly with edit_document only when the person asks you to. It stays within ${bounds.output_body_max_chars} characters and is never saved whole.`
+      : `Save the deliverable with save_document: a title of at most ${bounds.output_title_max_chars} characters and a Markdown body of at most ${bounds.output_body_max_chars} characters. Change an existing document with edit_document.`,
     usesFormats(skill)
       ? `Name its format in format_id, from the content formats in your instructions${current}.`
       : '',
@@ -261,6 +304,11 @@ export function saveDocument(
       ok: false,
       text: 'Load the methodology with load_skill first, then save the document.',
     };
+  if (fetchesPage(skill))
+    return {
+      ok: false,
+      text: 'A page document is the live page CiteLadder fetched; it is never written whole. Change it with edit_document.',
+    };
   const parsed = schemas(catalog, bounds).save.safeParse(input);
   if (!parsed.success) return { ok: false, text: argumentProblem(parsed.error) };
   const { document: requested, ...fields } = parsed.data;
@@ -293,8 +341,8 @@ export function saveDocument(
       payload: {
         ...fields,
         format_id: format,
-        title: scrubRecordRefs(fields.title),
-        body: scrubRecordRefs(fields.body),
+        title: scrubRecordRefs(fields.title, state.personIds),
+        body: scrubRecordRefs(fields.body, state.personIds),
       },
     },
     bounds,
@@ -354,7 +402,7 @@ export function editDocument(
   const result = replaced(base.body, parsed.data.edits);
   if (!result.ok) return result;
   const count = parsed.data.edits.length;
-  return staged(
+  const outcome = staged(
     catalog,
     state,
     number,
@@ -365,11 +413,100 @@ export function editDocument(
         target_kind: base.target_kind,
         target: base.target,
         format_id: base.formatId,
-        title: scrubRecordRefs(parsed.data.title ?? base.title),
-        body: scrubRecordRefs(result.text),
+        title: scrubRecordRefs(parsed.data.title ?? base.title, state.personIds),
+        body: scrubRecordRefs(result.text, state.personIds),
       },
     },
     bounds,
     `applied ${editLabel(count)}`,
   );
+  return outcome.ok ? followedBy(state, number, base.body, outcome) : outcome;
+}
+
+/** Suggestions staged earlier in the turn follow a staged edit; one it changed is dropped and the reply says so. */
+function followedBy(
+  state: DocumentState,
+  number: number,
+  before: string,
+  outcome: BuiltinOutcome,
+): BuiltinOutcome {
+  const body = state.staged.get(number)?.payload.body;
+  const dropped = body ? followEdit(state.suggestions, number, before, body) : 0;
+  if (!dropped) return outcome;
+  const which = dropped === 1 ? 'one suggestion' : `${dropped} suggestions`;
+  return {
+    ...outcome,
+    text: `${outcome.text} The edit changed the text of ${which} staged earlier in this turn, so it was dropped; suggest it again if it still applies.`,
+  };
+}
+
+/** The page document a suggestion call names, with its text as the turn holds it. */
+function pageFor(
+  state: DocumentState,
+  requested: number | null | undefined,
+): { ok: false; text: string } | { ok: true; number: number; body: string; state: PageState } {
+  const pages = [...state.pages.keys()];
+  const [only, ...others] = pages;
+  if (only === undefined)
+    return {
+      ok: false,
+      text: 'Suggestions are for a page document, and this chat has none. Change other documents with edit_document.',
+    };
+  const number = requested ?? (others.length === 0 ? only : null);
+  const page = number === null ? undefined : state.pages.get(number);
+  if (number === null || !page)
+    return {
+      ok: false,
+      text: `Set document to the number of a page document: one of ${pages.map(documentLabel).join(', ')}.`,
+    };
+  const saved = state.documents.find((document) => document.number === number);
+  const body = state.staged.get(number)?.payload.body ?? saved?.body ?? '';
+  return { ok: true, number, body, state: page };
+}
+
+/**
+ * Stages suggestions on a page document, all or none: each must name text
+ * that matches once, an SEO field, or the whole page, and is resolved to the
+ * stored finding's anchor here. They commit with the reply.
+ */
+export function suggestEdits(
+  catalog: SkillCatalog,
+  state: DocumentState,
+  input: unknown,
+  bounds: OutputBounds,
+): BuiltinOutcome {
+  const parsed = schemas(catalog, bounds).suggest.safeParse(input);
+  if (!parsed.success) return { ok: false, text: argumentProblem(parsed.error) };
+  const resolved = pageFor(state, parsed.data.document);
+  if (!resolved.ok) return resolved;
+  const { suggestions } = parsed.data;
+  if (state.suggestions.length + suggestions.length > suggestionPolicy.max_per_turn)
+    return {
+      ok: false,
+      text: `A turn stages at most ${suggestionPolicy.max_per_turn} suggestions. Keep the ones that matter most.`,
+    };
+  const accepted: StagedSuggestion[] = [];
+  const scrub = (text: string) => scrubRecordRefs(text, state.personIds);
+  const { number, body } = resolved;
+  for (const [index, item] of suggestions.entries()) {
+    const page = {
+      number,
+      body,
+      state: resolved.state,
+      rules: state.rules,
+      staged: [...state.suggestions, ...accepted],
+    };
+    const checked = checkSuggestion(page, item, scrub);
+    const label = suggestions.length > 1 ? `Suggestion ${index + 1}: ` : '';
+    if (!checked.ok)
+      return { ok: false, text: `${label}${checked.text} No suggestions were staged.` };
+    accepted.push(checked.suggestion);
+  }
+  state.suggestions.push(...accepted);
+  const count = accepted.length === 1 ? 'one suggestion' : `${accepted.length} suggestions`;
+  return {
+    ok: true,
+    document: number,
+    text: `${documentLabel(number)}: staged ${count} (${accepted.map((item) => item.id).join(', ')}); they are saved with your reply and shown beside the page for the person to apply. Now reply briefly; do not repeat them.`,
+  };
 }

@@ -1,25 +1,23 @@
-'use client';
-
 /**
  * The Site Health issues catalog's filter state — ONE owner.
  *
  * This module holds the filter model, its address-bar round-trip (through
- * `lib/navigation/url-state.ts`, the app's url-state primitive), the
- * severity/dimension pairs behind the segmented control, and the request
- * params the issues query sends. Ordering is URL-only in this release, so
- * there is no sort field to serialize.
+ * `lib/navigation/url-state.ts`, the app's url-state primitive), the severity
+ * choices, and the request params the issues query sends. The tab (Technical,
+ * Content, AEO) and the ordering are URL state like the filters.
  *
  * Cursors are opaque and filter-bound on the server — replaying one under
  * changed filters is refused — so a filter edit drops the catalog cursor, the
- * selected issue and the rail's occurrence stack together, in one history
- * entry. The occurrence stack lives here for the same reason: it is only
- * meaningful under a fixed (filters, page, issue) triple, and every caller
- * that moved one of those used to have to remember to reset it.
+ * open issue and its occurrence stack together, in one history entry. The
+ * occurrence stack lives here for the same reason: it is only meaningful under
+ * a fixed (filters, page, issue) triple, and every caller that moved one of
+ * those used to have to remember to reset it.
  */
 import { useCallback, useMemo, useState } from 'react';
 
+import type { IssueSection, IssueSort } from '@citeladder/contracts';
 import type { IssuesParams } from '@/lib/api/site-health';
-import { ISSUE_OCCURRENCE_LIMIT, ISSUE_PAGE_LIMIT } from '@/lib/config/site-health';
+import { ISSUE_PAGE_LIMIT } from '@/lib/config/site-health';
 import {
   optionalStringUrlCodec,
   setUrlParams,
@@ -32,10 +30,12 @@ export type FindingClass = 'defect' | 'advisory';
 
 /** Issue filter model (drives the issues query + URL state). */
 export type IssueFilters = {
+  /** The tab: every issue belongs to exactly one. */
+  section: IssueSection;
+  sort: IssueSort;
   query: string;
   severity: string;
   category: string;
-  dimension: string;
   /** Internal key for the wire's `rule` param. */
   rule_id: string;
   site_url_id: string;
@@ -45,15 +45,23 @@ export type IssueFilters = {
 };
 
 export const emptyIssueFilters: IssueFilters = {
+  section: 'technical',
+  sort: 'severity',
   query: '',
   severity: '',
   category: '',
-  dimension: '',
   rule_id: '',
   site_url_id: '',
   finding_class: 'defect',
   page_kind: '',
 };
+
+/** The tabs in reading order, with their names. */
+export const ISSUE_SECTIONS: ReadonlyArray<{ value: IssueSection; label: string }> = [
+  { value: 'technical', label: 'Technical' },
+  { value: 'content', label: 'Content' },
+  { value: 'aeo', label: 'AEO' },
+];
 
 /** A free-text filter: absent in the URL is '', and blank never serializes. */
 const textCodec: UrlCodec<string> = {
@@ -61,68 +69,47 @@ const textCodec: UrlCodec<string> = {
   serialize: (value) => value.trim() || null,
 };
 const findingClassCodec = stringUrlCodec(['defect', 'advisory'] as const, 'defect');
+const sectionCodec = stringUrlCodec(['technical', 'content', 'aeo'] as const, 'technical');
+const sortCodec = stringUrlCodec(['severity', 'pages'] as const, 'severity');
 
 const SEVERITY_CLASSES = ['high', 'medium', 'low'] as const;
-const DIMENSION_CLASSES = ['technical', 'aeo'] as const;
 
-/** The one segmented control over severity AND dimension: picking either clears the other. */
-export type IssueFilterClass =
-  | 'all'
-  | (typeof SEVERITY_CLASSES)[number]
-  | (typeof DIMENSION_CLASSES)[number];
+/** A severity choice; `all` leaves severity unfiltered. */
+export type IssueSeverityChoice = 'all' | (typeof SEVERITY_CLASSES)[number];
 
-const FILTER_CLASS_LABELS: Readonly<Record<IssueFilterClass, string>> = {
-  all: 'All',
+const SEVERITY_CHOICE_LABELS: Readonly<Record<IssueSeverityChoice, string>> = {
+  all: 'All severities',
   high: 'High',
   medium: 'Medium',
   low: 'Low',
-  technical: 'Web Fundamentals',
-  aeo: 'AEO',
 };
 
 function isSeverityClass(value: string): value is (typeof SEVERITY_CLASSES)[number] {
   return (SEVERITY_CLASSES as readonly string[]).includes(value);
 }
 
-function isDimensionClass(value: string): value is (typeof DIMENSION_CLASSES)[number] {
-  return (DIMENSION_CLASSES as readonly string[]).includes(value);
+/** The severity choices on offer, the unfiltered one naming what it leaves unfiltered. */
+export const ISSUE_SEVERITY_CHOICES: ReadonlyArray<{ key: IssueSeverityChoice; label: string }> = (
+  ['all', ...SEVERITY_CLASSES] as const
+).map((key) => ({ key, label: SEVERITY_CHOICE_LABELS[key] }));
+
+/** Which severity choice the current filters read as. */
+export function issueSeverityChoice(filters: IssueFilters): IssueSeverityChoice {
+  return isSeverityClass(filters.severity) ? filters.severity : 'all';
 }
 
-/** The segments on offer. Advisories carry no severity, so they list dimensions only. */
-export function issueFilterClasses(
-  findingClass: FindingClass,
-): ReadonlyArray<{ key: IssueFilterClass; label: string }> {
-  const keys: readonly IssueFilterClass[] =
-    findingClass === 'defect'
-      ? ['all', ...SEVERITY_CLASSES, ...DIMENSION_CLASSES]
-      : ['all', ...DIMENSION_CLASSES];
-  return keys.map((key) => ({ key, label: FILTER_CLASS_LABELS[key] }));
-}
-
-/** Which segment the current filters read as. */
-export function issueFilterClass(filters: IssueFilters): IssueFilterClass {
-  if (isSeverityClass(filters.severity)) return filters.severity;
-  if (isDimensionClass(filters.dimension)) return filters.dimension;
-  return 'all';
-}
-
-/** The severity/dimension PAIR a segment selects — 'all' clears both. */
-export function issueFilterClassChange(
-  key: IssueFilterClass,
-): Pick<IssueFilters, 'severity' | 'dimension'> {
-  return {
-    severity: isSeverityClass(key) ? key : '',
-    dimension: isDimensionClass(key) ? key : '',
-  };
+/** The severity a choice selects — 'all' clears it. */
+export function issueSeverityChange(key: IssueSeverityChoice): Pick<IssueFilters, 'severity'> {
+  return { severity: key === 'all' ? '' : key };
 }
 
 /**
- * Switching defects/advisories resets the class with it: severities are
+ * Switching defects/advisories clears the severity with it: severities are
  * defect-only, so an advisory view holding `severity=high` would filter on a
- * segment it does not even offer.
+ * choice it does not even offer.
  */
 export function findingClassChange(finding_class: FindingClass): Partial<IssueFilters> {
-  return { finding_class, ...issueFilterClassChange('all') };
+  return { finding_class, severity: '' };
 }
 
 /** Build issue request params. */
@@ -134,10 +121,11 @@ export function toIssueParams(
   return {
     cursor: cursor ?? undefined,
     limit,
+    section: filters.section,
+    sort: filters.sort,
     query: filters.query.trim() || undefined,
     severity: filters.severity || undefined,
     category: filters.category || undefined,
-    dimension: filters.dimension || undefined,
     // The backend issues endpoint names the rule filter `rule` (not `rule_id`);
     // the `IssueFilters` model keeps `rule_id` as its internal URL-state key.
     rule: filters.rule_id || undefined,
@@ -148,17 +136,25 @@ export function toIssueParams(
 }
 
 /**
- * The catalog's list request: one issue page that also carries its first
- * row's occurrence page, sized as the rail asks for it, so the default
- * selection renders without waiting on a second request. The catalog and the
- * route prefetch both build it here so they share one cache entry.
+ * The catalog's list request. The catalog and the route prefetch both build
+ * it here so they share one cache entry.
  */
 export function issueCatalogParams(filters: IssueFilters, cursor: string | null): IssuesParams {
-  return {
-    ...toIssueParams(filters, cursor, ISSUE_PAGE_LIMIT),
-    detail_limit: ISSUE_OCCURRENCE_LIMIT,
-  };
+  return toIssueParams(filters, cursor, ISSUE_PAGE_LIMIT);
 }
+
+/** How many of the worst issues the summary's priority list names. */
+const PRIORITY_ISSUE_COUNT = 3;
+
+/**
+ * The summary's request: the crawl's worst defects, unfiltered and across
+ * every tab, whose summary counts the whole crawl. The persisted catalog
+ * answers it, and the route prefetch starts it beside the list.
+ */
+export const ISSUE_PRIORITY_PARAMS: IssuesParams = {
+  limit: PRIORITY_ISSUE_COUNT,
+  finding_class: 'defect',
+};
 
 /**
  * Every URL key this module owns, as a `setUrlParams` patch. Params it does
@@ -166,10 +162,11 @@ export function issueCatalogParams(filters: IssueFilters, cursor: string | null)
  */
 export function issueFilterParams(filters: IssueFilters): Record<string, string | null> {
   return {
+    section: sectionCodec.serialize(filters.section),
+    sort: sortCodec.serialize(filters.sort),
     query: textCodec.serialize(filters.query),
     severity: textCodec.serialize(filters.severity),
     category: textCodec.serialize(filters.category),
-    dimension: textCodec.serialize(filters.dimension),
     rule: textCodec.serialize(filters.rule_id),
     site_url_id: textCodec.serialize(filters.site_url_id),
     finding_class: findingClassCodec.serialize(filters.finding_class),
@@ -183,10 +180,11 @@ export function issueFilterParams(filters: IssueFilters): Record<string, string 
  * — the resets each verb implies happen here, once.
  */
 export function useIssueFilters() {
+  const [section] = useUrlState('section', sectionCodec);
+  const [sort] = useUrlState('sort', sortCodec);
   const [query] = useUrlState('query', textCodec);
   const [severity] = useUrlState('severity', textCodec);
   const [category] = useUrlState('category', textCodec);
-  const [dimension] = useUrlState('dimension', textCodec);
   const [rule] = useUrlState('rule', textCodec);
   const [siteUrlId] = useUrlState('site_url_id', textCodec);
   const [findingClass] = useUrlState('finding_class', findingClassCodec);
@@ -197,16 +195,17 @@ export function useIssueFilters() {
 
   const filters = useMemo<IssueFilters>(
     () => ({
+      section,
+      sort,
       query,
       severity,
       category,
-      dimension,
       rule_id: rule,
       site_url_id: siteUrlId,
       finding_class: findingClass,
       page_kind: pageKind,
     }),
-    [query, severity, category, dimension, rule, siteUrlId, findingClass, pageKind],
+    [section, sort, query, severity, category, rule, siteUrlId, findingClass, pageKind],
   );
 
   /**
@@ -232,8 +231,8 @@ export function useIssueFilters() {
     [filters],
   );
 
-  /** Show another issue in the rail, from its first page of occurrences. */
-  const selectIssue = useCallback((groupId: string) => {
+  /** Open an issue from its first page of occurrences, or close it with null. */
+  const selectIssue = useCallback((groupId: string | null) => {
     setUrlParams({ issue: groupId });
     setOccurrenceCursors([]);
   }, []);

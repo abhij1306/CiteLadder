@@ -26,10 +26,11 @@ export function removeWidget(widgets: readonly OverviewWidget[], index: number) 
 }
 
 export function moveWidget(widgets: readonly OverviewWidget[], from: number, to: number) {
-  if (from === to || to < 0 || to >= widgets.length || !widgets[from]) return [...widgets];
+  const moved = widgets[from];
+  if (from === to || to < 0 || to >= widgets.length || !moved) return [...widgets];
   const next = [...widgets];
-  const [moved] = next.splice(from, 1);
-  next.splice(to, 0, moved!);
+  next.splice(from, 1);
+  next.splice(to, 0, moved);
   return next;
 }
 

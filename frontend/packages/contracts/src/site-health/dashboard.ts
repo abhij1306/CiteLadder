@@ -8,7 +8,12 @@ import {
 } from './crawl.ts';
 import { responseObject, uuid } from './core.ts';
 import { monitoredQuotaSchema } from './inventory.ts';
-import { findingClassSchema, issueDimensionSchema, issueSeveritySchema } from './issues.ts';
+import {
+  findingClassSchema,
+  issueDimensionSchema,
+  issueSectionSchema,
+  issueSeveritySchema,
+} from './issues.ts';
 import { rootErrorSchema } from './pages.ts';
 import { cursorPageSchema } from './pagination.ts';
 
@@ -268,6 +273,8 @@ const overviewIssueSchema = responseObject({
   eligibility_blocker: z.boolean(),
   impact_band: z.number().int(),
   impact_label: z.string(),
+  // The Issues tab the rule is listed under; null for a rule the catalog retired.
+  section: issueSectionSchema.nullable(),
 });
 
 const cohortCompositionSchema = responseObject({
@@ -356,13 +363,13 @@ export const siteHealthOverviewSchema = responseObject({
     }),
     limitations: z.array(z.string()),
   }),
-  trend: responseObject({
-    state: z.enum(['unavailable', 'measured']),
-    reason: z.enum(['no_comparable_snapshot', 'comparable_snapshot', 'cohort_composition_changed']),
-    metric: z.literal('aeo_readiness_score'),
-    series: z.array(responseObject({ label: z.string(), value: z.number().nullable() })),
-    cohort_composition: cohortCompositionSchema,
-  }),
+  /**
+   * The project's open issues over time, one point per UTC day an audit landed,
+   * oldest first (SH-B9). Empty until the first audit lands.
+   */
+  open_issue_trend: z.array(
+    responseObject({ day: z.iso.date(), open_count: z.number().int().nonnegative() }),
+  ),
   change_summary: responseObject({
     state: z.enum(['unavailable', 'measured']),
     reason: z.enum(['no_comparable_snapshot', 'comparable_snapshot', 'cohort_composition_changed']),
@@ -385,11 +392,9 @@ export const siteHealthOverviewSchema = responseObject({
   }),
 });
 
-// Stable coded failures. The frontend keys UX (limit feedback, stale-revision
-// refetch, retry copy) off these codes.
+// Stable coded failures. The frontend keys UX (limit feedback, retry copy) off
+// these codes.
 const siteHealthErrorCodeSchema = z.enum([
-  'site_health_quota_exceeded',
-  'stale_selection_version',
   'crawl_already_active',
   'site_health_discovery_limit_exceeded',
   'site_health_analysis_limit_exceeded',
@@ -406,15 +411,12 @@ const siteHealthErrorCodeSchema = z.enum([
   'http_5xx',
 ]);
 
-// Coded error body. Quota errors carry `limit`/`currently_used`; a stale
-// selection carries the expected/current versions. Extra keys fail loud.
+// Coded error body. Limit errors carry `limit`/`currently_used`. Extra keys fail loud.
 export const siteHealthErrorSchema = responseObject({
   code: siteHealthErrorCodeSchema,
   message: z.string(),
   limit: z.number().int().optional(),
   currently_used: z.number().int().optional(),
-  expected_selection_version: z.number().int().optional(),
-  current_selection_version: z.number().int().optional(),
 });
 
 export type IssueHistoryPage = z.infer<typeof issueHistoryPageSchema>;

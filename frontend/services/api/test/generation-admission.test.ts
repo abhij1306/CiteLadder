@@ -36,7 +36,7 @@ it('admits category language but rejects tracked identities, placeholders and co
   const input = generationInput.parse({ count: 4 }),
     slots = planSlots(context, input, []);
   const texts = [
-    'Which maxi dresses suit warm weather?',
+    'Where can I buy maxi dresses for warm weather?',
     'Best Red Dress for summer?',
     'Which Rival dresses last longest?',
     'best dresses online',
@@ -162,6 +162,46 @@ it('drops a core or diagnostic draft joining two needs with "or", never a compar
   const comparison = admit('comparison', ['Red Dress or Rival for maxi dresses?']);
   expect(comparison.admitted.map((row) => row.text)).toEqual([
     'Red Dress or Rival for maxi dresses?',
+  ]);
+});
+
+it('drops a core draft answered with general advice, by its label or an advice frame, never a diagnostic', () => {
+  const admit = (
+    cohort: 'core' | 'brand_diagnostic',
+    rows: { text: string; answer_kind?: 'named_options' | 'general_advice' }[],
+  ) => {
+    const slots = planSlots(context, generationInput.parse({ count: rows.length, cohort }), []);
+    return admitDrafts(
+      rows.map((row, index) => ({
+        ...row,
+        slot_id: slots[index]!.slot_id,
+        buyer_stage: 'consideration',
+        prompt_intent: cohort === 'core' ? 'recommend' : 'validate',
+      })),
+      slots,
+      context,
+      [],
+    );
+  };
+  const core = admit('core', [
+    // Answered with styles to consider, not dresses or shops to buy from.
+    { text: 'Compare maxi dresses for a beach holiday', answer_kind: 'general_advice' },
+    { text: 'How to choose maxi dresses for a wedding' },
+    { text: 'What kind of maxi dresses suit a garden party?' },
+    { text: 'Best maxi dresses for a beach holiday', answer_kind: 'named_options' },
+    // A row parsed without a label is judged by its text alone.
+    { text: 'Looking for cheap maxi dresses for petite women' },
+  ]);
+  expect(core.admitted.map((row) => row.text)).toEqual([
+    'Best maxi dresses for a beach holiday',
+    'Looking for cheap maxi dresses for petite women',
+  ]);
+  expect(core.drops).toEqual({ advice: 3 });
+  const diagnostic = admit('brand_diagnostic', [
+    { text: 'How does Red Dress size its maxi dresses?', answer_kind: 'general_advice' },
+  ]);
+  expect(diagnostic.admitted.map((row) => row.text)).toEqual([
+    'How does Red Dress size its maxi dresses?',
   ]);
 });
 
@@ -394,6 +434,35 @@ describe('JEV judgments', () => {
       },
     });
     expect(borderline).toMatchObject({ verdict: 'uncertain', flags: ['names_a_business'] });
+  });
+
+  it('gates a core draft the judge reads as seeking advice, whatever the drafter labelled it', async () => {
+    const readsAs = (intent: string) =>
+      judge(async () => ({
+        model: 'jev-test',
+        answers: {
+          ...answers,
+          intent: { choice: intent, probabilities: { [intent]: 0.9 }, confidence: 0.8 },
+        },
+      }));
+    // Labelled `buy` by the drafter, but the judge reads a request to understand.
+    const learning = [{ ...draft(), text: 'Which maxi dress fabrics breathe best?' }];
+    await judgeDrafts(context, learning, readsAs('learn'));
+    expect(learning[0]!.decision).toMatchObject({ verdict: 'fail', flags: ['advice_intent'] });
+    expect(selectDrafts(learning, 1)).toEqual([]);
+    const buying = [draft()];
+    await judgeDrafts(context, buying, readsAs('recommend'));
+    expect(buying[0]!.decision).toMatchObject({ verdict: 'pass', flags: [] });
+    // A brand diagnostic may ask how the named brand works by design.
+    const branded = [
+      {
+        ...draft(),
+        slot: { ...draft().slot, cohort: 'brand_diagnostic' as const },
+        text: 'How does Red Dress size its maxi dresses?',
+      },
+    ];
+    await judgeDrafts(context, branded, readsAs('learn'));
+    expect(branded[0]!.decision).toMatchObject({ verdict: 'pass', flags: [] });
   });
 
   it('gates a branded draft that claims what its cell does not ground', async () => {

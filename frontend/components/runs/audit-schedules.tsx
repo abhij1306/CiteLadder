@@ -1,5 +1,3 @@
-'use client';
-
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 
@@ -28,6 +26,7 @@ import { textRole } from '@/components/ui/typography';
 import { Inline, Stack } from '@/components/ui/layout';
 import { ledgerClasses, ledgerItemClasses } from '@/components/ui/workspace';
 import { useProjectScope } from '@/lib/project/active-project-scope';
+import { useWorkspaceCapability } from '@/lib/project/project-context';
 import { useProjectMarkets } from '@/lib/project/use-project-markets';
 import { useEngineCatalog } from '@/lib/providers/engines';
 import { useConfiguredEngines } from '@/lib/runs/use-configured-engines';
@@ -48,12 +47,7 @@ export function AuditSchedules({
 }: Readonly<{ projectId: string; promptSets: PromptSet[] }>) {
   const { workspaceId } = useProjectScope();
   return (
-    <WorkspaceSchedules
-      key={`${workspaceId}:${projectId}`}
-      workspaceId={workspaceId}
-      projectId={projectId}
-      promptSets={promptSets}
-    />
+    <WorkspaceSchedules workspaceId={workspaceId} projectId={projectId} promptSets={promptSets} />
   );
 }
 
@@ -67,19 +61,81 @@ function WorkspaceSchedules({
   promptSets: PromptSet[];
 }>) {
   const scope = { workspaceId, projectId };
+  const schedulesQuery = useQuery(runsQueries.schedules(scope));
+  const markets = useProjectMarkets(projectId, workspaceId);
+  const resumeMutation = useMutation(runsMutations.resumeSchedule(scope));
+  const canWrite = useWorkspaceCapability('write');
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Scheduled audits</CardTitle>
+        <p className="type-caption">Runs use the selected prompt set and your connected engines.</p>
+      </CardHeader>
+      <CardContent>
+        <Stack>
+          {schedulesQuery.isError ? (
+            <ReadError
+              {...readErrorProps(schedulesQuery)}
+              fallback="Could not load scheduled audits."
+            />
+          ) : null}
+          {schedulesQuery.data?.length ? (
+            <ul className={ledgerClasses()}>
+              {schedulesQuery.data.map((schedule) => (
+                <ScheduleRow
+                  key={schedule.id}
+                  schedule={schedule}
+                  markets={markets}
+                  resuming={resumeMutation.isPending}
+                  onResume={canWrite ? () => resumeMutation.mutate(schedule.id) : undefined}
+                />
+              ))}
+            </ul>
+          ) : null}
+          {schedulesQuery.isSuccess && schedulesQuery.data.length === 0 ? (
+            <QueryState kind="empty" inline message="No scheduled audits yet." />
+          ) : null}
+          {/* Scheduling is offered only to a role that may write schedules. */}
+          {canWrite ? (
+            <ScheduleForm scope={scope} promptSets={promptSets} markets={markets} />
+          ) : null}
+          <ResumeNotice
+            error={resumeMutation.error}
+            onRetry={() => {
+              if (resumeMutation.variables) resumeMutation.mutate(resumeMutation.variables);
+            }}
+          />
+        </Stack>
+      </CardContent>
+    </Card>
+  );
+}
+
+/** The new-schedule form and its outcome, for a role that may write schedules. */
+function ScheduleForm({
+  scope,
+  promptSets,
+  markets,
+}: Readonly<{
+  scope: Readonly<{ workspaceId: string; projectId: string }>;
+  promptSets: PromptSet[];
+  markets: readonly ProjectMarket[];
+}>) {
   const [promptSetId, setPromptSetId] = useState(promptSets[0]?.id ?? '');
   const [auditScope, setAuditScope] = useState<'brand' | 'commerce'>('brand');
   const [cadence, setCadence] = useState<AuditScheduleCadence>('weekly');
   const [intervalMinutes, setIntervalMinutes] = useState('60');
   // Only engines with a tested connection can run; until someone picks, the first of them.
-  const { configuredEngines, enginesReady, catalog } = useConfiguredEngines(true, workspaceId);
+  const { configuredEngines, enginesReady, catalog } = useConfiguredEngines(
+    true,
+    scope.workspaceId,
+  );
   const [picked, setPicked] = useState<LogicalEngine[] | null>(null);
   const engines = (picked ?? configuredEngines.slice(0, 1)).filter((engine) =>
     configuredEngines.includes(engine),
   );
   const [marketIds, setMarketIds] = useState<(string | null)[]>([null]);
-  const schedulesQuery = useQuery(runsQueries.schedules(scope));
-  const markets = useProjectMarkets(projectId, workspaceId);
   const createMutation = useMutation(runsMutations.createSchedule(scope));
   const createSchedule = () =>
     createMutation.mutate({
@@ -97,138 +153,103 @@ function WorkspaceSchedules({
     !createMutation.isPending &&
     catalog.order.length > 0 &&
     scheduleReady(promptSetId, engines, marketIds);
-  const resumeMutation = useMutation(runsMutations.resumeSchedule(scope));
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Scheduled audits</CardTitle>
-        <p className="type-caption">Runs use the selected prompt set and your connected engines.</p>
-      </CardHeader>
-      <CardContent>
-        <Stack>
-          {schedulesQuery.isError ? (
-            <ReadError
-              {...readErrorProps(schedulesQuery)}
-              fallback="Could not load scheduled audits."
+    <>
+      {promptSets.length === 0 ? (
+        <Callout tone="info">Add prompts before scheduling an audit.</Callout>
+      ) : (
+        <Stack className="desktop:grid-cols-3">
+          <Stack gap="item" className={textRole('label')}>
+            <span>Prompt set</span>
+            <Select
+              ariaLabel="Prompt set"
+              value={promptSetId}
+              onValueChange={setPromptSetId}
+              options={promptSets.map((set) => ({ value: set.id, label: set.name }))}
             />
-          ) : null}
-          {schedulesQuery.data?.length ? (
-            <ul className={ledgerClasses('boxed')}>
-              {schedulesQuery.data.map((schedule) => (
-                <ScheduleRow
-                  key={schedule.id}
-                  schedule={schedule}
-                  markets={markets}
-                  resuming={resumeMutation.isPending}
-                  onResume={() => resumeMutation.mutate(schedule.id)}
-                />
-              ))}
-            </ul>
-          ) : null}
-          {schedulesQuery.isSuccess && schedulesQuery.data.length === 0 ? (
-            <QueryState kind="empty" inline message="No scheduled audits yet." />
-          ) : null}
-          {promptSets.length === 0 ? (
-            <Callout tone="info">Add prompts before scheduling an audit.</Callout>
-          ) : (
-            <Stack className="desktop:grid-cols-3">
-              <Stack gap="item" className={textRole('label')}>
-                <span>Prompt set</span>
-                <Select
-                  ariaLabel="Prompt set"
-                  value={promptSetId}
-                  onValueChange={setPromptSetId}
-                  options={promptSets.map((set) => ({ value: set.id, label: set.name }))}
-                />
-              </Stack>
-              <Stack gap="item" className={textRole('label')}>
-                <span>Measurement scope</span>
-                <Select
-                  ariaLabel="Measurement scope"
-                  value={auditScope}
-                  onValueChange={setAuditScope}
-                  options={[
-                    { value: 'brand', label: 'Brand visibility' },
-                    { value: 'commerce', label: 'Commerce AI Shelf' },
-                  ]}
-                />
-              </Stack>
-              <Stack gap="item" className={textRole('label')}>
-                <span>Cadence</span>
-                <Select
-                  ariaLabel="Cadence"
-                  value={cadence}
-                  onValueChange={setCadence}
-                  options={Object.entries(CADENCE_LABELS).map(([value, label]) => ({
-                    value: value as AuditScheduleCadence,
-                    label,
-                  }))}
-                />
-              </Stack>
-              {cadence === 'every_n_minutes' ? (
-                <label htmlFor="audit-schedule-minutes" className={textRole('label')}>
-                  <Stack as="span" gap="item">
-                    <span>Minutes</span>
-                    <Input
-                      id="audit-schedule-minutes"
-                      min="5"
-                      type="number"
-                      value={intervalMinutes}
-                      onChange={(event) => setIntervalMinutes(event.target.value)}
-                    />
-                  </Stack>
-                </label>
-              ) : null}
-              <Stack as="fieldset" gap="item" className="desktop:col-span-2">
-                <legend className={textRole('label')}>Engines</legend>
-                {enginesReady && configuredEngines.length === 0 ? (
-                  <p className="type-body">
-                    No configured engines. Connect a provider in Settings, Providers to schedule an
-                    audit.
-                  </p>
-                ) : (
-                  <Inline className="flex-wrap">
-                    {configuredEngines.map((engine) => (
-                      <Checkbox
-                        key={engine}
-                        label={catalog.label(engine)}
-                        checked={engines.includes(engine)}
-                        onCheckedChange={() =>
-                          setPicked(
-                            engines.includes(engine)
-                              ? engines.filter((value) => value !== engine)
-                              : [...engines, engine],
-                          )
-                        }
-                      />
-                    ))}
-                  </Inline>
-                )}
-              </Stack>
-              <MarketChecklist markets={markets} marketIds={marketIds} onToggle={setMarketIds} />
-              <div className="flex items-end">
-                <Button variant="primary" onClick={createSchedule} disabled={!canCreate}>
-                  {createMutation.isPending ? 'Scheduling…' : 'Schedule audit'}
-                </Button>
-              </div>
-            </Stack>
-          )}
-          {createMutation.isError ? (
-            <MutationNotice
-              notice={mutationNoticeForError(createMutation.error, {
-                action: 'schedule the audit',
-              })}
-              onRetry={createSchedule}
+          </Stack>
+          <Stack gap="item" className={textRole('label')}>
+            <span>Measurement scope</span>
+            <Select
+              ariaLabel="Measurement scope"
+              value={auditScope}
+              onValueChange={setAuditScope}
+              options={[
+                { value: 'brand', label: 'Brand visibility' },
+                { value: 'commerce', label: 'Commerce AI Shelf' },
+              ]}
             />
+          </Stack>
+          <Stack gap="item" className={textRole('label')}>
+            <span>Cadence</span>
+            <Select
+              ariaLabel="Cadence"
+              value={cadence}
+              onValueChange={setCadence}
+              options={Object.entries(CADENCE_LABELS).map(([value, label]) => ({
+                value: value as AuditScheduleCadence,
+                label,
+              }))}
+            />
+          </Stack>
+          {cadence === 'every_n_minutes' ? (
+            <label htmlFor="audit-schedule-minutes" className={textRole('label')}>
+              <Stack as="span" gap="item">
+                <span>Minutes</span>
+                <Input
+                  id="audit-schedule-minutes"
+                  min="5"
+                  type="number"
+                  value={intervalMinutes}
+                  onChange={(event) => setIntervalMinutes(event.target.value)}
+                />
+              </Stack>
+            </label>
           ) : null}
-          <ResumeNotice
-            error={resumeMutation.error}
-            onRetry={() => resumeMutation.mutate(resumeMutation.variables!)}
-          />
+          <Stack as="fieldset" gap="item" className="desktop:col-span-2">
+            <legend className={textRole('label')}>Engines</legend>
+            {enginesReady && configuredEngines.length === 0 ? (
+              <p className="type-body">
+                No configured engines. Connect a provider in Settings, Providers to schedule an
+                audit.
+              </p>
+            ) : (
+              <Inline className="flex-wrap">
+                {configuredEngines.map((engine) => (
+                  <Checkbox
+                    key={engine}
+                    label={catalog.label(engine)}
+                    checked={engines.includes(engine)}
+                    onCheckedChange={() =>
+                      setPicked(
+                        engines.includes(engine)
+                          ? engines.filter((value) => value !== engine)
+                          : [...engines, engine],
+                      )
+                    }
+                  />
+                ))}
+              </Inline>
+            )}
+          </Stack>
+          <MarketChecklist markets={markets} marketIds={marketIds} onToggle={setMarketIds} />
+          <div className="flex items-end">
+            <Button variant="primary" onClick={createSchedule} disabled={!canCreate}>
+              {createMutation.isPending ? 'Scheduling…' : 'Schedule audit'}
+            </Button>
+          </div>
         </Stack>
-      </CardContent>
-    </Card>
+      )}
+      {createMutation.isError ? (
+        <MutationNotice
+          notice={mutationNoticeForError(createMutation.error, {
+            action: 'schedule the audit',
+          })}
+          onRetry={createSchedule}
+        />
+      ) : null}
+    </>
   );
 }
 
@@ -294,7 +315,8 @@ function ScheduleRow({
   schedule: AuditSchedule;
   markets: readonly ProjectMarket[];
   resuming: boolean;
-  onResume: () => void;
+  /** Resumes a paused schedule; omitted for a role that may not. */
+  onResume?: () => void;
 }>) {
   const catalog = useEngineCatalog();
   return (
@@ -316,7 +338,7 @@ function ScheduleRow({
         <Inline as="span" className="text-ink-secondary flex-wrap">
           {pauseLabel(schedule)}
           {/* A one-time schedule that ran is finished, not paused; resuming would run it again. */}
-          {finishedOnce(schedule) ? null : (
+          {finishedOnce(schedule) || !onResume ? null : (
             <Button variant="secondary" disabled={resuming} onClick={onResume}>
               Resume
             </Button>

@@ -2,7 +2,6 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import {
   drainLanes,
-  exclusiveDrain,
   idlePause,
   LaneFailures,
   tickAndDrain,
@@ -575,57 +574,4 @@ it('refuses unbounded pools and budgets', () => {
   expect(() => executionSettings({ RUNNER_DB_POOL_SIZE: '5' })).toThrow();
   expect(() => executionSettings({ RUNNER_BUDGET_SECONDS: '0' })).toThrow();
   expect(executionSettings({})).toMatchObject({ budgetSeconds: 300, poolSize: 4 });
-});
-
-describe('exclusive drain on PostgreSQL', () => {
-  const live = () => ({ signal: new AbortController().signal, deadline: Number.POSITIVE_INFINITY });
-
-  it('admits one drain at a time and lets a later execution take over once it ends', async () => {
-    const config = testConfig();
-    const holding = Promise.withResolvers<void>();
-    const started = Promise.withResolvers<void>();
-    const active = exclusiveDrain(
-      config,
-      live(),
-      0,
-    )(async () => {
-      started.resolve();
-      await holding.promise;
-      return 3;
-    });
-    try {
-      await started.promise;
-      const blocked = vi.fn(async () => 1);
-      // A concurrent execution gives up without draining while the lock is held.
-      expect(await exclusiveDrain(config, live(), 300)(blocked)).toBe(0);
-      expect(blocked).not.toHaveBeenCalled();
-      // A waiting execution proceeds as soon as the active drain releases.
-      const waiting = exclusiveDrain(config, live(), 5_000)(async () => 2);
-      holding.resolve();
-      expect(await active).toBe(3);
-      expect(await waiting).toBe(2);
-    } finally {
-      // A failed assertion must not leave the lock session open.
-      holding.resolve();
-      await active.catch(() => undefined);
-    }
-  });
-
-  it('keeps the only pooled connection free for lanes that query the database', async () => {
-    const config = testConfig({ RUNNER_DB_POOL_SIZE: '1', DB_POOL_TIMEOUT_SECONDS: '2' });
-    const db = createDatabase(config, { execution: true });
-    try {
-      const drained = await exclusiveDrain(
-        config,
-        live(),
-        0,
-      )(async () => {
-        const { rows } = await sql<{ one: number }>`select 1 as one`.execute(db);
-        return rows[0]!.one;
-      });
-      expect(drained).toBe(1);
-    } finally {
-      await db.destroy();
-    }
-  });
 });

@@ -60,7 +60,11 @@ const writes = {
 } as const;
 const scope = (workspaceId: string, projectId: string) => ({ workspaceId, projectId });
 const uploadView = (row: Selectable<CrawlLogUploads>) =>
-  crawlUploadSchema.parse({ ...row, created_at: row.created_at.toISOString() });
+  crawlUploadSchema.parse({
+    ...row,
+    created_at: row.created_at.toISOString(),
+    completed_at: row.completed_at?.toISOString() ?? null,
+  });
 export const crawlLogRoutes = [
   defineGetRoute({
     ...base,
@@ -285,14 +289,17 @@ export const crawlLogRoutes = [
       const key = path.upload_id + ':' + input.data.seq;
       // A retried, already-accepted sequence spends no attempt quota.
       const stored = await batchQuota(db, source, new Date(), key);
-      if (stored) return answeredReceipt(stored);
-      return ingest(db, source, Buffer.from(input.data.lines.join('\n')), {
-        key,
-        uploadId: path.upload_id,
-        seq: input.data.seq,
-        actorId: c.get('user').id,
-        quotaChecked: true,
-      });
+      const receipt = stored
+        ? answeredReceipt(stored)
+        : await ingest(db, source, Buffer.from(input.data.lines.join('\n')), {
+            key,
+            uploadId: path.upload_id,
+            seq: input.data.seq,
+            actorId: c.get('user').id,
+            quotaChecked: true,
+          });
+      // The stored batch row; the response is its receipt only.
+      return crawlReceiptSchema.parse(receipt);
     },
   }),
   definePostRoute({

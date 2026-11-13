@@ -1,5 +1,7 @@
 import { renderWithProviders as render } from '@/test/render';
 import { act, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 
 import { LOADING_INDICATOR_DELAY_MS } from '@/lib/config/operational';
@@ -189,6 +191,37 @@ describe('OnboardingGate', () => {
     );
 
     expect(screen.getByText(`${WORKSPACE}/${PROJECT}`)).toBeInTheDocument();
+  });
+
+  it('starts a project route afresh on a project switch, so no draft carries over', async () => {
+    const OTHER = '33333333-3333-4333-8333-333333333333';
+    function DraftScreen() {
+      const { projectId } = useProjectScope();
+      const [draft, setDraft] = useState('');
+      return (
+        <label>
+          {`Draft for ${projectId}`}
+          <input value={draft} onChange={(event) => setDraft(event.target.value)} />
+        </label>
+      );
+    }
+    const gate = () => (
+      <OnboardingGate>
+        <DraftScreen />
+      </OnboardingGate>
+    );
+    const { rerender } = render(gate());
+    await userEvent.type(screen.getByLabelText(`Draft for ${PROJECT}`), 'weekly');
+    expect(screen.getByLabelText(`Draft for ${PROJECT}`)).toHaveValue('weekly');
+
+    contextValue = {
+      ...contextValue,
+      activeProjectId: OTHER,
+      activeProject: makeProject({ id: OTHER, workspace_id: WORKSPACE }),
+    };
+    rerender(gate());
+
+    expect(screen.getByLabelText(`Draft for ${OTHER}`)).toHaveValue('');
   });
 
   it('keeps an empty workspace on its workspace-management routes', () => {

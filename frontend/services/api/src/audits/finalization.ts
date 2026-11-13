@@ -143,7 +143,7 @@ export function finalizeAudit(
     });
     await auditEvent(
       trx,
-      auditId,
+      { workspaceId, auditId },
       policy.audits.constants.event_audit_completed,
       `audit ${status}`,
       {

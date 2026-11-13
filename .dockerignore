@@ -8,6 +8,8 @@
 **/.env
 **/.env.*
 !**/.env.example
+**/.dev.vars*
+frontend/services/api/local
 
 **/node_modules
 **/*.tsbuildinfo

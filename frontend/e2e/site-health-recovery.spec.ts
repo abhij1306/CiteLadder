@@ -34,7 +34,6 @@ test('Site Health retries only its failed initial read inside the authenticated 
     route.fulfill({
       json: {
         project_id: PROJECT,
-        selection_version: 1,
         monitored_urls: [],
         quota: { used: 0, limit: 50 },
       },

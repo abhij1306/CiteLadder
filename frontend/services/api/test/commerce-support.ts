@@ -1,6 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import type { Database } from '../src/db/database.ts';
 import { policy } from '../src/config.ts';
+import type { CatalogFormat } from '../src/commerce/catalog-sources.ts';
+import { applyImport, stageImport } from '../src/commerce/import.ts';
+import type { CommerceScope } from '../src/commerce/reads.ts';
 import { SiteFixtures, storedFacts } from './site-health-fixtures.ts';
 import { prompt, promptSet } from './prompt-fixtures.ts';
 import { testDatabase } from './support.ts';
@@ -118,6 +121,20 @@ async function commercePrompt(
     })
     .execute();
   return { promptId, candidateId };
+}
+
+/**
+ * Import a catalog CSV the way a person does: stage it, then apply it with
+ * every proposed category. Returns the applied import's results.
+ */
+export async function importCatalog(
+  db: Database,
+  scope: CommerceScope,
+  content: string,
+  format: CatalogFormat = 'csv',
+) {
+  const staged = await stageImport(db, scope, { format, content, label: 'catalog.csv' });
+  return applyImport(db, scope, staged.import_id, []);
 }
 
 /** Deterministic persisted catalog pages and targets on disposable PostgreSQL. */

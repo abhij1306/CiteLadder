@@ -1,44 +1,41 @@
 import type { ComponentPropsWithoutRef, ReactNode } from 'react';
 
+import { EmptyHeadingLevelContext } from '@/components/ui/empty-state';
 import { cn } from '@/lib/utils';
 
 /**
- * Card — a `surface` box on the page that groups one thing: a chart, a
- * table, a form. `radius-lg`, `shadow-card` and a 24px inset on the box
- * itself, so content that owns its edges (a table, a scrolling list) sits in
- * the same inset as text.
+ * Card — the resting container (D51): a `surface` box on the page ground that
+ * groups one thing (a chart, a table, a form), edged by one 1px `line` border
+ * and no shadow, since nothing at rest is lifted. `radius-lg` and the card's
+ * inset on the box itself, so content that owns its edges (a table, a
+ * scrolling list) sits in the same inset as text.
  *
- *   `plain` (default) — the white card.
- *   `muted` — a flat `surface-sunken` well for secondary content: a tip, a
- *             code sample, an empty state.
- *   `ink`   — the one inverted tile a page may hold, for one emphasised
- *             quote or number.
- *
- * Cards never nest and never take a coloured edge or fill. The card sets no
- * display of its own: a flex column would re-flow every card and put an
- * overflow boundary between a sticky child and its scroll container.
+ * Cards never nest and never take a coloured edge or fill; what groups inside
+ * a card is an inset (`panelClasses`) or a divider. The card sets no display
+ * of its own: a flex column would re-flow every card and put an overflow
+ * boundary between a sticky child and its scroll container.
  */
-export type CardTone = 'plain' | 'muted' | 'ink';
+export const CARD_FACE = 'bg-surface text-ink border-line rounded-lg border';
 
-const CARD_TONE = {
-  plain: 'bg-surface text-ink shadow-card',
-  muted: 'bg-surface-sunken text-ink',
-  ink: 'bg-ink text-on-ink',
-} as const satisfies Record<CardTone, string>;
+/** The card, for a semantic element that is not a `section` (a list item, a link). */
+export const cardClasses = () => cn('surface-card p-[var(--card-padding)]', CARD_FACE);
 
-/** The card face, for a semantic element that is not a `section` (a list item, a link). */
-export const cardClasses = (tone: CardTone = 'plain') =>
-  cn('surface-card rounded-lg p-[var(--card-padding)]', CARD_TONE[tone]);
+/**
+ * A floating surface (D51): a menu, popover, select list, dialog, drawer,
+ * toast or tip is the same container lifted by `shadow-float`. Its 1px `line`
+ * border is its edge in both themes; the shadow carries depth only.
+ */
+export const FLOAT_FACE = 'bg-surface text-ink border-line border shadow-float';
 
 export function Card({
   children,
   className,
-  tone = 'plain',
   ...props
-}: Readonly<ComponentPropsWithoutRef<'section'> & { tone?: CardTone }>) {
+}: Readonly<ComponentPropsWithoutRef<'section'>>) {
   return (
-    <section {...props} className={cn(cardClasses(tone), className)}>
-      {children}
+    <section {...props} className={cn(cardClasses(), className)}>
+      {/* Under the card's h3 title, a block empty state's heading is an h3. */}
+      <EmptyHeadingLevelContext value={3}>{children}</EmptyHeadingLevelContext>
     </section>
   );
 }
@@ -47,8 +44,15 @@ export function Card({
  * CardHeader — the eyebrow, title and description on the left and `actions`
  * (a secondary or ghost Button, a Badge, a small control group) on the same
  * row at the right; when the row is too narrow the actions wrap below the
- * title rather than squeezing it. 16 below it when the card has more content.
+ * title rather than squeezing it. Title and description are one fact, 4
+ * apart. When the card has more content the header closes with a hairline
+ * across the card's full width: the header pads 16 above the rule and the
+ * body starts 16 below it (the card inset on both sides), with no other
+ * margin across the rule.
  */
+const HEADER_RULE =
+  'not-last:-mx-[var(--card-padding)] not-last:mb-[var(--card-padding)] not-last:border-b not-last:border-line not-last:px-[var(--card-padding)] not-last:pb-[var(--card-padding)]';
+
 export function CardHeader({
   children,
   className,
@@ -62,7 +66,7 @@ export function CardHeader({
 >) {
   if (!actions) {
     return (
-      <header {...props} className={cn('flex flex-col gap-1 not-last:pb-4', className)}>
+      <header {...props} className={cn('flex flex-col gap-1', HEADER_RULE, className)}>
         {children}
       </header>
     );
@@ -70,10 +74,7 @@ export function CardHeader({
   return (
     <header
       {...props}
-      className={cn(
-        'flex flex-wrap items-start justify-between gap-x-4 gap-y-2 not-last:pb-4',
-        className,
-      )}
+      className={cn('flex flex-wrap items-start justify-between gap-2', HEADER_RULE, className)}
     >
       <div className="grid min-w-0 flex-1 basis-60 gap-1">{children}</div>
       <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>
@@ -94,7 +95,7 @@ export function CardEyebrow({
   );
 }
 
-/** CardTitle — 16/24 Geist 500 in `ink`. */
+/** CardTitle — 16/24 at 500 in `ink`. */
 export function CardTitle({
   children,
   className,

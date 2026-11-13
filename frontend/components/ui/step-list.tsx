@@ -135,7 +135,7 @@ export function StepList({
 /** Elapsed time, or an empty slot: the status word already names a step that has none. */
 function StepTime({ time }: Readonly<{ time: string | undefined }>) {
   return (
-    <span className="text-data text-ink-muted min-w-[6ch] text-right font-mono tabular-nums">
+    <span className="text-caption text-ink-muted min-w-[6ch] text-right font-mono tabular-nums">
       {time}
     </span>
   );

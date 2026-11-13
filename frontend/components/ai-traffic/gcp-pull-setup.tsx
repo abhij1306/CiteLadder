@@ -1,4 +1,3 @@
-'use client';
 import type { z } from 'zod';
 import type { crawlSourceListSchema, crawlSourceSchema } from '@citeladder/contracts/ai-traffic';
 import type { useCrawlConnections } from '@/lib/ai-traffic/use-crawl-connections';
@@ -23,12 +22,7 @@ type GcpPull = z.infer<typeof crawlSourceListSchema>['gcp_pull'];
 function CodeText({ value, label }: Readonly<{ value: string; label: string }>) {
   return (
     <Stack>
-      <pre
-        className={panelClasses(
-          { tone: 'well' },
-          'type-code overflow-x-auto break-all whitespace-pre-wrap',
-        )}
-      >
+      <pre className={panelClasses('type-code overflow-x-auto break-all whitespace-pre-wrap')}>
         {value}
       </pre>
       <CopyButton value={value} className="w-fit">
@@ -154,7 +148,6 @@ export function SinkFilterUpdates({
   workspaceId: string;
   canManage: boolean;
 }>) {
-  const { confirmFilter } = useGcpPullActions(projectId, workspaceId);
   const outdated = data.items.filter(
     (s) => s.pull && !s.pull.filter_current && s.status === 'active',
   );
@@ -163,22 +156,27 @@ export function SinkFilterUpdates({
       key={source.id}
       source={source}
       gcp={data.gcp_pull}
+      projectId={projectId}
+      workspaceId={workspaceId}
       canManage={canManage}
-      confirmFilter={confirmFilter}
     />
   ));
 }
+/** Each source owns its confirmation, so one source's pending or failed state stays on it. */
 function SinkFilterUpdate({
   source,
   gcp,
+  projectId,
+  workspaceId,
   canManage,
-  confirmFilter,
 }: Readonly<{
   source: Source;
   gcp: GcpPull;
+  projectId: string;
+  workspaceId: string;
   canManage: boolean;
-  confirmFilter: ReturnType<typeof useGcpPullActions>['confirmFilter'];
 }>) {
+  const { confirmFilter } = useGcpPullActions(projectId, workspaceId);
   return (
     <Stack as="section" aria-label={`Sink filter update for ${source.host}`}>
       <Callout tone="warning">

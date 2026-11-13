@@ -3,14 +3,9 @@ import { siteHealthDashboardSchema } from '@citeladder/contracts/site-health';
 
 import type { Database } from '../../db/database.ts';
 import { WorkspaceScope } from '../../db/workspace-scope.ts';
-import {
-  crawlCounters,
-  dashboardCrawl,
-  projectCrawl,
-  rootFailure,
-  scoreSummary,
-  type Crawl,
-} from './crawl.ts';
+import { dashboardCrawl, rootFailure, type Crawl } from './crawl.ts';
+import { crawlCounters } from './crawl-counters.ts';
+import { projectCrawl, scoreSummary } from './crawl-projection.ts';
 import { monitoredQuota } from './runtime.ts';
 
 const TERMINAL_DISCOVERY = new Set([

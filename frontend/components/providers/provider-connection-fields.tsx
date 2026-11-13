@@ -1,5 +1,3 @@
-'use client';
-
 import { AppGrid } from '@/components/ui/app-grid';
 import { Callout } from '@/components/ui/callout';
 import { Field } from '@/components/ui/field';

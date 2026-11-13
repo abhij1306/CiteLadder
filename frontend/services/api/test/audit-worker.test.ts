@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { afterAll, afterEach, describe, expect, it } from 'vitest';
-import { testDatabase } from './support.ts';
+import { asOwner, testDatabase } from './support.ts';
 import { VisibilityFixtures } from './visibility-fixtures.ts';
 import { auditTenant, auditTestKey } from './audit-fixtures.ts';
 import { sql } from 'kysely';
@@ -32,7 +32,9 @@ const workspaces: string[] = [],
 afterEach(async () => {
   if (tasks.length) {
     await db.deleteFrom('execution_cost_projections').where('task_id', 'in', tasks).execute();
-    await db.deleteFrom('provider_attempts').where('task_id', 'in', tasks).execute();
+    await asOwner((owner) =>
+      owner.deleteFrom('provider_attempts').where('task_id', 'in', tasks).execute(),
+    );
   }
   if (workspaces.length)
     await db
@@ -130,6 +132,30 @@ function worker(
     },
     { owner: 'worker', taskScope: scope, send, ...(now ? { now } : {}) },
   );
+}
+/** A Google AI Overview whose paid submission is known (`aio-task`), awaiting its free retrieval. */
+async function submittedOverview(pollCount: number) {
+  const t = await seed(true, [], 'google_ai_overview');
+  const connectionId = record(t.task.provider_route_snapshot).connection_id as string;
+  const { credential_revision } = await db
+    .selectFrom('provider_connections')
+    .select('credential_revision')
+    .where('id', '=', connectionId)
+    .executeTakeFirstOrThrow();
+  await db
+    .updateTable('audit_tasks')
+    .set({
+      provider_submission_ref: 'paid-intent',
+      provider_task_submitted_at: new Date(Date.now() - 60000),
+      provider_task_id: 'aio-task',
+      provider_poll_count: pollCount,
+      attempt_count: 1,
+      provider_connection_id: connectionId,
+      provider_credential_revision: credential_revision,
+    })
+    .where('id', '=', t.task.id)
+    .execute();
+  return t;
 }
 async function ready(id: string) {
   await db
@@ -599,26 +625,7 @@ describe('leased audit worker phases', () => {
     expect(record(artifact.usage).provider_cost_microusd).toBe(2000);
   });
   it('stops a Google AI Overview at the poll ceiling without another provider call', async () => {
-    const t = await seed(true, [], 'google_ai_overview');
-    const connectionId = record(t.task.provider_route_snapshot).connection_id as string;
-    const { credential_revision } = await db
-      .selectFrom('provider_connections')
-      .select('credential_revision')
-      .where('id', '=', connectionId)
-      .executeTakeFirstOrThrow();
-    await db
-      .updateTable('audit_tasks')
-      .set({
-        provider_submission_ref: 'paid-intent',
-        provider_task_submitted_at: new Date(Date.now() - 60000),
-        provider_task_id: 'aio-task',
-        provider_poll_count: 1000,
-        attempt_count: 1,
-        provider_connection_id: connectionId,
-        provider_credential_revision: credential_revision,
-      })
-      .where('id', '=', t.task.id)
-      .execute();
+    const t = await submittedOverview(1000);
     let calls = 0;
     await worker(t, async () => {
       calls++;
@@ -637,6 +644,111 @@ describe('leased audit worker phases', () => {
         .where('task_id', '=', t.task.id)
         .executeTakeFirstOrThrow(),
     ).toEqual({ outcome: 'execution_failure', error_code: 'poll_ceiling_exceeded' });
+  });
+  it('polls a paid Google AI Overview again when saving its answer fails, never writing it off', async () => {
+    const t = await submittedOverview(0);
+    const paths: string[] = [];
+    let tick = Date.now();
+    let saves = 0;
+    const w = new AuditWorker(
+      db,
+      runtime,
+      auditTestKey,
+      {
+        // The first save loses its database connection inside the owned transaction.
+        execution: async (...args) => {
+          if (++saves === 1) throw new Error('Connection terminated unexpectedly');
+          return deriveExecution(...args);
+        },
+        finalize: (workspaceId, auditId) => finalizeAudit(db, workspaceId, auditId, async () => {}),
+      },
+      {
+        owner: 'worker',
+        taskScope: t,
+        env: {},
+        now: () => new Date(tick),
+        send: async (input) => {
+          paths.push(String(input).split('/').slice(-2).join('/'));
+          return Response.json({
+            status_code: 20000,
+            tasks: [
+              {
+                id: 'aio-task',
+                status_code: 20000,
+                result: [{ items: [{ type: 'organic', title: 'No overview here' }] }],
+              },
+            ],
+          });
+        },
+      },
+    );
+    await w.runOnce();
+    const parked = await stored(t.task.id);
+    expect([parked.status, parked.attempt_count, parked.provider_poll_count]).toEqual([
+      'awaiting_provider_result',
+      1,
+      1,
+    ]);
+    tick += 2000;
+    await ready(t.task.id);
+    await w.runOnce();
+    expect(paths).toEqual(['advanced/aio-task', 'advanced/aio-task']);
+    expect(await stored(t.task.id)).toMatchObject({ status: 'succeeded', attempt_count: 1 });
+    expect(
+      await db
+        .selectFrom('provider_attempts')
+        .select(['status', 'error_code'])
+        .where('task_id', '=', t.task.id)
+        .orderBy('attempt_number')
+        .execute(),
+    ).toEqual([
+      { status: 'failed', error_code: 'result_unsaved' },
+      { status: 'succeeded', error_code: '' },
+    ]);
+  });
+  it('settles every claimed task when finalizing their audit fails', async () => {
+    // One prompt at three repetitions: two run together, one stays queued.
+    const t = await seed();
+    await db
+      .updateTable('audit_tasks')
+      .set({ available_at: new Date(0) })
+      .where('audit_id', '=', t.auditId)
+      .execute();
+    let calls = 0;
+    const w = new AuditWorker(
+      db,
+      { ...runtime, audits: { ...runtime.audits, worker_concurrency: 2 } },
+      auditTestKey,
+      {
+        execution: deriveExecution,
+        finalize: async () => {
+          throw new Error('Connection terminated unexpectedly');
+        },
+      },
+      {
+        owner: 'worker',
+        taskScope: t,
+        env: {},
+        send: async () => {
+          calls++;
+          // The second answer is still running when the first task's finalize fails.
+          if (calls === 2) await sleep(50);
+          return Response.json({
+            status: 'completed',
+            output: [
+              { type: 'message', content: [{ type: 'output_text', text: 'Acme Running.' }] },
+            ],
+          });
+        },
+      },
+    );
+    expect(await w.runOnce()).toBe(2);
+    const settled = await db
+      .selectFrom('audit_tasks')
+      .select('status')
+      .where('audit_id', '=', t.auditId)
+      .execute();
+    expect(settled.map((task) => task.status).sort()).toEqual(['queued', 'succeeded', 'succeeded']);
   });
   it('records a retrieval whose credential is gone with its full failure code', async () => {
     const t = await seed(true, [], 'google_ai_overview');
@@ -685,6 +797,7 @@ describe('audit failure codes', () => {
       searchPolicy.surface.error_submission_unreconciled,
       searchPolicy.surface.error_credential_unavailable,
       searchPolicy.constants.error_account_unavailable,
+      searchPolicy.constants.error_result_unsaved,
       auditPolicy.constants.error_run_deadline,
       auditPolicy.constants.error_cancelled,
       auditPolicy.constants.error_no_connection,

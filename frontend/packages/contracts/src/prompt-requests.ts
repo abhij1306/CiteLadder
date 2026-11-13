@@ -58,7 +58,6 @@ export const promptBulkStatusRequestSchema = z.strictObject({
   prompt_ids: z.array(uuid()).min(1),
   status: promptStatusSchema,
 });
-export type PromptBulkStatusRequest = z.input<typeof promptBulkStatusRequestSchema>;
 
 /** One browser-parsed CSV row: the user's topic NAME (created when new, '' = none). */
 export const promptImportRowRequestSchema = z.strictObject({

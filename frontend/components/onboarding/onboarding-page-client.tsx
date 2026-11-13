@@ -1,5 +1,3 @@
-'use client';
-
 import { Link } from 'react-router-dom';
 import { Suspense, useEffect, useState, type ReactNode } from 'react';
 

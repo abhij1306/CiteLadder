@@ -181,16 +181,23 @@ export async function buildVerificationResult(
   postAuditId: string | null,
 ) {
   const ctx = { db, declaration, scope: new WorkspaceScope(declaration.workspace_id) };
-  const baseline = await ctx.scope
-    .selectFrom(db, 'opportunity_snapshots')
-    .selectAll()
-    .where('id', '=', declaration.opportunity_snapshot_id)
-    .executeTakeFirst();
+  // No snapshot existed at go-live: the baseline is unavailable, not empty.
+  const baseline = declaration.opportunity_snapshot_id
+    ? await ctx.scope
+        .selectFrom(db, 'opportunity_snapshots')
+        .selectAll()
+        .where('id', '=', declaration.opportunity_snapshot_id)
+        .executeTakeFirst()
+    : undefined;
   if (!baseline)
     return {
       state: 'unavailable',
       legs: {},
-      limitations: ['Frozen Opportunity snapshot is unavailable.'],
+      limitations: [
+        declaration.opportunity_snapshot_id
+          ? 'Frozen Opportunity snapshot is unavailable.'
+          : 'No Opportunity snapshot existed at go-live.',
+      ],
     };
   const latest = await ctx.scope
     .selectFrom(db, 'opportunity_snapshots')

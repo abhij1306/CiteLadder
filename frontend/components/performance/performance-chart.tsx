@@ -1,5 +1,3 @@
-'use client';
-
 import { ChartLegend, type ChartTone } from '@/components/ui/chart';
 import { Stack } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';

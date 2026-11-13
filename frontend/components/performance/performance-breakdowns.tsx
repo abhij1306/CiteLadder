@@ -1,5 +1,3 @@
-'use client';
-
 import { BingPanel } from './bing-panel';
 import { DimensionTable, useWarmDimensionTable } from './dimension-table';
 import { TabPanel, Tabs } from '@/components/ui/tabs';

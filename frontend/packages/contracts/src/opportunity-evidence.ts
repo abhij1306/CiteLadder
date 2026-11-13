@@ -59,15 +59,53 @@ const earnedListingEvidenceSchema = z.object({
   }),
 });
 
-/** A Site Health defect on one owned page. */
-const siteIssueEvidenceSchema = z.object({
-  issue_rule_id: z.string(),
-  issue_severity: z.string(),
-  category: z.string(),
-  issue_evidence: json,
+/**
+ * The Site Health defects on one owned page that one finding folds together,
+ * every one of them: several rules can map to one finding (SH-B2). `issues` is
+ * in rule order, then issue id.
+ */
+export const siteIssueEvidenceSchema = z.object({
+  issues: z
+    .array(
+      z.object({
+        issue_id: z.string(),
+        rule_id: z.string(),
+        severity: z.string(),
+        category: z.string(),
+        evidence: json,
+      }),
+    )
+    .min(1),
   crawl_id: z.string(),
   site_url_id: z.string(),
   url: z.string(),
+  coverage: json,
+  limitations: z.array(z.string()),
+});
+
+/**
+ * One Site Health issue family: one rule across the pages it fails on in one
+ * crawl. `group_id` is the family's issue group in that crawl's catalog.
+ * `pages` is the cohort a declaration freezes, in URL order and bounded;
+ * `page_count` counts every affected page, so fewer listed pages means the
+ * list was cut.
+ */
+export const issueFamilyCohortSchema = z.object({
+  rule_id: z.string(),
+  rule_label: z.string(),
+  crawl_id: z.string(),
+  group_id: z.string(),
+  page_count: z.number().int(),
+  pages: z.array(z.object({ site_url_id: z.string(), url: z.string() })),
+});
+export type IssueFamilyCohort = z.infer<typeof issueFamilyCohortSchema>;
+
+/** A Site Health defect repeated across pages, as one finding. */
+export const siteIssueFamilyEvidenceSchema = z.object({
+  issue_rule_id: z.string(),
+  issue_severity: z.string(),
+  category: z.string(),
+  cohort: issueFamilyCohortSchema,
   coverage: json,
   limitations: z.array(z.string()),
 });
@@ -109,10 +147,29 @@ const demandSignalEvidenceSchema = z.object({
   query_relevance: z.unknown(),
 });
 
-const productNotMentionedEvidenceSchema = z.object({
+/**
+ * What every per-product metric rule stores: the product, the window the
+ * Products read measured (ending at `as_of`), the metric's reading and the
+ * threshold it failed, beside the row's own figures.
+ */
+const productMetricEvidenceSchema = z.object({
   product_id: z.string(),
-  product_visibility: z.number(),
-  audit_id: z.string(),
+  product_name: z.string(),
+  window_days: z.number().int(),
+  as_of: z.string(),
+  executions: z.number().int(),
+  metric: z.string(),
+  value: z.number(),
+  samples: z.number().int(),
+  threshold: z.number(),
+  appearances: z.number().int(),
+  ordered_appearances: z.number().int(),
+  win_rate: z.number().nullable(),
+  mentioned_price: z
+    .object({ median: z.number().nullable(), currency: z.string(), quoted: z.number().int() })
+    .nullable(),
+  catalog_price: z.object({ amount: z.number(), currency: z.string() }).nullable(),
+  merchants: z.array(z.object({ domain: z.string(), count: z.number().int() })),
 });
 
 const catalogFieldsEvidenceSchema = z.object({
@@ -127,6 +184,95 @@ const citedAlternativesEvidenceSchema = z.object({
   product_visibility: z.number(),
   audit_id: z.string(),
 });
+
+/** The most cited pages a content-gap finding lists. */
+export const CONTENT_GAP_EVIDENCE_MEMBERS = 20;
+
+/** What both content-gap rules store: one angle of one succeeded content-angle run. */
+const contentGapEvidenceSchema = z.object({
+  run_id: z.string(),
+  /** The angle's stable identity across reclustering; the label is not. */
+  lineage_id: z.string(),
+  angle_label: z.string(),
+  /** Null for prompts without a topic. */
+  topic_id: z.string().nullable(),
+  /**
+   * The angle's prompts with their text as the prompt library held it at the
+   * refresh; `text` is null for a prompt the library no longer had then.
+   */
+  prompts: z.array(z.object({ id: z.string(), text: z.string().nullable() })),
+  engines: z.array(z.string()),
+  citation_count: z.number().int(),
+  domain_count: z.number().int(),
+  competitor_count: z.number().int(),
+  /** Every cited page of the angle; `members` lists the most cited ones first. */
+  member_count: z.number().int(),
+  members: z
+    .array(
+      z.object({
+        url: z.string(),
+        title: z.string(),
+        domain: z.string(),
+        classification: z.string(),
+        matched_competitor: z.string().nullable(),
+        citation_count: z.number().int(),
+      }),
+    )
+    .max(CONTENT_GAP_EVIDENCE_MEMBERS),
+  /** The run's audit window. */
+  window: z.object({ start: z.string(), end: z.string() }),
+  methodology_version: z.string(),
+  formula_version: z.string(),
+  /** The run's recorded limitations (topicless prompts, empty titles, ...). */
+  limitations: z.array(json),
+});
+
+/** An angle matched to an owned content page that is not cited for its prompts. */
+const contentGapImprovePageEvidenceSchema = contentGapEvidenceSchema.extend({
+  site_url_id: z.string(),
+  url: z.string(),
+  match_method: z.literal('model_pick'),
+  /** The planned-page Action of the same lineage this page now continues. */
+  continues_action_id: z.string().optional(),
+});
+export type ContentGapImprovePageEvidence = z.infer<typeof contentGapImprovePageEvidenceSchema>;
+
+/** An angle no content page covers: a page to plan, keyed by its lineage's fixed key. */
+const contentGapNewPageEvidenceSchema = contentGapEvidenceSchema.extend({
+  planned_page_key: z.string(),
+});
+export type ContentGapNewPageEvidence = z.infer<typeof contentGapNewPageEvidenceSchema>;
+
+/** Either content-gap rule's evidence. */
+export const contentGapFindingEvidenceSchema = z.union([
+  contentGapImprovePageEvidenceSchema,
+  contentGapNewPageEvidenceSchema,
+]);
+export type ContentGapEvidence = z.infer<typeof contentGapFindingEvidenceSchema>;
+
+/** A content-gap finding's rule with its evidence. */
+export type ContentGapFinding =
+  | { rule_id: 'content_gap_improve_page'; evidence: ContentGapImprovePageEvidence }
+  | { rule_id: 'content_gap_new_page'; evidence: ContentGapNewPageEvidence };
+
+/**
+ * A finding's rule and stored evidence as a content-gap finding, or null when
+ * the rule is not a content-gap rule or the evidence is not in its shape.
+ */
+export function parseContentGapEvidence(rule: string, evidence: unknown): ContentGapFinding | null {
+  switch (rule) {
+    case 'content_gap_improve_page': {
+      const parsed = contentGapImprovePageEvidenceSchema.safeParse(evidence);
+      return parsed.success ? { rule_id: rule, evidence: parsed.data } : null;
+    }
+    case 'content_gap_new_page': {
+      const parsed = contentGapNewPageEvidenceSchema.safeParse(evidence);
+      return parsed.success ? { rule_id: rule, evidence: parsed.data } : null;
+    }
+    default:
+      return null;
+  }
+}
 
 const promptGap = promptGapEvidenceSchema;
 const siteIssue = siteIssueEvidenceSchema;
@@ -147,6 +293,7 @@ export const opportunityEvidenceSchemas = {
   site_contextual_links: contextualLinksEvidenceSchema,
   site_link_near_orphan: siteIssue,
   site_link_weak_authority: siteIssue,
+  site_issue_family: siteIssueFamilyEvidenceSchema,
   site_change_potential_regression: siteChange,
   site_change_critical_regression: siteChange,
   site_change_metadata_inconsistency: siteChange,
@@ -160,7 +307,12 @@ export const opportunityEvidenceSchemas = {
   high_traffic_low_visibility: demand,
   low_share_of_voice_theme: json,
   search_keyword_gap: keywordGapEvidenceSchema,
-  product_not_mentioned: productNotMentionedEvidenceSchema,
+  content_gap_improve_page: contentGapImprovePageEvidenceSchema,
+  content_gap_new_page: contentGapNewPageEvidenceSchema,
+  product_not_mentioned: productMetricEvidenceSchema,
+  price_mismatch: productMetricEvidenceSchema,
+  losing_position: productMetricEvidenceSchema,
+  merchant_absent: productMetricEvidenceSchema,
   catalog_fields_missing: catalogFieldsEvidenceSchema,
   cited_alternatives_without_uploaded_presence: citedAlternativesEvidenceSchema,
 } as const;

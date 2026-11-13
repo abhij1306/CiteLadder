@@ -95,6 +95,7 @@ describe('client error sink', () => {
     expect(result.records).toEqual([
       expect.objectContaining({
         level: 'warning',
+        severity: 'WARNING',
         kind: 'chunk_load',
         component: null,
         user_id: userId,

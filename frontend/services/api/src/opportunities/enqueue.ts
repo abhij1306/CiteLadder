@@ -7,7 +7,7 @@ import { sql, type Transaction } from 'kysely';
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import type { DB } from '../generated/db-schema.ts';
-import { enqueueTask } from '../queue/enqueue.ts';
+import { enqueueCoalesced, enqueueTask } from '../queue/enqueue.ts';
 import { MAX_WINDOW_DAYS } from './verification-decisions.ts';
 
 const versions = policy.opportunity.opportunities;
@@ -37,6 +37,23 @@ export function enqueueOpportunityRefresh(db: Database | Transaction<DB>, trigge
       RULE_VERSION,
       FORMULA_VERSION,
     ].join(':'),
+    maxAttempts: trigger.maxAttempts,
+  });
+}
+
+/**
+ * An Opportunity refresh for evidence derived after its source announced its
+ * own refresh (a content-angle run after its audit or crawl). A refresh still
+ * queued for the project has not read anything yet and reads the latest
+ * sources, so it absorbs this request; otherwise one is queued.
+ */
+export function enqueueDerivedOpportunityRefresh(db: Database, trigger: Trigger) {
+  return enqueueCoalesced(db, {
+    workspaceId: trigger.workspaceId,
+    projectId: trigger.projectId,
+    kind: 'opportunity_refresh',
+    payload: { trigger_kind: trigger.triggerKind, trigger_id: trigger.triggerId },
+    delaySeconds: 0,
     maxAttempts: trigger.maxAttempts,
   });
 }

@@ -25,6 +25,9 @@ import { issueGroupId } from '../src/site-health/reads/rules.ts';
 import { issueDetail } from '../src/site-health/reads/issues.ts';
 import { refreshIssueCurrency } from '../src/site-health/issue-currency.ts';
 import { loadCrawl } from '../src/site-health/reads/crawl.ts';
+import { latestLinkCrawl } from '../src/site-health/internal-link-runs.ts';
+import { crawlability, siteSnapshot } from '../src/mcp/evidence-site.ts';
+import { resolveCrawl } from '../src/opportunities/sources.ts';
 import { record } from '../src/db/json.ts';
 import { compareText } from '../src/text-order.ts';
 import { encodeKeysetCursor } from '../src/http/keyset-cursor.ts';
@@ -99,7 +102,7 @@ async function monitor(seed: SiteSeed, siteUrlId: string) {
       profile_id: seed.profileId,
       site_url_id: siteUrlId,
       active: true,
-      selection_source: 'user',
+      selection_source: 'bootstrap',
       selected_at: now,
       created_at: now,
       updated_at: now,
@@ -110,8 +113,12 @@ async function monitor(seed: SiteSeed, siteUrlId: string) {
 type Page = Awaited<ReturnType<SiteFixtures['page']>>;
 
 /** A page observed in the crawl, with its analysis finalized. */
-async function page(seed: SiteSeed, path: string, options: { current?: boolean } = {}) {
-  const row = await fixtures.page(seed, path, {}, options);
+async function page(
+  seed: SiteSeed,
+  path: string,
+  { facts = {}, ...options }: { current?: boolean; facts?: Record<string, unknown> } = {},
+) {
+  const row = await fixtures.page(seed, path, facts, options);
   await observe(seed, row.id);
   await db
     .updateTable('site_page_analyses')
@@ -200,6 +207,78 @@ async function siteIssue(
   await refreshIssueCurrency(db, await loadCrawl(db, seed.workspaceId, seed.crawlId));
 }
 
+/**
+ * An architecture finding on the root as `architecture.ts` writes it: attached
+ * to the root's analysis, never named in its `source_evaluation_ids`.
+ */
+async function architectureIssue(seed: SiteSeed, root: Page, ruleId: string) {
+  const rule = policy.site_health.rule_catalog.find((item) => item.rule_id === ruleId)!;
+  const architectureId = randomUUID();
+  await db
+    .insertInto('site_observed_architectures')
+    .values({
+      id: architectureId,
+      workspace_id: seed.workspaceId,
+      project_id: seed.projectId,
+      crawl_id: seed.crawlId,
+      source_snapshot_id: await fixtures.snapshot(seed, 'complete'),
+      coverage_state: 'complete',
+      page_count: 1,
+      hierarchy: '[]',
+      internal_linking: '{}',
+      page_kinds: '[]',
+      structure_depth: '{}',
+      architecture_formula_version: 'fixture',
+      archetype_policy_version: 'fixture',
+      analyzer_version: 'fixture',
+      extractor_version: 'fixture',
+      rule_version: 'fixture',
+      created_at: new Date(),
+    })
+    .execute();
+  const { source_evaluation_ids: named } = await db
+    .selectFrom('site_page_analyses')
+    .select('source_evaluation_ids')
+    .where('id', '=', root.analysisId)
+    .executeTakeFirstOrThrow();
+  const evaluationId = await fixtures.evaluation(seed, root, ruleId, 'missing');
+  await db
+    .updateTable('site_rule_evaluations')
+    .set({ source_architecture_id: architectureId })
+    .where('id', '=', evaluationId)
+    .execute();
+  await db
+    .updateTable('site_page_analyses')
+    .set({ source_evaluation_ids: named })
+    .where('id', '=', root.analysisId)
+    .execute();
+  await db
+    .insertInto('site_issues')
+    .values({
+      id: randomUUID(),
+      workspace_id: seed.workspaceId,
+      project_id: seed.projectId,
+      crawl_id: seed.crawlId,
+      site_url_id: root.id,
+      analysis_id: root.analysisId,
+      evaluation_id: evaluationId,
+      source_artifact_id: root.artifactId,
+      rule_id: ruleId,
+      rule_version: rule.rule_version,
+      dimension: rule.dimension,
+      category: rule.category,
+      severity: rule.severity,
+      finding_class: rule.finding_class,
+      description: rule.description,
+      remediation: rule.remediation,
+      evidence: '{}',
+      analyzer_version: policy.site_health.versions.analyzer,
+      is_current: true,
+      created_at: new Date(),
+    })
+    .execute();
+}
+
 const byUrl = (items: { normalized_url: string; analysis_status: string; error_code: string }[]) =>
   Object.fromEntries(items.map((item) => [new URL(item.normalized_url).pathname, item]));
 
@@ -239,10 +318,46 @@ describe('page projections', () => {
     ]);
   });
 
-  it('serve the newest crawl’s pages by project, named with that crawl and its status', async () => {
+  it('report a page never analyzed as having no facts, never zero headings, words or links', async () => {
+    const seed = await fixtures.crawl();
+    const analyzed = await page(seed, '/analyzed', {
+      facts: {
+        headings: { h1_count: 1, counts: { h1: 1, h2: 2 } },
+        body: { word_count: 240 },
+        links: { anchors: [{ is_internal: true }, { is_internal: false }] },
+      },
+    });
+    const pending = await fixtures.analyzable(seed, '/pending');
+    await observe(seed, pending.siteUrlId);
+
+    const read = (siteUrlId: string) =>
+      json(seed, `/site-crawls/${seed.crawlId}/pages/${siteUrlId}`, pageDetailSchema);
+    expect((await read(analyzed.id)).facts).toMatchObject({
+      h1_count: 1,
+      heading_count: 3,
+      word_count: 240,
+      internal_link_count: 1,
+      external_link_count: 1,
+    });
+    const never = await read(pending.siteUrlId);
+    expect(never.analysis_status).not.toBe('completed');
+    expect(never.facts).toBeNull();
+  });
+
+  it('serve the current crawl’s pages by project, named with that crawl and its status', async () => {
     const empty = await fixtures.tenant({ websiteUrl: 'https://example.test/' });
     expect((await get(empty, `/projects/${empty.projectId}/site-health/pages`)).status).toBe(404);
-    const seed = await fixtures.crawl('running');
+    const seed = await fixtures.crawl('partially_completed');
+    // Neither a later one-page rerun nor a crawl still running is the current crawl.
+    for (const [status, configuration, offset] of [
+      ['completed', { page_rerun: true }, 60_000],
+      ['running', {}, 120_000],
+    ] as const)
+      await fixtures.sibling(seed, {
+        status,
+        configuration: JSON.stringify(configuration),
+        created_at: new Date(Date.now() + offset),
+      });
     await page(seed, '/');
     const blocked = await page(seed, '/robots', { current: false });
     await db
@@ -256,7 +371,7 @@ describe('page projections', () => {
       `/projects/${seed.projectId}/site-health/pages?status=error_or_blocked`,
       latestCrawlPagesPageSchema,
     );
-    expect(body).toMatchObject({ crawl_id: seed.crawlId, crawl_status: 'running' });
+    expect(body).toMatchObject({ crawl_id: seed.crawlId, crawl_status: 'partially_completed' });
     expect(body.items.map((item) => new URL(item.normalized_url).pathname)).toEqual(['/robots']);
   });
 
@@ -325,6 +440,62 @@ describe('page projections', () => {
       (await json(seed, `/site-crawls/${seed.crawlId}/pages`, pagesPageSchema)).items,
     );
     expect(terminal['/waiting']!.analysis_status).toBe('not_measured');
+  });
+
+  it('search a crawl’s pages by URL, case-insensitively, binding the cursor to the search', async () => {
+    const seed = await fixtures.crawl();
+    await page(seed, '/');
+    await page(seed, '/bags/tote');
+    await page(seed, '/bags/clutch');
+    const search = async (query: string) =>
+      json(seed, `/site-crawls/${seed.crawlId}/pages?${query}`, pagesPageSchema);
+
+    const bags = await search('query=%2FBAGS%2F&sort=url');
+    expect(bags.items.map((item) => new URL(item.normalized_url).pathname)).toEqual([
+      '/bags/clutch',
+      '/bags/tote',
+    ]);
+    expect((await search('query=no-such-page')).items).toEqual([]);
+    const first = await search('query=bags&sort=url&limit=1');
+    const replayed = await get(
+      seed,
+      `/site-crawls/${seed.crawlId}/pages?query=tote&sort=url&limit=1&cursor=${first.next_cursor}`,
+    );
+    expect(replayed.status).toBe(400);
+    const outsider = await fixtures.crawl();
+    expect((await get(outsider, `/site-crawls/${seed.crawlId}/pages?query=bags`)).status).toBe(404);
+  });
+
+  it('name each of a page’s issues by its catalog group and the scores it counts toward', async () => {
+    const seed = await fixtures.crawl();
+    const home = await page(seed, '/');
+    await issue(seed, home, 'technical.indexable');
+    await issue(seed, home, 'web.accessibility_form_names');
+
+    const detail = await json(
+      seed,
+      `/site-crawls/${seed.crawlId}/pages/${home.id}`,
+      pageDetailSchema,
+    );
+    expect(
+      Object.fromEntries(
+        detail.issues.map((row) => [row.rule_id, [row.group_id, row.score_roles]]),
+      ),
+    ).toEqual({
+      'technical.indexable': [
+        issueGroupId(seed.crawlId, 'technical.indexable', 'defect'),
+        ['aeo_readiness', 'web_fundamentals'],
+      ],
+      'web.accessibility_form_names': [
+        issueGroupId(seed.crawlId, 'web.accessibility_form_names', 'defect'),
+        [],
+      ],
+    });
+    // The page's group is the one the catalog serves.
+    const catalog = await json(seed, `/site-crawls/${seed.crawlId}/issues`, siteIssuesPageSchema);
+    expect(catalog.items.map((row) => row.group_id).toSorted()).toEqual(
+      detail.issues.map((row) => row.group_id).toSorted(),
+    );
   });
 
   it('bind a cursor to the filters and order it was issued for', async () => {
@@ -564,59 +735,52 @@ describe('issue catalog', () => {
     expect(first).toContain('"homepage, product"');
   });
 
+  it('serves an issue’s affected pages to an API key, inside the key’s project only', async () => {
+    const seed = await fixtures.crawl();
+    const home = await page(seed, '/');
+    await issue(seed, home, 'technical.indexable');
+    const groupId = issueGroupId(seed.crawlId, 'technical.indexable', 'defect');
+    const created = await app.request('/api/v1/api-keys', {
+      method: 'POST',
+      headers: {
+        cookie: `${TEST_SESSION_COOKIE}=${await sessionToken({ sub: seed.userId, ver: 0 })}`,
+        'x-workspace-id': seed.workspaceId,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ name: 'Issue export' }),
+    });
+    expect(created.status, await created.clone().text()).toBe(201);
+    const { secret } = (await created.json()) as { secret: string };
+    const read = (crawlId: string, group: string) =>
+      app.request(`/v1/projects/${seed.projectId}/site-crawls/${crawlId}/issues/${group}`, {
+        headers: { authorization: `Bearer ${secret}` },
+      });
+
+    const response = await read(seed.crawlId, groupId);
+    expect(response.status, await response.clone().text()).toBe(200);
+    const detail = siteIssueDetailSchema.parse(await response.json());
+    expect(detail.occurrences.map((row) => row.site_url_id)).toEqual([home.id]);
+    // Another workspace's crawl, and a group the crawl does not hold, are not found.
+    const outsider = await fixtures.crawl();
+    expect((await read(outsider.crawlId, groupId)).status).toBe(404);
+    expect((await read(seed.crawlId, randomUUID())).status).toBe(404);
+  });
+
   it('serves the newest crawl’s issue page by project, named with that crawl', async () => {
     const seed = await fixtures.crawl();
     const home = await page(seed, '/');
     await issue(seed, home, 'technical.indexable');
 
-    const body = await json(
-      seed,
-      `/projects/${seed.projectId}/site-health/issues?detail_limit=1`,
-      latestCrawlIssuesPageSchema,
-    );
+    const latest = async (section: string) =>
+      json(
+        seed,
+        `/projects/${seed.projectId}/site-health/issues?section=${section}`,
+        latestCrawlIssuesPageSchema,
+      );
+    const body = await latest('technical');
     expect(body.crawl_id).toBe(seed.crawlId);
     expect(body.items.map((group) => group.rule_id)).toEqual(['technical.indexable']);
-    expect(body.first_issue?.occurrences.map((row) => row.site_url_id)).toEqual([home.id]);
-  });
-
-  it('embeds the first row’s detail only when asked, as the detail route serves it', async () => {
-    const seed = await fixtures.crawl();
-    const home = await page(seed, '/');
-    const product = await page(seed, '/product');
-    for (const target of [home, product]) await issue(seed, target, 'technical.indexable');
-    await issue(seed, home, 'technical.title_present');
-    const groupId = issueGroupId(seed.crawlId, 'technical.indexable', 'defect');
-
-    const plain = await json(seed, `/site-crawls/${seed.crawlId}/issues`, siteIssuesPageSchema);
-    const embedded = await json(
-      seed,
-      `/site-crawls/${seed.crawlId}/issues?detail_limit=1`,
-      siteIssuesPageSchema,
-    );
-
-    expect(plain.first_issue).toBeUndefined();
-    expect(embedded.first_issue).toMatchObject({
-      group_id: groupId,
-      rule_id: 'technical.indexable',
-      occurrence_count: 2,
-      affected_url_count: 2,
-    });
-    expect(embedded.first_issue?.occurrences).toHaveLength(1);
-    expect(embedded.first_issue).toEqual(
-      await json(
-        seed,
-        `/site-crawls/${seed.crawlId}/issues/${groupId}?limit=1`,
-        siteIssueDetailSchema,
-      ),
-    );
-    // A page with no rows has no first issue to carry.
-    const none = await json(
-      seed,
-      `/site-crawls/${seed.crawlId}/issues?detail_limit=1&query=no-such-issue`,
-      siteIssuesPageSchema,
-    );
-    expect(none.items).toEqual([]);
-    expect(none.first_issue).toBeUndefined();
+    expect((await latest('aeo')).items).toEqual([]);
   });
 
   it('ranks a severity tier by pages affected, pages it on that order, and searches titles', async () => {
@@ -653,6 +817,64 @@ describe('issue catalog', () => {
     expect(searched.items.map((group: { rule_id: string }) => group.rule_id)).toEqual([
       'web.mobile_viewport',
     ]);
+  });
+
+  it('lists each tab’s issues in the order asked for, counting every tab, and binds cursors to both', async () => {
+    const seed = await fixtures.crawl();
+    const home = await page(seed, '/');
+    const product = await page(seed, '/product');
+    // Technical: a high on one page, a medium on two.
+    await issue(seed, home, 'technical.https');
+    for (const target of [home, product])
+      await issue(seed, target, 'technical.canonical_integrity');
+    // Content: a technical metadata rule and a technical content rule.
+    await issue(seed, home, 'technical.title_present');
+    await issue(seed, product, 'web.mobile_viewport');
+    // AEO.
+    await issue(seed, home, 'aeo.schema_required_valid');
+    const tab = async (query: string) => {
+      const body = await json(
+        seed,
+        `/site-crawls/${seed.crawlId}/issues?${query}`,
+        siteIssuesPageSchema,
+      );
+      return { rules: body.items.map((row) => row.rule_id), body };
+    };
+
+    const technical = await tab('section=technical');
+    expect(technical.rules).toEqual(['technical.https', 'technical.canonical_integrity']);
+    expect(technical.body.summary.section_counts).toEqual({ technical: 2, content: 2, aeo: 1 });
+    expect((await tab('section=technical&sort=pages')).rules).toEqual([
+      'technical.canonical_integrity',
+      'technical.https',
+    ]);
+    expect((await tab('section=content')).rules.toSorted()).toEqual([
+      'technical.title_present',
+      'web.mobile_viewport',
+    ]);
+    expect((await tab('section=aeo')).rules).toEqual(['aeo.schema_required_valid']);
+    // A search counts its matches in every tab, so the reader sees which tab holds them.
+    const searched = await tab('section=aeo&query=viewport');
+    expect(searched.rules).toEqual([]);
+    expect(searched.body.summary.section_counts).toEqual({ technical: 0, content: 1, aeo: 0 });
+
+    const first = await tab('section=technical&sort=pages&limit=1');
+    const cursor = encodeURIComponent(first.body.next_cursor!);
+    expect((await tab(`section=technical&sort=pages&limit=1&cursor=${cursor}`)).rules).toEqual([
+      'technical.https',
+    ]);
+    for (const changed of ['section=technical&sort=severity', 'section=content&sort=pages']) {
+      const replayed = await get(
+        seed,
+        `/site-crawls/${seed.crawlId}/issues?${changed}&limit=1&cursor=${cursor}`,
+      );
+      expect(replayed.status, changed).toBe(400);
+    }
+    expect((await get(seed, `/site-crawls/${seed.crawlId}/issues?section=seo`)).status).toBe(422);
+    const outsider = await fixtures.crawl();
+    expect(
+      (await get(outsider, `/site-crawls/${seed.crawlId}/issues?section=technical`)).status,
+    ).toBe(404);
   });
 
   it('serves the unfiltered list and summary its writers persisted; filters still read the issues', async () => {
@@ -744,6 +966,21 @@ describe('issue catalog', () => {
 });
 
 describe('dashboard', () => {
+  it('shows a running site crawl, else the current crawl, never a page rerun or a later failure', async () => {
+    const seed = await fixtures.crawl();
+    const later = (offset: number, values: Parameters<SiteFixtures['sibling']>[1]) =>
+      fixtures.sibling(seed, { ...values, created_at: new Date(Date.now() + offset) });
+    const shown = async () =>
+      (await json(seed, `/projects/${seed.projectId}/site-health`, siteHealthDashboardSchema)).crawl
+        ?.id;
+
+    await later(60_000, { configuration: JSON.stringify({ page_rerun: true }) });
+    await later(120_000, { status: 'failed' });
+    expect(await shown()).toBe(seed.crawlId);
+    const running = await later(180_000, { status: 'running', completed_at: null });
+    expect(await shown()).toBe(running);
+  });
+
   it('reports a failed root fetch and resolves the quota without writing the runtime', async () => {
     const seed = await fixtures.crawl('failed');
     const task = await fixtures.task(seed, 'discover');
@@ -853,6 +1090,7 @@ describe('crawl events', () => {
         .insertInto('site_crawl_events')
         .values({
           id,
+          workspace_id: seed.workspaceId,
           crawl_id: seed.crawlId,
           event_type: type,
           message: '',
@@ -870,13 +1108,20 @@ describe('crawl events', () => {
     expect(
       await json(seed, `/site-crawls/${seed.crawlId}/events?last_event_id=${randomUUID()}`, events),
     ).toEqual([]);
+    // A resume id that is not a UUID is refused, never read as "replay everything".
+    const replayRefused = await get(seed, `/site-crawls/${seed.crawlId}/events?last_event_id=bad`);
+    expect(replayRefused.status).toBe(422);
+    const streamRefused = await get(seed, `/site-crawls/${seed.crawlId}/events?stream=true`, {
+      'last-event-id': 'bad',
+    });
+    expect(streamRefused.status).toBe(422);
     // The fixture crawl was frozen without count disclosure.
     const replay = await json(seed, `/site-crawls/${seed.crawlId}/events`, events);
     expect(replay[1]!.payload).toEqual({ analyzed: 1 });
 
     process.env.SITE_HEALTH_SSE_POLL_INTERVAL_SECONDS = '0.01';
     const stream = await get(seed, `/site-crawls/${seed.crawlId}/events?stream=true`);
-    expect(stream.headers.get('content-type')).toBe('text/event-stream');
+    expect(stream.headers.get('content-type')).toBe('text/event-stream; charset=utf-8');
     // A terminal crawl's stream ends after its grace polls.
     const text = await stream.text();
     expect(text.match(/^event: /gmu)).toHaveLength(3);
@@ -945,15 +1190,15 @@ describe('conditional snapshot reads', () => {
     expect(growing.status).toBe(200);
     expect(growing.headers.get('etag')).toBeNull();
     expect(growing.headers.get('cache-control')).toBe('private, no-store, max-age=0');
-    // The project's newest-crawl read follows the same rule.
+    // The project's read answers only for a current (terminal) crawl.
     const latest = (seed: SiteSeed) => get(seed, `/projects/${seed.projectId}/site-health/issues`);
     expect((await latest(terminal)).headers.get('etag')).toMatch(/^W\/"[\w-]{43}"$/);
-    expect((await latest(running)).headers.get('etag')).toBeNull();
+    expect((await latest(running)).status).toBe(404);
   });
 });
 
 describe('snapshot projections', () => {
-  it('read the earlier site crawl after a page rerun, unless the rerun is named', async () => {
+  it('read the earlier site crawl after a page rerun on every surface, unless the rerun is named', async () => {
     const seed = await fixtures.crawl();
     const site = await fixtures.snapshot(seed, 'complete');
     const rerun = {
@@ -979,6 +1224,20 @@ describe('snapshot projections', () => {
       (await json(seed, `${path}${query}`, siteHealthOverviewSchema)).snapshot_id;
     expect(await read('')).toBe(site);
     expect(await read(`?crawl_id=${rerun.crawlId}`)).toBe(rerunSnapshot);
+
+    // Opportunities, MCP and internal links read the same site crawl (SH-B1).
+    const scope = { workspaceId: seed.workspaceId, projectId: seed.projectId };
+    const mcp = { db, scope, origin: '' };
+    expect((await resolveCrawl(db, scope))?.id).toBe(seed.crawlId);
+    expect(await siteSnapshot(mcp, {})).toMatchObject({
+      snapshot_id: site,
+      crawl_id: seed.crawlId,
+    });
+    expect(await siteSnapshot(mcp, { snapshot_id: rerun.crawlId })).toMatchObject({
+      snapshot_id: rerunSnapshot,
+    });
+    expect(await crawlability(mcp, {})).toMatchObject({ crawl_id: seed.crawlId });
+    expect(await latestLinkCrawl(db, scope)).toEqual({ id: seed.crawlId });
   });
 
   it('fill presentation fields an older frozen snapshot lacks, and never recompute it', async () => {
@@ -1018,6 +1277,26 @@ describe('snapshot projections', () => {
             affected_pages: 1,
             eligibility_blocker: true,
           },
+          {
+            rule_id: 'technical.title_present',
+            finding_class: 'defect',
+            severity: 'high',
+            category: 'metadata',
+            description: '',
+            remediation: '',
+            affected_pages: 1,
+            eligibility_blocker: false,
+          },
+          {
+            rule_id: 'fixture.retired_rule',
+            finding_class: 'defect',
+            severity: 'low',
+            category: 'technical',
+            description: '',
+            remediation: '',
+            affected_pages: 1,
+            eligibility_blocker: false,
+          },
         ]),
         aeo_readiness_diagnostic: JSON.stringify({
           state: 'limited_evidence',
@@ -1054,7 +1333,15 @@ describe('snapshot projections', () => {
       impact_band: 4,
       impact_label: 'Critical',
     });
-    expect(overview.trend.reason).toBe('no_comparable_snapshot');
+    // The Issues tab each rule is listed under, from today's catalog; none for a retired rule.
+    expect(
+      Object.fromEntries(overview.top_issues.map((row) => [row.rule_id, row.section])),
+    ).toEqual({
+      'technical.indexable': 'technical',
+      'technical.title_present': 'content',
+      'fixture.retired_rule': null,
+    });
+    expect(overview.open_issue_trend).toEqual([]);
 
     const readiness = await json(
       seed,
@@ -1062,6 +1349,49 @@ describe('snapshot projections', () => {
       aeoReadinessSchema,
     );
     expect(readiness).toMatchObject({ state: 'limited_evidence', score: 40 });
+  });
+
+  it("plot the project's persisted open issues per day, oldest first", async () => {
+    const seed = await fixtures.crawl();
+    await db
+      .updateTable('site_health_snapshots')
+      .set({
+        aeo_measurement_state: 'not_measured',
+        web_fundamentals_state: 'not_measured',
+        classification_state: 'not_measured',
+      })
+      .where('id', '=', await fixtures.snapshot(seed, 'complete'))
+      .execute();
+    const other = await fixtures.crawl();
+    const point = (owner: SiteSeed, day: string, openCount: number) => ({
+      id: randomUUID(),
+      workspace_id: owner.workspaceId,
+      project_id: owner.projectId,
+      day,
+      open_count: openCount,
+      source_crawl_id: owner.crawlId,
+      policy_version: '1',
+      created_at: new Date(),
+      updated_at: new Date(),
+    });
+    await db
+      .insertInto('site_issue_trend')
+      .values([
+        point(seed, '2026-11-03', 9),
+        point(seed, '2026-11-01', 12),
+        point(other, '2026-11-02', 40),
+      ])
+      .execute();
+
+    const overview = await json(
+      seed,
+      `/projects/${seed.projectId}/site-health/overview`,
+      siteHealthOverviewSchema,
+    );
+    expect(overview.open_issue_trend).toEqual([
+      { day: '2026-11-01', open_count: 12 },
+      { day: '2026-11-03', open_count: 9 },
+    ]);
   });
 
   it('render the snapshot without its provenance id lists, which stay persisted', async () => {
@@ -1273,6 +1603,23 @@ describe('issue history', () => {
     ).toEqual({ items: [], next_cursor: null, current_analysis_finalized: false });
     expect((await get(await fixtures.crawl(), path)).status).toBe(404);
   });
+
+  it('keeps the homepage’s still-open site-level findings out of its resolved history', async () => {
+    const seed = await fixtures.crawl();
+    const home = await page(seed, '/');
+    const earlier = await fixtures.page(seed, '/', {}, { current: false, siteUrlId: home.id });
+    await issue(seed, earlier, 'technical.title_present');
+    await architectureIssue(seed, home, 'architecture.orphan_pages');
+
+    const history = await json(
+      seed,
+      `/site-crawls/${seed.crawlId}/pages/${home.id}/issue-history`,
+      issueHistoryPageSchema,
+    );
+    expect(history.items.map((row: { rule_id: string }) => row.rule_id)).toEqual([
+      'technical.title_present',
+    ]);
+  });
 });
 
 describe('workspace authorization', () => {
@@ -1283,7 +1630,7 @@ describe('workspace authorization', () => {
       `/site-crawls/${seed.crawlId}`,
       `/site-crawls/${seed.crawlId}/pages`,
       `/site-crawls/${seed.crawlId}/issues`,
-      `/site-crawls/${seed.crawlId}/issues?detail_limit=5`,
+      `/site-crawls/${seed.crawlId}/issues?section=aeo&sort=pages`,
       `/site-crawls/${seed.crawlId}/events`,
       `/site-crawls/${seed.crawlId}/export.csv`,
     ])

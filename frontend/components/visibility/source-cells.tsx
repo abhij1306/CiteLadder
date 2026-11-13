@@ -1,5 +1,3 @@
-'use client';
-
 import { BrandMark } from '@/components/ui/brand-mark';
 import { Inline } from '@/components/ui/layout';
 import { ClampText, TableCell } from '@/components/ui/table';

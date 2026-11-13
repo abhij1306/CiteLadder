@@ -1,7 +1,4 @@
-'use client';
-
 import { useState } from 'react';
-import { SEARCH_MAX_DEPTH } from '@/lib/config/search-intelligence';
 
 import { Callout } from '@/components/ui/callout';
 import { Drawer } from '@/components/ui/drawer';
@@ -53,7 +50,7 @@ function useDatasetSelections(readiness: SearchIntelligenceReadiness, action: st
   const setDepth = (candidate: SearchDatasetSelectionRequest, text: string) => {
     setDrafts((current) => ({ ...current, [selectionKey(candidate)]: text }));
     const depth = Number(text);
-    if (!Number.isInteger(depth) || depth < 1 || depth > SEARCH_MAX_DEPTH) return;
+    if (!Number.isInteger(depth) || depth < 1 || depth > readiness.max_depth) return;
     setSelections((current) =>
       current.map((item) =>
         selectionKey(item) === selectionKey(candidate) ? { ...item, depth } : item,
@@ -197,7 +194,7 @@ export function SearchIntelligenceReviewDrawer({
                 value={location}
                 onValueChange={setLocation}
                 placeholder="Select market"
-                options={marketOptions(location)}
+                options={marketOptions(location, readiness.markets)}
               />
             )}
           </Field>

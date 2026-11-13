@@ -17,11 +17,11 @@ import {
   decodeKeysetCursor,
   InvalidCursorError,
 } from '../http/keyset-cursor.ts';
-import { isoDateText, utcTextOf, wireUtc } from '../db/timestamps.ts';
-import { boundedExport } from '../http/table-export.ts';
+import { isoDateText, storedInstant, utcTextOf, wireUtc } from '../db/timestamps.ts';
+import { assertExportBound, keysetBatches } from '../http/table-export.ts';
 import { sourceList } from './source-reads.ts';
-import { reportingDay, type CrawlScope } from './state.ts';
-import { addDays, inclusiveDays } from '../calendar-days.ts';
+import type { CrawlScope } from './state.ts';
+import { addDays, inclusiveDays, reportingDay } from '../calendar-days.ts';
 
 export type CrawlReadOptions = {
   range?: string | null;
@@ -157,13 +157,30 @@ export async function crawlerPage(db: Database, scope: CrawlScope, input: CrawlR
         : null,
   });
 }
-/** Every crawler row for one export: one bounded query, its breakdowns grouped once. */
+/**
+ * Every crawler row for one export, in bot order: counted first and refused
+ * past the cap, then read in keyset batches whose breakdowns group per batch.
+ */
 export async function crawlerExport(db: Database, scope: CrawlScope, input: CrawlReadOptions = {}) {
   const options = await withReportingTimezone(db, scope, input);
-  const max = crawlLogs.max_export_rows;
-  const rows = boundedExport(await crawlerRows(db, scope, options, undefined, max + 1), max);
-  return botCrawlersResponseSchema.shape.items.parse(await crawlerItems(db, scope, options, rows));
+  const { count } = await rollups(db, scope, options)
+    .select(sql<number>`count(distinct bot_id)::integer`.as('count'))
+    .executeTakeFirstOrThrow();
+  assertExportBound(count, crawlLogs.max_export_rows);
+  const batches = keysetBatches({
+    read: (after: CrawlerRow | undefined, take: number) =>
+      crawlerRows(db, scope, options, after?.bot_id, take),
+    size: crawlLogs.export_batch_rows,
+    max: crawlLogs.max_export_rows,
+  });
+  return (async function* () {
+    for await (const rows of batches)
+      yield botCrawlersResponseSchema.shape.items.parse(
+        await crawlerItems(db, scope, options, rows),
+      );
+  })();
 }
+type CrawlerRow = Awaited<ReturnType<typeof crawlerRows>>[number];
 /** Crawler totals in bot order after a bot id, at most `take` of them. */
 function crawlerRows(
   db: Database,
@@ -298,26 +315,52 @@ export async function activityPage(db: Database, scope: CrawlScope, input: Crawl
         : null,
   });
 }
-/** Every request row for one export, in the paged read's order, from one bounded query. */
+/**
+ * Every request row for one export, in the paged read's order: counted first
+ * and refused past the cap, then read in keyset batches.
+ */
 export async function activityExport(
   db: Database,
   scope: CrawlScope,
   input: CrawlReadOptions = {},
 ) {
   const options = await withReportingTimezone(db, scope, input);
-  const max = crawlLogs.max_export_rows;
-  const rows = await activityQuery(db, scope, options)
-    .limit(max + 1)
-    .execute();
-  return botActivityResponseSchema.shape.items.parse(boundedExport(rows, max).map(activityItem));
+  // The count and every batch share one retention cutoff, so a slow download
+  // does not lose its oldest rows to a cutoff that moved while it streamed.
+  const retainedSince = retentionCutoff();
+  const { count } = await activityRequests(db, scope, options, retainedSince)
+    .select(sql<number>`count(*)::integer`.as('count'))
+    .executeTakeFirstOrThrow();
+  assertExportBound(count, crawlLogs.max_export_rows);
+  const batches = keysetBatches({
+    read: (after: ActivityRow | undefined, take: number) => {
+      let query = activityQuery(db, scope, options, retainedSince);
+      if (after)
+        query = query.where(
+          sql<boolean>`(occurred_at,id)<(${storedInstant(after.occurred)},${after.id}::uuid)`,
+        );
+      return query.limit(take).execute();
+    },
+    size: crawlLogs.export_batch_rows,
+    max: crawlLogs.max_export_rows,
+  });
+  return (async function* () {
+    for await (const rows of batches)
+      yield botActivityResponseSchema.shape.items.parse(rows.map(activityItem));
+  })();
 }
 function activityItem<T extends { occurred: string }>({ occurred, ...row }: T) {
   return { ...row, occurred_at: wireUtc(occurred) };
 }
+type ActivityRow = Awaited<ReturnType<ReturnType<typeof activityQuery>['execute']>>[number];
 /** Retained requests matching the filters, newest first. */
-function activityQuery(db: Database, scope: CrawlScope, options: CrawlReadOptions) {
-  let query = db
-    .selectFrom('bot_requests')
+function activityQuery(
+  db: Database,
+  scope: CrawlScope,
+  options: CrawlReadOptions,
+  retainedSince = retentionCutoff(),
+) {
+  return activityRequests(db, scope, options, retainedSince)
     .select([
       'id',
       'source_id',
@@ -339,9 +382,24 @@ function activityQuery(db: Database, scope: CrawlScope, options: CrawlReadOption
       'ip_range_snapshot_id',
       utcTextOf(sql.ref('occurred_at')).as('occurred'),
     ])
+    .orderBy('occurred_at', 'desc')
+    .orderBy('id', 'desc');
+}
+function retentionCutoff() {
+  return new Date(Date.now() - crawlLogs.retention_days * 86400000);
+}
+/** Requests retained since the cutoff matching the filters, unselected and unordered. */
+function activityRequests(
+  db: Database,
+  scope: CrawlScope,
+  options: CrawlReadOptions,
+  retainedSince: Date,
+) {
+  let query = db
+    .selectFrom('bot_requests')
     .where('workspace_id', '=', scope.workspaceId)
     .where('project_id', '=', scope.projectId)
-    .where('occurred_at', '>=', new Date(Date.now() - crawlLogs.retention_days * 86400000))
+    .where('occurred_at', '>=', retainedSince)
     .where('verification', 'in', verificationFilter(options.verification));
   const bots = purposeBots(options.purpose);
   if (bots) query = query.where('bot_id', 'in', bots);
@@ -353,7 +411,7 @@ function activityQuery(db: Database, scope: CrawlScope, options: CrawlReadOption
     const { from, to } = windowBounds(crawlWindow(options), options);
     query = query.where('occurred_at', '>=', from).where('occurred_at', '<', to);
   }
-  return query.orderBy('occurred_at', 'desc').orderBy('id', 'desc');
+  return query;
 }
 export async function coveragePage(db: Database, scope: CrawlScope, input: CrawlReadOptions = {}) {
   const options = await withReportingTimezone(db, scope, input);
@@ -411,6 +469,19 @@ export async function coveragePage(db: Database, scope: CrawlScope, input: Crawl
         : null,
   });
 }
+type CrawlConnection = z.infer<typeof crawlSummarySchema>['connection'];
+
+/**
+ * The project's crawl-log connection: none without an active source, awaiting
+ * data until one has delivered, then connected.
+ */
+function crawlConnection(
+  sources: readonly Readonly<{ status: string; connection: string }>[],
+): CrawlConnection {
+  if (!sources.some((s) => s.status === 'active')) return 'not_connected';
+  return sources.some((s) => s.connection === 'connected') ? 'connected' : 'awaiting_data';
+}
+
 export async function crawlSummary(db: Database, scope: CrawlScope, input: CrawlReadOptions = {}) {
   const options = await withReportingTimezone(db, scope, input);
   const w = crawlWindow(options),
@@ -453,9 +524,7 @@ export async function crawlSummary(db: Database, scope: CrawlScope, input: Crawl
   ]);
   const quality = coverageQuality(coverage, w, currentReportingDay(options));
   const adequate = quality === 'complete' || quality === 'declared_complete';
-  let connection = 'not_connected';
-  if (sources.some((s) => s.status === 'active'))
-    connection = sources.some((s) => s.connection === 'connected') ? 'connected' : 'awaiting_data';
+  const connection = crawlConnection(sources);
   const measured = total.requests > 0 || adequate;
   return crawlSummarySchema.parse({
     unit: 'requests',

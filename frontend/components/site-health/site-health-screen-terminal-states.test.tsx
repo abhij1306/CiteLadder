@@ -18,9 +18,6 @@ describe('SiteHealthScreen — terminal states on the canonical screen', () => {
     ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Run new crawl' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Stop crawl' })).not.toBeInTheDocument();
-    const scores = screen.getByTestId('score-section');
-    expect(scores).toBeInTheDocument();
-    expect(within(scores).getAllByText('Not measured').length).toBeGreaterThanOrEqual(3);
   });
 
   it('routes a failed crawl with a PRESENT-but-null-score summary to terminal (the failed-crawl shape)', async () => {
@@ -69,7 +66,6 @@ describe('SiteHealthScreen — terminal states on the canonical screen', () => {
         /The site returned HTTP 500 after 3 attempts\. The site is having server trouble/,
       ),
     ).toBeInTheDocument();
-    expect(screen.getAllByText('Not measured').length).toBeGreaterThan(0);
     expect(screen.queryByText('Across 0 of 0 pages')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Run new crawl' })).toBeInTheDocument();
   });
@@ -107,7 +103,7 @@ describe('SiteHealthScreen — terminal states on the canonical screen', () => {
     renderScreen();
 
     await screen.findByText(/The site returned HTTP 404 for the start URL/);
-    await user.click(screen.getByRole('tab', { name: 'Errors & Blocked' }));
+    await user.click(screen.getByRole('radio', { name: 'Errors & Blocked' }));
     const block = await screen.findByTestId('root-errors-block');
     expect(within(block).getByText('http_4xx')).toBeInTheDocument();
     expect(within(block).getByText('HTTP 404')).toBeInTheDocument();
@@ -187,17 +183,17 @@ describe('SiteHealthScreen — terminal states on the canonical screen', () => {
 
     renderScreen();
 
-    expect(await screen.findByRole('tab', { name: 'Audited so far' })).toHaveAttribute(
-      'aria-selected',
+    expect(await screen.findByRole('radio', { name: 'Audited so far' })).toHaveAttribute(
+      'aria-checked',
       'true',
     );
     await waitFor(() => expect(requestedStatuses).toContain('completed'));
 
-    await user.click(screen.getByRole('tab', { name: 'All Discovered' }));
+    await user.click(screen.getByRole('radio', { name: 'All Discovered' }));
     await waitFor(() => expect(requestedStatuses).toContain(null));
-    // Selecting another tab never renames this one (or shifts the strip).
-    expect(screen.getByRole('tab', { name: 'Audited so far' })).toHaveAttribute(
-      'aria-selected',
+    // Selecting another view never renames this one (or shifts the strip).
+    expect(screen.getByRole('radio', { name: 'Audited so far' })).toHaveAttribute(
+      'aria-checked',
       'false',
     );
   });

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { domainMatches } from '../analysis/domains.ts';
 import { policy } from '../config.ts';
 import { createModelGateway, gatewaySettings, type ModelGateway } from '../models/gateway.ts';
 import { competitorSuggestionPrompt } from '../config/discovery.ts';
@@ -114,8 +115,8 @@ export function cleanSuggestions(
       } catch {
         return [];
       }
-      const excluded = cfg.competitor_excluded_domains.some(
-        (value) => normalized === value || normalized.endsWith(`.${value}`),
+      const excluded = cfg.competitor_excluded_domains.some((value) =>
+        domainMatches(normalized, value),
       );
       if (excluded || seenNames.has(item.name.toLowerCase()) || seenDomains.has(normalized))
         return [];
@@ -290,6 +291,7 @@ function researchWarnings(
   if (competitorState === 'failed') warnings.add('competitor_search_failed');
   if (!identity || !available) warnings.add('research_degraded');
   if (!count) warnings.add('competitors_not_found');
+  if (identity?.status === 'insufficient_evidence') warnings.add('insufficient_evidence');
   const confidence = cfg.identity_conflict_fields.flatMap((field) => {
     const value = identity?.profile.field_confidence[field];
     return value === undefined ? [] : [value];
@@ -452,6 +454,8 @@ export async function researchBrand(
     pagesRead: firstParty.pages.length,
     snapshot: {
       review_state: 'unreviewed',
+      // The identity model's own verdict; null when no model judged the evidence.
+      identity_status: identity?.status ?? null,
       profile,
       competitive_signature: identity?.signature ?? {},
       competitors,

@@ -1,5 +1,3 @@
-'use client';
-
 import { lazy } from 'react';
 import { Link } from 'react-router-dom';
 

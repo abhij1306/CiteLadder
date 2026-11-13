@@ -1,49 +1,36 @@
 import { randomUUID } from 'node:crypto';
-import { sql } from 'kysely';
 import type { Database } from '../db/database.ts';
-import { ApiError } from '../errors.ts';
-import { ModelError } from '../models/http.ts';
 import {
-  hasPendingServerTool,
-  webSearchBlocks,
-  withoutPendingServerTools,
   type ServerToolEvent,
   type ConversationBlock,
-  type ConversationMessage,
   type ToolCall,
 } from '../models/conversation.ts';
 import { authorize } from './access.ts';
 import {
   isBuiltin,
   agentToolList,
-  documentLabel,
   editDocument,
   loadSkill,
   methodology,
   saveDocument,
+  suggestEdits,
   EDIT_DOCUMENT,
   LOAD_SKILL,
   SAVE_DOCUMENT,
-  type DocumentState,
+  SUGGEST_EDITS,
 } from './builtin-tools.ts';
+import { offeredRuleIds } from '../page-documents/content-rules.ts';
+import { pageStates, saveSuggestions } from './suggest-edits.ts';
 import {
   agentPolicy,
   AgentError,
   budgetSchema,
-  type Budget,
-  type Json,
   type Lease,
   type Scope,
   type SkillCatalog,
 } from './contracts.ts';
-import { contextCitations, manifestSchema, suppliedManifest } from './context.ts';
-import {
-  ModelCalls,
-  RefusedDispatch,
-  type AgentModel,
-  type ModelRequest,
-  type ModelResult,
-} from './model-calls.ts';
+import { manifestSchema, suppliedManifest } from './context.ts';
+import { ModelCalls, type AgentModel, type ModelRequest } from './model-calls.ts';
 import {
   chatDocuments,
   latestDocument,
@@ -54,7 +41,7 @@ import {
 } from './outputs.ts';
 import { lockRun, terminalize } from './queue.ts';
 import { appendMessage, appendRecoveryReply, getChat, touchChat } from './messages.ts';
-import { readSources, scrubRecordRefs, uniqueSources, uniqueWeb } from './sources.ts';
+import { readSources, scrubRecordRefs, uniqueSources, uniqueWeb, writtenIds } from './sources.ts';
 import { documentEmitter, type TurnEvents } from './stream.ts';
 import {
   chatTranscripts,
@@ -67,48 +54,32 @@ import {
 import { leaseSignal } from '../queue/heartbeat.ts';
 import { logLaneFailure } from '../queue/lane-log.ts';
 import { AGENT_LANE } from '../queue/task-queue.ts';
-import { refused, ToolRegistry, type ToolOutcome } from './tools.ts';
+import { ToolRegistry, type ToolOutcome } from './tools.ts';
+import {
+  nextSearches,
+  noReply,
+  readLimit,
+  resultsMessage,
+  retryEffort,
+  type TurnState,
+} from './turn-budget.ts';
+import {
+  bounded,
+  closable,
+  CLOSED_REPLY,
+  failureCode,
+  savedNotice,
+  savedTranscript,
+  stillAuthorized,
+  suggestedNotices,
+  UNAVAILABLE_REPLY,
+  unlessClosable,
+  withSummary,
+  type PromptSummary,
+  type StoppedTurn,
+} from './turn-ending.ts';
+import { accepted, initialState, pageDocuments, reportedSearches } from './turn-state.ts';
 
-function failureCode(error: unknown) {
-  if (error instanceof AgentError) return error.code;
-  if (error instanceof ApiError && [403, 404].includes(error.status)) return 'access_revoked';
-  if (error instanceof ModelError) return 'provider_error';
-  // Validation and storage defects are ours, not the model provider's.
-  return 'internal_error';
-}
-type StepRecord = {
-  kind: 'model' | 'skill' | 'document' | 'tool' | 'search';
-  ordinal?: number;
-  skill_id?: string;
-  tool?: string;
-  status?: string;
-  call_id?: string;
-  /** A web search's query, as the model wrote it. */
-  query?: string;
-};
-type PromptSummary = Record<string, Json>;
-type TurnState = DocumentState & {
-  /** Records this turn's reads returned: the reply's sources. */
-  read: string[];
-  /** Web pages this turn's searches returned, by URL: sources apart from CiteLadder records. */
-  web: Map<string, string>;
-  /** Each web search's query by call id, until its result arrives. */
-  queries: Map<string, string>;
-  /** The last response left a provider-hosted search for the next call to continue. */
-  waiting: boolean;
-  /** Web searches the provider ran this turn, discarded responses included. */
-  searches: number;
-  steps: StepRecord[];
-  toolsUsed: number;
-  /** This turn's messages, appended in order and persisted as its transcript. */
-  messages: ConversationMessage[];
-  contextHash: string;
-};
-export function bounded(text: string, limit: number, marker: string) {
-  return text.length <= limit
-    ? text
-    : text.slice(0, Math.max(0, limit - marker.length)) + marker.slice(0, limit);
-}
 export type RuntimeDependencies = {
   catalog: SkillCatalog;
   tools: ToolRegistry;
@@ -116,142 +87,12 @@ export type RuntimeDependencies = {
   modelFor: (run: Awaited<ReturnType<typeof lockRun>>) => AgentModel | Promise<AgentModel>;
   attachTarget: AttachTarget;
 };
-type Turn = Awaited<ReturnType<AgentRuntime['load']>>;
-/** The workflow's pinned format, else the latest document's. */
-function currentFormat(turn: Turn) {
-  return turn.manifest.workflow?.format_id ?? turn.latest?.output.format_id ?? null;
-}
-/** Merges the last prompt summary into the frozen manifest without rewriting it. */
-function withSummary(summary: PromptSummary) {
-  return {
-    context_manifest: sql<Json>`context_manifest || jsonb_build_object('prompt_summary', ${JSON.stringify(summary)}::jsonb)`,
-  };
-}
-/** Whether the member may still write to the chat; a refusal answers false, a database error still throws. */
-async function stillAuthorized(db: Database, scope: Parameters<typeof authorize>[1]) {
-  try {
-    await authorize(db, scope);
-    return true;
-  } catch (error) {
-    if (error instanceof ApiError || error instanceof AgentError) return false;
-    throw error;
-  }
-}
-/**
- * The transcript as saved: no later call continues the turn's last response,
- * so a provider-hosted call it left waiting (a paused or read-beside search on
- * the last call) is dropped, and every later replay pairs each tool use.
- */
-function savedTranscript(messages: readonly ConversationMessage[]): ConversationMessage[] {
-  const last = messages.findLastIndex((message) => message.role === 'assistant');
-  return messages.map((message, index) =>
-    index === last ? { ...message, content: withoutPendingServerTools(message.content) } : message,
-  );
-}
-function savedNotice(number: number, formatLabel: string | null) {
-  const format = formatLabel ? ` in ${formatLabel} format` : '';
-  return `${documentLabel(number)} saved${format}.`;
-}
-/**
- * The web searches the next call may run, and is held for: what is left of the
- * turn's budget, at most the per-call cap. None left offers no search tool. A
- * search the previous response left waiting (beside a read, or paused) runs
- * in the next call, which must offer the tool, so at least one is offered then.
- * The last call starts no new search: one left waiting there could never run.
- */
-function searchAllowance(budget: Budget, used: number, waiting: boolean, last: boolean) {
-  const left = last ? 0 : Math.max(0, budget.max_web_searches - used);
-  const allowed = Math.min(left, budget.max_web_searches_per_call);
-  return waiting ? Math.max(1, allowed) : allowed;
-}
-/**
- * Thinking shares the output cap, so a cut-off call is discarded and asked
- * once more with low effort as the next call of the turn; a cut-off retry, or
- * a cut-off last call, ends the turn.
- */
-function retryEffort(effort: Budget['reasoning_effort'], ordinal: number, budget: Budget) {
-  if (effort === 'low' || ordinal === budget.max_model_calls)
-    throw new AgentError('output_too_long');
-  return 'low' as const;
-}
-/** A turn never ends without a reply, even when the model wrote none. */
-function noReply(reads: number) {
-  const read = reads === 1 ? 'one read' : `${reads} reads`;
-  return reads
-    ? `I completed ${read} but reached this turn’s limit before writing an answer. Nothing was saved. Narrow the request to one page, prompt or date range and ask again.`
-    : 'I reached this turn’s limit before writing an answer. Nothing was saved. Narrow the request and ask again.';
-}
-const UNAVAILABLE_REPLY = 'The Agent model connection changed before I could write a summary.';
-const CLOSED_REPLY = 'The chat was closed before I wrote a summary.';
-const unavailable = (error: unknown) => error instanceof RefusedDispatch;
-/**
- * Whether the turn can end on the documents it staged: there is one, and the
- * transcript ends on a user message with no search waiting, so a closing reply
- * keeps every later replay well formed (B60, B69).
- */
-function closable(state: TurnState) {
-  return state.staged.size > 0 && !state.waiting && state.messages.at(-1)?.role === 'user';
-}
+export type Turn = Awaited<ReturnType<AgentRuntime['load']>>;
 /** What the turn had built when it stopped. */
 type Progress = {
   summary?: PromptSummary;
   open?: { turn: Turn; model: AgentModel; state: TurnState };
 };
-/** A turn stopped after it staged a document, which it can still save (B69). */
-export type StoppedTurn = { saveDocuments: () => Promise<void> };
-/** Appended after a step's tool results, never deleted, so the cached history stays exact. */
-function reminder(
-  budget: Budget,
-  ordinal: number,
-  state: Pick<TurnState, 'toolsUsed' | 'searches'>,
-) {
-  const left = budget.max_model_calls - ordinal;
-  if (left === 1)
-    return 'This is the last step of the turn: answer now from what you have read and name anything still missing. Tool calls will be refused.';
-  const notes = [
-    left <= budget.limit_reminder_calls ? `${left} steps are left in this turn.` : '',
-    state.toolsUsed >= budget.max_tool_calls
-      ? 'The read budget for this turn is spent: answer from what you have read.'
-      : '',
-    budget.max_web_searches > 0 && state.searches >= budget.max_web_searches
-      ? 'The web search budget for this turn is spent.'
-      : '',
-  ].filter(Boolean);
-  return notes.join(' ');
-}
-/**
- * The searches call `ordinal` may run; the turn's last call starts none.
- * Provider-hosted search exists only on the Messages API.
- */
-function nextSearches(model: AgentModel, budget: Budget, state: TurnState, ordinal: number) {
-  if (model.adapter !== 'anthropic') return 0;
-  return searchAllowance(budget, state.searches, state.waiting, ordinal === budget.max_model_calls);
-}
-/**
- * A call refused for an unavailable model after the turn staged a document answers null,
- * so the turn saves that document with a fixed reply (B60); anything else throws.
- */
-function unlessClosable(state: TurnState) {
-  return (error: unknown) => {
-    if (unavailable(error) && closable(state)) return null;
-    throw error;
-  };
-}
-/** The web searches a response ran: as the provider reported them, else as its blocks show. */
-function reportedSearches(response: ModelResult) {
-  const reported = response.usage.web_search_requests;
-  return typeof reported === 'number' ? reported : webSearchBlocks(response.blocks).calls.length;
-}
-/** One step's tool results, with the step's reminder unless a search waits on them. */
-function resultsMessage(
-  budget: Budget,
-  state: TurnState,
-  { ordinal, last, results }: { ordinal: number; last: boolean; results: ConversationBlock[] },
-): ConversationMessage {
-  // A search waiting on these results needs a message of results only.
-  const note = last || state.waiting ? '' : reminder(budget, ordinal, state);
-  return { role: 'user', content: [...results, ...(note ? [{ type: 'text', text: note }] : [])] };
-}
 const ok = (outcome: ToolOutcome) =>
   outcome.status === 'completed' || outcome.status === 'unavailable';
 const result = (call: ToolCall, text: string, error: boolean): ConversationBlock => ({
@@ -299,6 +140,14 @@ export class AgentRuntime {
         .where('chat_id', '=', chat.id)
         .where('id', '=', run.user_message_id)
         .executeTakeFirstOrThrow();
+      // The chat's turn limit bounds its messages.
+      const written = await trx
+        .selectFrom('agent_messages')
+        .select('content')
+        .where('workspace_id', '=', scope.workspaceId)
+        .where('chat_id', '=', chat.id)
+        .where('role', '=', 'user')
+        .execute();
       const manifest = manifestSchema.parse(run.context_manifest);
       return {
         run,
@@ -307,7 +156,14 @@ export class AgentRuntime {
         documents,
         latest: latestDocument(documents),
         request: request.content,
+        personIds: writtenIds(
+          ...written.map((message) => message.content),
+          ...documents.flatMap(({ revision }) => [revision.title, revision.body]),
+        ),
         manifest,
+        pages: await pageStates(trx, scope.workspaceId, pageDocuments(documents)),
+        // The content rules this turn's context offered; suggest_edits accepts only these.
+        rules: offeredRuleIds({ sections: manifest.package.sections, action: manifest.action }),
         // Fixed for the turn: computed once, not on every call.
         context: suppliedManifest(manifest, budget.context_package_max_chars),
         transcripts: await chatTranscripts(trx, scope, chat.id),
@@ -365,7 +221,7 @@ export class AgentRuntime {
   private opened(turn: Turn, model: AgentModel, latest: Progress) {
     const { budget } = turn;
     const { kept, dropped } = replayed(turn.transcripts, model.adapter, budget);
-    const state = this.initialState(turn);
+    const state = initialState(this.deps.catalog, turn);
     latest.open = { turn, model, state };
     const opening = openingMessage({
       kept,
@@ -375,6 +231,7 @@ export class AgentRuntime {
         kind: output.kind,
         formatId: output.format_id,
         revision,
+        suggestions: turn.pages.get(output.number)?.digest ?? null,
       })),
       pinned: state.skill
         ? {
@@ -436,7 +293,7 @@ export class AgentRuntime {
         continue;
       }
       effort = budget.reasoning_effort;
-      this.accepted(state, ordinal, response);
+      accepted(state, ordinal, response);
       const last = ordinal === budget.max_model_calls;
       if (response.stop === 'pause_turn') {
         if (last) return this.finish(lease, turn, model, state, response.text, latest.summary);
@@ -457,18 +314,6 @@ export class AgentRuntime {
       if (last) return this.finish(lease, turn, model, state, response.text, latest.summary);
     }
     throw new AgentError('stopped_at_limit');
-  }
-  /** Appends a kept response as the assistant's message and records its step and searches. */
-  private accepted(state: TurnState, ordinal: number, response: ModelResult) {
-    // An empty assistant message would make every later replay of this chat invalid.
-    const blocks = response.blocks.length
-      ? response.blocks
-      : [{ type: 'text', text: '(no answer)' }];
-    state.messages.push({ role: 'assistant', content: blocks });
-    state.steps.push({ kind: 'model', ordinal });
-    this.searched(state, ordinal, blocks);
-    // A paused search loop continues from the unchanged response in the next call.
-    state.waiting = response.stop === 'pause_turn' || hasPendingServerTool(blocks);
   }
   /** One model call, after rechecking that the workspace may still run the Agent. */
   private async callModel(
@@ -501,51 +346,6 @@ export class AgentRuntime {
     if (result.stop === 'context_window') throw new AgentError('context_too_long');
     if (result.stop === 'refusal') throw new AgentError('model_refused');
     return result;
-  }
-  private initialState(turn: Turn): TurnState {
-    const skill = this.deps.catalog.skills.get(
-      turn.run.requested_skill_id ?? turn.latest?.output.skill_id ?? '',
-    );
-    if (turn.run.requested_skill_id && !skill) throw new AgentError('skills_changed');
-    return {
-      skill,
-      skillSource: turn.run.requested_skill_source ?? (skill ? 'chat' : null),
-      formatId: currentFormat(turn),
-      documents: turn.documents.map(({ output, revision }) => ({
-        number: output.number,
-        kind: output.kind,
-        skillId: output.skill_id,
-        formatId: output.format_id,
-        title: revision.title,
-        body: revision.body,
-      })),
-      staged: new Map(),
-      read: [],
-      web: new Map(),
-      queries: new Map(),
-      waiting: false,
-      searches: 0,
-      steps: [],
-      toolsUsed: 0,
-      messages: [],
-      contextHash: '',
-    };
-  }
-  /** Records one response's web searches: a step per result, and the pages each returned. */
-  private searched(state: TurnState, ordinal: number, blocks: ConversationBlock[]) {
-    const { calls, results } = webSearchBlocks(blocks);
-    for (const call of calls) state.queries.set(call.id, call.query);
-    for (const { callId, sources } of results) {
-      state.steps.push({
-        kind: 'search',
-        ordinal,
-        status: sources ? 'completed' : 'failed',
-        call_id: callId.slice(0, 64),
-        query: (state.queries.get(callId) ?? '').slice(0, 200),
-      });
-      for (const source of sources ?? [])
-        if (!state.web.has(source.url)) state.web.set(source.url, source.title);
-    }
   }
   /**
    * One response's tool calls. Built-ins run first, in the order written, since
@@ -584,17 +384,7 @@ export class AgentRuntime {
         tool(outcome.ok ? 'completed' : 'refused');
         return Promise.resolve(result(call, outcome.text, !outcome.ok));
       }
-      let limit: ToolOutcome | null = null;
-      if (state.toolsUsed >= turn.budget.max_tool_calls)
-        limit = refused(
-          'tool_budget_spent',
-          'The read budget for this turn is spent. Answer from what you have read.',
-        );
-      else if (parallel >= turn.budget.max_parallel_tool_calls)
-        limit = refused(
-          'parallel_limit',
-          `At most ${turn.budget.max_parallel_tool_calls} reads run in one step. Make this call in your next step.`,
-        );
+      const limit = readLimit(turn.budget, state.toolsUsed, parallel);
       if (!limit && this.deps.tools.has(call.name)) {
         state.toolsUsed++;
         parallel++;
@@ -615,6 +405,11 @@ export class AgentRuntime {
       const outcome = loadSkill(catalog, state, call.input, turn.budget);
       if (outcome.ok && state.skill && before?.id !== state.skill.id)
         state.steps.push({ kind: 'skill', skill_id: state.skill.id });
+      return outcome;
+    }
+    if (call.name === SUGGEST_EDITS) {
+      const outcome = suggestEdits(catalog, state, call.input, turn.budget);
+      if (outcome.ok) state.steps.push({ kind: 'suggestion' });
       return outcome;
     }
     // A document is saved whole once per response, so a later save never silently wins.
@@ -661,7 +456,7 @@ export class AgentRuntime {
       status: outcome.status,
       call_id: call.id,
     });
-    state.read.push(...readSources(outcome.refs));
+    state.read.push(...readSources(outcome.received));
     return outcome;
   }
   private recordTool(
@@ -723,15 +518,16 @@ export class AgentRuntime {
       const run = await lockRun(trx, lease);
       await authorize(trx, turn.scope);
       const chat = await getChat(trx, turn.scope, run.chat_id, true);
-      const sources = uniqueSources(contextCitations(turn.manifest), read);
-      const completion = staged
-        .map(([number, { payload }]) => {
+      const sources = uniqueSources(turn.context.citations, read);
+      const completion = [
+        ...staged.map(([number, { payload }]) => {
           const format = payload.format_id;
           const label = format ? (this.deps.catalog.formats?.get(format)?.label ?? format) : null;
           return savedNotice(number, label);
-        })
-        .join(' ');
-      const reply = scrubRecordRefs(text).trim();
+        }),
+        ...suggestedNotices(state.suggestions),
+      ].join(' ');
+      const reply = scrubRecordRefs(text, state.personIds).trim();
       let content = completion;
       if (reply) {
         const answer = bounded(
@@ -740,7 +536,7 @@ export class AgentRuntime {
           '\n[reply truncated at its size bound]',
         );
         content = [answer, completion].filter(Boolean).join('\n\n');
-      } else if (!staged.length) content = noReply(reads.length);
+      } else if (!completion) content = noReply(reads.length);
       const message = await appendMessage(trx, chat, {
         role: 'agent',
         replyTo: run.user_message_id,
@@ -773,6 +569,12 @@ export class AgentRuntime {
           this.deps.attachTarget,
         );
       }
+      // Suggestions anchor to each page's latest revision, so they follow the documents.
+      await saveSuggestions(trx, chat, state.suggestions, {
+        runId: run.id,
+        messageId: message.id,
+        outputs: new Map(turn.documents.map(({ output }) => [output.number, output.id])),
+      });
       await saveTranscript(trx, {
         scope: turn.scope,
         runId: run.id,

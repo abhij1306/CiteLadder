@@ -95,6 +95,18 @@ beforeEach(() => {
     scanned_lines: 0,
     missing_fields: [],
     created_at: '2026-10-04T00:00:00Z',
+    completed_at: null,
+  });
+  vi.mocked(aiTrafficApi.completeUpload).mockResolvedValue({
+    id: 'upload',
+    filename: 'logs.ndjson',
+    size_bytes: 0,
+    status: 'completed',
+    last_ack_seq: 0,
+    scanned_lines: 1,
+    missing_fields: [],
+    created_at: '2026-10-04T00:00:00Z',
+    completed_at: '2026-10-04T00:05:00Z',
   });
   vi.mocked(aiTrafficApi.uploadBatch).mockResolvedValue({
     id: 'batch',
@@ -115,7 +127,13 @@ describe('local streaming upload privacy', () => {
       ...event('unmatched'),
       timestamp: day + 'T12:00:00Z',
     }));
-    await run(file(rows.map((row) => JSON.stringify(row)).join('\n')));
+    // The server's completion time is returned, for the processing wait to compare against.
+    await expect(run(file(rows.map((row) => JSON.stringify(row)).join('\n')))).resolves.toEqual({
+      uploadId: 'upload',
+      scanned: 3,
+      matched: 0,
+      completedAt: '2026-10-04T00:05:00Z',
+    });
     expect(aiTrafficApi.completeUpload).toHaveBeenCalledWith(
       'project',
       'source',
@@ -172,6 +190,7 @@ describe('local streaming upload privacy', () => {
       scanned_lines: 0,
       missing_fields: [],
       created_at: '2026-10-04T00:00:00Z',
+      completed_at: null,
     });
     await run(original, 'json_array', 'upload');
     expect(aiTrafficApi.createUpload).not.toHaveBeenCalled();

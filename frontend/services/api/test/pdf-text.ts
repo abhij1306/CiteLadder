@@ -24,21 +24,22 @@ function pageText(items: readonly TextItem[]) {
 export async function pdfText(bytes: Uint8Array) {
   const task = getDocument({ data: new Uint8Array(bytes), useSystemFonts: false });
   const document = await task.promise;
-  const pages: string[] = [];
-  try {
-    for (let index = 1; index <= document.numPages; index++) {
-      const page = await document.getPage(index);
-      const content = await page.getTextContent();
-      pages.push(pageText(content.items.filter((item) => 'str' in item)));
-      const viewport = page.getViewport({ scale: 1 });
-      for (const item of content.items) {
-        if (!('str' in item) || !item.str.trim()) continue;
-        expect(item.transform[4]).toBeGreaterThanOrEqual(49);
-        expect(item.transform[4] + item.width).toBeLessThanOrEqual(viewport.width - 49);
-        expect(item.transform[5]).toBeGreaterThanOrEqual(24);
-      }
+  const readPage = async (index: number) => {
+    const page = await document.getPage(index);
+    const content = await page.getTextContent();
+    const viewport = page.getViewport({ scale: 1 });
+    for (const item of content.items) {
+      if (!('str' in item) || !item.str.trim()) continue;
+      expect(item.transform[4]).toBeGreaterThanOrEqual(49);
+      expect(item.transform[4] + item.width).toBeLessThanOrEqual(viewport.width - 49);
+      expect(item.transform[5]).toBeGreaterThanOrEqual(24);
     }
-    return pages;
+    return pageText(content.items.filter((item) => 'str' in item));
+  };
+  try {
+    return await Promise.all(
+      Array.from({ length: document.numPages }, (_, index) => readPage(index + 1)),
+    );
   } finally {
     await task.destroy();
   }

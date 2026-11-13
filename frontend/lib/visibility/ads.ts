@@ -43,7 +43,7 @@ export function landingLabel(url: string): string {
 }
 
 /** The heading and sentence for a read that has no ads to show. */
-export function adsStateCopy(state: Exclude<VisibilityAdsResponse['state'], 'value'> | 'no_runs'): {
+export function adsStateCopy(state: Exclude<VisibilityAdsResponse['state'], 'value'>): {
   heading: string;
   description: string;
 } {
@@ -59,11 +59,6 @@ export function adsStateCopy(state: Exclude<VisibilityAdsResponse['state'], 'val
         heading: AD_APPLICABILITY.unavailable,
         description:
           'These ChatGPT Search answers were collected before ads were read. Ads appear from the next audit.',
-      };
-    case 'no_runs':
-      return {
-        heading: 'No runs in this period',
-        description: 'Choose a period that includes a completed run to see ads.',
       };
     case 'no_answers':
       return {

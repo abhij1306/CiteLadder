@@ -1,4 +1,7 @@
-import { demandSnapshotSummarySchema } from '@citeladder/contracts/demand';
+import {
+  demandSnapshotSummarySchema,
+  type DemandDetectorPolicy,
+} from '@citeladder/contracts/demand';
 import { sql } from 'kysely';
 import type { Database } from '../db/database.ts';
 import { WorkspaceScope } from '../db/workspace-scope.ts';
@@ -44,6 +47,39 @@ export async function readDemandOrigin(
     .executeTakeFirst();
   if (!snapshot) throw notFound('Demand snapshot');
   return { signal, snapshot };
+}
+/** The thresholds the detectors read, so the screen states each rule from them. */
+function detectorPolicy(): DemandDetectorPolicy {
+  const p = policy.demand;
+  return {
+    striking_distance: {
+      min_impressions: p.DEMAND_STRIKING_DISTANCE_MIN_IMPRESSIONS,
+      min_position: p.DEMAND_STRIKING_DISTANCE_MIN_POSITION,
+      max_position: p.DEMAND_STRIKING_DISTANCE_MAX_POSITION,
+    },
+    cannibalization: {
+      min_page_impressions: p.DEMAND_CANNIBALIZATION_MIN_PAGE_IMPRESSIONS,
+      min_page_share: p.DEMAND_CANNIBALIZATION_MIN_PAGE_SHARE,
+    },
+    ctr_gap: {
+      min_candidate_impressions: p.DEMAND_CTR_GAP_MIN_CANDIDATE_IMPRESSIONS,
+      relative_threshold: p.DEMAND_CTR_GAP_RELATIVE_THRESHOLD,
+      absolute_threshold: p.DEMAND_CTR_GAP_ABSOLUTE_THRESHOLD,
+      min_cohort_rows: p.DEMAND_CTR_GAP_MIN_COHORT_ROWS,
+      min_cohort_impressions: p.DEMAND_CTR_GAP_MIN_COHORT_IMPRESSIONS,
+    },
+    low_ctr: {
+      min_impressions: p.DEMAND_MIN_IMPRESSIONS,
+      ctr_threshold: p.DEMAND_LOW_CTR_THRESHOLD,
+      max_signals: p.DEMAND_LOW_CTR_MAX_SIGNALS,
+    },
+    trends: {
+      window_days: p.DEMAND_TREND_WINDOW_DAYS,
+      required_days: p.DEMAND_TREND_REQUIRED_DAYS,
+      emerging_ratio: p.DEMAND_TREND_EMERGING_RATIO,
+      declining_ratio: p.DEMAND_TREND_DECLINING_RATIO,
+    },
+  };
 }
 export async function latestDemand(db: Database, workspaceId: string, projectId: string) {
   const scope = new WorkspaceScope(workspaceId);
@@ -114,6 +150,7 @@ export async function latestDemand(db: Database, workspaceId: string, projectId:
       created_at: wireUtc(r.at!),
       action_id: byIdentity.get(`demand:${r.identity_hash}`) ?? null,
     })),
+    detector_policy: detectorPolicy(),
   };
 }
 

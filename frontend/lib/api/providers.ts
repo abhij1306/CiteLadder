@@ -47,8 +47,6 @@ export const providersApi = {
     );
     return strictValidate(providerConnectionSchema, res, 'providers.updateConnection');
   },
-  deleteConnection: (connectionId: string, options?: ApiRequestOptions) =>
-    apiClient.delete<void>(`/provider-connections/${connectionId}`, options),
   testConnection: async (connectionId: string, options?: ApiRequestOptions) => {
     const res = await apiClient.post<ConnectionTestResult>(
       `/provider-connections/${connectionId}/test`,
