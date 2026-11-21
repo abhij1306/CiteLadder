@@ -653,7 +653,6 @@ describe('analytics kind registry', () => {
         'opportunity_verification',
         'page_fetch',
         'performance_range_projection',
-        'probe_labelling',
         'referral_retention_sweep',
         'search_intelligence_acquisition',
         'source_page_inspection',

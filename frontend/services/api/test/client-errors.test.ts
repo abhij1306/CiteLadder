@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { createApp } from '../src/app.ts';
@@ -29,13 +29,11 @@ const report = {
   component: 'chart',
 };
 
-/** Every browser acts as a user, so the budget is the fixture user's. */
+/** Every browser acts as the install's local user, so reports share one budget; clear it all. */
 async function clearClientBudget() {
-  if (!userId) return;
   await db
     .deleteFrom('usage_windows')
     .where('subject_kind', '=', 'user')
-    .where('subject_hash', '=', createHash('sha256').update(userId.toLowerCase()).digest('hex'))
     .where('operation', 'in', ['client_errors.report', 'client_errors.csp_report'])
     .execute();
 }
@@ -227,7 +225,6 @@ describe('client error sink', () => {
           event: 'client.slow_interaction',
           duration_ms: 320,
           scripts: slow.scripts,
-          user_id: null,
         }),
       ],
     });

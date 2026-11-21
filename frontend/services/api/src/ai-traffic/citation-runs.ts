@@ -19,6 +19,7 @@ export function citationRuns(
     .distinctOn('a.audit_scope')
     .where('a.workspace_id', '=', scope.workspaceId)
     .where('a.project_id', '=', scope.projectId)
+    .where('a.audit_scope', '<>', 'probe')
     .where('a.status', '=', 'completed')
     .where('a.created_at', '>=', bounds.from)
     .where('a.created_at', '<', bounds.to)

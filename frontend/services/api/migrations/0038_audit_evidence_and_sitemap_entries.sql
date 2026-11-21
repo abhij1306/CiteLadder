@@ -79,6 +79,12 @@ ALTER TABLE public.response_analyses
 
 ALTER TABLE public.site_crawls ADD COLUMN live_counters jsonb;
 
+-- Confirmed MCP prompt changes are one kind, update_prompts; archive_prompts stays
+-- allowed for confirmations issued before it.
+ALTER TABLE public.mcp_confirmations DROP CONSTRAINT ck_mcp_confirmations_kind;
+ALTER TABLE public.mcp_confirmations
+    ADD CONSTRAINT ck_mcp_confirmations_kind CHECK (kind IN ('add_prompts', 'archive_prompts', 'update_prompts', 'launch_audit', 'schedule', 'declare_implemented'));
+
 ALTER TABLE ONLY public.observed_entity_candidates
     ADD CONSTRAINT observed_entity_candidates_decided_by_user_id_fkey FOREIGN KEY (decided_by_user_id) REFERENCES public.users(id) ON DELETE SET NULL;
 

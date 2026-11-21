@@ -11,7 +11,6 @@
 import { apiKeyScopeSchema, type ApiKeyScope } from '@citeladder/contracts/api-keys';
 import type { MiddlewareHandler } from 'hono';
 
-import { budget, spendBudget } from '../abuse/usage.ts';
 import { resolveCaller, touchApiKey } from '../api-keys/keys.ts';
 import { requireCapability, type Actor } from '../auth/actor.ts';
 import {
@@ -26,6 +25,7 @@ import type { Database } from '../db/database.ts';
 import { ApiError, notFound } from '../errors.ts';
 import { requireProject } from '../projects/access.ts';
 import { requirePathOwnership } from './ownership.ts';
+import { spendRateLimits } from './rate-limit.ts';
 
 export function apiKeyAuth(
   db: Database,
@@ -34,15 +34,17 @@ export function apiKeyAuth(
 ): MiddlewareHandler<AppEnv> {
   return async (c, next) => {
     const key = await resolveCaller(db, config.auth.apiKeyPepper, c.req.header('authorization'));
-    await spendBudget(db, budget('public_api_key'), key.id);
-    await spendBudget(db, budget('public_api_workspace'), key.workspace_id);
-    const member = await findWorkspaceMember(db, key.created_by_user_id, key.workspace_id);
+    const rateLimit = await spendRateLimits(db, key);
+    for (const [name, value] of Object.entries(rateLimit)) c.header(name, value);
+    const [member, creator] = await Promise.all([
+      findWorkspaceMember(db, key.created_by_user_id, key.workspace_id),
+      db
+        .selectFrom('users')
+        .select('is_active')
+        .where('id', '=', key.created_by_user_id)
+        .executeTakeFirst(),
+    ]);
     // A key acts as its creator, so it stops when that user is deactivated.
-    const creator = await db
-      .selectFrom('users')
-      .select('is_active')
-      .where('id', '=', key.created_by_user_id)
-      .executeTakeFirst();
     if (member === undefined || !creator?.is_active)
       throw new ApiError(401, 'This API key no longer has workspace access', {
         code: 'invalid_api_key',
@@ -79,10 +81,10 @@ export function apiKeyAuth(
     c.set('workspace', new WorkspaceContext(key.workspace_id, member.role, projectId));
     await touchApiKey(db, key);
     await next();
+    for (const [name, value] of Object.entries(rateLimit)) c.res.headers.set(name, value);
   };
 }
 
-/** The path's project, which must be in the key's workspace and allowlist (else 404). */
 async function pathProject(
   db: Database,
   workspaceId: string,

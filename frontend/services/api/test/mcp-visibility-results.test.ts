@@ -111,10 +111,10 @@ it('filters by a topic of this project only, and tells an unasked topic apart fr
       to_at: '2026-02-01T00:00:00Z',
     }),
   ).rejects.toThrow('topic_id is not a topic of this project');
-  expect(await read('read_fact_checks', { view: 'facts' })).toEqual({
-    state: 'unavailable',
-    reason: 'not_enabled',
-    artifact_refs: [],
+  expect(await read('read_fact_checks', { view: 'facts' })).toMatchObject({
+    state: 'available',
+    view: 'facts',
+    facts: [],
   });
 });
 

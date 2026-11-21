@@ -264,7 +264,7 @@ it('archives, refiles and activates a selection only on confirmation, all or not
   ).toBe('topic_id goes only with change assign_topic.');
 
   const activate = await prepare({ change: 'activate', prompt_ids: [tenant.promptId] });
-  expect(activate).toMatchObject({ prompt_slots: { used: 1 } });
+  expect(activate).toMatchObject({ state: 'needs_confirmation' });
   await confirm(activate);
   expect(await promptTexts(tenant.setId)).toEqual(['Which running shoes suit road use? [active]']);
   expect(await promptTexts(elsewhere.setId)).toEqual([

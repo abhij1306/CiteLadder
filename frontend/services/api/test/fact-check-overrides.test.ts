@@ -65,12 +65,6 @@ describe('verdict overrides', () => {
     const override = (owner: Tenant, verdict: string, note?: string) =>
       call(owner, 'POST', path, { verdict, note });
 
-    const outside = await fixtures.tenant();
-    const refused = await override(outside, 'supported');
-    expect([refused.status, (refused.body.error as { code: string }).code]).toEqual([
-      409,
-      'fact_checking_not_in_plan',
-    ]);
     const attacker = await fixtures.tenant();
     expect((await override(attacker, 'supported')).status).toBe(404);
     expect((await override(tenant, 'contradicted')).status).toBe(409);
@@ -147,13 +141,6 @@ describe('verdict overrides', () => {
 
 describe('facts CSV import', () => {
   it('imports CSV rows as drafts only, answering each row and skipping duplicates', async () => {
-    const outside = await call(tenant, 'POST', '/brand-facts/import', {
-      rows: [{ topic: 'pricing', statement: 'x', source_url: null }],
-    });
-    expect([outside.status, (outside.body.error as { code: string }).code]).toEqual([
-      409,
-      'fact_checking_not_in_plan',
-    ]);
     await confirmedFact(tenant, 'pricing', 'Pro costs $59 per month.');
     const imported = await call(tenant, 'POST', '/brand-facts/import', {
       rows: [
