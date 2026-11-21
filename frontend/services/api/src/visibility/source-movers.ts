@@ -1,12 +1,3 @@
-/**
- * Top movers: the sources whose citation share changed most against the
- * previous comparable period, split into risers and fallers.
- *
- * Citation share is a source's citations over every citation in its period,
- * so the two periods are compared as shares, never as raw counts. A source
- * cited in only one period has share 0 in the other. Movement is reported
- * only when the two run sets are comparable.
- */
 import type { visibilitySourceMoversSchema } from '@citeladder/contracts/visibility-evidence';
 import { sql } from 'kysely';
 import type { z } from 'zod';
@@ -30,7 +21,6 @@ export type MoverQuery = {
   limit: number;
 };
 
-/** Citations per source key over a scope of answers, and their total. */
 async function shares(
   db: Database,
   selection: RunSelection,
@@ -87,7 +77,6 @@ export async function getSourceMovers(
     cohort: selection.cohort,
   });
   if (status !== 'comparable') return empty(status);
-  // The baseline runs bring their own market, as any named run set does.
   const baselineScope = evidenceScope(db, {
     ...selection,
     auditId: null,

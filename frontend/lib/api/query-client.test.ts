@@ -15,11 +15,11 @@ describe('shouldRetryQuery', () => {
     expect(shouldRetryQuery(2, new Error('offline'))).toBe(false);
   });
 
-  it('retries 408 / 429 / 5xx', () => {
-    expect(shouldRetryQuery(0, new ApiError('timeout', 408, ''))).toBe(true);
-    expect(shouldRetryQuery(0, new ApiError('rate', 429, ''))).toBe(true);
-    expect(shouldRetryQuery(0, new ApiError('down', 500, ''))).toBe(true);
-    expect(shouldRetryQuery(0, new ApiError('down', 503, ''))).toBe(true);
+  it('retries 408 / 429 / 5xx once, so a server error surfaces quickly', () => {
+    for (const status of [408, 429, 500, 503]) {
+      expect(shouldRetryQuery(0, new ApiError('down', status, ''))).toBe(true);
+      expect(shouldRetryQuery(1, new ApiError('down', status, ''))).toBe(false);
+    }
   });
 
   it('does not retry ordinary 4xx', () => {
@@ -33,26 +33,19 @@ describe('shouldRetryQuery', () => {
     expect(shouldRetryQuery(0, new DOMException('Aborted', 'AbortError'))).toBe(false);
   });
 
-  it('caps retries at 2 regardless of error kind', () => {
-    expect(shouldRetryQuery(2, new ApiError('down', 503, ''))).toBe(false);
-  });
-
-  it('retries the A3 timeout surface (retryable network-class ApiError)', () => {
+  it('retries the A3 timeout surface once, since each attempt already waited the full timeout', () => {
     const timeout = new ApiError('timed out', 0, '', 'req-t', {
       code: 'request_timeout',
       retryable: true,
     });
     expect(shouldRetryQuery(0, timeout)).toBe(true);
-    expect(shouldRetryQuery(1, timeout)).toBe(true);
-    expect(shouldRetryQuery(2, timeout)).toBe(false);
+    expect(shouldRetryQuery(1, timeout)).toBe(false);
   });
 
   it('honors an explicit retryable classification over the status heuristic', () => {
-    // Server-classified non-retryable 5xx → no futile retry.
     expect(
       shouldRetryQuery(0, new ApiError('down', 503, '', undefined, { retryable: false })),
     ).toBe(false);
-    // Server-classified retryable → retry even without a transient status.
     expect(shouldRetryQuery(0, new ApiError('busy', 400, '', undefined, { retryable: true }))).toBe(
       true,
     );
@@ -64,10 +57,24 @@ describe('createAppQueryClient', () => {
     const client = createAppQueryClient();
     const queries = client.getDefaultOptions().queries;
     expect(queries?.retry).toBe(shouldRetryQuery);
+    expect(queries?.retryDelay).toBe(500);
     expect(queries?.staleTime).toBe(60_000);
     expect(queries?.gcTime).toBe(30 * 60_000);
     expect(queries?.refetchOnWindowFocus).toBe(false);
     expect(client.getDefaultOptions().mutations?.retry).toBe(false);
+  });
+});
+
+describe('a failing read on the app client', () => {
+  it('settles on the error after one quick retry instead of retrying silently', async () => {
+    const queryFn = vi.fn(async () => {
+      throw new ApiError('down', 500, '');
+    });
+    const app = createAppQueryClient();
+
+    await expect(app.fetchQuery({ queryKey: ['read'], queryFn })).rejects.toThrow('down');
+
+    expect(queryFn).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -113,12 +120,6 @@ describe('warmQuery', () => {
     await vi.waitFor(() => expect(queryFn).toHaveBeenCalledTimes(1));
   });
 
-  /**
-   * Tab and link intent fires on the ACTIVE target too. Re-driving a key that
-   * already failed resets `error` → `pending`, so the settled alert a panel is
-   * rendering would be replaced by its skeleton until the identical failure
-   * returns — hovering a tab visibly reloading its own content.
-   */
   it('leaves an already-failed key untouched so a settled error cannot flicker', async () => {
     const queryFn = vi.fn(async () => {
       throw new ApiError('gone', 404, '');

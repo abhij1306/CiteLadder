@@ -30,7 +30,6 @@ describe('saveBlob', () => {
 
     expect(createObjectURL).toHaveBeenCalledTimes(1);
     expect(clickSpy).toHaveBeenCalledTimes(1);
-    // The object URL is always revoked so it does not leak.
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:mock');
     vi.unstubAllGlobals();
   });

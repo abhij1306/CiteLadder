@@ -1,14 +1,3 @@
-/**
- * Filing a manual or imported prompt that names the brand.
- *
- * A prompt naming the business measures recall of a name the asker already
- * gave, so it is never an organic (`core`) prompt. It files under the
- * comparison cohort when it also names a tracked competitor, otherwise under
- * the brand diagnostic, exactly as generation files its own branded rows.
- * Names count under the project's matching policy, so a common-word brand in
- * ordinary language ("target audience") does not file a prompt as branded.
- * An explicitly chosen cohort always wins.
- */
 import type { promptCohortSchema } from '@citeladder/contracts/project';
 import type { Kysely } from 'kysely';
 import type { z } from 'zod';
@@ -21,7 +10,6 @@ import type { ProjectScope } from '../projects/brand-profile.ts';
 
 type Cohort = z.infer<typeof promptCohortSchema>;
 
-/** The cohort a prompt without an explicit one files under. */
 export type CohortFiling = (text: string) => Cohort;
 
 export async function brandFiling(

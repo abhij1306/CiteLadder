@@ -1,7 +1,3 @@
-/**
- * The crawler's single URL admission decision: may it touch this URL, under
- * what canonical identity, and what should the corpus do with it.
- */
 import { parse as parseHost } from 'tldts';
 
 import { policy } from '../config.ts';
@@ -18,13 +14,11 @@ const HOST_EXCLUSIONS = new Set(acquisition.hard_exclusion_host_labels);
 const QUERY_EXCLUSIONS = new Set(acquisition.hard_exclusion_query_keys);
 const MAX_URL_CHARS = policy.site_health.page_analysis.facts.limits.url_chars;
 const PRIORITIES: Record<string, number> = crawl.value_priorities;
-// Highest value first, so a path naming two kinds takes the more valuable one.
 const VALUE_KINDS = Object.keys(PRIORITIES)
   .filter((kind) => kind !== 'root')
   .sort((a, b) => PRIORITIES[b]! - PRIORITIES[a]!);
 const SCHEME_PREFIX = /^[A-Za-z][A-Za-z0-9+.-]*:/u;
 
-/** A crawl's scope: its root registrable domain and every subdomain. */
 export type Scope = { domain?: string };
 export type Admission = {
   accepted: boolean;
@@ -38,7 +32,6 @@ export type Admission = {
   itemKind: string;
 };
 
-/** The root registrable domain plus every subdomain. */
 export function inScope(url: string, domain: string) {
   const root = domain.trim().replace(/\.$/u, '').toLowerCase();
   if (!root) return false;
@@ -53,7 +46,6 @@ export function inScope(url: string, domain: string) {
 
 const pathTokens = (segment: string) => new Set(segment.split(/[-_.]+/u).filter(Boolean));
 
-/** The most valuable kind named by whole tokens of one path segment (or a whole fallback segment). */
 function namedKind(segment: string) {
   const tokens = pathTokens(segment);
   const named = VALUE_KINDS.find((kind) => tokens.has(kind));
@@ -64,10 +56,6 @@ function namedKind(segment: string) {
   return fallback?.[0] ?? null;
 }
 
-/**
- * Admission ordering only. Whole tokens, not substrings, and the section the
- * URL sits in first: `/blog/product-review` is an article, not a product.
- */
 function valueKind(url: string) {
   const path = stripTrailing(new URL(url).pathname.toLowerCase(), '/') || '/';
   if (path === '/') return 'root';
@@ -79,11 +67,6 @@ function valueKind(url: string) {
   return 'other';
 }
 
-/**
- * Resolve an href against its page, refusing the two shapes that only look
- * relative: a join artifact (`allhttps://…`) and a scheme-less absolute link
- * (`twitter.com/x`). Admitted, each cost a fetch, a 404 and a failed page.
- */
 function resolve(raw: string, base: string | undefined) {
   if (!base) return raw;
   if (raw.includes('://') && !SCHEME_PREFIX.test(raw)) throw new Error('malformed reference');
@@ -96,11 +79,6 @@ function resolve(raw: string, base: string | undefined) {
   return new URL(raw, base).href;
 }
 
-/**
- * Tracking and ignored keys are not refused: the canonical identity drops
- * them, so a tagged link admits its clean target, which the link checks
- * judge under the same tracking-stripped URL.
- */
 function queryRejection(url: URL) {
   const keys = [...url.searchParams.keys()].map((key) => key.toLowerCase());
   if (keys.some((key) => QUERY_EXCLUSIONS.has(key))) return reasons.hard_query;
@@ -111,7 +89,6 @@ function canonicalRejection(canonical: URL, infrastructure: 'sitemap' | undefine
     return reasons.hard_host;
   const path = stripTrailing(canonical.pathname.toLowerCase(), '/') || '/';
   if (PATH_EXCLUSIONS.some((pattern) => pattern.test(path))) return reasons.hard_path;
-  // Sitemaps are crawler infrastructure: their extension is the one asset the crawler fetches.
   const sitemap =
     infrastructure === 'sitemap' &&
     crawl.sitemap_path_suffixes.some((suffix) => path.endsWith(suffix));
@@ -154,7 +131,6 @@ export function classifyUrlAdmission(
   const kind = valueKind(canonical.url);
   if (scope.domain && !inScope(canonical.url, scope.domain))
     return rejected(reasons.out_of_scope, canonical.url, kind);
-  // A document stays visible in coverage, but the HTML analyzer never receives it.
   const path = new URL(canonical.url).pathname.toLowerCase();
   const document = crawl.inventory_document_extensions.some((extension) =>
     path.endsWith(extension),
@@ -172,5 +148,4 @@ export function classifyUrlAdmission(
   };
 }
 
-/** Whether a URL names a non-content endpoint the crawler never fetches, even by redirect. */
 export const hardExcluded = (url: URL) => !classifyUrlAdmission(url.href).accepted;

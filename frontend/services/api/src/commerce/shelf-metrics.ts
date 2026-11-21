@@ -19,15 +19,9 @@ type Observation = Pick<
   | 'surface_kind'
 >;
 
-/** A rank only an ordered answer supplies. */
 const orderedRank = (row: Pick<Observation, 'order_observable' | 'rank'>) =>
   row.order_observable ? row.rank : null;
 
-/**
- * Whether `row` ranks ahead of `other` in the same execution: a ranked slot
- * beats an unranked one, a carousel card's rank wins over a text-list rank
- * (both start at 1), then the lower rank wins.
- */
 function outranks(row: Observation, other: Observation) {
   const rank = orderedRank(row),
     otherRank = orderedRank(other);
@@ -38,12 +32,6 @@ function outranks(row: Observation, other: Observation) {
   return card === otherCard ? rank < otherRank : card;
 }
 
-/**
- * The product or competitor an observation recommends, or null when it names
- * neither: unresolved, a rejected candidate, or any classification the shelf
- * does not recognize. A pending AI-observed competitor has an identity but
- * holds no slot (`shelfMetrics`).
- */
 function holderIdentity(
   row: Pick<Observation, 'classification' | 'product_id' | 'competitor_candidate_id'>,
 ): string | null {
@@ -56,10 +44,6 @@ function holderIdentity(
   return null;
 }
 
-/**
- * One slot per product or competitor per execution, at its best rank: an
- * answer that names the same product in three sentences recommends it once.
- */
 function shelfSlots(observations: Observation[]) {
   const held = new Map<string, Observation>();
   for (const row of observations) {
@@ -73,15 +57,12 @@ function shelfSlots(observations: Observation[]) {
 }
 
 export function shelfMetrics(taskIds: string[], observations: Observation[]) {
-  // Only the owned products and approved competitors share the shelf; a
-  // pending AI-observed competitor is shown apart until someone approves it.
   const recognized = shelfSlots(observations).filter(
     (row) => row.classification !== 'ai_observed_competitor',
   );
   const owned = recognized.filter((row) => row.classification === 'owned');
   const ownedTasks = new Set(owned.map((row) => row.task_id));
   const rankedOwned = owned.filter((row) => orderedRank(row) !== null);
-  // The first-ranked observation of each execution that ranked any.
   const ranked = taskIds
     .map((id) =>
       observations
@@ -113,11 +94,6 @@ export function shelfMetrics(taskIds: string[], observations: Observation[]) {
   };
 }
 
-/**
- * The latest match pass of each answer of one audit: the pass of the highest
- * catalog revision, then the most recent. Older passes stay as history and
- * are never read for current numbers.
- */
 function latestPasses(
   db: Database,
   audit: Pick<Selectable<Audits>, 'workspace_id' | 'project_id' | 'id'>,
@@ -152,7 +128,6 @@ export async function finalizeCommerceShelf(db: Database, audit: Selectable<Audi
       typeof frozen[key] === 'string' ? frozen[key] : value,
     ]),
   );
-  // Several prompts share one target; each target gets one snapshot.
   const targets = await db
     .selectFrom('commerce_prompt_targets')
     .select(['target_kind', 'target_id'])
@@ -188,8 +163,6 @@ export async function finalizeCommerceShelf(db: Database, audit: Selectable<Audi
       .where('c.id', 'in', ids)
       .where('c.target_kind', '=', target.target_kind)
       .where('c.target_id', '=', target.target_id)
-      // A branded comparison names the owned brand, so it would always find the
-      // owned product: like brand Visibility, the shelf counts unbranded prompts only.
       .where('s.cohort', 'not in', policy.prompts.branded_cohorts)
       .execute();
     const taskIds = new Set(tasks.map((task) => task.id));

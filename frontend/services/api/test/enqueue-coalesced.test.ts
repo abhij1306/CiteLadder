@@ -1,8 +1,3 @@
-/**
- * Coalesced-successor enqueue against real PostgreSQL: concurrent requests
- * for one refresh leave one queued row with the earliest deadline, queued
- * work absorbs merged payloads, and leased work gets a queued successor.
- */
 import { setTimeout as sleep } from 'node:timers/promises';
 
 import { afterAll, describe, expect, it } from 'vitest';
@@ -14,7 +9,6 @@ import { testDatabase } from './support.ts';
 
 const db = testDatabase();
 const fixtures = new VisibilityFixtures(db);
-// A kind no production worker drains, so no claim takes these rows mid-test.
 const KIND = 'coalesce_probe';
 const NOW = new Date('2026-11-06T10:00:00.000Z');
 
@@ -40,7 +34,6 @@ describe('enqueueCoalesced', () => {
     const request = (delaySeconds: number) =>
       db.transaction().execute(async (trx) => {
         await enqueueCoalesced(trx, { workspaceId, projectId, kind: KIND, delaySeconds, now: NOW });
-        // Hold the transaction open so the other request overlaps it.
         await sleep(150);
       });
 

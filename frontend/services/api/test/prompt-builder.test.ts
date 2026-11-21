@@ -1,4 +1,3 @@
-/** The Prompt Builder's topic endpoints: a write-free preview and the confirmed plan. */
 import { randomUUID } from 'node:crypto';
 
 import type { topicPreviewResponseSchema, topicSchema } from '@citeladder/contracts/project';
@@ -101,7 +100,6 @@ describe('topic preview', () => {
       ...deps,
       meter: () => meter,
     });
-    // The existing topic is never proposed again, and the product-line name is stripped.
     expect(preview).toEqual({
       source: 'model',
       topics: [
@@ -155,7 +153,6 @@ describe('topic confirm', () => {
         delete: [stale],
         rename: [{ id: kept, name: 'Hiking boots' }],
         create: [
-          // A freed name is reusable in the same plan.
           { name: 'Shoes', offerings: [] },
           { name: 'Trail running shoes', offerings: [offerings[0], 'Not an offering'] },
         ],
@@ -169,7 +166,6 @@ describe('topic confirm', () => {
     ]);
     const created = result.body.find((row) => row.name === 'Trail running shoes')!;
     expect((await topicLinks()).topic_offerings).toEqual({ [created.id]: [offerings[0]] });
-    // Deleting a topic keeps its prompts, detached.
     const detached = await db
       .selectFrom('prompts')
       .select('topic_id')
@@ -204,7 +200,6 @@ describe('topic confirm', () => {
       body: { create: [{ name: 'Sandals' }, { name: 'boots' }] },
     });
     expect(duplicate.status).toBe(409);
-    // A topic renamed twice in one plan is refused, not resolved to its first name.
     const renamedTwice = await call(`/projects/${t.projectId}/topics/confirm`, {
       method: 'POST',
       body: {

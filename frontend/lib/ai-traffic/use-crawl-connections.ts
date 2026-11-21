@@ -18,7 +18,6 @@ import type { z } from 'zod';
 import type { crawlSourceListSchema } from '@citeladder/contracts/ai-traffic';
 import type { CrawlSourceCreateRequest } from '@citeladder/contracts/crawl-log-requests';
 
-/** The log format and collection point a custom sender declares. */
 type LogFormat = NonNullable<CrawlSourceCreateRequest['format']>;
 type CollectionPoint = NonNullable<CrawlSourceCreateRequest['collection_point']>;
 export type CrawlConnectionInput = Readonly<{
@@ -29,7 +28,6 @@ export type CrawlConnectionInput = Readonly<{
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
 }>;
-/** The project's crawl log sources; shared by the screen and the connections section. */
 export function useCrawlSources(
   projectId: string,
   workspaceId: string,
@@ -59,20 +57,14 @@ export function uploadProcessing(
   if (at && Date.parse(at) >= Date.parse(awaiting.completedAt)) return 'processed';
   return awaiting.timedOut ? 'delayed' : 'processing';
 }
-/** Crawl views stay for a project that already has sources, even if collection is unavailable. */
 export function crawlLogsAvailable(data: z.infer<typeof crawlSourceListSchema>) {
   return data.availability === 'available' || data.items.length > 0;
 }
-/** The sampling a custom sender declares, from the dialog's fields. */
 function declaredSampling(sampling: string, rate: string, filter: string) {
   if (sampling === 'sampled') return { kind: 'sampled', rate: Number(rate) } as const;
   if (sampling === 'filtered') return { kind: 'filtered', description: filter } as const;
   return { kind: 'none' } as const;
 }
-/**
- * What a setup declares: Firehose its buffer and filter, Google Cloud its
- * subscription and sample rate, the others format, point and sampling.
- */
 function declaredFields(
   setup: (typeof CRAWL_LOG_SETUPS)[number]['value'],
   fields: Readonly<{
@@ -117,12 +109,9 @@ export function useCrawlConnections({
   const [awaiting, setAwaiting] = useState<Awaiting | null>(null);
   const sources = useCrawlSources(projectId, workspaceId, awaiting);
   const processing = awaiting ? uploadProcessing(sources.data, awaiting) : null;
-  // Processing finished: refresh the reads that show the new rows.
   useEffect(() => {
     if (processing === 'processed') void refreshAiTraffic(client, projectId);
   }, [processing, client, projectId]);
-  // The wait is bounded: a failed or slow rollup stops the rechecks. Each
-  // upload's completion starts its own wait.
   const waitingFor = awaiting && !awaiting.timedOut ? awaiting.completedAt : null;
   useEffect(() => {
     if (!waitingFor) return;
@@ -169,11 +158,6 @@ export function useCrawlConnections({
     matched: number;
   } | null>(null);
   const mutation = useMutation(aiTrafficMutations.source(scope));
-  /**
-   * Issue a source from the dialog's fields, or revoke one. The descriptor
-   * refreshes the project's reads; the issued token is shown here. Rotation
-   * owns its own dialog and mutation (`RotateTokenDialog`).
-   */
   const issueSource = (
     action: { kind: 'create' } | { kind: 'revoke'; id: string },
     onSettled?: () => void,
@@ -221,7 +205,6 @@ export function useCrawlConnections({
       if (!mapping) throw new Error('The upload mapping is unavailable');
       const result = await uploadCrawlFile({
         file,
-        // The file is read in the format its source was created with.
         format: source.format,
         mapping,
         catalog,
@@ -232,7 +215,6 @@ export function useCrawlConnections({
         onProgress: setProgress,
       });
       setAwaiting({ sourceId, completedAt: result.completedAt, timedOut: false });
-      // The rows appear after processing; the effect above refreshes every read then.
       await refreshCrawlSources(client, projectId);
       return result;
     },

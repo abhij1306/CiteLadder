@@ -1,68 +1,54 @@
 import { lazy } from 'react';
 import { useParams } from 'react-router-dom';
 
-import {
-  ChatConversation,
-  JumpToLatest,
-  ReplyComposer,
-  useChatThread,
-} from '@/components/agent/chat-thread';
+import { ChatConversation, ReplyComposer, useChatThread } from '@/components/agent/chat-thread';
 import { OutputPane } from '@/components/agent/output-pane';
 import { useFollowLatest } from '@/components/agent/use-follow-latest';
 import { useChatDetail } from '@/components/agent/use-chat-turns';
-import { ListScreen, RouteLoadingScreen } from '@/components/layout/page-shell';
+import { NotFoundScreen } from '@/components/templates/not-found-screen';
+import { ThreadPage, ThreadPageLoading } from '@/components/templates/thread-page';
+import { WorkbenchPage } from '@/components/templates/workbench-page';
 import { IslandUnavailable, LazyIsland } from '@/components/ui/lazy-island';
-import { ProjectLink } from '@/components/ui/project-link';
-import { Button } from '@/components/ui/button';
-import { Callout } from '@/components/ui/callout';
+import { ActionButton } from '@/components/ui/actions';
 import { ComposerDock } from '@/components/ui/chat-dock';
 import { Stack } from '@/components/ui/layout';
-import { QueryState } from '@/components/ui/query-state';
+import { textRole } from '@/components/ui/typography';
 import type { AgentChatDetail } from '@/lib/api/agent';
+import { isNotFound } from '@/lib/api/errors';
 import { useProjectScope } from '@/lib/project/active-project-scope';
 import { useWorkspaceCapability } from '@/lib/project/project-context';
+import { Notice, readErrorProps } from '@/components/ui/notice';
+import { StateBlock } from '@/components/ui/state-block';
 
-/** A chat working on a page (`optimize_page`) has this document, and opens as its workspace (E1). */
 const PAGE_OUTPUT_KIND = 'page';
 
-// The workspace carries the editor (CodeMirror), so it loads only for a page chat.
 const PageWorkspace = lazy(() =>
   import('./workspace/page-workspace').then(({ PageWorkspace }) => ({ default: PageWorkspace })),
 );
 
-/**
- * One chat: a single thread with its documents inline and the composer pinned
- * below, or, once a page chat has its page, the page workspace.
- */
 export function ChatScreen() {
   const { chatId = '' } = useParams();
   const { workspaceId, projectId } = useProjectScope();
   const query = useChatDetail(workspaceId, chatId);
 
-  // A failed background refresh keeps the chat on screen; only a first load fails the page.
+  if (isNotFound(query.error)) return <NotFoundScreen />;
   if (query.isError && !query.data)
     return (
-      <ListScreen>
-        <QueryState
+      <ThreadPage>
+        <StateBlock
           kind="error"
-          error={query.error}
+          {...readErrorProps(query)}
+          title="Couldn't load this chat"
           fallback="This chat could not be loaded."
-          onRetry={() => void query.refetch()}
-          pending={query.isFetching}
         />
-      </ListScreen>
+      </ThreadPage>
     );
-  if (!query.data)
-    return (
-      <ListScreen>
-        <QueryState kind="loading" />
-      </ListScreen>
-    );
+  if (!query.data) return <ThreadPageLoading />;
   if (query.data.chat.project_id !== projectId)
     return (
-      <ListScreen>
-        <Callout tone="negative">This chat belongs to another project.</Callout>
-      </ListScreen>
+      <ThreadPage>
+        <Notice tone="negative">This chat belongs to another project.</Notice>
+      </ThreadPage>
     );
   const page = query.data.outputs.find((output) => output.kind === PAGE_OUTPUT_KIND);
   if (page)
@@ -70,11 +56,19 @@ export function ChatScreen() {
       <LazyIsland
         label="Page workspace"
         defects="surface"
-        loading={<RouteLoadingScreen />}
+        loading={
+          <WorkbenchPage title={query.data.chat.title}>
+            <StateBlock
+              kind="loading"
+              label="Loading the page workspace…"
+              shape={{ kind: 'list' }}
+            />
+          </WorkbenchPage>
+        }
         failed={
-          <ListScreen>
-            <IslandUnavailable message="The page workspace could not load. Reload the page to try again." />
-          </ListScreen>
+          <WorkbenchPage title={query.data.chat.title}>
+            <IslandUnavailable message="Couldn't load the page workspace. Reload the page to try again." />
+          </WorkbenchPage>
         }
       >
         <PageWorkspace
@@ -100,23 +94,20 @@ function ChatView({
   const { scrollRef, showJump, jumpToLatest } = useFollowLatest();
 
   return (
-    <ListScreen
+    <ThreadPage
       title={detail.chat.title}
-      // Fill the viewport below the shell chrome: only the thread scrolls and
-      // the composer stays under it. Kept identical in chat- and new-chat-screen.
-      fill
       scrollRef={scrollRef}
       scrollLabel="Agent conversation"
-      dock={
-        <ComposerDock floating={showJump ? <JumpToLatest onJump={jumpToLatest} /> : null}>
+      composer={
+        <ComposerDock onJumpToLatest={showJump ? jumpToLatest : null}>
           <ReplyComposer
             id="chat-message"
             thread={thread}
             detail={detail}
             placeholder={
               detail.outputs.length > 0
-                ? 'Ask about the work or request a change. / picks a skill, @ mentions an Action.'
-                : 'Ask a follow-up. / picks a skill, @ mentions an Action.'
+                ? 'Ask about the work or request a change'
+                : 'Ask a follow-up'
             }
           />
         </ComposerDock>
@@ -124,6 +115,9 @@ function ChatView({
       actions={<ChatHeaderActions detail={detail} />}
     >
       <Stack gap="workspace" className="min-w-0 flex-1 content-start">
+        <p aria-hidden className={textRole('heading', 'desktop:hidden')}>
+          {detail.chat.title}
+        </p>
         <ChatConversation
           thread={thread}
           detail={detail}
@@ -140,15 +134,11 @@ function ChatView({
           )}
         />
       </Stack>
-    </ListScreen>
+    </ThreadPage>
   );
 }
 
 function ChatHeaderActions({ detail }: Readonly<{ detail: AgentChatDetail }>) {
   if (!detail.chat.action_id) return null;
-  return (
-    <Button asChild variant="ghost">
-      <ProjectLink href={`/agent/actions/${detail.chat.action_id}`}>Open Action</ProjectLink>
-    </Button>
-  );
+  return <ActionButton action="openAction" href={`/actions/${detail.chat.action_id}`} />;
 }

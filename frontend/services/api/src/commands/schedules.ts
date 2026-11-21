@@ -1,4 +1,3 @@
-/** Audit schedule commands for the browser and the public API. */
 import type { z } from 'zod';
 
 import type { scheduleCreate, scheduleUpdate } from '../audits/schedule-inputs.ts';
@@ -23,14 +22,15 @@ export function createSchedule(
   return schedules.createSchedule(db, scopeOf(actor, projectId), input);
 }
 
-export function updateSchedule(
+export async function updateSchedule(
   db: Database,
   actor: Writer,
   projectId: string,
   scheduleId: string,
   input: z.output<typeof scheduleUpdate>,
 ) {
-  return schedules.updateSchedule(db, scopeOf(actor, projectId), scheduleId, input);
+  const scope = scopeOf(actor, projectId);
+  return schedules.updateSchedule(db, scope, scheduleId, input);
 }
 
 export function deleteSchedule(db: Database, actor: Writer, projectId: string, scheduleId: string) {

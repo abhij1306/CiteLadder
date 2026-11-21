@@ -1,9 +1,3 @@
-/**
- * The content-angle refresh against real PostgreSQL: which citations are
- * clustered, the window, recompute keys and reuse, failed runs, lineages,
- * idempotent and concurrent tasks, and workspace isolation. The model gateway
- * is a scripted `complete`; nothing reaches a provider.
- */
 import { randomUUID } from 'node:crypto';
 
 import { afterAll, describe, expect, it } from 'vitest';
@@ -29,11 +23,9 @@ afterAll(async () => {
 });
 
 type Kind = 'competitor' | 'editorial' | 'social' | 'owned';
-/** Each answer is its own repetition, so engines and prompts never collide. */
 let repetition = 0;
 type Cited = { url: string; title: string; kind: Kind };
 
-/** One answer to `promptId` in `auditId`, citing `cited`. */
 async function answer(
   seed: SiteSeed,
   auditId: string,
@@ -97,7 +89,6 @@ const SETUP: Cited[] = [
 
 type Scenario = SiteSeed & { auditId: string; pageId: string; prompts: string[] };
 
-/** A project with one topic, three prompts, one audit and one content page. */
 async function scenario(): Promise<Scenario> {
   const seed = await fixtures.crawl();
   const crm = await topic(db, seed.projectId, 'CRM');
@@ -109,7 +100,6 @@ async function scenario(): Promise<Scenario> {
   await answer(seed, auditId, { id: pricing, index: 0 }, PRICING);
   await answer(seed, auditId, { id: pricing, index: 0 }, PRICING_GEMINI, 'gemini');
   await answer(seed, auditId, { id: setup, index: 1 }, SETUP);
-  // A topicless prompt with too little to cluster.
   await answer(seed, auditId, { id: general, index: 2 }, [
     { url: 'https://globex.com/what-is-crm', title: 'What is a CRM', kind: 'competitor' },
   ]);
@@ -137,7 +127,6 @@ type Payload = {
 type Responder = (payload: Payload) => unknown;
 type AsyncResponder = (payload: Payload) => Promise<unknown>;
 
-/** Clusters titles by the first keyword they share with a label; picks a page sharing it. */
 const labels = ['Pricing comparison', 'Setup guide'];
 const keyword = (label: string) => label.split(' ')[0]!.toLowerCase();
 const byKeyword: Responder = (payload) => {
@@ -161,7 +150,6 @@ const byKeyword: Responder = (payload) => {
   };
 };
 
-/** A gateway whose every call is answered by `respond`; `calls` records each request. */
 function scripted(respond: Responder | AsyncResponder | (() => never)) {
   const calls: { step: 'cluster' | 'match'; payload: Payload }[] = [];
   const base = createModelGateway(
@@ -196,7 +184,6 @@ function scripted(respond: Responder | AsyncResponder | (() => never)) {
   return { gateway, calls };
 }
 
-/** Enqueue one refresh for a fresh trigger and drain it with `gateway`. */
 async function refresh(seed: SiteSeed, gateway: ReturnType<typeof scripted>['gateway']) {
   await enqueueContentAngles(db, seed, { kind: 'audit', id: randomUUID() });
   await drain(seed, gateway);
@@ -229,7 +216,6 @@ const runs = (seed: SiteSeed) =>
     .orderBy('created_at')
     .execute();
 
-/** A run's angles with members and owned matches, by label. */
 async function angles(runId: string) {
   const rows = await db
     .selectFrom('content_angles as angle')
@@ -309,7 +295,6 @@ describe('a succeeded run', () => {
         prompt_ids: [seed.prompts[0]],
         site_url_id: seed.pageId,
         method: 'model_pick',
-        // The matched page is cited for the angle's prompt.
         owned_cited: true,
         members: [
           'https://globex.com/pricing',
@@ -333,9 +318,7 @@ describe('a succeeded run', () => {
         citationIds: expect.any(Array),
       },
     ]);
-    // One cluster call for the CRM topic, one match call for its angles.
     expect(model.calls.map((call) => call.step)).toEqual(['cluster', 'match']);
-    // Most-cited first, then by URL; the social, owned and topicless citations are not sent.
     expect(model.calls[0]!.payload.pages.map((page) => page.title)).toEqual([
       'Globex pricing plans',
       'Globex setup guide',
@@ -350,7 +333,6 @@ describe('a succeeded run', () => {
 
   it('reads no citation from an answer without a tracked prompt', async () => {
     const seed = await scenario();
-    // The run's fourth prompt snapshot names no prompt in the library.
     await fixtures.execution(seed, {
       auditId: seed.auditId,
       promptIndex: 3,
@@ -454,12 +436,10 @@ describe('recompute keys', () => {
     const seed = await scenario();
     const model = scripted(byKeyword);
     await refresh(seed, model.gateway);
-    // Same inputs: no run, no call.
     await refresh(seed, model.gateway);
     expect(await runs(seed)).toHaveLength(1);
     expect(model.calls.map((call) => call.step)).toEqual(['cluster', 'match']);
 
-    // A changed title: a new clustering key and a clustering call.
     await db
       .updateTable('citations')
       .set({ title: 'Initech pricing tiers' })
@@ -471,7 +451,6 @@ describe('recompute keys', () => {
     expect(second!.cluster_key).not.toBe(first!.cluster_key);
     expect(model.calls.map((call) => call.step)).toEqual(['cluster', 'match', 'cluster', 'match']);
 
-    // Only a new crawl: the clustering is reused and only the match is recomputed.
     const crawlId = await fixtures.sibling(seed, { completed_at: new Date(Date.now() + 60_000) });
     const page = await fixtures.page(
       { ...seed, crawlId },
@@ -489,7 +468,6 @@ describe('recompute keys', () => {
     expect(third).toMatchObject({ crawl_id: crawlId, cluster_key: second!.cluster_key });
     expect(third.match_key).not.toBe(second!.match_key);
     expect(model.calls.slice(4).map((call) => call.step)).toEqual(['match']);
-    // The reused clustering keeps every angle on its lineage.
     const lineageOf = async (runId: string) =>
       (await angles(runId)).map((angle) => [angle.label, angle.lineage_id]);
     expect(await lineageOf(third.id)).toEqual(await lineageOf(second!.id));
@@ -515,7 +493,6 @@ describe('a failed run', () => {
 });
 
 describe('lineages', () => {
-  /** Relabels the pricing angle and regroups the setup pages into a new angle. */
   const relabelled: Responder = (payload) => {
     if (payload.angles) return byKeyword(payload);
     const ids = (pattern: RegExp) =>
@@ -533,7 +510,6 @@ describe('lineages', () => {
     await refresh(seed, scripted(byKeyword).gateway);
     const [first] = await runs(seed);
     const [pricing, setup] = await angles(first!.id);
-    // A new pricing page joins (3 shared of 4: 0.75); setup pages regroup.
     const pricingAudit = await fixtures.audit(seed);
     await answer(seed, pricingAudit, { id: seed.prompts[0]!, index: 0 }, [
       ...PRICING,
@@ -550,10 +526,8 @@ describe('lineages', () => {
     const second = (await runs(seed))[1]!;
     const [onboarding, plans] = await angles(second.id);
     expect(plans).toMatchObject({ label: 'Pricing plans', lineage_id: pricing!.lineage_id });
-    // Setup kept 1 of its 2 pages among 4: 0.25, below the minimum.
     expect(onboarding!.label).toBe('Onboarding');
     expect(onboarding!.lineage_id).not.toBe(setup!.lineage_id);
-    // Each lineage is keyed by the label it was created with, never by a later one.
     const lineages = await db
       .selectFrom('content_angle_lineages')
       .select(['id', 'planned_page_key', 'first_run_id'])

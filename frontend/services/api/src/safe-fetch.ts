@@ -1,4 +1,3 @@
-/** Public website transport. Each hop validates all DNS answers and dials one pinned IP. */
 import { lookup } from 'node:dns/promises';
 import { request as httpRequest } from 'node:http';
 import { request as httpsRequest } from 'node:https';
@@ -13,7 +12,6 @@ import { isNonEmpty } from './lists.ts';
 
 export class FetchError extends Error {
   readonly code: string;
-  /** The status of a response that arrived and was refused, so its attempt still records it. */
   readonly status: number | null;
   constructor(code: string, refused?: { status: number; contentType: string }) {
     super(refused ? `${code}: ${refused.contentType || 'no content type'}` : code);
@@ -25,20 +23,15 @@ export type FetchOptions = {
   maxBytes: number;
   timeoutSeconds: number;
   redirects: number;
-  /** Media types a 2xx may carry; `*` accepts any. */
   contentTypes: readonly string[];
-  /** The site (`siteDomain`) every hop must stay on. */
   domain?: string;
   signal?: AbortSignal;
   maxDecodedBytes?: number;
   gate?: <T>(url: URL, send: () => Promise<T>, signal: AbortSignal) => Promise<T>;
   authorize?: (url: URL) => Promise<void>;
-  /** Response headers kept on the result; defaults to the evidence allowlist. */
   headerNames?: readonly string[];
-  /** Observes every network call, including failed ones, in call order. */
   onCall?: (call: FetchCall) => void;
 };
-/** One real network call made while serving a fetch; redirects make several. */
 export type FetchCall = {
   url: string;
   status: number | null;
@@ -56,7 +49,6 @@ export type FetchedPage = {
   charset?: string;
   headers?: Record<string, string>;
   redirects?: string[];
-  /** Each followed redirect with the status that issued it. */
   redirectChain?: { from: string; to: string; status: number }[];
   httpVersion?: string;
   wireBytes?: number;
@@ -185,7 +177,6 @@ export async function pinnedRequest(
       url,
       {
         agent: false,
-        // Exactly one validated address is selected above; no family race.
         family: target.family,
         signal,
         headers: {

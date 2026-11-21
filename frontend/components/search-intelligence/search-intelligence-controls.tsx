@@ -1,14 +1,13 @@
-import { choiceFilter, menuFieldKeys, type FilterDefinition } from '@/components/ui/all-filters';
+import { ArrowLeft } from '@/lib/icons';
+import { choiceFilter, type FilterDefinition } from '@/components/ui/all-filters';
+import { menuFieldKeys } from '@/components/ui/filter-options';
 import { Button } from '@/components/ui/button';
+import { Icon } from '@/components/ui/icon';
 import { Input } from '@/components/ui/input';
 import { Inline } from '@/components/ui/layout';
 import { SegmentedControl } from '@/components/ui/tabs';
 import type { SearchCollection } from './search-intelligence-collection-state';
 
-/**
- * The collection's view switcher, leading the page's control row; on a
- * competitor comparison, the way back to every competitor comes first.
- */
 export function CollectionViewControl({ collection }: Readonly<{ collection: SearchCollection }>) {
   if (collection.listingCompetitors) return null;
   const views = (
@@ -22,7 +21,8 @@ export function CollectionViewControl({ collection }: Readonly<{ collection: Sea
   if (collection.tab !== 'competitors') return views;
   return (
     <Inline gap="compact">
-      <Button variant="ghost" onClick={collection.showAllCompetitors}>
+      <Button variant="quiet" onClick={collection.showAllCompetitors}>
+        <Icon icon={ArrowLeft} />
         All competitors
       </Button>
       {views}
@@ -30,11 +30,6 @@ export function CollectionViewControl({ collection }: Readonly<{ collection: Sea
   );
 }
 
-/**
- * The collection's pickers and keyword filters, for the control row's All
- * filters: the website, the saved result (or competitor) when there is more
- * than one, then minimum volume and intent for keyword datasets.
- */
 export function collectionFilters(collection: SearchCollection): FilterDefinition[] {
   if (collection.listingCompetitors) return [];
   const competitors = collection.tab === 'competitors';
@@ -89,7 +84,6 @@ const INTENT_OPTIONS = [
   { value: 'transactional', label: 'Transactional' },
 ] as const;
 
-/** Minimum search volume (a nonnegative whole number) and search intent. */
 export function keywordFilters({
   minVolume,
   setMinVolume,
@@ -108,6 +102,8 @@ export function keywordFilters({
       label: 'Min. search volume',
       valueLabel: minVolume || 'Any volume',
       isDefault: minVolume === '',
+      defaultLabel: 'Any volume',
+      reset: () => setMinVolume(''),
       content: (
         <Input
           aria-label="Minimum search volume"

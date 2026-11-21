@@ -39,9 +39,7 @@ describe('BulkActions', () => {
     );
 
     expect(screen.getByRole('button', { name: 'Find competitors' })).toBeDisabled();
-    expect(
-      screen.getByText('Competitors can be found for up to 10 products at a time.'),
-    ).toBeVisible();
+    expect(screen.getByText('Up to 10 products at a time')).toBeVisible();
     expect(screen.getByRole('button', { name: 'Clear selection' })).toBeEnabled();
   });
 

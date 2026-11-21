@@ -1,27 +1,15 @@
 import { act, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { Route, Routes } from 'react-router-dom';
-import {
-  afterAll,
-  afterEach,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  vi,
-} from 'vite-plus/test';
+import { describe, expect, it, vi } from 'vite-plus/test';
 
+import { openComposerSubmenu } from '@/test/composer-menu';
 import { mswServer } from '@/test/msw-server';
 import { actionsPage } from '@/test/fixtures/actions';
-import { makeProject } from '@/test/fixtures/project';
 import { renderWithProviders } from '@/test/render';
-import { expectThreadFollowsLatest } from '@/test/chat-follow';
 
 const mocks = vi.hoisted(() => ({ saveBlob: vi.fn() }));
 vi.mock('@/lib/download', () => ({ saveBlob: mocks.saveBlob }));
-import { ChatScreen } from './chat-screen';
 import { OutputHistory } from './output-history';
 import { refreshAgentChat } from '@/lib/api/agent';
 import {
@@ -31,40 +19,15 @@ import {
   PROJECT,
   REV1,
   REV2,
-  RUN,
   detail,
-  pageChatPhases,
   revision,
   skills,
 } from '@/test/agent-chat-fixture';
+import { renderChat, serveChatScreen } from '@/test/chat-screen';
 
-function renderChat() {
-  return renderWithProviders(
-    <Routes>
-      <Route path="/agent/chats/:chatId" element={<ChatScreen />} />
-    </Routes>,
-    {
-      initialEntries: [`/agent/chats/${CHAT}`],
-      projectSelection: {
-        activeProjectId: PROJECT,
-        activeProject: makeProject({ id: PROJECT }),
-        status: 'ready',
-      },
-    },
-  );
-}
-
-beforeAll(() => mswServer.listen({ onUnhandledFrame: 'error' }));
-beforeEach(() =>
-  mswServer.use(
-    http.get(`/api/v1/projects/${PROJECT}/actions`, () => HttpResponse.json(actionsPage())),
-  ),
-);
-afterEach(() => {
-  mswServer.resetHandlers();
+serveChatScreen(() => {
   mocks.saveBlob.mockReset();
 });
-afterAll(() => mswServer.close());
 
 describe('ChatScreen', () => {
   it('selects Automatic when a follow-up has no inherited workflow', async () => {
@@ -79,8 +42,8 @@ describe('ChatScreen', () => {
     );
     const user = userEvent.setup();
     renderChat();
-    await user.click(await screen.findByRole('button', { name: 'Skill: Automatic' }));
-    expect(screen.getByRole('menuitemradio', { name: 'Automatic' })).toBeChecked();
+    await openComposerSubmenu(user, /^Skills: Automatic$/);
+    expect(await screen.findByRole('menuitemradio', { name: 'Automatic' })).toBeChecked();
   });
 
   it('shows supplied context and its omissions in plain words', async () => {
@@ -104,10 +67,10 @@ describe('ChatScreen', () => {
     renderChat();
     await user.click(await screen.findByText('Context used'));
     expect(screen.getByText('Selected issue group')).toBeVisible();
-    // Omissions are disclosed in plain words, never as internal codes.
     expect(screen.getByText(/left out to fit this turn/)).toBeVisible();
     expect(screen.queryByText(/oldest_history|history messages/)).not.toBeInTheDocument();
   });
+
   it('saves an edit as a new revision and shows it inline in the thread', async () => {
     let current = detail(revision(REV1, 1, 'agent', 'Old title tag.'));
     const edits: unknown[] = [];
@@ -226,7 +189,7 @@ describe('ChatScreen', () => {
     const cited = within(await screen.findByRole('list', { name: 'Cited evidence' }));
     expect(cited.getByRole('link', { name: 'Action' })).toHaveAttribute(
       'href',
-      expect.stringContaining(`/agent/actions/${ACTION}`),
+      expect.stringContaining(`/actions/${ACTION}`),
     );
     const next = within(await screen.findByRole('navigation', { name: 'Next steps' }));
     const href = new URL(
@@ -235,31 +198,6 @@ describe('ChatScreen', () => {
     );
     expect(href.searchParams.get('workflow')).toBe('internal_links');
     expect(href.searchParams.get('revision_id')).toBe(REV1);
-  });
-
-  it('links the Actions a message mentioned', async () => {
-    const ACTION = '88888888-8888-4888-8888-888888888888';
-    const base = detail(revision(REV1, 1, 'agent', 'Body.'));
-    const withMention = {
-      ...base,
-      messages: base.messages.map((message) =>
-        message.role === 'user'
-          ? { ...message, mentions: [{ kind: 'action', id: ACTION, label: 'Pricing page' }] }
-          : message,
-      ),
-    };
-    mswServer.use(
-      http.get('/api/v1/agent/skills', () => HttpResponse.json(skills)),
-      http.get(`/api/v1/agent/chats/${CHAT}`, () => HttpResponse.json(withMention)),
-      http.get(`/api/v1/projects/${PROJECT}/actions`, () => HttpResponse.json(actionsPage())),
-    );
-    renderChat();
-
-    const mentioned = within(await screen.findByRole('list', { name: 'Mentioned Actions' }));
-    expect(mentioned.getByRole('link', { name: '@Pricing page' })).toHaveAttribute(
-      'href',
-      expect.stringContaining(`/agent/actions/${ACTION}`),
-    );
   });
 
   it('compares an earlier revision with the current one', async () => {
@@ -315,145 +253,14 @@ describe('ChatScreen', () => {
     );
   });
 
-  it('shows the reply as it streams, then the saved reply in its place', async () => {
-    const STREAMED_RUN = '99999999-9999-4999-8999-999999999991';
-    const base = detail(revision(REV1, 1, 'agent', 'Body.'));
-    const question = {
-      ...base.messages[0]!,
-      id: '77777777-7777-4777-8777-777777777781',
-      sequence: 3,
-      content: 'Why this order?',
-    };
-    const running = {
-      ...base,
-      messages: [...base.messages, question],
-      latest_run: { ...base.latest_run, id: STREAMED_RUN, status: 'running' as const },
-    };
-    const finished = {
-      ...running,
-      messages: [
-        ...running.messages,
-        {
-          ...base.messages[1]!,
-          id: '77777777-7777-4777-8777-777777777782',
-          sequence: 4,
-          content: 'The saved answer.',
-        },
-      ],
-      latest_run: { ...running.latest_run, status: 'succeeded' as const },
-    };
-    let phase: 'before' | 'running' | 'done' = 'before';
-    let release!: () => void;
-    const held = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    let read!: () => void;
-    const reading = new Promise<void>((resolve) => {
-      read = resolve;
-    });
-    const frame = (event: unknown) =>
-      new TextEncoder().encode(`data: ${JSON.stringify(event)}\n\n`);
-    mswServer.use(
-      http.get('/api/v1/agent/skills', () => HttpResponse.json(skills)),
-      http.get(`/api/v1/agent/chats/${CHAT}`, () =>
-        HttpResponse.json({ before: base, running, done: finished }[phase]),
-      ),
-      http.post(`/api/v1/agent/chats/${CHAT}/messages`, () => {
-        phase = 'running';
-        return HttpResponse.json(
-          { chat_id: CHAT, run: { ...running.latest_run, status: 'queued' } },
-          { status: 202 },
-        );
-      }),
-      http.post(`/api/v1/agent/chats/${CHAT}/runs/${STREAMED_RUN}/run`, () => {
-        const body = new ReadableStream<Uint8Array>({
-          async start(controller) {
-            controller.enqueue(frame({ type: 'step', ordinal: 1 }));
-            controller.enqueue(frame({ type: 'thinking', ordinal: 1, text: 'Comparing pages' }));
-            controller.enqueue(frame({ type: 'reply_delta', ordinal: 1, text: 'Partly ' }));
-            controller.enqueue(frame({ type: 'reply_delta', ordinal: 1, text: 'written' }));
-            for (const [call_id, tool] of [
-              ['a', 'read_site_health'],
-              ['b', 'read_performance'],
-            ])
-              controller.enqueue(
-                frame({ type: 'tool', ordinal: 1, call_id, tool, status: 'started' }),
-              );
-            await reading;
-            // A later step never blanks what was already written.
-            controller.enqueue(frame({ type: 'step', ordinal: 2 }));
-            await held;
-            phase = 'done';
-            controller.enqueue(frame({ type: 'done', run: finished.latest_run }));
-            controller.close();
-          },
-        });
-        return new HttpResponse(body, { headers: { 'content-type': 'text/event-stream' } });
-      }),
-    );
-    const user = userEvent.setup();
-    renderChat();
-
-    await user.type(await screen.findByLabelText('Reply to the agent'), 'Why this order?');
-    await user.click(screen.getByRole('button', { name: 'Send' }));
-    const live = await screen.findByRole('article', { name: 'Agent reply in progress' });
-    await vi.waitFor(() => expect(live).toHaveTextContent('Partly written'));
-    expect(within(live).getByText('Thinking')).toBeVisible();
-    // Reads one response asked for run together and are shown together.
-    expect(await screen.findByText('Running 2 reads at once…')).toBeVisible();
-    expect(
-      within(screen.getByRole('list', { name: 'Current reads' }))
-        .getAllByRole('listitem')
-        .map((item) => item.textContent),
-    ).toEqual(['Reading site health…', 'Reading performance…']);
-    read();
-    expect(await screen.findByText('Deciding the next step…')).toBeVisible();
-    expect(live).toHaveTextContent('Partly written');
-    release();
-    // The saved reply replaces the live one; the two may land in separate renders.
-    await vi.waitFor(() => {
-      expect(screen.getByText('The saved answer.')).toBeVisible();
-      expect(
-        screen.queryByRole('article', { name: 'Agent reply in progress' }),
-      ).not.toBeInTheDocument();
-    });
-  });
-
-  it('waits while the page is read, then runs the turn the fetch queued', async () => {
-    const { reading, fetched, answered } = pageChatPhases('Here is what to change.');
-    let phase: 'reading' | 'fetched' | 'answered' = 'reading';
-    const streamed: string[] = [];
-    mswServer.use(
-      http.get('/api/v1/agent/skills', () => HttpResponse.json(skills)),
-      http.get(`/api/v1/agent/chats/${CHAT}`, () =>
-        HttpResponse.json({ reading, fetched, answered }[phase]),
-      ),
-      http.post(`/api/v1/agent/chats/${CHAT}/runs/:runId/run`, ({ params }) => {
-        streamed.push(String(params.runId));
-        phase = 'answered';
-        const done = `data: ${JSON.stringify({ type: 'done', run: answered.latest_run })}\n\n`;
-        return new HttpResponse(done, { headers: { 'content-type': 'text/event-stream' } });
-      }),
-    );
-    const user = userEvent.setup();
-    renderChat();
-
-    expect(await screen.findByText('Reading your page…')).toBeVisible();
-    await user.type(screen.getByLabelText('Reply to the agent'), 'Also the title');
-    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
-    phase = 'fetched';
-    expect(await screen.findByText('Here is what to change.', {}, { timeout: 5000 })).toBeVisible();
-    expect(streamed).toEqual([fetched.latest_run.id]);
-    expect(screen.queryByText('Reading your page…')).not.toBeInTheDocument();
-  });
-
-  it('regenerates the last reply by sending its request again as a new turn', async () => {
+  it('regenerates the last reply by sending its request and its paste again as a new turn', async () => {
     const bodies: unknown[] = [];
+    const paste = { kind: 'pasted_text' as const, text: 'Current snippet' };
+    const chat = detail(revision(REV1, 1, 'agent', 'Body.'));
+    chat.messages[0] = { ...chat.messages[0]!, attachments: [paste] };
     mswServer.use(
       http.get('/api/v1/agent/skills', () => HttpResponse.json(skills)),
-      http.get(`/api/v1/agent/chats/${CHAT}`, () =>
-        HttpResponse.json(detail(revision(REV1, 1, 'agent', 'Body.'))),
-      ),
+      http.get(`/api/v1/agent/chats/${CHAT}`, () => HttpResponse.json(chat)),
       http.post(`/api/v1/agent/chats/${CHAT}/messages`, async ({ request }) => {
         bodies.push(await request.json());
         return HttpResponse.json(
@@ -470,9 +277,8 @@ describe('ChatScreen', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Regenerate' }));
     await vi.waitFor(() =>
-      expect(bodies).toEqual([{ message: 'Improve our pricing page snippet.' }]),
+      expect(bodies).toEqual([{ message: chat.messages[0]!.content, attachments: [paste] }]),
     );
-    // The reader's draft is untouched.
     expect(screen.getByLabelText('Reply to the agent')).toHaveValue('');
   });
 
@@ -503,13 +309,50 @@ describe('ChatScreen', () => {
     await user.click(screen.getByRole('button', { name: 'Send' }));
     await screen.findByRole('alert');
     expect(screen.getByLabelText('Reply to the agent')).toHaveValue('Shorten it.');
-    await user.type(screen.getByLabelText('Reply to the agent'), ' Next draft.');
     await user.click(screen.getByRole('button', { name: 'Retry send' }));
 
     await vi.waitFor(() => expect(keys).toHaveLength(2));
     expect(keys[0]).toBeTruthy();
     expect(keys[1]).toBe(keys[0]);
-    expect(screen.getByLabelText('Reply to the agent')).toHaveValue('Shorten it. Next draft.');
+    expect(screen.getByLabelText('Reply to the agent')).toHaveValue('');
+  });
+
+  it('sends an edited draft after a failed send instead of retrying the old message', async () => {
+    const bodies: unknown[] = [];
+    mswServer.use(
+      http.get('/api/v1/agent/skills', () => HttpResponse.json(skills)),
+      http.get(`/api/v1/agent/chats/${CHAT}`, () =>
+        HttpResponse.json(detail(revision(REV1, 1, 'agent', 'Old title tag.'))),
+      ),
+      http.post(`/api/v1/agent/chats/${CHAT}/messages`, async ({ request }) => {
+        bodies.push(await request.json());
+        if (bodies.length === 1)
+          return HttpResponse.json({ error: { message: 'Unavailable' } }, { status: 503 });
+        return HttpResponse.json(
+          {
+            chat_id: CHAT,
+            run: { ...detail(revision(REV1, 1, 'agent', '')).latest_run, status: 'queued' },
+          },
+          { status: 202 },
+        );
+      }),
+    );
+    const user = userEvent.setup();
+    renderChat();
+
+    await user.type(await screen.findByLabelText('Reply to the agent'), 'Shorten it.');
+    await user.click(screen.getByRole('button', { name: 'Send' }));
+    expect(await screen.findByRole('button', { name: 'Retry send' })).toBeEnabled();
+    await user.type(screen.getByLabelText('Reply to the agent'), ' Next draft.');
+    expect(screen.queryByRole('button', { name: 'Retry send' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Send' }));
+
+    await vi.waitFor(() =>
+      expect(bodies).toEqual([
+        expect.objectContaining({ message: 'Shorten it.' }),
+        expect.objectContaining({ message: 'Shorten it. Next draft.' }),
+      ]),
+    );
   });
 
   it('exports the revision as Markdown', async () => {
@@ -554,11 +397,13 @@ describe('ChatScreen', () => {
               target_prompt_id: null,
               origin: 'evidence',
               status: 'open',
+              measurement: null,
               priority_score: 1,
               priority_band: 'low',
               families: [],
               approach: 'fix_technical',
-              group: 'fix_site',
+              goal: 'read_site',
+              grouping: 'seo',
               skill_id: 'technical_health',
               member_count: 1,
               declarable_member_count: 1,
@@ -617,75 +462,6 @@ describe('ChatScreen', () => {
     ]);
   });
 
-  it('explains an older unanswered stop at the step limit and offers to try again', async () => {
-    const stopped = detail(revision(REV1, 1, 'agent', 'Body.'), {
-      status: 'failed',
-      error_code: 'stopped_at_limit',
-    });
-    // Turns now always end with a reply; an older one may have ended silently.
-    stopped.messages = stopped.messages.filter((message) => message.role === 'user');
-    mswServer.use(
-      http.get('/api/v1/agent/skills', () => HttpResponse.json(skills)),
-      http.get(`/api/v1/agent/chats/${CHAT}`, () => HttpResponse.json(stopped)),
-    );
-    renderChat();
-
-    expect(await screen.findByText(/stopped at its step limit/i)).toBeVisible();
-    expect(screen.queryByText(/could not finish/i)).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Try again' })).toBeEnabled();
-  });
-
-  it('shows what a running turn has done so far', async () => {
-    mswServer.use(
-      http.get('/api/v1/agent/skills', () => HttpResponse.json(skills)),
-      http.get(`/api/v1/agent/chats/${CHAT}`, () =>
-        HttpResponse.json(
-          detail(revision(REV1, 1, 'agent', 'Body.'), {
-            status: 'running',
-            progress: [
-              { ordinal: 1, status: 'unavailable', tool: 'read_site_health' },
-              { ordinal: 2, status: 'working', tool: null },
-            ],
-          }),
-        ),
-      ),
-    );
-    const user = userEvent.setup();
-    renderChat();
-
-    await user.click(await screen.findByText('View activity'));
-    const steps = within(screen.getByRole('list', { name: 'Agent progress' }));
-    expect(steps.getAllByRole('listitem').map((item) => item.textContent)).toEqual([
-      'Read site health · no data yet',
-      'Deciding the next step…',
-    ]);
-  });
-
-  it('refuses edits while a turn is running and offers Stop', async () => {
-    const cancels: string[] = [];
-    mswServer.use(
-      http.get('/api/v1/agent/skills', () => HttpResponse.json(skills)),
-      http.get(`/api/v1/agent/chats/${CHAT}`, () =>
-        HttpResponse.json(detail(revision(REV1, 1, 'agent', 'Body.'), { status: 'running' })),
-      ),
-      http.post(`/api/v1/agent/chats/${CHAT}/runs/${RUN}/cancel`, ({ params }) => {
-        cancels.push(String(params.chatId ?? CHAT));
-        return HttpResponse.json({ ...detail(revision(REV1, 1, 'agent', 'x')).latest_run });
-      }),
-    );
-    const user = userEvent.setup();
-    renderChat();
-
-    const pane = await screen.findByRole('region', { name: 'Pricing page edits' });
-    expect(within(pane).getByRole('button', { name: 'Edit' })).toBeDisabled();
-    expect(screen.getByLabelText('Reply to the agent')).toBeEnabled();
-    await user.type(screen.getByLabelText('Reply to the agent'), 'Next question');
-    // While the turn runs, Stop takes Send's place; drafting continues.
-    expect(screen.queryByRole('button', { name: 'Send' })).not.toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Stop' }));
-    expect(cancels).toHaveLength(1);
-  });
-
   it('prefills a suggestion for review and hides suggestions after discussion', async () => {
     let current = detail(revision(REV1, 1, 'agent', 'Body.'));
     const sends: unknown[] = [];
@@ -716,12 +492,12 @@ describe('ChatScreen', () => {
       ],
     };
     await act(() => refreshAgentChat(queryClient, CHAT));
-    await screen.findByText('Here is why.');
+    await screen.findByText('Here is why.', { selector: 'article p' });
     expect(screen.queryByRole('group', { name: 'Suggested follow-ups' })).not.toBeInTheDocument();
     expect(screen.getByLabelText('Reply to the agent')).toHaveValue('Make it shorter');
   });
 
-  it('shows the workflow inherited from the chat without promising automatic routing', async () => {
+  it('shows the skill inherited from the chat until it is removed for Automatic', async () => {
     mswServer.use(
       http.get('/api/v1/agent/skills', () => HttpResponse.json(skills)),
       http.get(`/api/v1/agent/chats/${CHAT}`, () =>
@@ -733,42 +509,19 @@ describe('ChatScreen', () => {
     );
     const user = userEvent.setup();
     renderChat();
+    const continued = 'Continue with Search Console optimization';
+    const inherited = `Skill: ${continued}`;
+    expect(await screen.findByText(inherited)).toBeVisible();
+    await openComposerSubmenu(user, /^Skills: Continue with Search Console optimization$/);
+    expect(await screen.findByRole('menuitemradio', { name: continued })).toBeChecked();
+    screen.getByRole('menuitemradio', { name: 'Search Console optimization' }).focus();
+    await user.keyboard('{Enter}');
     await user.click(
-      await screen.findByRole('button', {
-        name: 'Skill: Continue with Search Console optimization',
-      }),
+      await screen.findByRole('button', { name: 'Remove Skill: Search Console optimization' }),
     );
-    expect(screen.getByRole('menuitemradio', { name: 'Automatic' })).toBeVisible();
-    expect(
-      screen.getByRole('menuitemradio', { name: 'Continue with Search Console optimization' }),
-    ).toBeChecked();
-    await user.click(screen.getByRole('menuitemradio', { name: 'Search Console optimization' }));
-    await user.click(screen.getByRole('button', { name: 'Skill: Search Console optimization' }));
-    await user.click(
-      screen.getByRole('menuitemradio', { name: 'Continue with Search Console optimization' }),
-    );
-    expect(
-      screen.getByRole('button', { name: 'Skill: Continue with Search Console optimization' }),
-    ).toBeVisible();
-  });
-
-  it('follows the thread in its own region until the reader scrolls up', async () => {
-    let current = detail(revision(REV1, 1, 'agent', 'Body.'));
-    mswServer.use(
-      http.get('/api/v1/agent/skills', () => HttpResponse.json(skills)),
-      http.get(`/api/v1/agent/chats/${CHAT}`, () => HttpResponse.json(current)),
-    );
-    const user = userEvent.setup();
-    const { queryClient } = renderChat();
-    await screen.findByLabelText('Reply to the agent');
-    await expectThreadFollowsLatest({
-      scope: document.body,
-      user,
-      newerReply: async () => {
-        current = detail(revision(REV2, 2, 'agent', 'Updated body.'));
-        await act(() => refreshAgentChat(queryClient, CHAT));
-        await screen.findByText('Updated body.');
-      },
-    });
+    expect(screen.getByText(inherited)).toBeVisible();
+    await user.click(screen.getByRole('button', { name: `Remove ${inherited}` }));
+    await openComposerSubmenu(user, /^Skills: Automatic$/);
+    expect(await screen.findByRole('menuitemradio', { name: 'Automatic' })).toBeChecked();
   });
 });

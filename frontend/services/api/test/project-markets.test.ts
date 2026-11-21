@@ -409,7 +409,6 @@ describe('visibility by market', () => {
       country_code: 'ES',
       language_code: 'es',
     });
-    // Spain's run finished, but its metrics are not written yet.
     const spanishRun = await fixtures.audit(tenant, { completedAt: new Date() });
     await db
       .updateTable('audits')

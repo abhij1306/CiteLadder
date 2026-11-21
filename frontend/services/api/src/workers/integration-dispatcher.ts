@@ -52,7 +52,6 @@ export class IntegrationDispatcher {
         'mapping.connection_id',
         'mapping.project_id',
       ])
-      // Each mapping's newest scheduled run, in the same read.
       .leftJoinLateral(
         (eb) =>
           eb
@@ -85,7 +84,6 @@ export class IntegrationDispatcher {
           connectionId: target.connection_id,
           mappingId: target.mapping_id,
           projectId: target.project_id,
-          // No window: the sync owner re-reads the late-data days after coverage.
           syncKind: 'scheduled',
         });
       } catch (error) {
@@ -115,8 +113,6 @@ export class IntegrationDispatcher {
           grant.refresh_token_encrypted || grant.access_token_encrypted,
         );
       } catch {
-        // A credential which cannot be recovered is resolved locally. Provider
-        // failures still use the existing revoke-failed path below.
         token = null;
       }
       if (token !== null) {

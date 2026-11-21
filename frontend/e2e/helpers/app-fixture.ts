@@ -22,7 +22,6 @@ const FIXTURE_USER = {
   updated_at: '2026-01-01T00:00:00Z',
 } as const;
 
-/** The workspace every fixture account belongs to. */
 export const FIXTURE_WORKSPACE_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 
 /**
@@ -41,7 +40,6 @@ export const FIXTURE_PROJECT = makeProject({
   primary_market: 'United States',
 });
 
-/** Build the canonical project-owned URL used by authenticated browser journeys. */
 export function fixtureProjectPath(href: string): string {
   const target = new URL(href, 'https://citeladder.test');
   target.searchParams.set('project', FIXTURE_PROJECT.id);
@@ -101,8 +99,6 @@ export async function stubAuthedShell(
     route.fulfill({ json: workspacesFor(projects) }),
   );
   await page.route('**/api/v1/projects', (route) => route.fulfill({ json: projects }));
-  // The shell reads the engine catalogue before any screen: every engine's
-  // name, order and surface kind come from it.
   await page.route('**/api/v1/provider-catalog', (route) =>
     route.fulfill({ json: providerCatalogFixture }),
   );

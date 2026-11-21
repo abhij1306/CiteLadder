@@ -1,37 +1,28 @@
 import type { ReactNode } from 'react';
 
+import { AgentFailureNotice } from '@/components/agent/agent-failure-notice';
 import { Composer } from '@/components/agent/composer';
 import { Conversation } from '@/components/agent/conversation';
-import { SkillPicker } from '@/components/agent/skill-picker';
+import { useSkillChoice } from '@/components/agent/skill-picker';
 import { useCancelRun, useFollowUp, type FollowUp } from '@/components/agent/use-chat-turns';
-import { ProjectLink } from '@/components/ui/project-link';
-import { Button } from '@/components/ui/button';
-import { Callout } from '@/components/ui/callout';
 import { AgentThread } from '@/components/ui/chat-dock';
-import { MutationNotice } from '@/components/ui/mutation-notice';
 import { latestOutput } from '@/lib/agent/documents';
 import { agentHandoffHref } from '@/lib/agent/handoff';
 import { isPageReading, isRunActive } from '@/lib/agent/run-state';
 import { useAgentAccess } from '@/lib/agent/use-agent-access';
 import type { AgentChatDetail, AgentOutput } from '@/lib/api/agent';
+import { Notice } from '@/components/ui/notice';
 
-/**
- * One chat's conversation and reply composer, shared by the full Agent screen
- * and the Dashboard panel so both behave the same: the message appears at
- * once, the reply streams, Stop replaces Send while a turn runs, and the last
- * turn can be retried, regenerated or edited.
- */
 export function useChatThread(workspaceId: string, detail: AgentChatDetail) {
   const chatId = detail.chat.id;
   const access = useAgentAccess();
-  // A page chat reading its page has no turn yet, and nothing can be sent until it does.
   const runActive = isRunActive(detail.latest_run) || isPageReading(detail.page_fetch);
   const turn = useFollowUp(workspaceId, detail);
   const cancel = useCancelRun(workspaceId);
   // Capture the run: a closure does not keep the narrowing of `detail.latest_run`.
   const activeRun = isRunActive(detail.latest_run) ? detail.latest_run : null;
   const stop = activeRun ? () => cancel.mutate({ chatId, runId: activeRun.id }) : undefined;
-  return { access, runActive, turn, stop, stopping: cancel.isPending };
+  return { workspaceId, access, runActive, turn, stop, stopping: cancel.isPending };
 }
 export type ChatThread = ReturnType<typeof useChatThread>;
 
@@ -42,27 +33,28 @@ export function ChatConversation({
 }: Readonly<{
   thread: ChatThread;
   detail: AgentChatDetail;
-  /** How one document is shown in the thread; omitted (the page workspace), documents are not. */
   renderOutput?: (output: AgentOutput) => ReactNode;
 }>) {
   const { turn, access, runActive } = thread;
   return (
     <>
       <Conversation
+        workspaceId={thread.workspaceId}
         detail={detail}
         renderOutput={renderOutput}
         onRefine={turn.suggest}
         onRecover={turn.recover}
         onRetry={turn.resend}
-        hasDraft={Boolean(turn.draft.trim() || turn.commands.mentions.length)}
+        hasDraft={Boolean(
+          turn.draft.trim() || turn.commands.mentions.length || turn.commands.pastes.items.length,
+        )}
         pendingMessage={turn.pendingMessage}
         canSend={access.canSend && !turn.pending && !runActive}
       />
-      {/* Notices keep the thread's reading column instead of the page's full width. */}
       {!access.canSend || turn.failure ? (
         <AgentThread>
-          {access.canSend ? null : <Callout tone="info">{access.message}</Callout>}
-          <FollowUpFailure turn={turn} actionId={detail.chat.action_id} canSend={access.canSend} />
+          {access.canSend ? null : <Notice tone="info">{access.message}</Notice>}
+          <FollowUpFailure turn={turn} actionId={detail.chat.action_id} />
         </AgentThread>
       ) : null}
     </>
@@ -76,6 +68,14 @@ export function ReplyComposer({
   placeholder,
 }: Readonly<{ id: string; thread: ChatThread; detail: AgentChatDetail; placeholder: string }>) {
   const { turn, access, runActive } = thread;
+  const skill = useSkillChoice({
+    value: turn.skillId,
+    onChange: turn.setSkillId,
+    hasDocument: detail.outputs.length > 0,
+    inheritedSkillId:
+      detail.pinned_skill_id ?? (detail.chat.action_id ? null : latestOutput(detail)?.skill_id),
+    hasAction: Boolean(detail.chat.action_id),
+  });
   return (
     <Composer
       id={id}
@@ -88,65 +88,29 @@ export function ReplyComposer({
       submissionDisabled={runActive}
       onStop={thread.stop}
       stopping={thread.stopping}
+      onRetry={
+        turn.failure &&
+        turn.failure.recovery !== 'new-chat' &&
+        turn.draft.trim() === turn.failedMessage
+          ? turn.retrySubmission
+          : undefined
+      }
       placeholder={placeholder}
       commands={turn.commands}
-      tools={
-        <SkillPicker
-          {...turn.commands.skillPicker}
-          value={turn.skillId}
-          onChange={turn.setSkillId}
-          hasDocument={detail.outputs.length > 0}
-          inheritedSkillId={
-            detail.pinned_skill_id ??
-            (!detail.chat.action_id ? latestOutput(detail)?.skill_id : null)
-          }
-          hasAction={Boolean(detail.chat.action_id)}
-          disabled={!access.canSend || runActive}
-        />
-      }
+      skill={skill}
     />
-  );
-}
-
-/**
- * Back to the newest message: a `ComposerDock`'s `floating` control, shown
- * only while the reader has scrolled away from the end of the thread.
- */
-export function JumpToLatest({ onJump }: Readonly<{ onJump: () => void }>) {
-  return (
-    <Button variant="secondary" onClick={onJump}>
-      Jump to latest
-    </Button>
   );
 }
 
 function FollowUpFailure({
   turn,
   actionId,
-  canSend,
-}: Readonly<{ turn: FollowUp; actionId: string | null; canSend: boolean }>) {
+}: Readonly<{ turn: FollowUp; actionId: string | null }>) {
   if (!turn.failure) return null;
   return (
-    <MutationNotice
-      notice={turn.failure}
-      recovery={
-        turn.failure.startNewChat ? (
-          <ProjectLink
-            href={agentHandoffHref({ actionId, prompt: turn.lastMessage })}
-            className="underline"
-          >
-            Start a new chat
-          </ProjectLink>
-        ) : (
-          <Button
-            variant="secondary"
-            onClick={turn.retrySubmission}
-            disabled={turn.pending || !canSend}
-          >
-            Retry send
-          </Button>
-        )
-      }
+    <AgentFailureNotice
+      failure={turn.failure}
+      newChatHref={agentHandoffHref({ actionId, prompt: turn.lastMessage })}
     />
   );
 }

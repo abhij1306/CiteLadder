@@ -2,7 +2,6 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { Database } from '../db/database.ts';
 import type { Crawl } from './site-task.ts';
 
-/** Append evidence without updating a previous body; the crawl records each observation. */
 export async function insertRobotsSnapshot(
   db: Database,
   crawl: Pick<Crawl, 'workspace_id' | 'project_id'>,

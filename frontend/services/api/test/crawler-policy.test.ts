@@ -125,7 +125,6 @@ it('fails answer-crawler access when every sampled page is closed, not when only
   };
   const closed = 'User-agent: OAI-SearchBot\nDisallow: /blog/';
   const pages = [`${origin}/blog/a`, `${origin}/blog/b`];
-  // The root is open, but the bot can reach none of the content pages.
   expect(searchFacts(closed, pages)).toMatchObject(['missing', { blocked: ['OAI-SearchBot'] }]);
   expect(searchFacts(closed, [...pages, `${origin}/pricing`])).toMatchObject([
     'satisfied',

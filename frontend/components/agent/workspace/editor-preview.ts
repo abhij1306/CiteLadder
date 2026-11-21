@@ -1,9 +1,3 @@
-/**
- * Live-preview styling for the page editor (E2): headings, bold, italics and
- * links render styled, and their Markdown marks are hidden except on the
- * lines the cursor is on while the editor has focus. Hiding never removes
- * text, so offsets stay the server's and suggestions anchor exactly.
- */
 import { syntaxTree } from '@codemirror/language';
 import type { EditorState, Range } from '@codemirror/state';
 import {
@@ -14,7 +8,6 @@ import {
   type ViewUpdate,
 } from '@codemirror/view';
 
-/** A node of the Markdown syntax tree as an iteration visits it. */
 type SyntaxNodeRef = Parameters<
   Parameters<ReturnType<typeof syntaxTree>['iterate']>[0]['enter']
 >[0];
@@ -26,10 +19,8 @@ const HEADING_LINES = [1, 2, 3, 4, 5, 6].map((level) =>
   Decoration.line({ class: `page-editor-h${level}` }),
 );
 
-/** What one pass over the visible syntax tree collects. */
 type Pass = {
   state: EditorState;
-  /** Lines whose marks stay visible: the cursor's, while the editor has focus. */
   active: ReadonlySet<number>;
   ranges: Range<Decoration>[];
 };
@@ -39,14 +30,12 @@ function hideMark(pass: Pass, from: number, to: number) {
   pass.ranges.push(HIDDEN.range(from, to));
 }
 
-/** An ATX heading's `#` run and the space after it; a setext underline stays. */
 function hideHeaderMark(pass: Pass, node: SyntaxNodeRef) {
   if (!node.node.parent?.name.startsWith('ATXHeading')) return;
   const spaced = pass.state.doc.sliceString(node.to, node.to + 1) === ' ';
   hideMark(pass, node.from, spaced ? node.to + 1 : node.to);
 }
 
-/** A link's brackets and destination; an autolink's URL is its text and stays. */
 function hideLinkPart(pass: Pass, node: SyntaxNodeRef) {
   if (node.name === 'URL' && node.node.parent?.name !== 'Link') return;
   hideMark(pass, node.from, node.to);

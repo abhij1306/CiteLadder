@@ -8,10 +8,8 @@ export function providerErrorCode(status: number) {
   return status >= 500 ? 'server_error' : 'client_error';
 }
 
-/** Rate limits and transient gateway failures; never a deterministic 4xx/5xx. */
 export const transientStatus = (status: number) => [429, 500, 502, 503, 504].includes(status);
 
-/** A configured endpoint URL; an unparseable value is a configuration error. */
 export function parseEndpoint(baseUrl: string) {
   try {
     return new URL(baseUrl);
@@ -20,24 +18,20 @@ export function parseEndpoint(baseUrl: string) {
   }
 }
 
-/** One call's deadline, shared by its retries, or the caller's signal if it fires first. */
 export function callDeadline(timeoutSeconds: number, signal?: AbortSignal) {
   return AbortSignal.any([AbortSignal.timeout(timeoutSeconds * 1000), ...(signal ? [signal] : [])]);
 }
 
-/** A deadline that passed is a timeout; any other abort, such as a caller's cancellation, is not. */
 export function abortCode(signal?: AbortSignal) {
   const reason: unknown = signal?.reason;
   return reason instanceof Error && reason.name === 'TimeoutError' ? 'timeout' : 'connection';
 }
 
-/** The chat-completions URL of an OpenAI-compatible endpoint, given either form. */
 export function chatCompletionsUrl(endpoint: URL) {
   const base = stripTrailing(endpoint.href, '/');
   return base.endsWith('/chat/completions') ? base : endpointUrl(base, '/chat/completions');
 }
 
-/** `base` without trailing slashes, joined to an absolute `path`. */
 export function endpointUrl(base: string, path: string) {
   let end = base.length;
   while (end > 0 && base[end - 1] === '/') end--;
@@ -48,7 +42,6 @@ export class ModelError extends Error {
   readonly code: 'not_configured' | 'parse' | 'http' | 'connection' | 'timeout';
   readonly status: number | undefined;
   readonly retryAfter: string | undefined;
-  /** Tokens the provider reported for a call that still failed, such as an unparseable answer. */
   readonly usage: Record<string, number | null> | undefined;
   constructor(
     code: ModelError['code'],
@@ -64,7 +57,6 @@ export class ModelError extends Error {
   }
 }
 
-/** One provider call's answer, the same whichever API produced it. */
 type ModelResult = {
   content: string;
   provider_adapter: string;
@@ -101,7 +93,6 @@ export type RetryPolicy = {
   retryConnection: boolean;
 };
 
-/** A provider's `Retry-After` as whole seconds for a `ModelError`, when it asks for a wait. */
 export function retryAfterHeader(header: string | null | undefined): string | undefined {
   const seconds = retryAfterSeconds(header);
   return seconds === undefined ? undefined : String(Math.ceil(seconds));
@@ -156,7 +147,6 @@ export async function postModel(
   throw new ModelError('connection');
 }
 
-/** Only an abort interrupts the backoff; the caller's deadline has passed. */
 async function backoff(transport: Transport, milliseconds: number, signal?: AbortSignal) {
   try {
     await transport.sleep(milliseconds, signal);

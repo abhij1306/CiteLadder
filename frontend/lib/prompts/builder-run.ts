@@ -1,13 +1,7 @@
-/**
- * The Prompt Builder's run as data: the distribution step's settings, the
- * generate request they make, and review's coverage of what came back
- * against what was asked for, with the request for "Generate more".
- */
 import type { PromptGenerateRequest } from '@citeladder/contracts/prompt-requests';
 import type { PromptCandidate, PromptFormLimits, SeedQueries, Topic } from '@citeladder/contracts';
 import { PROMPT_BUILDER } from '@/lib/config/prompts';
 
-/** The run bounds the API enforces, from the prompt-set list. */
 export type RunLimits = Pick<PromptFormLimits, 'generation_count_max' | 'seed_query_ids_max'>;
 
 export type SeedChoice = SeedQueries['sources'][number]['source'] | 'none';
@@ -18,26 +12,21 @@ export const INTENT_KEYS = [
   'transactional',
 ] as const satisfies readonly IntentKey[];
 
-/** The distribution step's controls, as typed: numbers stay text until the request is built. */
 export type RunSettings = {
   count: string;
   brandedPercent: string;
   comparisonPercent: string;
   intent: Record<IntentKey, string>;
   personas: string[];
-  /** The chosen search source; null until the person picks one (see `seedSourceOf`). */
   seedSource: SeedChoice | null;
-  /** Seed queries the person unticked; every other listed query steers wording. */
   unticked: ReadonlySet<string>;
   runContext: string;
 };
 
-/** The source seeds come from: the person's choice, else the first connected source. */
 export function seedSourceOf(settings: RunSettings, seeds: SeedQueries): SeedChoice {
   return settings.seedSource ?? seeds.sources[0]?.source ?? 'none';
 }
 
-/** Defaults that suit most businesses. */
 export function defaultRunSettings(): RunSettings {
   const mix = PROMPT_BUILDER.defaultIntentMix;
   return {
@@ -56,7 +45,6 @@ export function defaultRunSettings(): RunSettings {
   };
 }
 
-/** A whole number within bounds, or null. */
 function whole(text: string, min: number, max: number): number | null {
   const value = Number(text.trim());
   return text.trim() !== '' && Number.isInteger(value) && value >= min && value <= max
@@ -66,7 +54,6 @@ function whole(text: string, min: number, max: number): number | null {
 
 type Built = { ok: true; request: PromptGenerateRequest } | { ok: false; problem: string };
 
-/** The seed fields: every listed query is `[]`, none is the `none` source. */
 function seedFields(
   settings: RunSettings,
   seeds: SeedQueries,
@@ -83,12 +70,6 @@ function seedFields(
   return { seed_source: source, seed_query_ids: ticked };
 }
 
-/**
- * The generate request for every topic, or why the settings cannot make one.
- * `seeds` is null until the seed-query read has loaded, so a pending or failed
- * read never passes for "no search data". Only personas still offered count.
- * `limits` are the server's run bounds, so no request it would refuse is built.
- */
 export function runRequest(
   settings: RunSettings,
   context: {
@@ -135,22 +116,20 @@ export function runRequest(
   };
 }
 
-export type CoverageState = 'on_target' | 'short' | 'empty' | 'not_planned';
+export type PlannedCoverage = 'on_target' | 'short' | 'empty' | 'not_planned';
 export type CoverageRow = {
   key: string;
   label: string;
-  /** What the request planned for this row; 0 when it planned none. */
   target: number;
   actual: number;
-  state: CoverageState;
+  state: PlannedCoverage;
 };
 
-function coverageState(target: number, actual: number): CoverageState {
+function coverageState(target: number, actual: number): PlannedCoverage {
   if (actual >= target) return target === 0 && actual === 0 ? 'not_planned' : 'on_target';
   return actual === 0 ? 'empty' : 'short';
 }
 
-/** `total` split over `weights` by largest remainder, so the parts sum to it. */
 function apportion(total: number, weights: readonly number[]): number[] {
   const sum = weights.reduce((a, b) => a + b, 0);
   if (!sum) return weights.map(() => 0);
@@ -167,7 +146,6 @@ function apportion(total: number, weights: readonly number[]): number[] {
   return floors.map((part, index) => part + (extra.has(index) ? 1 : 0));
 }
 
-/** Each requested topic: drafted suggestions against an even share of the count. */
 export function topicCoverage(
   request: PromptGenerateRequest,
   topics: readonly Topic[],
@@ -201,7 +179,6 @@ const SEGMENTS: readonly { key: Segment; label: string }[] = [
 
 export type SegmentCoverageRow = CoverageRow & { segment: Segment };
 
-/** Each planned segment (cohort): drafted suggestions against its share of the count. */
 export function segmentCoverage(
   request: PromptGenerateRequest,
   drafted: readonly PromptCandidate[],
@@ -223,7 +200,6 @@ export function segmentCoverage(
 
 const missing = (row: CoverageRow) => Math.max(1, row.target - row.actual);
 
-/** The builder's request narrowed to one topic, for the suggestions it is missing. */
 export function moreForTopic(
   request: PromptGenerateRequest,
   row: CoverageRow,
@@ -231,7 +207,6 @@ export function moreForTopic(
   return { ...request, topic_ids: [row.key], count: missing(row) };
 }
 
-/** The builder's request narrowed to one segment, for the suggestions it is missing. */
 export function moreForSegment(
   request: PromptGenerateRequest,
   row: SegmentCoverageRow,

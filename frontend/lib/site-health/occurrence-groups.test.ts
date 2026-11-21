@@ -27,8 +27,6 @@ describe('groupOccurrences', () => {
   });
 
   it('never shares a line that names the page it is printed under', () => {
-    // Each page links to itself through a redirect: the same words, "→ this
-    // page", but a different page every time.
     const entries = groupOccurrences([
       onPage(1, {
         failing_targets: [{ url: 'https://acme.com/p1', final_url: 'https://acme.com/page-1' }],

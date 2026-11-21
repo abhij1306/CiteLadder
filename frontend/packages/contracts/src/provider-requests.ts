@@ -1,16 +1,7 @@
-/**
- * Request bodies of the BYOK provider connections. The credential is
- * write-only: it is sent here and never present on a response. A credential is
- * either a bearer `api_key` or an HTTP Basic `api_login` + `api_password`
- * pair; the API refines each body so the shape matches the transport and a
- * half pair is refused at the edge. The browser types its arguments as
- * `z.input` of these.
- */
 import { z } from 'zod';
 
 import { logicalEngineSchema, transportProviderSchema } from './providers.ts';
 
-/** An endpoint override: https, or http on loopback only; no credentials, query or fragment. */
 const endpoint = () =>
   z
     .string()
@@ -33,7 +24,6 @@ const endpoint = () =>
       }
     }, 'Provider endpoint is invalid');
 
-/** The engines a connection serves; each engine at most once. */
 const routes = () =>
   z
     .array(
@@ -59,7 +49,6 @@ export const providerConnectionCreateRequestSchema = z.object({
 });
 export type ProviderConnectionCreateRequest = z.input<typeof providerConnectionCreateRequestSchema>;
 
-/** A partial connection edit; an absent or null field is kept. */
 export const providerConnectionUpdateRequestSchema = z.object({
   label: z.string().max(255).nullish(),
   api_key: z.string().nullish(),

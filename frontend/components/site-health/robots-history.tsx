@@ -1,15 +1,15 @@
 import { useState } from 'react';
 import type { robotsHistoryPageSchema } from '@citeladder/contracts/site-health';
 import type { z } from 'zod';
-import { FileText } from 'lucide-react';
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
-import { TableTime } from '@/components/ui/display-time';
 import { choiceFilter } from '@/components/ui/all-filters';
 import type { FilterBarProps } from '@/components/ui/filter-bar';
-import { Stack } from '@/components/ui/layout';
+import { FilterChip } from '@/components/ui/filter-chip';
+import { Inline, Stack } from '@/components/ui/layout';
 import { LineDiff } from '@/components/ui/line-diff';
-import { TableCell, TableRow } from '@/components/ui/table';
+import { TableCell, TableRow, TableTime } from '@/components/ui/table';
 import { textRole } from '@/components/ui/typography';
+import { FileText } from '@/lib/icons';
 import { diffLines } from '@/lib/agent/diff';
 import { siteHealthQueries } from '@/lib/api/site-health-queries';
 import { useDisplayTimeZone } from '@/lib/display-timezone';
@@ -21,7 +21,6 @@ import { useCursorTableQuery } from '@/lib/table/use-cursor-table-query';
 type RobotsHistoryPage = z.infer<typeof robotsHistoryPageSchema>;
 type Snapshot = RobotsHistoryPage['snapshots'][number];
 type Side = 'before' | 'after';
-/** The two observations chosen for comparison, on the page they were chosen from. */
 type Selection = Readonly<{ page: string; before: string; after: string }>;
 
 export function RobotsHistory({
@@ -32,8 +31,6 @@ export function RobotsHistory({
   projectId: string;
 }>) {
   const timeZone = useDisplayTimeZone();
-  // A page turn keeps the rows and the pager on screen until the next
-  // observations land; loading and errors draw inside the table.
   const { page, cursor, table } = useCursorTableQuery({
     workspaceId,
     scopeId: projectId,
@@ -41,7 +38,7 @@ export function RobotsHistory({
     query: (request) => siteHealthQueries.robotsHistory({ workspaceId, projectId }, request),
     noun: 'observations',
     loading: 'Loading robots.txt observations…',
-    error: 'robots.txt history is unavailable.',
+    subject: 'the robots.txt history',
     empty: () => ({
       kind: 'empty',
       icon: FileText,
@@ -50,7 +47,6 @@ export function RobotsHistory({
     }),
     fixedPageSize: ROBOTS_HISTORY_PAGE_SIZE,
   });
-  // A new page offers different observations, so the comparison starts over.
   const pageKey = cursor.cursor ?? 'first';
   const [selection, setSelection] = useState<Selection>({ page: pageKey, before: '', after: '' });
   const selected =
@@ -71,35 +67,38 @@ export function RobotsHistory({
       : [];
   });
   const choose = (side: Side, value: string) => setSelection({ ...selected, [side]: value });
-  // The two observations to compare, in All filters; one observation has nothing to compare.
   const toolbar: FilterBarProps = {
-    filters:
-      versions.length < 2
-        ? []
-        : (['before', 'after'] as const).map((side) =>
-            choiceFilter({
-              id: side,
-              label: side === 'before' ? 'Before' : 'After',
-              value: selected[side],
-              defaultValue: '',
-              groups: [
-                {
-                  options: [
-                    { value: '', label: `Select ${side} observation` },
-                    ...versions.map(({ value, label }) => ({ value, label })),
-                  ],
-                },
-              ],
-              onChange: (value) => choose(side, value),
-            }),
-          ),
+    view:
+      versions.length < 2 ? undefined : (
+        <Inline className="flex-wrap">
+          {(['before', 'after'] as const).map((side) => (
+            <FilterChip
+              key={side}
+              filter={choiceFilter({
+                id: side,
+                label: side === 'before' ? 'Before' : 'After',
+                value: selected[side],
+                defaultValue: '',
+                groups: [
+                  {
+                    options: [
+                      { value: '', label: `Select ${side} observation` },
+                      ...versions.map(({ value, label }) => ({ value, label })),
+                    ],
+                  },
+                ],
+                onChange: (value) => choose(side, value),
+              })}
+            />
+          ))}
+        </Inline>
+      ),
   };
   return (
     <Stack>
       <DataTable
         label="robots.txt observation sequence"
         columns={COLUMNS}
-        minWidth="md"
         toolbar={toolbar}
         {...table}
       >
@@ -124,7 +123,6 @@ export function RobotsHistory({
           </TableRow>
         ))}
       </DataTable>
-      {/* One observation against itself has nothing to compare. */}
       {selected.before === selected.after ? null : (
         <RobotsDiff
           before={versions.find((version) => version.value === selected.before)?.snapshot}
@@ -135,10 +133,6 @@ export function RobotsHistory({
   );
 }
 
-/**
- * What the observation captured. A stored body is content-addressed and
- * carries no time of its own, so the row's Observed time dates it.
- */
 function snapshotSummary(snapshot: Snapshot | undefined): string {
   if (!snapshot) return 'No body observed';
   const size = pluralCount(snapshot.body.length, 'character');
@@ -146,10 +140,10 @@ function snapshotSummary(snapshot: Snapshot | undefined): string {
 }
 
 const COLUMNS: readonly DataTableColumn[] = [
-  { key: 'observed', label: 'Observed', width: 'date' },
-  { key: 'status', label: 'Fetch status', width: 'status' },
-  { key: 'policy', label: 'Policy' },
-  { key: 'snapshot', label: 'robots.txt body', width: 'name' },
+  { key: 'observed', label: 'Observed', kind: 'date' },
+  { key: 'status', label: 'Fetch status', kind: 'status' },
+  { key: 'policy', label: 'Policy', kind: 'text' },
+  { key: 'snapshot', label: 'robots.txt body', kind: 'text', width: 'name' },
 ];
 
 function RobotsDiff({
@@ -164,14 +158,10 @@ function RobotsDiff({
   );
   return (
     <>
-      <p className={textRole('caption')}>
-        Lines removed since the Before observation and added in the After observation. Choose two
-        observations on this page.
-      </p>
       {lines ? (
         <LineDiff lines={lines} label="robots.txt line diff" />
       ) : (
-        <p className={textRole('body')}>
+        <p className={textRole('body', 'text-ink-2')}>
           These robots.txt files are too long to compare line by line.
         </p>
       )}

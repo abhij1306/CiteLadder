@@ -62,7 +62,6 @@ export const recomputeDemand: Executor = async (task, { db, maxAttempts, checkCa
       scope.projectId,
       traffic.inputs.filter((r) => r.target_kind === 'query').map((r) => r.target),
     );
-    // Keyed by detector; the low-CTR detector reads the traffic snapshot.
     const evaluations: Record<DemandDetector, Evaluation> = {
       high_impression_low_ctr: detectSearchSignals(traffic.inputs, (query) =>
         searchClasses.get(normalizeQuery(query)),

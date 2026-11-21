@@ -1,8 +1,3 @@
-/**
- * Topics domain endpoints: first-class topical categories grouping prompts
- * within a project (topics rail + AI generation targets), with their query
- * and mutation descriptors. Every response passes through `strictValidate`.
- */
 import { mutationOptions, queryOptions, type QueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 
@@ -40,14 +35,8 @@ const topicsApi = {
     const res = await apiClient.patch<Topic>(`/topics/${topicId}`, input, options);
     return strictValidate(topicSchema, res, 'topics.update');
   },
-  // Deleting a topic detaches its prompts (topic_id -> null); prompts survive.
   remove: (topicId: string, options?: ApiRequestOptions) =>
     apiClient.delete<void>(`/topics/${topicId}`, options),
-  /**
-   * Buyer-facing topic proposals beside the existing topics. A metered model
-   * call (429 when the workspace's provider-call window is spent, 422 without
-   * saved offerings); nothing is written.
-   */
   preview: async (projectId: string, options?: ApiRequestOptions) => {
     const res = await apiClient.post<TopicPreview>(
       `/projects/${projectId}/topics/preview`,
@@ -56,11 +45,6 @@ const topicsApi = {
     );
     return strictValidate(topicPreviewResponseSchema, res, 'topics.preview');
   },
-  /**
-   * Apply a reviewed topic plan at once: delete, rename, then create. A
-   * created proposal names the offerings it covers. 409 on a name collision,
-   * and then nothing is applied.
-   */
   confirm: async (projectId: string, input: TopicConfirmRequest, options?: ApiRequestOptions) => {
     const res = await apiClient.post<Topic[]>(
       `/projects/${projectId}/topics/confirm`,
@@ -69,7 +53,6 @@ const topicsApi = {
     );
     return strictValidate(topicListSchema, res, 'topics.confirm');
   },
-  /** Searches generation would ground on, per persisted source; no weights. */
   seedQueries: async (projectId: string, options?: ApiRequestOptions) => {
     const res = await apiClient.get<SeedQueries>(`/projects/${projectId}/seed-queries`, options);
     return strictValidate(seedQueriesResponseSchema, res, 'topics.seedQueries');
@@ -79,13 +62,11 @@ const topicsApi = {
 const scoped = (scope: ProjectScope) => ({ workspaceId: scope.workspaceId });
 
 export const topicsQueries = {
-  /** The project's topics: the library's topic filter and the Prompt Builder. */
   list: (scope: ProjectScope) =>
     queryOptions({
       queryKey: queryKeys.topics.list(scope),
       queryFn: ({ signal }) => topicsApi.list(scope.projectId, { signal, ...scoped(scope) }),
     }),
-  /** The searches generation would ground on. */
   seedQueries: (scope: ProjectScope) =>
     queryOptions({
       queryKey: queryKeys.topics.seedQueries(scope),
@@ -93,18 +74,10 @@ export const topicsQueries = {
     }),
 };
 
-/**
- * Seed queries derive from the topics and the saved business context, so a
- * write to either refreshes them; this is the one place that says so.
- */
 export function refreshSeedQueries(client: QueryClient, projectId: string) {
   return client.invalidateQueries({ queryKey: queryKeys.topics.project(projectId) });
 }
 
-/**
- * Topic writes. Each success refreshes the prompt library (topics, the seed
- * queries bound to them, and the prompts filed under them).
- */
 export const topicsMutations = {
   create: (scope: ProjectScope) =>
     mutationOptions({
@@ -120,17 +93,14 @@ export const topicsMutations = {
       onSuccess: (_topic, _input, _result, { client }) =>
         refreshPromptLibrary(client, scope.projectId),
     }),
-  /** Deleting a topic detaches its prompts; the prompts survive. */
   remove: (scope: ProjectScope) =>
     mutationOptions({
       mutationFn: (topic: Topic) => topicsApi.remove(topic.id, scoped(scope)),
       onSuccess: (_data, _topic, _result, { client }) =>
         refreshPromptLibrary(client, scope.projectId),
     }),
-  /** Proposals beside the existing topics; a metered call that writes nothing. */
   preview: (scope: ProjectScope) =>
     mutationOptions({ mutationFn: () => topicsApi.preview(scope.projectId, scoped(scope)) }),
-  /** Apply a reviewed topic plan at once. */
   confirm: (scope: ProjectScope) =>
     mutationOptions({
       mutationFn: (plan: TopicConfirmRequest) =>

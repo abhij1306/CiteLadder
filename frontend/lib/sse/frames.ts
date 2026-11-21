@@ -1,11 +1,9 @@
-/** One raw `field: value` Server-Sent Event frame. */
 export type RawSseFrame = {
   id: string | null;
   event: string | null;
   data: string;
 };
 
-/** Split chunked SSE text into complete frames and an unfinished remainder. */
 export function splitSseFrames(buffer: string): { frames: string[]; rest: string } {
   const frames: string[] = [];
   let rest = buffer;
@@ -18,7 +16,6 @@ export function splitSseFrames(buffer: string): { frames: string[]; rest: string
   return { frames, rest };
 }
 
-/** Parse standard SSE fields, ignoring comments and unknown extension fields. */
 export function parseSseFrame(frame: string): RawSseFrame {
   let id: string | null = null;
   let event: string | null = null;

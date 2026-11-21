@@ -1,9 +1,3 @@
-/**
- * Discovery-time canonical aliases: a fetched, system-selected page whose
- * declared canonical names another active, already fetched page of this crawl
- * is excluded rather than analyzed twice. The whole-crawl alias graph (cycles,
- * representatives, targets fetched later) is resolved again at finalization.
- */
 import { sql } from 'kysely';
 import { getDomain } from 'tldts';
 
@@ -12,7 +6,7 @@ import { compareText, scalarText } from '../text-order.ts';
 import type { Database } from '../db/database.ts';
 import { record } from '../db/json.ts';
 import { deactivateSystemMemberships } from './frontier.ts';
-import { refreshIssueCurrency } from './issue-currency.ts';
+import { syncIssueCurrency } from './issue-currency.ts';
 import type { Crawl } from './site-task.ts';
 import { inScope } from './url-admission.ts';
 import { canonicalIdentity } from './url-identity.ts';
@@ -41,14 +35,6 @@ function targetHash(crawl: Crawl, hash: string, declared: string, base: string) 
   return target.hash;
 }
 
-/**
- * The hash this page aliases when its target is an active member this crawl
- * already fetched. The page is a sample's selected member, or any page a full
- * crawl's HTML walk fetched: a walked page joins the tracked set only after
- * this check, so an alias never does. A target not fetched yet may still fail
- * and be released, so the alias waits for finalization, which aliases only
- * toward a target that ended active (`reconcileDuplicateAliases`).
- */
 export async function duplicateOf(
   trx: Database,
   crawl: Crawl,
@@ -91,6 +77,8 @@ export async function duplicateOf(
     .select('a.id')
     .where('t.workspace_id', '=', crawl.workspace_id)
     .where('t.crawl_id', '=', crawl.id)
+    // Only these kinds write artifacts; naming them lets the task slot index serve the lookup.
+    .where('t.task_kind', 'in', ['discover', 'analyze'])
     .where('t.url_hash', '=', target)
     .limit(1)
     .executeTakeFirst();
@@ -127,13 +115,16 @@ export async function markDuplicates(trx: Database, crawl: Crawl, hashes: string
     .where('crawl_id', '=', crawl.id)
     .where('site_url_id', '=', sql<string>`any(${ids}::uuid[])`)
     .where('is_current', '=', true)
-    .returning('finalized_at')
+    .returning(['id', 'supersedes_analysis_id'])
     .execute();
-  if (retired.some((row) => row.finalized_at !== null)) await refreshIssueCurrency(trx, crawl);
+  await syncIssueCurrency(
+    trx,
+    crawl,
+    retired.map((row) => row.supersedes_analysis_id ?? row.id),
+  );
 }
 
-/** Resolve whole-crawl chains and cycles before removing any representative. */
-export async function reconcileDuplicateAliases(db: Database, crawl: Crawl) {
+export async function duplicateAliases(db: Database, crawl: Crawl) {
   const rows = await db
     .selectFrom('site_urls as u')
     .innerJoin('site_url_observations as o', (join) =>
@@ -156,7 +147,6 @@ export async function reconcileDuplicateAliases(db: Database, crawl: Crawl) {
     .execute();
   const admitted = new Set(rows.map((row) => row.url_hash));
   const active = new Set(rows.filter((row) => row.active).map((row) => row.url_hash));
-  // The crawl root carries the site-wide checks every page scores.
   const protectedHashes = new Set([rootHash(crawl)]);
   const artifacts = await db
     .selectFrom('site_crawl_tasks as t')
@@ -166,7 +156,11 @@ export async function reconcileDuplicateAliases(db: Database, crawl: Crawl) {
         .onRef('a.workspace_id', '=', 't.workspace_id')
         .onRef('a.crawl_id', '=', 't.crawl_id'),
     )
-    .select(['t.url_hash', 'a.final_url', 'a.normalized_facts'])
+    .select([
+      't.url_hash',
+      'a.final_url',
+      sql<unknown>`a.normalized_facts -> 'canonical_url'`.as('canonical_url'),
+    ])
     .where('t.workspace_id', '=', crawl.workspace_id)
     .where('t.crawl_id', '=', crawl.id)
     .orderBy('a.fetched_at')
@@ -180,28 +174,22 @@ export async function reconcileDuplicateAliases(db: Database, crawl: Crawl) {
     const target = targetHash(
       crawl,
       artifact.url_hash,
-      scalarText(record(artifact.normalized_facts).canonical_url),
+      scalarText(artifact.canonical_url),
       artifact.final_url,
     );
     if (admitted.has(target)) edges.set(artifact.url_hash, target);
     else edges.delete(artifact.url_hash);
   }
-  const duplicates = resolveDuplicateAliases({ edges, known, active, protectedHashes });
-  await markDuplicates(db, crawl, duplicates);
-  return duplicates.length;
+  return resolveDuplicateAliases({ edges, known, active, protectedHashes });
 }
 
 export type AliasGraph = {
-  /** Fetched page hash → the admitted hash its declared canonical names. */
   edges: Map<string, string>;
-  /** Admitted hashes this crawl fetched. */
   known: Set<string>;
   active: Set<string>;
-  /** Pages never excluded (the crawl root); a chain stops at one. */
   protectedHashes: Set<string>;
 };
 
-/** Where one alias chain ends: a protected page, a fetched sink, or a cycle's deterministic member. */
 function representative(graph: AliasGraph, source: string) {
   const path: string[] = [];
   let current = source;
@@ -209,8 +197,6 @@ function representative(graph: AliasGraph, source: string) {
     if (current !== source && graph.protectedHashes.has(current)) return current;
     const cycleStart = path.indexOf(current);
     if (cycleStart >= 0) {
-      // Protected beats merely active and the lowest hash breaks the tie, so a
-      // cycle resolves the same way whichever member the walk entered it from.
       const cycle = path.slice(cycleStart).sort(compareText);
       return (
         cycle.find((hash) => graph.protectedHashes.has(hash)) ??
@@ -226,11 +212,6 @@ function representative(graph: AliasGraph, source: string) {
   }
 }
 
-/**
- * The system-selected pages to exclude as duplicates, resolved over whole
- * chains and cycles before any representative is removed: a page whose own
- * representative is itself being excluded is kept this pass.
- */
 export function resolveDuplicateAliases(graph: AliasGraph) {
   const resolved = new Map<string, string>();
   for (const source of [...graph.active].sort(compareText)) {

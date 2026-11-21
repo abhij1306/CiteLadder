@@ -1,4 +1,3 @@
-/** What one source's reading of a declaration shares across its checks. */
 import { sql } from 'kysely';
 import type { Database } from '../../db/database.ts';
 import type { WorkspaceScope } from '../../db/workspace-scope.ts';
@@ -15,7 +14,6 @@ export type ReadContext = {
   declaration: Declaration;
   result: Evaluation;
   reading: Reading;
-  /** One read per page, snapshot or row a declaration's checks share. */
   reads: Map<string, Promise<unknown>>;
 };
 
@@ -26,12 +24,6 @@ export function once<T>(ctx: ReadContext, key: string, read: () => Promise<T>): 
 
 export const dayOf = (iso: string) => iso.slice(0, 10);
 
-/**
- * The analyses a reading of the crawl sees, as an `in` list: each page's
- * latest audit as the crawl shows it (`pageAuditsSql`, SH-B9). `fold` reads a
- * page rerun through the site crawl it lands in, so a check across many pages
- * sees every tracked page; otherwise a rerun shows its own page.
- */
 export async function latestAudits(
   ctx: ReadContext,
   crawlId: string,
@@ -58,11 +50,6 @@ type SiteAnalysis = {
   source_evaluation_ids: unknown;
 };
 
-/**
- * The declared page's latest audit as this crawl shows it (`latestAudits`),
- * fetched after go-live; a check without its own page reads the declaration's
- * only target.
- */
 export async function pageAnalysis(
   ctx: ReadContext,
   crawlId: string,

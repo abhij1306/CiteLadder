@@ -1,4 +1,3 @@
-import { Download, Pencil } from 'lucide-react';
 import { useState } from 'react';
 
 import { OutputDeclaration } from '@/components/agent/action-declaration';
@@ -10,25 +9,24 @@ import { UnsavedChangesGuard } from '@/components/ui/unsaved-changes-guard';
 import { OutputHistory } from '@/components/agent/output-history';
 import { WebSources } from '@/components/agent/web-sources';
 import { ProjectLink } from '@/components/ui/project-link';
-import { Badge } from '@/components/ui/badge';
+import { DraftSheet } from '@/components/ui/draft-sheet';
+import { revisionDraft } from '@/components/agent/revision-draft';
+import { Tag } from '@/components/ui/tag';
 import { Button } from '@/components/ui/button';
+import { ClampText } from '@/components/ui/clamp-text';
 import { CopyButton } from '@/components/ui/copy-button';
 import { Icon } from '@/components/ui/icon';
 import { Inline, Stack } from '@/components/ui/layout';
 import { TabPanel, Tabs } from '@/components/ui/tabs';
 import { textRole } from '@/components/ui/typography';
+import { Download, Pencil } from '@/lib/icons';
 import { downloadOutputMarkdown, outputMarkdown } from '@/lib/agent/export';
 import { type AgentOutput, type AgentRevision } from '@/lib/api/agent';
-import { PROMPTS_GENERATE_HREF } from '@/lib/prompts/routes';
+import { PROMPT_BUILDER_HREF } from '@/lib/prompts/routes';
 import { useWorkspaceCapability } from '@/lib/project/project-context';
 
 type PaneTab = 'output' | 'sources' | 'history';
 
-/**
- * One of the chat's documents, shown inline in the thread after the reply that wrote it. Edits and restores are refused by
- * the server while a turn is queued or running, so the pane disables them
- * then rather than offering a control that will fail.
- */
 export function OutputPane({
   workspaceId,
   chatId,
@@ -44,13 +42,11 @@ export function OutputPane({
   runActive: boolean;
   canEdit: boolean;
   canSend: boolean;
-  /** Sends a follow-up turn asking the agent to revise part of the output. */
   onRevise: (message: string) => void;
 }>) {
   const { kindLabel } = useAgentCatalog();
   const revision = output.latest_revision;
   const [tab, setTab] = useState<PaneTab>('output');
-  // Held here, not in the editor, so switching tabs cannot discard it.
   const [draft, setDraft] = useState<OutputDraft | null>(null);
   const editing = draft !== null;
   const unsaved =
@@ -69,111 +65,117 @@ export function OutputPane({
     />
   );
   return (
-    <Stack as="section" gap="compact" aria-labelledby={headingId} className="min-w-0 content-start">
-      <UnsavedChangesGuard when={unsaved} />
-      <Stack as="header" gap="tight">
-        <h2 id={headingId} className={textRole('sectionTitle', 'min-w-0')}>
-          {revision.title}
-        </h2>
-        <Inline className="flex-wrap">
-          <span className={textRole('caption')}>Document {output.number}</span>
-          <Badge>{kindLabel(output.kind)}</Badge>
-          <span className={textRole('caption')}>Revision {revision.number}</span>
-          {output.target_label ? (
-            <span className={textRole('caption', 'truncate')}>{output.target_label}</span>
-          ) : null}
-        </Inline>
-        {editing ? null : (
-          <OutputActions
-            revision={revision}
-            locked={locked}
-            onEdit={
-              canEdit
-                ? () => {
-                    setTab('output');
-                    setDraft({
-                      baseRevisionId: revision.id,
-                      title: revision.title,
-                      body: revision.body,
-                    });
-                  }
-                : undefined
-            }
-          />
-        )}
-        {editing ? null : (
-          <OutputDeclaration
-            workspaceId={workspaceId}
-            chatId={chatId}
-            output={output}
-            runActive={runActive}
-            canEdit={canEdit}
-          />
-        )}
-        {editing ? null : <PromptBuilderHandoff kind={output.kind} />}
-      </Stack>
-      <Tabs
-        value={tab}
-        onValueChange={setTab}
-        ariaLabel="Output views"
-        spaced
-        items={[
-          { value: 'output', label: 'Document' },
-          { value: 'sources', label: 'Sources' },
-          { value: 'history', label: 'History' },
-        ]}
+    <DraftSheet as="div" {...revisionDraft(revision)} className="min-w-0">
+      <Stack
+        as="section"
+        gap="compact"
+        aria-labelledby={headingId}
+        className="min-w-0 content-start"
       >
-        <TabPanel value="output" className="min-w-0">
-          {draft ? (
-            <OutputEditor
-              workspaceId={workspaceId}
-              target={target}
+        <UnsavedChangesGuard when={unsaved} />
+        <Stack as="header" gap="tight">
+          <h2 id={headingId} className={textRole('heading', 'min-w-0')}>
+            {revision.title}
+          </h2>
+          <Inline className="flex-wrap">
+            <span className={textRole('caption')}>Document {output.number}</span>
+            <Tag>{kindLabel(output.kind)}</Tag>
+            <span className={textRole('caption')}>Revision {revision.number}</span>
+            {output.target_label ? (
+              <ClampText className={textRole('caption', 'min-w-0 flex-1')}>
+                {output.target_label}
+              </ClampText>
+            ) : null}
+          </Inline>
+          {editing ? null : (
+            <OutputActions
               revision={revision}
-              draft={draft}
-              onChange={setDraft}
-              onDone={() => setDraft(null)}
+              locked={locked}
+              onEdit={
+                canEdit
+                  ? () => {
+                      setTab('output');
+                      setDraft({
+                        baseRevisionId: revision.id,
+                        title: revision.title,
+                        body: revision.body,
+                      });
+                    }
+                  : undefined
+              }
             />
-          ) : (
-            document
           )}
-        </TabPanel>
-        <TabPanel value="sources">
-          <Stack gap="compact">
-            {revision.source_refs.length === 0 ? (
-              <p className={textRole('body')}>This revision cites no CiteLadder records.</p>
-            ) : (
-              <EvidenceChips refs={revision.source_refs} label="CiteLadder records" />
-            )}
-            <WebSources sources={revision.web_sources} />
-          </Stack>
-        </TabPanel>
-        <TabPanel value="history">
-          {tab === 'history' ? (
-            <OutputHistory
+          {editing ? null : (
+            <OutputDeclaration
               workspaceId={workspaceId}
               chatId={chatId}
-              outputId={output.id}
-              latestRevisionId={revision.id}
-              canRestore={!locked}
+              output={output}
+              runActive={runActive}
+              canEdit={canEdit}
             />
-          ) : null}
-        </TabPanel>
-      </Tabs>
-    </Stack>
+          )}
+          {editing ? null : <PromptBuilderHandoff kind={output.kind} />}
+        </Stack>
+        <Tabs
+          value={tab}
+          onValueChange={setTab}
+          ariaLabel="Output views"
+          spaced
+          items={[
+            { value: 'output', label: 'Document' },
+            { value: 'sources', label: 'Sources' },
+            { value: 'history', label: 'History' },
+          ]}
+        >
+          <TabPanel value="output" className="min-w-0">
+            {draft ? (
+              <OutputEditor
+                workspaceId={workspaceId}
+                target={target}
+                revision={revision}
+                draft={draft}
+                onChange={setDraft}
+                onDone={() => setDraft(null)}
+              />
+            ) : (
+              document
+            )}
+          </TabPanel>
+          <TabPanel value="sources">
+            <Stack gap="compact">
+              {revision.source_refs.length === 0 ? (
+                <p className={textRole('body', 'text-ink-2')}>
+                  This revision cites no CiteLadder records.
+                </p>
+              ) : (
+                <EvidenceChips refs={revision.source_refs} label="CiteLadder records" />
+              )}
+              <WebSources sources={revision.web_sources} />
+            </Stack>
+          </TabPanel>
+          <TabPanel value="history">
+            {tab === 'history' ? (
+              <OutputHistory
+                workspaceId={workspaceId}
+                chatId={chatId}
+                outputId={output.id}
+                latestRevisionId={revision.id}
+                canRestore={!locked}
+              />
+            ) : null}
+          </TabPanel>
+        </Tabs>
+      </Stack>
+    </DraftSheet>
   );
 }
 
-/**
- * A prompt plan is applied in the Prompt Builder, where a person confirms
- * topics and starts the run; the Agent writes no prompts itself.
- */
 function PromptBuilderHandoff({ kind }: Readonly<{ kind: AgentOutput['kind'] }>) {
-  // The Prompt Builder writes prompts, so a role that may not is not sent there.
   const canWrite = useWorkspaceCapability('write');
   if (kind !== 'prompt_plan' || !canWrite) return null;
   return (
     <Button asChild variant="primary" className="justify-self-start">
-      <ProjectLink href={PROMPTS_GENERATE_HREF}>Open Prompt Builder</ProjectLink>
+      <ProjectLink href={PROMPT_BUILDER_HREF}>Open Prompt builder</ProjectLink>
     </Button>
   );
 }
@@ -185,7 +187,6 @@ function OutputActions({
 }: Readonly<{
   revision: AgentRevision;
   locked: boolean;
-  /** Opens the editor; omitted for a role that may not edit outputs. */
   onEdit?: () => void;
 }>) {
   return (

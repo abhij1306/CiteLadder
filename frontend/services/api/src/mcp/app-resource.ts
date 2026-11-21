@@ -1,7 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { mcpPolicy } from './config.ts';
 
-/** MCP Apps metadata for a presentation tool: its result renders inline. */
 export const appToolMetadata = { ui: { resourceUri: mcpPolicy.ui_resource_uri } };
 export const appResource = {
   uri: mcpPolicy.ui_resource_uri,

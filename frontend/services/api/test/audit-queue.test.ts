@@ -88,7 +88,6 @@ describe('audit queue leases against PostgreSQL', () => {
     expect(await queue.heartbeat(task!, 'other')).toBe(false);
     const running = await queue.markRunning(task!, task!.lease_owner);
     expect(running?.audit.status).toBe('running');
-    // Expiry belongs to PostgreSQL, independent of the injected application clock.
     await db
       .updateTable('audit_tasks')
       .set({ lease_expires_at: new Date(0) })
@@ -122,7 +121,7 @@ describe('audit queue leases against PostgreSQL', () => {
         .execute();
       await parkAuditTask(trx, locked!.task, 'awaiting_provider_result', ready, at);
     });
-    await queue.claim('drain', 3, t); // Other ready slots may progress while this task waits.
+    await queue.claim('drain', 3, t);
     expect(await queue.claim('poller', 1, t)).toEqual([]);
     at = ready;
     const [poll] = await queue.claim('poller', 1, t);
@@ -143,7 +142,7 @@ describe('audit queue leases against PostgreSQL', () => {
         .execute();
     await scoped('succeeded', new Date(0));
     const none = await queue.nextDue();
-    if (none) expect(none.getTime()).toBeGreaterThan(0); // other tenants may hold work
+    if (none) expect(none.getTime()).toBeGreaterThan(0);
     const [task] = await db
       .selectFrom('audit_tasks')
       .select('id')

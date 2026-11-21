@@ -20,7 +20,6 @@ export type ResearchResponse = {
   cost: string | null;
 };
 type LiveInput = {
-  /** The DataForSEO login pair as JSON, decrypted by the credential owner. */
   secret: string;
   endpoint: string;
   baseUrl: string;
@@ -29,10 +28,8 @@ type LiveOptions = {
   send?: typeof fetch;
   signal?: AbortSignal;
 };
-/** A resolved paid target: the approved endpoint path on a client that sends nothing yet. */
 export type LiveTarget = { endpoint: string; credential: { secret: string; baseUrl: string } };
 
-/** Every local check a call needs, before its dispatch commits: nothing here is sent. */
 export function resolveLive(input: LiveInput, env?: SettingSource): LiveTarget {
   if (
     ![...Object.values(si.endpoints), ...Object.values(si.broad_endpoints)].includes(input.endpoint)
@@ -56,7 +53,6 @@ function liveClient(
   });
 }
 
-/** One paid Live POST; classification and bounded retries belong to persisted dispatch evidence. */
 export async function sendLive(
   target: LiveTarget,
   payload: Record<string, unknown>,
@@ -67,14 +63,12 @@ export async function sendLive(
   return receipt(record(await client.call(target.endpoint, [payload])));
 }
 
-/** One successful task in one successful envelope, kept with its exact hash and cost. */
 function receipt(body: Record<string, unknown>): ResearchResponse {
   const tasks = body.tasks;
   if (body.status_code !== policy.dataforseo.constants.status_ok)
     throw new ProviderError('parse_error');
   if (!Array.isArray(tasks) || tasks.length !== 1) throw new ProviderError('parse_error');
   const task = record(tasks[0]);
-  // A refused task (unauthorized login, unavailable account) means what it means for every product.
   if (task.status_code !== policy.dataforseo.constants.status_ok)
     throw typeof task.status_code === 'number'
       ? envelopeStatusError(task.status_code)

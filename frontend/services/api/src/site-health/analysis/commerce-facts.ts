@@ -1,4 +1,3 @@
-/** Generic catalog structure: breadcrumbs, product and category cards, the page's own price. */
 import {
   attribute,
   elements,
@@ -101,11 +100,6 @@ function cards(page: PageScope) {
   return { products, categories };
 }
 
-/**
- * Structural taxonomy and card facts without assigning a page kind. The price
- * is read from the page's own visible text outside card lists, with the words
- * around it so a "free shipping over $100" banner is not taken as a price.
- */
 export function commerceFacts(page: PageScope) {
   const trail = breadcrumbs(page);
   const { products, categories } = cards(page);

@@ -1,13 +1,3 @@
-/**
- * Commerce Actions from the per-product metrics against real PostgreSQL: the
- * Opportunity refresh raises `product_not_mentioned`, `price_mismatch`,
- * `losing_position` and `merchant_absent` from the Products read over every
- * matched answer in the window, never for a product with too little data and
- * never from another workspace's answers; a declared Action's check then reads
- * the same metric over the answers after go-live. Answers go through the real
- * audit, matching and persistence path; only quoted prices and merchants are
- * set on the stored observations afterwards.
- */
 import { randomUUID } from 'node:crypto';
 import { sql } from 'kysely';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -39,7 +29,6 @@ const METRIC_RULES = [
 ];
 
 type Tenant = Awaited<ReturnType<typeof auditTenant>>;
-// The fixture project's website is acme.example, so shop.acme.example is the business's own store.
 const CATALOG = [
   'link,title,brand,price,currency,category',
   'https://shop.example/products/road,Acme Road Runner,Acme,120,USD,Road',
@@ -47,14 +36,12 @@ const CATALOG = [
   'https://shop.example/products/gem,Acme Hidden Gem,Acme,50,USD,Road',
 ].join('\n');
 
-/** One brand-run answer of `text`; its task id. */
 async function answer(t: Tenant, text: string): Promise<string> {
   const { taskId } = await recordAnswer(db, t, text, { runtime, worker: 'metric-actions' });
   tasks.push(taskId);
   return taskId;
 }
 
-/** The quote and merchant on one task's observation of a product. */
 async function quote(
   task: string,
   product: string,
@@ -86,7 +73,6 @@ async function productId(t: Tenant, name: string) {
   return row.id;
 }
 
-/** The tenant's live per-product metric findings, as (rule, target). */
 async function findings(t: Tenant) {
   await recomputeOpportunities(db, { workspaceId: t.workspaceId, projectId: t.projectId });
   const rows = await db
@@ -101,7 +87,6 @@ async function findings(t: Tenant) {
   return rows;
 }
 
-/** The answer's run settles when its answer did, and the verification worker reads it. */
 async function settle(t: Tenant, task: string) {
   const { audit_id: auditId } = await db
     .selectFrom('audit_tasks')
@@ -117,7 +102,6 @@ async function settle(t: Tenant, task: string) {
     triggerId: auditId,
     maxAttempts: 3,
   });
-  // Only verification runs: the catalog's backfill would re-match the quoted answers.
   for (;;) {
     const taskIds = await workspaceTaskIds(db, t.workspaceId, 'opportunity_verification');
     const worker = new AnalyticsWorker(db, loadWorkerSettings({}), {
@@ -156,15 +140,12 @@ beforeAll(async () => {
   );
   const fourth = await answer(t, '1. Acme Trail Climber for trails\n2. Acme Road Runner for roads');
   const fifth = await answer(t, 'Most runners should get a gait analysis before buying anything.');
-  // Another workspace's answers name the product this one never sees.
   await answer(foreign, '1. Acme Hidden Gem for everything\n2. Acme Road Runner for roads');
   await answer(foreign, '1. Acme Hidden Gem again\n2. Acme Road Runner again');
   await quote(first, 'Acme Road Runner', '150', 'runnerstore.com');
   await quote(second, 'Acme Road Runner', '150', 'runnerstore.com');
-  // One quote is too few to judge Trail Climber's price.
   await quote(first, 'Acme Trail Climber', '60', 'shop.acme.example');
   await quote(third, 'Acme Trail Climber', null, 'outdoors.example');
-  // Two days old, so a go-live a day ago comes after them.
   await db
     .updateTable('audit_tasks')
     .set({ completed_at: new Date(Date.now() - 2 * DAY) })
@@ -196,13 +177,9 @@ describe('Commerce Actions from the per-product metrics', () => {
   it('raises each rule from the window of this workspace’s matched answers', async () => {
     const rows = await findings(t);
     expect(rows.map((row) => [row.rule_id, row.target_key])).toEqual([
-      // Listed in four ordered answers, first in none.
       ['losing_position', `product:${road}`],
-      // Both merchants named for it are third parties.
       ['merchant_absent', `product:${road}`],
-      // Quoted at a median of 150 against a catalog price of 120.
       ['price_mismatch', `product:${road}`],
-      // In none of the five answers; the other workspace's answers name it twice.
       ['product_not_mentioned', `product:${gem}`],
     ]);
     const price = rows.find((row) => row.rule_id === 'price_mismatch')!;
@@ -218,7 +195,6 @@ describe('Commerce Actions from the per-product metrics', () => {
       mentioned_price: { median: 150, currency: 'USD', quoted: 2 },
       catalog_price: { amount: 120, currency: 'USD' },
     });
-    // Provenance: Road Runner's observations in the answers measured.
     const observed = await db
       .selectFrom('commerce_recommendation_observations')
       .select('id')
@@ -229,20 +205,16 @@ describe('Commerce Actions from the per-product metrics', () => {
     expect([...(price.source_metric_ids as string[])].sort()).toEqual(
       observed.map((row) => row.id).sort(),
     );
-    // Trail Climber wins one of three ordered answers, has one quote and one answer to its own store.
     expect(rows.some((row) => row.target_key === `product:${trail}`)).toBe(false);
   });
 
   it('raises nothing for products with too little data', async () => {
-    // Two answers: below every rule's minimum, though Trail Climber is never named.
     const rows = await findings(foreign);
     expect(rows.map((row) => [row.rule_id, row.target_key])).toEqual([]);
-    // The same catalog in a workspace with five answers does raise findings.
     expect((await findings(t)).map((row) => row.rule_id)).toContain('product_not_mentioned');
   });
 
   it('verifies a declared Action against the same metrics in the answers after go-live', async () => {
-    // Road Runner's three findings are one product Action.
     const [absent] = (await findings(t)).filter((row) => row.rule_id === 'merchant_absent');
     const actionId = absent!.action_id!;
     await declareAction(
@@ -263,7 +235,6 @@ describe('Commerce Actions from the per-product metrics', () => {
       .executeTakeFirstOrThrow();
     const frozen = declared.expected_checks as { metric: string }[];
     const product = { kind: 'product_metric', product_id: road, product_name: 'Acme Road Runner' };
-    // Each baseline is the reading over the window that ended at go-live.
     expect(frozen.toSorted((a, b) => a.metric.localeCompare(b.metric))).toEqual([
       {
         ...product,
@@ -293,7 +264,6 @@ describe('Commerce Actions from the per-product metrics', () => {
         baseline_value: 0,
       },
     ]);
-    /** Each check's state and reason, by the metric it reads. */
     const checks = async () => {
       const detail = await getAction(db, t.workspaceId, actionId);
       return Object.fromEntries(
@@ -310,8 +280,6 @@ describe('Commerce Actions from the per-product metrics', () => {
       win_rate: ['waiting', null, road_],
     });
 
-    // One answer after go-live is too few to judge any of them; its only
-    // quote is in euros, which the price check does not convert.
     const later = await answer(t, '1. Acme Road Runner for daily miles');
     await quote(later, 'Acme Road Runner', '120', 'runnerstore.com', 'EUR');
     await settle(t, later);
@@ -321,9 +289,6 @@ describe('Commerce Actions from the per-product metrics', () => {
       win_rate: ['waiting', 'too_few_samples', road_],
     });
 
-    // A second answer quotes the catalog price and sends shoppers to the
-    // business's own store; one dollar quote and three ordered answers are
-    // still needed.
     const own = await answer(t, '1. Acme Road Runner for long runs');
     await quote(own, 'Acme Road Runner', '120', 'shop.acme.example');
     await settle(t, own);
@@ -333,8 +298,6 @@ describe('Commerce Actions from the per-product metrics', () => {
       win_rate: ['waiting', 'too_few_samples', road_],
     });
 
-    // A third answer lists it first again at the catalog price: three wins in
-    // three ordered answers, and two dollar quotes at the catalog price.
     const third = await answer(t, '1. Acme Road Runner for tempo runs\n2. Rival Pacer');
     await quote(third, 'Acme Road Runner', '120', 'runnerstore.com');
     await settle(t, third);

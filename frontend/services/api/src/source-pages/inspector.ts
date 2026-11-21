@@ -1,4 +1,3 @@
-/** Bounded source acquisition, evidence publication, and the owed Opportunity handoff. */
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { record } from '../db/json.ts';
@@ -121,7 +120,6 @@ export function sourcePageInspector(fetcher?: WebsiteFetcher): Executor {
       try {
         result = await acquirer.fetch(token, options); // NOSONAR -- Each redirect fetch spends budget first and stops when it is exhausted.
       } catch (error) {
-        // The citation stays unresolved; its spent redirect budget is kept.
         logger.info('source_page_redirect_fetch_failed', {
           task_id: task.id,
           ...failureFacts(error),

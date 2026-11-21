@@ -1,16 +1,12 @@
-/**
- * Display helpers for fact-check accuracy. Values are projected from the read,
- * never recomputed; a missing value stays `null` so the component draws the
- * shared missing mark rather than a zero.
- */
 import type {
+  AccuracyClaim,
   AccuracyCoverage,
   AccuracyResponse,
   ClaimVerdict,
   FactTopic,
 } from '@citeladder/contracts/fact-checking';
 
-import type { SentimentValue } from '@/components/ui/badge';
+import type { SentimentValue } from '@/components/ui/status-mark';
 
 export const TOPIC_LABELS: Record<FactTopic, string> = {
   pricing: 'Pricing',
@@ -30,7 +26,6 @@ export const VERDICT_LABELS: Record<ClaimVerdict, string> = {
   not_covered: 'Not covered',
 };
 
-/** The shared tone scale: supported reads as success, contradicted as danger. */
 export const VERDICT_TONE: Record<ClaimVerdict, SentimentValue> = {
   supported: 'positive',
   contradicted: 'negative',
@@ -60,34 +55,19 @@ const REASON_COPY: Record<Reason, string> = {
   model_changed: 'The checker model changed after these runs started, so they were not checked.',
 };
 
-/** The heading and sentence for a read that has no value to show. */
 export function accuracyStateCopy(
   state: Exclude<AccuracyResponse['state'], 'value'>,
   reason: AccuracyResponse['reason'],
-): { heading: string; description: string } {
+): { heading: string; description: string | null } {
   switch (state) {
     case 'not_enabled':
-      return {
-        heading: 'Fact-checking is not enabled',
-        description: 'Fact-checking is in a limited pilot and is not enabled for this workspace.',
-      };
+      return { heading: 'Fact-checking is not enabled', description: 'Limited pilot.' };
     case 'no_facts':
-      return {
-        heading: 'No confirmed facts for these runs',
-        description:
-          'Confirm brand facts in Agent → Context. Runs started after that are checked against them.',
-      };
+      return { heading: 'No confirmed facts for these runs', description: null };
     case 'no_claims':
-      return {
-        heading: 'No factual claims about you',
-        description:
-          'Answers in these runs named you without a checkable claim about pricing, plans, integrations or other facts.',
-      };
+      return { heading: 'No factual claims about you', description: null };
     case 'pending':
-      return {
-        heading: 'Checking claims…',
-        description: 'Claims answers made about you are being checked. Check back shortly.',
-      };
+      return { heading: 'Checking claims…', description: null };
     case 'unavailable':
       return {
         heading: 'Fact-checking unavailable',
@@ -100,11 +80,62 @@ export function accuracyStateCopy(
   }
 }
 
-/** "N of M claims with a verdict", then every other non-empty bucket. */
+function claimStateWords(claim: Pick<AccuracyClaim, 'status' | 'verdict' | 'reason'>): string {
+  switch (claim.status) {
+    case 'verdict':
+      return claim.verdict ? VERDICT_LABELS[claim.verdict].toLowerCase() : 'not checked';
+    case 'low_confidence':
+      return 'low confidence';
+    case 'pending':
+      return 'still being checked';
+    case 'unavailable':
+      return claim.reason ? `unavailable (${REASON_SHORT[claim.reason]})` : 'unavailable';
+    default: {
+      const _exhaustive: never = claim.status;
+      return _exhaustive;
+    }
+  }
+}
+
+export function claimAgentPrompt(claim: AccuracyClaim, engine: string): string {
+  const facts = claim.facts.map((fact) => fact.statement).join('; ');
+  const verdict = claimStateWords(claim);
+  return [
+    agentAsk(claim, engine),
+    `Asked "${claim.prompt}", it said: "${claim.quote}" (claim: ${claim.claim}).`,
+    facts ? `Checked against our fact: "${facts}". Verdict: ${verdict}.` : `Verdict: ${verdict}.`,
+  ].join(' ');
+}
+
+function agentAsk(claim: Pick<AccuracyClaim, 'status' | 'verdict'>, engine: string): string {
+  const verdict = claim.status === 'verdict' ? claim.verdict : null;
+  if (verdict === 'contradicted') return `Help me correct what ${engine} says about us.`;
+  if (verdict === 'supported')
+    return `Help me keep what ${engine} gets right about us accurate where it reads.`;
+  return `Help me check what ${engine} says about us.`;
+}
+
+export function contradictedChange(
+  data: Pick<AccuracyResponse, 'source_audit_ids' | 'trend'>,
+): number | null {
+  const [latest, previous] = [data.trend.at(-1), data.trend.at(-2)];
+  if (!latest || !previous || !latest.comparable) return null;
+  if (data.source_audit_ids.length !== 1 || data.source_audit_ids[0] !== latest.audit_id)
+    return null;
+  return latest.score.coverage.contradicted - previous.score.coverage.contradicted;
+}
+
 export function accuracyCoverageLine(coverage: AccuracyCoverage): string {
   const verdicts =
     coverage.supported + coverage.contradicted + coverage.inconclusive + coverage.not_covered;
-  const parts = [`${verdicts} of ${coverage.claims} claims checked`];
+  return [
+    `${verdicts} of ${coverage.claims} claims checked`,
+    ...accuracyCoverageExtras(coverage),
+  ].join(' · ');
+}
+
+export function accuracyCoverageExtras(coverage: AccuracyCoverage): string[] {
+  const parts: string[] = [];
   if (coverage.pending) parts.push(`${coverage.pending} pending`);
   if (coverage.low_confidence) parts.push(`${coverage.low_confidence} low confidence`);
   for (const { reason, count } of coverage.unavailable)
@@ -112,5 +143,5 @@ export function accuracyCoverageLine(coverage: AccuracyCoverage): string {
   if (coverage.answers_pending) parts.push(`${coverage.answers_pending} answers still being read`);
   if (coverage.answers_unavailable)
     parts.push(`${coverage.answers_unavailable} answers could not be read`);
-  return parts.join(' · ');
+  return parts;
 }

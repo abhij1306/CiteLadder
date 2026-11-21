@@ -1,19 +1,3 @@
-/**
- * The Sources table: cited domains, or cited pages, over a selection.
- *
- * Shared API/MCP projection. It reads the per-run facts audit finalization
- * persisted (`source-aggregates.ts`), never the answers and citations
- * themselves: counts are distinct values over the selected runs' persisted
- * answer, prompt and URL IDs, so a prompt or URL cited in two runs counts
- * once. Every rate's denominator is the selection's persisted answers bounded
- * by `as_of`, so paging never picks up a run that finished mid-read. Totals
- * follow the same filters as the rows; the page-format and gap filters read
- * this project's current page records. A selected run with no persisted facts
- * is not computed (`metrics_pending`), never zero. Page rows carry what this
- * project knows about the page (its standing and the Action to get listed on
- * it) and the brands named in the answers that cited it, which is
- * co-occurrence, never presence on the page.
- */
 import type { visibilitySourcesSchema } from '@citeladder/contracts/visibility-evidence';
 import { sql } from 'kysely';
 import type { z } from 'zod';
@@ -27,10 +11,9 @@ import {
   encodeKeysetCursor,
   InvalidCursorError,
 } from '../http/keyset-cursor.ts';
-import { latestReadings, readingPresences } from '../source-pages/reading.ts';
 import { compareText } from '../text-order.ts';
 import { brandIdentities, leadingBrands, type BrandCount } from './brand-identities.ts';
-import { gapPageHashes, pageStanding } from './page-standing.ts';
+import { gapPageHashes, pageStandings } from './page-standing.ts';
 import { earnedPageActions } from '../opportunities/earned-page-actions.ts';
 import { ratio } from './metrics.ts';
 import { runSetComparisonStatus } from './run-sets.ts';
@@ -52,7 +35,6 @@ type SourceRow = SourcesResponse['items'][number];
 export type SourceQuery = {
   domain: string | null;
   sourceClass: string | null;
-  /** `gap`: only pages that list a tracked competitor and not the business. */
   standing: 'gap' | null;
   dimension: 'domain' | 'url';
   asOf: ParsedDatetime | null;
@@ -64,10 +46,6 @@ export type SourceQuery = {
 type RowFilters = Pick<SourceQuery, 'domain' | 'sourceClass' | 'standing'>;
 const UNFILTERED: RowFilters = { domain: null, sourceClass: null, standing: null };
 
-/**
- * The selected brand runs (`selectedRuns`), each with when it was observed. A
- * commerce run measures something else, so even when named it contributes no sources.
- */
 const runsOf = (db: Database, selection: RunSelection) =>
   selectedRuns(db, selection).select(['audit.id', observedAt.as('observed_at')]);
 type Runs = ReturnType<typeof runsOf>;
@@ -96,7 +74,6 @@ function sourcePosition(query: SourceQuery, filters: Record<string, unknown>) {
   return { position, asOf };
 }
 
-/** The runs' persisted answers per engine and cohort, finalized by `as_of`. */
 function answerRows(db: Database, selection: RunSelection, runs: Runs, asOf: string) {
   let rows = db
     .selectFrom('audit_answer_aggregates as answer')
@@ -106,14 +83,10 @@ function answerRows(db: Database, selection: RunSelection, runs: Runs, asOf: str
     .where('answer.created_at', '<=', sql<Date>`${asOf}::timestamptz`);
   if (selection.logicalEngine !== null)
     rows = rows.where('answer.logical_engine', '=', selection.logicalEngine);
+  if (selection.topicId) rows = rows.where('answer.topic_id', '=', selection.topicId);
   return rows.select(['answer.analysis_ids', 'answer.prompt_keys']);
 }
 
-/**
- * The runs' persisted source rows the table counts. A domain row is filtered
- * by its publisher class, a page row by its page's current format, exactly
- * as the type ring is; `category` is that same class or format.
- */
 function sourceRows(
   db: Database,
   selection: RunSelection,
@@ -135,6 +108,7 @@ function sourceRows(
     .where('source.created_at', '<=', sql<Date>`${input.asOf}::timestamptz`);
   if (selection.logicalEngine !== null)
     rows = rows.where('source.logical_engine', '=', selection.logicalEngine);
+  if (selection.topicId) rows = rows.where('source.topic_id', '=', selection.topicId);
   if (filters.domain) rows = rows.where('source.domain', '=', filters.domain);
   if (filters.standing === 'gap')
     rows = rows.where(sql<boolean>`source.url_hash in (${gapPageHashes(selection)})`);
@@ -180,7 +154,6 @@ type Summary = {
   rows: GroupRow[];
 };
 
-/** The keyset condition past the cursor's row, in the page's direction. */
 function keysetAfter(position: string[] | null, backwards: boolean) {
   if (!position) return sql<boolean>`true`;
   const responses = Number(position[1]);
@@ -192,7 +165,6 @@ function keysetAfter(position: string[] | null, backwards: boolean) {
 const present = (values: (string | null)[]) =>
   values.filter((value): value is string => Boolean(value)).sort(compareText);
 
-/** One grouped row as the table serves it, before page facts and brands fill in. */
 function sourceItem(
   row: GroupRow,
   totals: { pages: boolean; responses: number; prompts: number; citations: number },
@@ -202,7 +174,6 @@ function sourceItem(
     key: row.key,
     retrieved: null,
     url_hash: pages ? row.url_hash : null,
-    // "Last seen" is asked of a page, never of a publisher.
     last_cited_at: pages ? wireUtcOrNull(row.last_cited_at) : null,
     responses: row.responses,
     prompts: row.prompts,
@@ -210,10 +181,8 @@ function sourceItem(
     urls: row.urls,
     response_rate: ratio(row.responses, totals.responses),
     prompt_coverage: ratio(row.prompts, totals.prompts),
-    // How much of a publisher the engines reached; a page is one URL.
     retrieval_rate: pages ? null : ratio(row.urls, totals.responses),
     citation_share: ratio(row.annotations, totals.citations),
-    // Per answer the source was retrieved in, never per answer selected.
     citation_rate: ratio(row.annotations, row.responses),
     ownership: present(row.ownership),
     categories: present(row.categories),
@@ -238,10 +207,7 @@ export async function getVisibilitySources(
   query: SourceQuery,
 ): Promise<SourcesResponse> {
   const selection = await authorizedSelection(db, requested);
-  // Selecting a domain is the drill-down into its pages; the URL dimension
-  // is pages across every domain.
   const pages = Boolean(query.domain) || query.dimension === 'url';
-  // Standing belongs to a page; a publisher row has none to filter on.
   if (query.standing && !pages)
     throw new TrendQueryError("'standing' applies to page rows: set 'dimension=url' or a domain");
   const filters = {
@@ -261,9 +227,6 @@ export async function getVisibilitySources(
   const order = backwards ? sql`asc` : sql`desc`;
   const keyOrder = backwards ? sql`desc` : sql`asc`;
   const after = keysetAfter(position, backwards);
-  // One round trip: the rates' denominator, the runs without persisted
-  // facts, the totals and the page of rows. A key's distinct answers, prompts
-  // and URLs are counted over the union of its rows' arrays, never summed.
   const { rows: summaryRows } = await sql<Summary>`
     with selected as materialized (${selected}),
     facts as (
@@ -323,7 +286,6 @@ export async function getVisibilitySources(
   const items = rows.map((row) =>
     sourceItem(row, { pages, responses, prompts, citations: totalCitations }),
   );
-  // Each step fills its own fields of the loaded rows, so they run together.
   const [, , retrieval] = await Promise.all([
     attachPageLinks(db, selection, items),
     pages ? attachRowMentions(db, selection, { runs, asOf, items }) : undefined,
@@ -371,12 +333,6 @@ export async function getVisibilitySources(
   return response;
 }
 
-/**
- * Each page row's inspection state, standing, live Opportunity and Action, and
- * page facts. A page this project has no record of keeps every field unset:
- * nobody looked, which is not the same as nothing wrong. Two cited URLs can
- * resolve to one page.
- */
 async function attachPageLinks(
   db: Database,
   selection: RunSelection,
@@ -389,45 +345,17 @@ async function attachPageLinks(
   if (byHash.size === 0) return;
   const hashes = [...byHash.keys()];
   const scope = { workspaceId: selection.workspaceId, projectId: selection.projectId };
-  // The Action lookup needs only the hashes, so it runs beside the page read.
   const [pages, actions] = await Promise.all([
-    db
-      .selectFrom('source_pages as page')
-      .leftJoin('source_page_snapshots as snapshot', 'snapshot.id', 'page.latest_snapshot_id')
-      .select([
-        'page.id',
-        'page.url_hash',
-        'page.source_class',
-        'page.inspection_state',
-        'page.page_format',
-        'page.page_format_method',
-        'snapshot.page_facts',
-      ])
-      .where('page.workspace_id', '=', selection.workspaceId)
-      .where('page.project_id', '=', selection.projectId)
-      .where('page.url_hash', 'in', hashes)
-      .orderBy('page.url_hash')
-      .execute(),
+    pageStandings(db, scope, hashes),
     earnedPageActions(db, scope, hashes),
   ]);
-  const readings = await latestReadings(db, scope, [...new Set(pages.map((page) => page.id))]);
-  const presences = await readingPresences(
-    db,
-    scope,
-    [...readings.values()].map((reading) => reading.id),
-  );
-  const seen = new Set<string>();
-  for (const page of pages) {
-    if (seen.has(page.url_hash)) continue;
-    seen.add(page.url_hash);
+  for (const page of pages.values()) {
     const title = record(page.page_facts).title;
-    const reading = readings.get(page.id);
-    const standing = pageStanding(page, reading, reading ? (presences.get(reading.id) ?? []) : []);
     for (const row of byHash.get(page.url_hash) ?? []) {
       row.inspection_state = page.inspection_state;
       const listing = actions.get(page.url_hash);
       row.opportunity_id = listing?.opportunity_id ?? null;
-      row.standing = standing;
+      row.standing = page.standing;
       row.action_id = listing?.action_id ?? null;
       row.title = typeof title === 'string' && title ? title : null;
       row.page_format = page.page_format;
@@ -436,11 +364,6 @@ async function attachPageLinks(
   }
 }
 
-/**
- * The brands named in the answers that cited each loaded page, in place: the
- * persisted answers behind each page row, joined to the mentions those
- * answers recorded.
- */
 async function attachRowMentions(
   db: Database,
   selection: RunSelection,
@@ -487,11 +410,6 @@ async function attachRowMentions(
   }
 }
 
-/**
- * Each row's movement in response rate against a baseline run set, when the
- * two sets are comparable; returns the comparison status. The baseline's
- * answers and each row's answers in it are the baseline runs' persisted facts.
- */
 async function applySourceComparison(
   db: Database,
   selection: RunSelection,
@@ -508,12 +426,7 @@ async function applySourceComparison(
     engine: selection.logicalEngine,
     cohort: selection.cohort,
   });
-  // A comparable baseline has its metric snapshots, written in the same
-  // finalization transaction as its persisted source facts.
   if (status !== 'comparable') return status;
-  // The named baseline runs, in whatever market they measured: named runs
-  // bring their own market, and the comparison status already proved the two
-  // sets share one frozen identity.
   const baseline = {
     ...selection,
     auditId: null,
@@ -534,8 +447,6 @@ async function applySourceComparison(
     runs,
     asOf: input.asOf,
     pages: input.pages,
-    // The rows' own filters, so a row moves against the same source type,
-    // domain and page standing it was counted under.
     filters: input.filters,
   }).where('source.key', 'in', keys);
   const { rows: counted } = await sql<{ key: string; answers: number }>`

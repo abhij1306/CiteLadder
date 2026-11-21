@@ -96,7 +96,6 @@ describe('a section draft', () => {
     await user.type(screen.getByRole('textbox', { name: 'Section text (Markdown)' }), ' Saved.');
     await user.click(screen.getByRole('button', { name: 'Save section' }));
     await waitFor(() => expect(saved).toHaveLength(1));
-    // The chat refresh shows the new revision before the save settles.
     view.rerender(canvas(second));
     answer();
 

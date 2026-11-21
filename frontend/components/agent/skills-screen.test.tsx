@@ -27,10 +27,9 @@ const CATALOG = {
       description: 'Produces something the catalog does not name.',
     },
   ],
-  workflow_groups: [],
   workflows: [],
   output_kinds: [{ kind: 'linkedin_post', label: 'LinkedIn post', refinements: [], next: [] }],
-  limits: { mentions_max: 5 },
+  limits: { mentions_max: 5, attachments_max: 3, attachment_max_chars: 40000 },
 };
 
 beforeAll(() => mswServer.listen({ onUnhandledFrame: 'error' }));
@@ -49,10 +48,13 @@ describe('Skills', () => {
       },
     });
 
-    const post = (await screen.findByRole('heading', { name: 'Social post' })).closest('li')!;
-    expect(within(post).getByText('Output: LinkedIn post')).toBeVisible();
-    // An output the catalog does not name gets no badge, not a placeholder.
-    const mystery = screen.getByRole('heading', { name: 'Mystery skill' }).closest('li')!;
-    expect(within(mystery).queryByText(/^Output/)).not.toBeInTheDocument();
+    const start = await screen.findByRole('link', { name: 'Start a chat with Social post' });
+    const post = start.closest('li')!;
+    expect(within(post).getByText('LinkedIn post')).toBeVisible();
+    expect(start).toHaveAttribute('href', expect.stringContaining('skill=social_post'));
+    expect(start).toHaveAccessibleDescription('A short professional post. Output: LinkedIn post');
+    expect(within(post).queryByRole('button')).not.toBeInTheDocument();
+    const mystery = screen.getByRole('link', { name: 'Start a chat with Mystery skill' });
+    expect(mystery).toHaveAccessibleDescription('Produces something the catalog does not name.');
   });
 });

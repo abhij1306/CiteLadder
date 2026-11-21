@@ -7,6 +7,7 @@ import { perceptionPrompt } from '../src/perception/model.ts';
 import { locateQuote, validateOutput } from '../src/perception/validate.ts';
 import {
   coverage,
+  entityScores,
   mentionStatus,
   perceptionSummary,
   readState,
@@ -23,6 +24,12 @@ const config = scoringConfig({
   ],
 });
 const limits = { max_entities: 8, max_passage_chars_per_entity: 1200 };
+const plain = { languageCode: 'en', config, policy: limits, promptNamesBrand: false };
+
+const THEMES = [
+  { id: 'theme-value', name: 'Value' },
+  { id: 'theme-support', name: 'Customer support' },
+];
 
 function pkgFor(answer: string) {
   return {
@@ -30,7 +37,8 @@ function pkgFor(answer: string) {
     template_version: 't1',
     language: 'en',
     prompt: 'best tools?',
-    entities: entityPassages({ answer, languageCode: 'en', config, policy: limits }),
+    themes: THEMES,
+    entities: entityPassages({ ...plain, answer }),
   };
 }
 
@@ -38,7 +46,7 @@ describe('perception passages', () => {
   it('sends the naming sentence plus one either side, brand first, competitors by first mention', () => {
     const answer =
       'Intro line. Then more. Rival is cheap. Filler one. Filler two. Filler three. Acme is great. Acme support is slow. End.';
-    expect(entityPassages({ answer, languageCode: 'en', config, policy: limits })).toEqual([
+    expect(entityPassages({ ...plain, answer })).toEqual([
       {
         entity_id: 'brand:acme',
         name: 'Acme',
@@ -58,7 +66,7 @@ describe('perception passages', () => {
 
   it('stores code-point offsets with astral and CJK text before the mention', () => {
     const answer = '😀😀 很好。Acme 很好。';
-    const [brand] = entityPassages({ answer, languageCode: 'zh', config, policy: limits });
+    const [brand] = entityPassages({ ...plain, answer, languageCode: 'zh' });
     const span = brand!.spans[0]!;
     expect(Array.from(answer).slice(span.start, span.end).join('')).toBe(span.text);
     expect(span.start).toBe(0);
@@ -72,20 +80,32 @@ describe('perception passages', () => {
   it('caps each entity passage budget in code points', () => {
     const answer = `Acme ${'x'.repeat(50)}.`;
     const [brand] = entityPassages({
+      ...plain,
       answer,
-      languageCode: 'en',
-      config,
       policy: { max_entities: 8, max_passage_chars_per_entity: 10 },
     });
     expect(brand!.spans).toEqual([{ start: 0, end: 10, text: 'Acme xxxxx' }]);
   });
 
+  it('reads the whole answer as the brand passage when the prompt names the brand', () => {
+    const answer = 'Rated 2.4/5. Holes within 3 months. Limited plus sizes. Rival is better.';
+    const passages = (promptNamesBrand: boolean) =>
+      entityPassages({ ...plain, answer, promptNamesBrand }).map((entity) => [
+        entity.name,
+        entity.spans.map((span) => span.text),
+      ]);
+    expect(passages(true)).toEqual([
+      ['Acme', [answer]],
+      ['Rival', ['Limited plus sizes. Rival is better.']],
+    ]);
+    expect(passages(false)).toEqual([['Rival', ['Limited plus sizes. Rival is better.']]]);
+  });
+
   it('keeps a late mention inside a window cut to the budget', () => {
     const answer = `${'x'.repeat(40)} Acme is great.`;
     const [brand] = entityPassages({
+      ...plain,
       answer,
-      languageCode: 'en',
-      config,
       policy: { max_entities: 8, max_passage_chars_per_entity: 12 },
     });
     expect(brand!.spans).toEqual([{ start: 35, end: 47, text: 'xxxxx Acme i' }]);
@@ -94,6 +114,7 @@ describe('perception passages', () => {
   it('hashes equal packages equally whatever their key order', () => {
     const pkg = pkgFor('Acme is great.');
     const reordered = {
+      themes: THEMES,
       entities: pkg.entities,
       prompt: pkg.prompt,
       language: 'en',
@@ -115,12 +136,22 @@ describe('perception passages', () => {
     expect(user).toContain('Question asked: best tools?');
     expect(user).toContain('Acme says {prompt} here.');
   });
+
+  it("offers the project's own themes and the fallback, and only the fallback without themes", () => {
+    const pkg = pkgFor('Acme is great.');
+    const offered = (themes: typeof THEMES) =>
+      perceptionPrompt({ ...pkg, themes }, policy.perception)
+        .user.split('\n')
+        .find((line) => line.startsWith('Allowed themes:'));
+    expect(offered(THEMES)).toBe('Allowed themes: Value, Customer support, Other');
+    expect(offered([])).toBe('Allowed themes: Other');
+  });
 });
 
 describe('perception validation', () => {
   const pkg = pkgFor('Acme is great value.  Rival   support is slow.');
 
-  it('keeps verified quotes, drops invented ones, unknown entities and maps stray themes', () => {
+  it("keeps verified quotes, drops invented ones and unknown entities, and maps themes outside the project's to the fallback", () => {
     const result = validateOutput(
       pkg,
       {
@@ -130,15 +161,16 @@ describe('perception validation', () => {
             label: 'positive',
             confidence: 0.9,
             aspects: [
-              { theme: 'value', polarity: 'positive', quote: 'great value' },
-              { theme: 'pricing', polarity: 'negative', quote: 'Acme is overpriced' },
+              { theme: ' value ', polarity: 'positive', quote: 'great value' },
+              { theme: 'Value', polarity: 'negative', quote: 'Acme is overpriced' },
+              { theme: 'Other', polarity: 'positive', quote: 'Acme is great' },
             ],
           },
           {
             entity_id: 'competitor:rival',
             label: 'negative',
             confidence: 0.4,
-            aspects: [{ theme: 'helpdesk', polarity: 'negative', quote: 'Rival support is slow' }],
+            aspects: [{ theme: 'pricing', polarity: 'negative', quote: 'Rival support is slow' }],
           },
           { entity_id: 'competitor:ghost', label: 'negative', confidence: 1, aspects: [] },
         ],
@@ -152,7 +184,16 @@ describe('perception validation', () => {
           'brand:acme',
           'positive',
           false,
-          [{ theme: 'value', polarity: 'positive', quote: 'great value', start: 8, end: 19 }],
+          [
+            {
+              theme_id: 'theme-value',
+              polarity: 'positive',
+              quote: 'great value',
+              start: 8,
+              end: 19,
+            },
+            { theme_id: null, polarity: 'positive', quote: 'Acme is great', start: 0, end: 13 },
+          ],
         ],
         [
           'competitor:rival',
@@ -160,7 +201,7 @@ describe('perception validation', () => {
           true,
           [
             {
-              theme: 'other',
+              theme_id: null,
               polarity: 'negative',
               quote: 'Rival   support is slow',
               start: 22,
@@ -289,6 +330,32 @@ describe('perception metrics', () => {
     });
   });
 
+  it('scores a competitor sharing the brand name apart from the brand', () => {
+    const answer: PerceptionAnswer = {
+      auditId: 'run-a',
+      executionId: 'run-a-e',
+      observedAt: '2026-10-01T00:00:00Z',
+      logicalEngine: 'chatgpt',
+      prompt: 'best tools?',
+      topic: 'tools',
+      versions: { extractor: 'x1', template: 't1', metrics: 'm1', model: 'model-a' },
+      comparisonKey: 'config-1',
+      mentions: [classified('positive'), { ...classified('negative'), isBrand: false }],
+      brandRecommendation: 'mentioned',
+      citations: [],
+    };
+    expect(
+      entityScores([answer]).map((entity) => [
+        entity.name,
+        entity.is_brand,
+        entity.score.net_sentiment,
+      ]),
+    ).toEqual([
+      ['Acme', true, 100],
+      ['Acme', false, -100],
+    ]);
+  });
+
   it('marks a trend point after a version change as not comparable and links quotes to the run', () => {
     const answer = (
       auditId: string,
@@ -296,7 +363,9 @@ describe('perception metrics', () => {
       template: string,
       label: 'positive' | 'negative',
       model = 'model-a',
+      comparisonKey: string | null = 'config-1',
     ): PerceptionAnswer => ({
+      comparisonKey,
       auditId,
       executionId: `${auditId}-e`,
       observedAt: at,
@@ -330,17 +399,22 @@ describe('perception metrics', () => {
       ['run-b', -100, true],
       ['run-c', -100, false],
     ]);
-    // Same versions under another frozen model is not like for like either.
     const remodelled = perceptionSummary(
       [
         answer('run-a', '2026-10-01T00:00:00Z', 't1', 'positive'),
         answer('run-b', '2026-10-02T00:00:00Z', 't1', 'negative', 'model-b'),
+        answer('run-c', '2026-10-03T00:00:00Z', 't1', 'negative', 'model-b', 'config-2'),
+        answer('run-d', '2026-10-04T00:00:00Z', 't1', 'negative', 'model-b', null),
+        answer('run-e', '2026-10-05T00:00:00Z', 't1', 'negative', 'model-b', null),
       ],
       { max_quotes_per_theme: 3, max_negative_quotes: 10, max_drivers: 10 },
     );
     expect(remodelled.trend.map((point) => [point.audit_id, point.comparable])).toEqual([
       ['run-a', true],
       ['run-b', false],
+      ['run-c', false],
+      ['run-d', false],
+      ['run-e', false],
     ]);
     expect(summary.themes).toEqual([
       expect.objectContaining({ theme: 'support', positive: 1, negative: 2 }),
@@ -371,6 +445,7 @@ describe('perception calibration fixtures', () => {
           competitors: fixture.competitors.map((name) => ({ name, domains: [] })),
         }),
         policy: limits,
+        promptNamesBrand: false,
       }).map((entity) => entity.name);
       return Object.keys(fixture.labels)
         .filter((name) => !named.includes(name))

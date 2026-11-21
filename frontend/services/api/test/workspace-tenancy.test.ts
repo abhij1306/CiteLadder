@@ -1,7 +1,3 @@
-/**
- * Tenancy in the schema: a project-owned row names its workspace, and
- * PostgreSQL refuses a row whose project (or prompt set) belongs to another.
- */
 import { randomUUID } from 'node:crypto';
 import { afterAll, describe, expect, it } from 'vitest';
 import { testDatabase } from './support.ts';
@@ -15,7 +11,6 @@ afterAll(async () => {
   await db.destroy();
 });
 
-/** The SQLSTATE PostgreSQL answers, or 'stored' when the insert succeeded. */
 async function outcome(insert: () => Promise<unknown>) {
   try {
     await insert();
@@ -44,7 +39,6 @@ describe('workspace-bound project rows', () => {
           updated_at: now,
         })
         .execute();
-    // A table that already carried workspace_id beside a project-only key.
     const layout = (workspaceId: string) => () =>
       db
         .insertInto('overview_layouts')
@@ -83,7 +77,6 @@ describe('workspace-bound project rows', () => {
     expect([
       await outcome(competitor(own.workspaceId)),
       await outcome(competitor(other.workspaceId)),
-      // One layout per project: the refused row goes first.
       await outcome(layout(other.workspaceId)),
       await outcome(layout(own.workspaceId)),
       await outcome(prompt(own.workspaceId)),

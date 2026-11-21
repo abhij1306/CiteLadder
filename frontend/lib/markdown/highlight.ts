@@ -1,8 +1,3 @@
-/**
- * A rehype step that wraps exact phrases in `<mark>`. It only splits text
- * nodes, so it adds no HTML from the input and leaves code and links intact.
- * A phrase that crosses formatting (bold, a link) stays unmarked.
- */
 export type Highlight = { text: string; tone: 'positive' | 'negative' };
 
 type Text = { type: 'text'; value: string };
@@ -15,8 +10,8 @@ type Element = {
 type Node = Text | Element | { type: string; children?: Node[] };
 
 const TONE_CLASS: Record<Highlight['tone'], string> = {
-  positive: 'bg-positive-soft text-ink',
-  negative: 'bg-negative-soft text-ink',
+  positive: 'bg-positive-wash text-ink',
+  negative: 'bg-negative-wash text-ink',
 };
 const SKIPPED = new Set(['code', 'pre']);
 
@@ -24,7 +19,6 @@ function isText(node: Node): node is Text {
   return node.type === 'text' && 'value' in node;
 }
 
-/** The text split around the earliest highlight, recursively. */
 function splitText(value: string, highlights: readonly Highlight[]): Node[] {
   let best: { at: number; highlight: Highlight } | null = null;
   for (const highlight of highlights) {

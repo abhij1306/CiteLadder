@@ -1,11 +1,5 @@
-/**
- * Visibility → By market: every project market's latest dashboard-ready run,
- * each read on its own through the canonical dashboard and perception owners.
- * Markets are compared side by side, never pooled; a market without a run is
- * `no_run`, never zero, and one whose latest run is still being written is
- * `metrics_pending`.
- */
-import type { VisibilityMarkets } from '@citeladder/contracts/visibility';
+import type { NetSentiment, VisibilityMarkets } from '@citeladder/contracts/visibility';
+import type { PerceptionResponse } from '@citeladder/contracts/visibility-perception';
 
 import type { Database } from '../db/database.ts';
 import { listMarkets } from '../projects/markets.ts';
@@ -39,13 +33,12 @@ async function marketRow(
   if (typeof view === 'string')
     return {
       market,
-      // A run whose results are still being written is not a market never measured.
       state: view === 'metrics_pending' ? 'metrics_pending' : 'no_run',
       audit_id: null,
       measured_at: null,
       mention_rate: null,
       share_of_voice: null,
-      net_sentiment: null,
+      sentiment: null,
       comparison_status: null,
       mention_rate_delta: null,
       share_of_voice_delta: null,
@@ -67,11 +60,17 @@ async function marketRow(
     measured_at: view.created_at,
     mention_rate: view.visibility_rate ?? null,
     share_of_voice: view.rankings.find((row) => row.is_brand)?.share_of_voice ?? null,
-    net_sentiment: perception.brand?.score.net_sentiment ?? null,
+    sentiment: brandSentiment(perception.brand),
     comparison_status: view.comparison?.status ?? null,
     mention_rate_delta: comparable ? (view.comparison?.deltas.visibility ?? null) : null,
     share_of_voice_delta: comparable ? (view.comparison?.deltas.sov ?? null) : null,
   };
+}
+
+function brandSentiment(brand: PerceptionResponse['brand']): NetSentiment | null {
+  if (!brand) return null;
+  const { classified, positive, negative, net_sentiment } = brand.score;
+  return { mentions: brand.coverage.mentions, classified, positive, negative, net_sentiment };
 }
 
 export async function getMarketVisibility(

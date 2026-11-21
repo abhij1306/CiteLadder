@@ -1,17 +1,10 @@
-/**
- * The bounded model input for one answer: for each mentioned business, the
- * sentences that name it plus one sentence either side. Offsets are code
- * points, the unit the entity assessment already stores, converted from the
- * UTF-16 indexes the regex and the sentence segmenter report.
- */
 import { createHash } from 'node:crypto';
 
 import { countedMatches, trackedEntities } from '../analysis/entity-assessment.ts';
-import type { ScoringConfig } from '../analysis/scoring.ts';
+import { namedByPrompt, type ScoringConfig } from '../analysis/scoring.ts';
 import type { PerceptionPolicy } from '../config/perception.ts';
 import { canonicalJson } from '../canonical-json.ts';
 
-/** A code-point span of the answer and its exact text. */
 export type Span = { start: number; end: number; text: string };
 
 export type EntityPassages = {
@@ -26,18 +19,16 @@ export type PerceptionPackage = {
   template_version: string;
   language: string;
   prompt: string;
+  themes: { id: string; name: string }[];
   entities: EntityPassages[];
 };
 
-/** States of the deterministic assessment that mean the entity is not named. */
 const NOT_NAMED = new Set(['absent', 'unavailable']);
 
-/** Whether an entity assessment state means the entity is named in the answer. */
 export function isNamed(state: string): boolean {
   return !NOT_NAMED.has(state);
 }
 
-/** True when any assessed entity is named in the answer (an empty list names none). */
 export function namesAnyEntity(assessments: readonly { state: string }[]): boolean {
   return assessments.some((row) => isNamed(row.state));
 }
@@ -46,12 +37,10 @@ function segmenter(languageCode: string) {
   try {
     return new Intl.Segmenter(languageCode || 'en', { granularity: 'sentence' });
   } catch {
-    // An unrecognised stored language code still segments; English rules are the fallback.
     return new Intl.Segmenter('en', { granularity: 'sentence' });
   }
 }
 
-/** Code-point offset of every UTF-16 index, so spans convert explicitly. */
 function codePointIndex(text: string): (utf16: number) => number {
   const offsets = new Uint32Array(text.length + 1);
   let points = 0;
@@ -68,7 +57,6 @@ function codePointIndex(text: string): (utf16: number) => number {
 
 type Range = { start: number; end: number };
 
-/** Sentence ranges (UTF-16) with their surrounding whitespace trimmed away. */
 function sentences(answer: string, languageCode: string): Range[] {
   const ranges: Range[] = [];
   for (const { index, segment } of segmenter(languageCode).segment(answer)) {
@@ -79,9 +67,7 @@ function sentences(answer: string, languageCode: string): Range[] {
   return ranges;
 }
 
-/** Answer ranges (UTF-16) of the sentences holding an occurrence, widened by one either side and merged. */
 function windows(occurrences: readonly number[], ranges: readonly Range[]): Range[] {
-  // Occurrences arrive in answer order, so one forward walk finds each sentence.
   const hit: number[] = [];
   let sentence = 0;
   for (const offset of occurrences) {
@@ -94,7 +80,6 @@ function windows(occurrences: readonly number[], ranges: readonly Range[]): Rang
   return mergeAdjacent(hit, ranges);
 }
 
-/** The ranges of ascending sentence indexes, adjacent indexes merged into one range. */
 function mergeAdjacent(indexes: readonly number[], ranges: readonly Range[]): Range[] {
   const merged: Range[] = [];
   let previous = -2;
@@ -109,38 +94,46 @@ function mergeAdjacent(indexes: readonly number[], ranges: readonly Range[]): Ra
   return merged;
 }
 
-/** At most `budget` code points of a window, kept around its mention so the naming survives a cut. */
 function clip(start: number, end: number, mention: number, budget: number) {
   if (end - start <= budget) return { start, end };
   const from = Math.min(Math.max(start, mention - Math.floor(budget / 2)), end - budget);
   return { start: from, end: from + budget };
 }
 
-/** Passages for each named entity: brand first, then competitors by first mention. */
 export function entityPassages(input: {
   answer: string;
   languageCode: string;
   config: ScoringConfig;
   policy: Pick<PerceptionPolicy, 'max_entities' | 'max_passage_chars_per_entity'>;
+  promptNamesBrand: boolean;
 }): EntityPassages[] {
   const { answer, policy } = input;
   if (!answer.trim()) return [];
   const ranges = sentences(answer, input.languageCode);
   const points = codePointIndex(answer);
   const chars = Array.from(answer);
-  const named = trackedEntities(input.config).flatMap((entity) => {
+  type Named = {
+    entity: ReturnType<typeof trackedEntities>[number];
+    occurrences: number[];
+    first: number;
+    windows: Range[] | null;
+  };
+  const named = trackedEntities(input.config).flatMap((entity): Named[] => {
+    if (entity.kind === 'brand' && namedByPrompt(input.promptNamesBrand, answer))
+      return [{ entity, occurrences: [0], first: 0, windows: [{ start: 0, end: answer.length }] }];
     const occurrences = countedMatches(entity.aliases, answer, entity.matching).map((m) => m.index);
     const [first] = occurrences;
-    return first === undefined ? [] : [{ entity, occurrences, first }];
+    return first === undefined ? [] : [{ entity, occurrences, first, windows: null }];
   });
   const [brand, competitors] = [
     named.filter(({ entity }) => entity.kind === 'brand'),
     named.filter(({ entity }) => entity.kind !== 'brand').sort((a, b) => a.first - b.first),
   ];
-  return [...brand, ...competitors].slice(0, policy.max_entities).map(({ entity, occurrences }) => {
+  const selected = [...brand, ...competitors].slice(0, policy.max_entities);
+  return selected.map(({ entity, occurrences, windows: fixed }) => {
     let budget = policy.max_passage_chars_per_entity;
     const spans: Span[] = [];
-    for (const window of windows(occurrences, ranges)) {
+    for (const window of fixed ?? windows(occurrences, ranges)) {
       if (budget <= 0) break;
       const mention = occurrences.find((offset) => offset >= window.start) ?? window.start;
       const { start, end } = clip(
@@ -162,7 +155,6 @@ export function entityPassages(input: {
   });
 }
 
-/** SHA-256 of the key-sorted package, so equal packages hash equally. */
 export function packageHash(pkg: PerceptionPackage): string {
   return createHash('sha256').update(canonicalJson(pkg, false)).digest('hex');
 }

@@ -5,13 +5,6 @@ export type RungLevel = 0 | 1 | 2 | 3;
 const RUNG_LABELS = ['Not cited', 'Mentioned', 'Cited', 'Top source'] as const;
 const RUNG_HEIGHTS = ['h-1.5', 'h-2.5', 'h-3.5'] as const;
 
-/**
- * Rungs — the logo's three ascending bars as a citation level: not cited,
- * mentioned, cited, top source. Bars fill with `accent` from the shortest up;
- * empty bars are `line`. The word is always present: printed with
- * `showLabel` (detail views), otherwise for screen readers (table cells).
- * Only ever a citation level, never a generic signal icon.
- */
 export function Rungs({
   level,
   label,

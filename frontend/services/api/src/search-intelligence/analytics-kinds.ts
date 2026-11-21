@@ -1,4 +1,3 @@
-/** The Keyword Research analytics kind. */
 import type { AnalyticsKinds } from '../queue/executor.ts';
 import { acquireResearch } from './executor.ts';
 

@@ -7,8 +7,6 @@ const SNAPSHOT = '33333333-3333-4333-8333-333333333333';
 const IMPLEMENTATION = '55555555-5555-4555-8555-555555555555';
 const ACTION = '66666666-6666-4666-8666-666666666666';
 
-/** The loop reads the project's industry into its brief, so those two fields
- * are stated; everything else is the shared shell project. */
 const project = {
   ...FIXTURE_PROJECT,
   industry: 'Software',
@@ -39,43 +37,6 @@ const row = {
   updated_at: '2026-08-28T00:00:00Z',
 };
 
-const handoff = {
-  opportunity_id: OPPORTUNITY,
-  pathway: 'earned',
-  source_class: 'editorial',
-  canonical_domain: 'example.org',
-  suggested_role: 'Earned Media',
-  suggested_skill_id: 'article',
-  target_url: null,
-  target_theme: 'analytics',
-  representative_citations: [{ url: 'https://example.org/tools', title: 'Analytics tools' }],
-  affected_themes: ['analytics'],
-  observed_competitors: ['Rival'],
-  coverage: { eligible_answers: 4, observed_answers: 2 },
-  limitations: ['Human review and outreach are required.'],
-  truncated: false,
-  source_analysis_ids: [SNAPSHOT],
-  snapshot_versions: { source_taxonomy: 'source-taxonomy-2' },
-};
-
-function detail() {
-  return {
-    ...row,
-    remediation: 'Prepare a transparent expert-contribution brief.',
-    evidence: { audit_id: SNAPSHOT },
-    source_analysis_ids: [SNAPSHOT],
-    source_issue_ids: [],
-    source_metric_ids: [SNAPSHOT],
-    source_traffic_ids: [],
-    analyzer_version: 'opp-analyzer-7',
-    rule_version: 'opp-rules-8',
-    formula_version: 'opp-formula-3',
-    content_handoff: handoff,
-    superseded_by_id: null,
-    superseded_at: null,
-  };
-}
-
 const verificationResult = {
   state: 'available',
   legs: {
@@ -102,11 +63,13 @@ const action = {
   target_prompt_id: null,
   origin: 'evidence',
   status: 'open',
+  measurement: null,
   priority_score: 140,
   priority_band: 'high',
   families: ['sources'],
   approach: 'earned_placement',
-  group: 'earned',
+  goal: 'mentions',
+  grouping: 'editorial',
   skill_id: 'earned_authority',
   member_count: 1,
   declarable_member_count: 1,
@@ -185,13 +148,27 @@ const declaration = {
 
 test('declaring an Action implemented shows comparable verification', async ({ page }) => {
   let declarationBody: Record<string, unknown> | null = null;
+  let accepted = false;
+  const status = () => {
+    if (declarationBody) return 'done';
+    return accepted ? 'in_progress' : 'open';
+  };
 
   await stubAuthedShell(page, [], [project]);
   await page.route(`**/api/v1/projects/${PROJECT}/logos/refresh`, (route) =>
     route.fulfill({ json: {} }),
   );
   await page.route('**/api/v1/agent/skills', (route) =>
-    route.fulfill({ json: { skills: [], limits: { mentions_max: 5 } } }),
+    route.fulfill({
+      json: {
+        skills: [],
+        limits: {
+          mentions_max: 5,
+          attachments_max: 3,
+          attachment_max_chars: 40000,
+        },
+      },
+    }),
   );
   await page.route(`**/api/v1/projects/${PROJECT}/actions*`, (route) =>
     route.fulfill({
@@ -199,15 +176,19 @@ test('declaring an Action implemented shows comparable verification', async ({ p
         items: [action],
         next_cursor: null,
         status_counts: { open: 1 },
-        group_counts: { fix_site: 0, own_pages: 0, earned: 1, products: 0 },
       },
     }),
   );
-  await page.route(`**/api/v1/actions/${ACTION}`, (route) =>
-    route.fulfill({
+  await page.route(`**/api/v1/actions/${ACTION}`, (route) => {
+    if (route.request().method() === 'PATCH') {
+      accepted = true;
+      return route.fulfill({ json: { ...action, status: status() } });
+    }
+    return route.fulfill({
       json: {
         ...action,
-        status: declarationBody ? 'done' : 'open',
+        status: status(),
+        measurement: declarationBody ? 'verified' : null,
         diagnosis: { approach: 'earned_placement', families: { sources: 'observed' } },
         members: [
           {
@@ -220,19 +201,17 @@ test('declaring an Action implemented shows comparable verification', async ({ p
         declarable_since: new Date(Date.now() - 30 * 86_400_000).toISOString(),
         declaration: declarationBody ? declaration : null,
       },
-    }),
-  );
+    });
+  });
   await page.route(`**/api/v1/projects/${PROJECT}/agent/chats?*`, (route) =>
     route.fulfill({ json: { items: [], next_cursor: null } }),
-  );
-  await page.route(`**/api/v1/opportunities/${OPPORTUNITY}`, (route) =>
-    route.fulfill({ json: detail() }),
   );
   await page.route(`**/api/v1/actions/${ACTION}/declaration`, async (route) => {
     declarationBody = (await route.request().postDataJSON()) as Record<string, unknown>;
     return route.fulfill({ status: 201, json: declaration });
   });
-  await page.goto(`/agent/actions/${ACTION}?project=${PROJECT}`);
+  await page.goto(`/actions/${ACTION}?project=${PROJECT}`);
+  await page.getByRole('button', { name: 'Accept' }).click();
   await page.getByRole('button', { name: 'Mark implemented' }).click();
   await page
     .getByRole('dialog', { name: 'Mark implemented' })
@@ -248,16 +227,29 @@ test('declaring an Action implemented shows comparable verification', async ({ p
 
 test('Action filters restore through URL history and reload', async ({ page }) => {
   await stubAuthedShell(page, [], [project]);
-  await page.route(`**/api/v1/projects/${PROJECT}/actions*`, (route) => {
-    const params = new URL(route.request().url()).searchParams;
-    const dismissed = params.get('status') === 'dismissed';
-    const group = params.get('group');
+  await page.route(`**/api/v1/projects/${PROJECT}/actions/tree*`, (route) => {
+    const dismissed = new URL(route.request().url()).searchParams.get('status') === 'dismissed';
     return route.fulfill({
       json: {
-        items: dismissed || (group && group !== 'earned') ? [] : [action],
-        next_cursor: null,
-        status_counts: { open: 1, dismissed: 0 },
-        group_counts: { fix_site: 0, own_pages: 0, earned: dismissed ? 0 : 1, products: 0 },
+        group_by: 'goal',
+        status_counts: { open: 1, in_progress: 0, done: 0, dismissed: 0 },
+        goals: [
+          { goal: 'read_site', count: 0, blocking: false },
+          { goal: 'own_pages', count: 0, blocking: false },
+          { goal: 'mentions', count: 1, blocking: false },
+          { goal: 'wrong_claims', count: 0, blocking: false },
+        ],
+        groups: dismissed
+          ? []
+          : [
+              {
+                key: 'mentions',
+                count: 1,
+                groupings: [
+                  { grouping: 'editorial', count: 1, items: [action], next_cursor: null },
+                ],
+              },
+            ],
       },
     });
   });
@@ -265,22 +257,32 @@ test('Action filters restore through URL history and reload', async ({ page }) =
     route.fulfill({ json: { items: [], next_cursor: null } }),
   );
   await page.route('**/api/v1/agent/skills', (route) =>
-    route.fulfill({ json: { skills: [], limits: { mentions_max: 5 } } }),
+    route.fulfill({
+      json: {
+        skills: [],
+        limits: {
+          mentions_max: 5,
+          attachments_max: 3,
+          attachment_max_chars: 40000,
+        },
+      },
+    }),
   );
 
-  await page.goto(`/agent/actions?project=${PROJECT}&status=dismissed`);
-  await expect(page.getByText('No Actions match these filters')).toBeVisible();
+  await page.goto(`/actions?project=${PROJECT}&status=dismissed`);
+  await expect(page.getByText('No declined actions')).toBeVisible();
   await page.reload();
-  await expect(page.getByText('No Actions match these filters')).toBeVisible();
+  await expect(page.getByText('No declined actions')).toBeVisible();
 
-  await page.getByRole('button', { name: 'All filters (1)' }).click();
-  await page.getByRole('menuitem', { name: /^Status/ }).click();
-  await page.getByRole('menuitemradio', { name: 'Open and in progress' }).click();
-  await expect(page.getByRole('button', { name: 'Get mentioned elsewhere, 1' })).toBeVisible();
+  await page.getByRole('button', { name: 'Status: Declined' }).click();
+  await page.getByRole('menuitemradio', { name: 'New' }).click();
+  await expect(
+    page.getByRole('button', { name: 'Get mentioned elsewhere, 1', exact: true }),
+  ).toBeVisible();
   await expect(page.getByRole('link', { name: 'example.org/tools' })).toBeVisible();
-  await expect.poll(() => new URL(page.url()).searchParams.has('status')).toBe(false);
+  await expect(page.getByText('Earn a placement', { exact: true })).toBeVisible();
+  await expect.poll(() => new URL(page.url()).searchParams.get('status')).toBe('open');
 
-  // A row opens its Action.
-  await page.getByRole('cell', { name: 'Earn a placement' }).click();
-  await expect(page).toHaveURL(new RegExp(`/agent/actions/${ACTION}`));
+  await page.getByRole('link', { name: 'example.org/tools' }).click();
+  await expect(page).toHaveURL(new RegExp(`/actions/${ACTION}`));
 });

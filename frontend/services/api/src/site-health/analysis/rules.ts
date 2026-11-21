@@ -1,9 +1,3 @@
-/**
- * Evaluates the config-owned Site Health rule catalog against one page's facts.
- * Applicability (which rules a page answers to) is separate from outcome, and
- * an unanswerable check is unknown rather than failed. Crawl-finalize rules
- * belong to finalization and are not evaluated per page.
- */
 import { policy } from '../../config.ts';
 import { contentChecks, type CompositeContract } from './content-checks.ts';
 import { DELIVERY_CHECKS, serverRenderSignals } from './delivery-checks.ts';
@@ -16,6 +10,7 @@ import {
   checkSitemapRedirect,
   type CheckResult,
 } from './indexing.ts';
+import { ON_PAGE_CHECKS } from './on-page-checks.ts';
 import { analysisPolicy } from './policy.ts';
 import { record, text, textList, type Facts } from './read-facts.ts';
 import { SCHEMA_CHECKS } from './schema-checks.ts';
@@ -34,7 +29,6 @@ const AUTHORED_CHECKS = new Set(r.authored_content_check_ids);
 const PURPOSE_CHECKS = new Set(r.purpose_confirmed_check_ids);
 const PURPOSE_KINDS = new Set(r.purpose_confirmed_page_kinds);
 
-/** Page-owned commerce structure: a purchase control or price, or a captured collection. */
 function ownsPurpose(kind: string, facts: Facts) {
   if (record(facts.page_kind_evidence).tier === 'structural') return true;
   const entity = record(facts.entity);
@@ -42,16 +36,10 @@ function ownsPurpose(kind: string, facts: Facts) {
     const product = record(entity.product);
     return Boolean(product.has_purchase_control || product.has_primary_price);
   }
-  // The empty default carries the same keys, so only captured items confirm a collection.
   const container = record(record(record(entity.listing).collection_evidence).container);
   return Number(container.item_count) > 0;
 }
 
-/**
- * A product or category purpose check asserts what that page must offer. When
- * only the URL or title suggested that purpose (no page-owned commerce
- * structure), its failure is unknown rather than a finding.
- */
 const purposeUnconfirmed = (rule: Rule, facts: Facts) =>
   PURPOSE_CHECKS.has(rule.rule_id) &&
   PURPOSE_KINDS.has(pageKind(facts)) &&
@@ -79,7 +67,6 @@ export type RuleEvaluation = {
   readiness_weight: number;
 };
 
-/** Evidence-backed findings become issues, independently of score membership. */
 export const createsIssue = (evaluation: RuleEvaluation) =>
   FAILING.has(evaluation.outcome) &&
   evaluation.finding_class !== 'diagnostic' &&
@@ -99,6 +86,7 @@ const CHECKS: Record<string, (facts: Facts) => CheckResult> = {
   'technical.client_side_redirect': checkClientSideRedirect,
   ...DELIVERY_CHECKS,
   ...SCHEMA_CHECKS,
+  ...ON_PAGE_CHECKS,
   ...contentChecks(composite),
 };
 
@@ -117,7 +105,6 @@ function requirement(kind: '' | 'html' | 'content', facts: Facts): [boolean, str
   return [true, ''];
 }
 
-/** Prefixed page-kind and trait scopes; null when the key is not prefixed. */
 function prefixedScope(key: string, facts: Facts): [boolean, string] | null {
   if (key.startsWith(prefixes.page_kind_or_trait_content)) {
     const tokens = tokensAfter(key, prefixes.page_kind_or_trait_content);
@@ -151,7 +138,6 @@ function prefixedScope(key: string, facts: Facts): [boolean, string] | null {
   return null;
 }
 
-/** Whether a rule applies to this page, and the persisted reason when it does not. */
 function applicability(rule: Rule, facts: Facts): [boolean, string] {
   const key = (rule.applicability_key || 'always').trim().toLowerCase();
   if (key === 'always') return [true, ''];
@@ -175,7 +161,6 @@ function applicability(rule: Rule, facts: Facts): [boolean, string] {
   return [false, 'unknown_applicability'];
 }
 
-/** Score membership from the catalog's `score_roles`, the single source (validated at startup). */
 export function membership(ruleId: string) {
   const roles = [...(RULES.get(ruleId)?.score_roles ?? [])];
   const pillar = roles.includes('aeo_readiness') ? (PILLARS[ruleId] ?? '') : '';
@@ -193,7 +178,6 @@ const NOT_SCORED = {
   readiness_weight: 0,
 };
 
-/** Not-applicable keeps only structural reasons; anything else is unknown, not absent. */
 function normalized(
   rule: Rule,
   outcome: string,
@@ -210,8 +194,6 @@ function normalized(
 const needsExtraction = (rule: Rule) =>
   rule.applicability_key.includes('html') || rule.applicability_key.includes('content');
 
-// The server-rendered content check is what detects a script-only shell, so that unreadable page
-// fails it instead of leaving it unknown. Other unavailable extractions stay unknown.
 const judgesShell = (rule: Rule, reason: string) =>
   rule.rule_id === 'aeo.server_rendered_content' && reason === 'client_rendering_required';
 
@@ -230,7 +212,6 @@ function runCheck(
   try {
     result = check(facts);
   } catch (error) {
-    // An unexpected check failure is evidence about the check, not an aborted page.
     const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
     return {
       outcome: 'error',
@@ -298,14 +279,12 @@ function evaluateRule(rule: Rule, facts: Facts): RuleEvaluation {
   return {
     ...base,
     ...scored,
-    // A check that finds itself not applicable keeps its roles but never scores.
     score_applicability: scored.score_applicability && result.outcome !== 'not_applicable',
     ...result,
     display_applicability: true,
   };
 }
 
-/** Every page-scoped rule in catalog order. */
 export const evaluatePageRules = (facts: Facts) =>
   CATALOG.filter((rule) => rule.applicability_key !== 'crawl_finalize').map((rule) =>
     evaluateRule(rule, facts),

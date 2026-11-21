@@ -1,11 +1,3 @@
-/**
- * The analytics queue's enqueue, with deterministic idempotency keys, and its
- * coalesced form for refreshes that absorb repeated requests.
- *
- * A key is `analytics:<kind>:<identity parts>`; with `ON CONFLICT DO NOTHING`
- * on the unique key, re-enqueueing the same logical task never adds a second
- * row (invariant 8).
- */
 import { randomUUID } from 'node:crypto';
 import { sql, type Transaction } from 'kysely';
 
@@ -22,14 +14,11 @@ type Enqueue = {
   kind: string;
   payload: Record<string, unknown>;
   keyParts: readonly (string | number)[];
-  /** The kind's attempt budget; defaults to the analytics task budget (`ANALYTICS_TASK_MAX_ATTEMPTS`). */
   maxAttempts?: number;
   idempotencyKey?: string;
-  /** When the row becomes claimable; now unless the request is delayed. */
   availableAt?: Date;
 };
 
-/** The analytics task attempt budget successors inherit unless their kind sets its own. */
 function defaultTaskMaxAttempts(): number {
   return resolveSettingSpec(
     policy.analytics.worker_settings.task_max_attempts,
@@ -37,12 +26,10 @@ function defaultTaskMaxAttempts(): number {
   ) as number;
 }
 
-/** The deterministic `analytics:<kind>:<identity parts>` idempotency key. */
 export function taskKey(kind: string, parts: readonly (string | number)[]): string {
   return ['analytics', kind, ...parts].join(':');
 }
 
-/** Insert one queue row unless its key exists; the new id, or null. */
 export async function enqueueTask(
   db: Database | Transaction<DB>,
   task: Enqueue,
@@ -78,31 +65,15 @@ type Coalesced = {
   workspaceId: string;
   projectId: string;
   kind: string;
-  /** The payload a new task starts with. */
   payload?: Record<string, unknown>;
-  /** Payload fields a queued task must share to absorb this request; none when omitted. */
   coalesceOn?: readonly string[];
-  /** The payload a queued task takes when it absorbs this request; unchanged when omitted. */
   merge?: (queued: Record<string, unknown>) => Record<string, unknown>;
-  /** The debounce: the task is due this long after the request. */
   delaySeconds: number;
   maxAttempts?: number;
-  /** Identity parts of a new task's key; a fresh successor key when omitted. */
   keyParts?: readonly (string | number)[];
   now?: Date;
 };
 
-/**
- * Request a refresh that coalesces with work not yet started.
- *
- * One advisory lock per kind, project and coalescing key serializes
- * concurrent requests. A queued task absorbs the request (merging its payload
- * when asked) and keeps the earliest deadline; leased or running work gets a
- * queued successor, since it may already have read the state this request
- * changes. The queued row stays locked until the caller commits, so a worker
- * cannot claim it before the change that requested it is visible. Returns the
- * queued task's id, or null when an explicit key already exists.
- */
 export function enqueueCoalesced(db: Database, request: Coalesced): Promise<string | null> {
   return inTransaction(db, async (trx) => {
     const { workspaceId, projectId, kind } = request;

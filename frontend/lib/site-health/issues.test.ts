@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vite-plus/test';
 
-import { issueTitle, severityCount } from './issues';
+import { issueTitle, sentences, severityCount } from './issues';
 
 describe('issueTitle fallback', () => {
   it('uses the title when present', () => {
@@ -24,5 +24,18 @@ describe('severityCount', () => {
     expect(severityCount({ medium: 23 }, 'medium')).toBe(23);
     expect(severityCount({}, 'low')).toBe(0);
     expect(severityCount({ high: 5 }, 'low')).toBe(0);
+  });
+});
+
+describe('sentences', () => {
+  it('splits a fix at sentence ends only, never inside a path or a file name', () => {
+    expect(
+      sentences('Publish /robots.txt for crawlers. Point the link at the final URL!  Then re-run'),
+    ).toEqual([
+      'Publish /robots.txt for crawlers.',
+      'Point the link at the final URL!',
+      'Then re-run',
+    ]);
+    expect(sentences('  ')).toEqual([]);
   });
 });

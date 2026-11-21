@@ -1,4 +1,3 @@
-/** Analytics recovery is bounded and serializes against heartbeats and publication. */
 import { sql } from 'kysely';
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';

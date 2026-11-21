@@ -13,7 +13,6 @@ import { auditEvent, transitionAudit } from './state.ts';
 
 const batchSize = auditPolicy.constants.audit_lease_sweep_batch_size;
 type Parent = { workspaceId: string; auditId: string };
-/** Where a reclaimed lease goes; `pending` names a paid submission that still needs no new attempt. */
 function expiredLeaseStatus(
   pending: 'submission_uncertain' | 'awaiting_provider_result' | null,
   failed: boolean,
@@ -23,7 +22,14 @@ function expiredLeaseStatus(
   if (!failed) return 'retry_wait';
   return auditStatus === 'cancelled' ? 'cancelled' : 'failed';
 }
-/** Evidence may be committed before its separate queue transition; repair the gap. */
+/**
+ * A paid submission is never charged again: an unconfirmed one is reconciled, and one with
+ * a provider task id goes back to polling, bounded by the recovery deadline or poll ceiling.
+ */
+function pendingSubmission(task: AuditTask) {
+  if (task.provider_task_id) return 'awaiting_provider_result';
+  return task.provider_submission_ref ? 'submission_uncertain' : null;
+}
 export function repairOwnedCompletion(db: Database, claimed: AuditTask, owner: string, at: Date) {
   return db.transaction().execute(async (trx) => {
     const locked = await ownedAuditTask(trx, claimed, owner);
@@ -80,7 +86,6 @@ export function repairOwnedCompletion(db: Database, claimed: AuditTask, owner: s
   });
 }
 
-/** Scope, cancellation, queue transitions and unused funding release commit together. */
 export async function cancelAudit(
   db: Database,
   scope: RecordScope,
@@ -186,12 +191,7 @@ export class AuditMaintenance {
           const parentTerminal = auditPolicy.constants.audit_terminal_statuses.includes(
             audit.status,
           );
-          // A paid submission is never charged again: an unconfirmed one is reconciled, and
-          // one with a provider task id goes back to polling, bounded by the recovery deadline.
-          let pending: 'submission_uncertain' | 'awaiting_provider_result' | null = null;
-          if (!parentTerminal && task.provider_task_id) pending = 'awaiting_provider_result';
-          else if (!parentTerminal && task.provider_submission_ref)
-            pending = 'submission_uncertain';
+          const pending = parentTerminal ? null : pendingSubmission(task);
           const attempts = task.attempt_count + (pending || parentTerminal ? 0 : 1);
           const failed = !pending && (parentTerminal || attempts >= task.max_attempts);
           await trx
@@ -199,6 +199,8 @@ export class AuditMaintenance {
             .set({
               status: expiredLeaseStatus(pending, failed, audit.status),
               attempt_count: attempts,
+              // Each paid lap counts toward the poll ceiling, so a save that keeps failing ends.
+              provider_poll_count: task.provider_poll_count + (pending ? 1 : 0),
               available_at: at,
               lease_owner: null,
               lease_expires_at: null,
@@ -232,22 +234,12 @@ export class AuditMaintenance {
     }
     return { reclaimed, parents };
   }
-  /**
-   * Reclaim expired task leases and finalize the audits that ended. The audit
-   * lane runs this on every pass, so a lease lost with a killed request or
-   * execution recovers at expiry rather than at the next tick.
-   */
   async recoverLeases(at = new Date(), canAdmit = () => true) {
     if (!canAdmit()) return 0;
     const { reclaimed, parents } = await this.#reclaim(at, canAdmit);
     await this.finalizeParents(parents.values(), canAdmit);
     return reclaimed;
   }
-  /**
-   * Deletes capacity leases that expired more than the retention window ago,
-   * released or not: capacity counts only live leases, and every acquire
-   * locks its bucket and sums that bucket's leases. One batch per pass.
-   */
   async purgeCapacityLeases(at = new Date()) {
     const cutoff = new Date(
       at.getTime() - auditPolicy.constants.capacity_lease_retention_seconds * 1000,
@@ -332,7 +324,6 @@ export class AuditMaintenance {
       try {
         await this.finalize(parent.workspaceId, parent.auditId); // NOSONAR -- Settle each parent before admitting the next within budget.
       } catch (error) {
-        // One parent's finalize never blocks the others; the next sweep retries it.
         getLogger('workers.audit').warning('audit_maintenance_finalize_failed', {
           audit_id: parent.auditId,
           ...failureFacts(error),

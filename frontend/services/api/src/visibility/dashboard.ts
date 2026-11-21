@@ -1,11 +1,3 @@
-/**
- * The selected-measurement visibility dashboard: one run, or one frozen
- * configuration pooled across a period.
- *
- * Computed from the persisted `MetricSnapshot`; no
- * cross-run trend here (that is `/visibility/trends`). The latest run is the
- * default selection, and a range pools only runs of one configuration.
- */
 import { auditStatusSchema } from '@citeladder/contracts/audits';
 import type { visibilitySchema } from '@citeladder/contracts/visibility';
 import { sql } from 'kysely';
@@ -27,6 +19,7 @@ import {
   type VisibilityComparison,
 } from './comparison.ts';
 import {
+  brandWins,
   cohortMetrics,
   engineMetrics,
   isComplete,
@@ -41,7 +34,7 @@ import {
   type Metrics,
   type RankingRow,
 } from './metrics.ts';
-import { applyMarks, rankingMarks } from './ranking-marks.ts';
+import { applyIdentities, brandIdentities } from './brand-identities.ts';
 import {
   engineSnapshots,
   loadMeasuredRuns,
@@ -91,34 +84,35 @@ export async function getVisibility(
   }
   if (query.selectionMode === 'range') return rangeVisibility(db, requested, query);
   const run = await selectedRun(db, requested, query.auditId);
-  // A named run is read in its own market: comparisons stay inside it.
   const scope = { ...requested, marketId: run.marketId };
   const view = await runView(db, scope, run, query);
-  const comparison = await compareSelection(
-    db,
-    scope,
-    {
-      auditId: run.auditId,
+  const [comparison, gaps] = await Promise.all([
+    compareSelection(
+      db,
+      scope,
+      {
+        auditId: run.auditId,
+        workspaceId: scope.workspaceId,
+        configuration: run.configuration,
+        completedAt: run.completedAt,
+        analyzerVersion: run.analyzerVersion,
+        scoringRuleVersion: run.scoringRuleVersion,
+        metrics: view.metrics,
+      },
+      { cohort: query.cohort, engine: query.logicalEngine, baselineId: query.baselineId },
+    ),
+    competitorGaps(db, {
       workspaceId: scope.workspaceId,
-      configuration: run.configuration,
-      completedAt: run.completedAt,
-      analyzerVersion: run.analyzerVersion,
-      scoringRuleVersion: run.scoringRuleVersion,
-      metrics: view.metrics,
-    },
-    { cohort: query.cohort, engine: query.logicalEngine, baselineId: query.baselineId },
-  );
-  const gaps = await competitorGaps(db, {
-    workspaceId: scope.workspaceId,
-    auditIds: [run.auditId],
-    cohort: query.cohort,
-    engine: query.logicalEngine,
-  });
+      auditIds: [run.auditId],
+      cohort: query.cohort,
+      engine: query.logicalEngine,
+      topicId: scope.topicId,
+    }),
+  ]);
   applyRankingComparison(view.response.rankings, comparison, gaps);
   return { ...view.response, comparison };
 }
 
-/** One run's projection with no baseline comparison, for summary surfaces such as Overview. */
 export async function getRunVisibility(
   db: Database,
   scope: RunScope,
@@ -130,6 +124,31 @@ export async function getRunVisibility(
   return (await runView(db, scope, run, { auditId, logicalEngine: null, cohort })).response;
 }
 
+export async function getRunComparison(
+  db: Database,
+  scope: RunScope,
+  { auditId, cohort }: Readonly<{ auditId: string; cohort: string }>,
+): Promise<VisibilityComparison> {
+  validateCohort(cohort);
+  const run = await selectedRun(db, scope, auditId);
+  const runScope = { ...scope, marketId: run.marketId };
+  const view = await runView(db, runScope, run, { auditId, logicalEngine: null, cohort });
+  return compareSelection(
+    db,
+    runScope,
+    {
+      auditId: run.auditId,
+      workspaceId: runScope.workspaceId,
+      configuration: run.configuration,
+      completedAt: run.completedAt,
+      analyzerVersion: run.analyzerVersion,
+      scoringRuleVersion: run.scoringRuleVersion,
+      metrics: view.metrics,
+    },
+    { cohort, engine: null, baselineId: null },
+  );
+}
+
 type SelectedRun = Omit<MeasuredRun, 'completedAt'> & { completedAt: string | null };
 
 const brandRuns = (db: Database, scope: RunScope) =>
@@ -139,7 +158,6 @@ const brandRuns = (db: Database, scope: RunScope) =>
     .where('project_id', '=', scope.projectId)
     .where('audit_scope', '=', visibility.brand_audit_scope);
 
-/** The latest dashboard-ready brand run (`latestBrandRunId`), or not measured. */
 async function latestDashboardRunId(db: Database, scope: RunScope): Promise<string> {
   const latest = await latestBrandRunId(db, { ...scope, marketId: marketOf(scope) });
   if (latest === null)
@@ -147,7 +165,6 @@ async function latestDashboardRunId(db: Database, scope: RunScope): Promise<stri
   return latest;
 }
 
-/** The runs an evidence summary covers: the selection, or the latest dashboard-ready run. */
 export async function scopedSelection(
   db: Database,
   selection: RunSelection,
@@ -157,7 +174,6 @@ export async function scopedSelection(
   return { ...scoped, auditId: await latestDashboardRunId(db, scoped) };
 }
 
-/** The named run, or the latest dashboard-ready one; its snapshot must exist. */
 async function selectedRun(
   db: Database,
   scope: RunScope,
@@ -190,21 +206,41 @@ async function selectedRun(
     .executeTakeFirst();
   if (snapshot === undefined)
     throw new AnalysisNotFoundError('Metrics not available for audit', 'metrics_pending');
+  const topicId = scope.topicId;
+  const measured = topicId
+    ? await topicBlock(db, { workspaceId: scope.workspaceId, auditId: audit.id, topicId })
+    : snapshot;
   const routes = await engineSnapshots(db, scope.workspaceId, [audit.id]);
   return {
-    snapshotId: snapshot.id,
+    snapshotId: measured.id,
     auditId: audit.id,
     auditStatus: audit.status,
     analyzerVersion: snapshot.analyzer_version,
     scoringRuleVersion: snapshot.scoring_rule_version,
-    visibilityScore: snapshot.visibility_score,
-    metrics: snapshot.metrics,
+    visibilityScore: measured.visibility_score,
+    metrics: measured.metrics,
     snapshotCreatedAt: snapshot.created_at,
     configuration: audit.configuration,
     completedAt: audit.completed_at,
     marketId: audit.market_id,
     provenance: modelProvenanceFor(routes.get(audit.id) ?? [], audit.configuration),
   };
+}
+
+export async function topicBlock(
+  db: Database,
+  key: { workspaceId: string; auditId: string; topicId: string },
+) {
+  const block = await db
+    .selectFrom('audit_topic_metrics')
+    .select(['id', 'visibility_score', 'metrics'])
+    .where('workspace_id', '=', key.workspaceId)
+    .where('audit_id', '=', key.auditId)
+    .where('topic_id', '=', key.topicId)
+    .executeTakeFirst();
+  if (block === undefined)
+    throw new AnalysisNotFoundError('The run asked no prompt in this topic', 'not_measured');
+  return block;
 }
 
 function engineRow(engine: string, metrics: Metrics): EngineRow {
@@ -216,6 +252,7 @@ function engineRow(engine: string, metrics: Metrics): EngineRow {
     counts: measurementCounts(metrics),
     search_use_rate: metricNumber(metrics.search_use_rate),
     visibility_score: promptPerformance(metrics),
+    ...brandWins(metrics),
   };
 }
 
@@ -234,7 +271,6 @@ function citationTotals(metrics: Metrics): NonNullable<VisibilityResponse['citat
   };
 }
 
-/** One run's projection before any comparison is applied. */
 async function runView(
   db: Database,
   scope: RunScope,
@@ -245,7 +281,7 @@ async function runView(
   const engine = query.logicalEngine;
   const metrics = engine === null ? cohort : engineMetrics(cohort, engine);
   const rankings = rankingRows(metrics);
-  applyMarks(rankings, await rankingMarks(db, scope));
+  applyIdentities(rankings, await brandIdentities(db, scope));
   const counts = measurementCounts(metrics);
   return {
     metrics,
@@ -272,7 +308,6 @@ async function runView(
       visibility_score: selectedScore(run.visibilityScore, metrics, query.cohort, engine),
       visibility_rate: observedRate(metrics, 'brand_mention_rate'),
       owned_citation_rate: observedRate(metrics, 'owned_citation_rate'),
-      // The preserved prompt composite: a different measure from the score.
       prompt_performance_score: promptPerformance(metrics),
       counts,
       comparison_key: frozenComparisonKey(run.configuration, engine),
@@ -287,16 +322,15 @@ async function runView(
   };
 }
 
-// --- Range: one frozen configuration pooled across an explicit period -----
-
-/** A configuration is its identity plus the versions that computed it. */
 function configurationGroup(source: TrendSource): string {
   return `${source.comparisonKey || source.auditId}:${source.analyzerVersion}:${source.scoringRuleVersion}`;
 }
 
+const runsWholeSet = (sources: readonly TrendSource[]) => sources.some((source) => source.wholeSet);
+
 function rangeGroups(
   runs: readonly MeasuredRun[],
-  query: DashboardQuery,
+  query: Pick<DashboardQuery, 'logicalEngine' | 'cohort' | 'configurationKey'>,
 ): {
   groups: Map<string, NonEmpty<TrendSource>>;
   key: string;
@@ -310,11 +344,12 @@ function rangeGroups(
   );
   if (groups.size === 0)
     throw new AnalysisNotFoundError('No measurements in the selected period', 'not_measured');
-  // The configuration measured most recently, unless the reader chose one.
   let key = query.configurationKey;
   if (key === null) {
     let latest: TrendSource | null = null;
+    const anyWholeSet = runsWholeSet([...groups.values()].flat());
     for (const [group, sources] of groups) {
+      if (anyWholeSet && !runsWholeSet(sources)) continue;
       const last = lastOf(sources);
       if (latest === null || last.completedAt > latest.completedAt) {
         key = group;
@@ -334,7 +369,6 @@ function rangeGroups(
   return { groups, key: key!, sources };
 }
 
-/** Per-engine rows over the selected runs; a configured engine never answered is unavailable. */
 function rangeEngines(
   runs: readonly MeasuredRun[],
   sources: readonly TrendSource[],
@@ -365,7 +399,11 @@ function rangeEngines(
         };
       }
       const point = foldBucket(lastOf(engineSources).completedAt, engineSources);
+      const brand = point.rankings.find((row) => row.is_brand);
       return {
+        win_count: brand?.win_count ?? null,
+        win_answers: brand?.win_answers ?? null,
+        win_rate: brand?.win_rate ?? null,
         logical_engine: engine,
         total_completed: point.counts!.responses,
         counts: point.counts,
@@ -390,7 +428,6 @@ function unavailableCounts(): MeasurementCounts {
   };
 }
 
-/** The same configuration over the equally long period just before this one. */
 async function comparePeriod(
   db: Database,
   scope: RunScope,
@@ -452,17 +489,45 @@ function asRankingRow(row: TrendPoint['rankings'][number]): RankingRow {
   };
 }
 
+function rangeWindow(query: Pick<DashboardQuery, 'fromAt' | 'toAt'>) {
+  const fromAt = query.fromAt && toUtc(query.fromAt);
+  const toAt = query.toAt ? toUtc(query.toAt) : fromEpochMicros(BigInt(Date.now()) * 1000n);
+  if (fromAt && epochMicros(fromAt) > epochMicros(toAt)) {
+    throw new TrendQueryError("'from' must not be after 'to'");
+  }
+  return { fromAt, toAt };
+}
+
+export async function selectionRuns(
+  db: Database,
+  requested: RunScope,
+  query: Omit<DashboardQuery, 'baselineId'>,
+): Promise<MeasuredRun[]> {
+  validateEngineAndRange(query);
+  validateCohort(query.cohort);
+  const scope = { ...requested, topicId: null };
+  if (query.selectionMode === 'range') {
+    const runs = await loadMeasuredRuns(db, scope, rangeWindow(query));
+    const selected = new Set(rangeGroups(runs, query).sources.map((source) => source.auditId));
+    return runs.filter((run) => selected.has(run.auditId));
+  }
+  if (query.selectionMode === 'run' && query.auditId === null) {
+    throw new TrendQueryError('A specific run selection requires audit_id');
+  }
+  const run = await selectedRun(db, scope, query.auditId);
+  return loadMeasuredRuns(
+    db,
+    { ...scope, marketId: run.marketId },
+    { fromAt: null, toAt: null, auditId: run.auditId },
+  );
+}
+
 async function rangeVisibility(
   db: Database,
   scope: RunScope,
   query: DashboardQuery,
 ): Promise<VisibilityResponse> {
-  const fromAt = query.fromAt && toUtc(query.fromAt);
-  const toAt = query.toAt ? toUtc(query.toAt) : fromEpochMicros(BigInt(Date.now()) * 1000n);
-  // An open period ends now, so it cannot start later than now.
-  if (fromAt && epochMicros(fromAt) > epochMicros(toAt)) {
-    throw new TrendQueryError("'from' must not be after 'to'");
-  }
+  const { fromAt, toAt } = rangeWindow(query);
   const runs = await loadMeasuredRuns(db, scope, { fromAt, toAt });
   const { groups, key, sources } = rangeGroups(runs, query);
   const latest = lastOf(sources);
@@ -471,7 +536,7 @@ async function rangeVisibility(
   const point = foldBucket(latest.completedAt, sources);
   const counts = point.counts!;
   const rankings = point.rankings.map(asRankingRow);
-  applyMarks(rankings, await rankingMarks(db, scope));
+  applyIdentities(rankings, await brandIdentities(db, scope));
   const comparison = fromAt
     ? await comparePeriod(db, scope, sources, point, query, { fromAt, toAt })
     : emptyComparison();
@@ -481,6 +546,7 @@ async function rangeVisibility(
     auditIds: sourceAuditIds,
     cohort: query.cohort,
     engine: query.logicalEngine,
+    topicId: scope.topicId,
   });
   applyRankingComparison(rankings, comparison, gaps);
   return {
@@ -507,7 +573,6 @@ async function rangeVisibility(
     owned_citation_rate: point.owned_citation_rate,
     prompt_performance_score: null,
     visibility_score: null,
-    // Pooled like the counts above; the last run's own values would describe one run only.
     avg_position: point.avg_position ?? null,
     model_provenance: point.model_provenance ?? [],
     citation_totals: undefined,

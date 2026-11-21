@@ -1,39 +1,89 @@
-/**
- * Display helpers for answer perception. Values are projected from the read,
- * never recomputed; a missing value stays `null` so the component draws the
- * shared missing mark rather than a zero.
- */
-import { formatPercent, measured } from '@/lib/format';
+import type { NetSentiment } from '@citeladder/contracts';
+import { PERCEPTION_MIN_CLASSIFIED } from '@/lib/config/visibility';
+import { availabilityLabel, percentText } from '@/lib/format';
 import type {
   PerceptionCoverage,
   PerceptionResponse,
 } from '@citeladder/contracts/visibility-perception';
 
-/** Net sentiment as a signed whole number, or null when nothing was classified. */
 export function formatNet(value: number | null): string | null {
   if (value === null || Number.isNaN(value)) return null;
   const rounded = Math.round(value);
   return rounded > 0 ? `+${rounded}` : String(rounded);
 }
 
-/** A 0–1 share as a whole percentage, or null. */
-export function formatShare(value: number | null): string | null {
-  return measured(formatPercent(value));
+export function sentimentReading(
+  sentiment: NetSentiment | null | undefined,
+  minimum = PERCEPTION_MIN_CLASSIFIED,
+):
+  | { kind: 'not_measured' }
+  | { kind: 'no_mentions' }
+  | { kind: 'too_few'; classified: number; mentions: number; minimum: number }
+  | { kind: 'value'; net: string; classified: number; mentions: number } {
+  if (!sentiment) return { kind: 'not_measured' };
+  if (sentiment.mentions === 0) return { kind: 'no_mentions' };
+  const { classified, mentions } = sentiment;
+  const reading = netReading(sentiment.net_sentiment, classified, minimum);
+  if (reading.kind === 'too_few') return { kind: 'too_few', classified, mentions, minimum };
+  return { kind: 'value', net: reading.text, classified, mentions };
 }
 
-const THEME_LABELS: Record<string, string> = {
-  ease_of_use: 'Ease of use',
-  security_privacy: 'Security and privacy',
-  reputation_trust: 'Reputation and trust',
-  shipping_delivery: 'Shipping and delivery',
-  returns_policy: 'Returns policy',
-};
+export const NOT_NAMED = 'Not named';
 
-export function themeLabel(theme: string): string {
-  const known = THEME_LABELS[theme];
-  if (known) return known;
-  const words = theme.replaceAll('_', ' ');
-  return words.charAt(0).toUpperCase() + words.slice(1);
+export function sentimentFigureValue(sentiment: NetSentiment | null | undefined): {
+  value: string | null;
+  missingLabel: string;
+} {
+  const reading = sentimentReading(sentiment);
+  return {
+    value: reading.kind === 'value' ? reading.net : null,
+    missingLabel: missingSentimentLabel(reading.kind),
+  };
+}
+
+function missingSentimentLabel(kind: ReturnType<typeof sentimentReading>['kind']): string {
+  if (kind === 'no_mentions') return NOT_NAMED;
+  if (kind === 'too_few') return `${availabilityLabel('too_few')} classified`;
+  return availabilityLabel('not_measured');
+}
+
+export type GatedReading =
+  | { kind: 'too_few'; basis: number; minimum: number }
+  | { kind: 'value'; text: string };
+
+function meetsMinimum(basis: number, minimum: number): boolean {
+  return basis >= Math.max(1, minimum);
+}
+
+function gated(text: string | null, basis: number, minimum: number): GatedReading {
+  if (!meetsMinimum(basis, minimum) || text === null) return { kind: 'too_few', basis, minimum };
+  return { kind: 'value', text };
+}
+
+export function shareReading(
+  share: number | null | undefined,
+  basis: number,
+  minimum = PERCEPTION_MIN_CLASSIFIED,
+): GatedReading {
+  return gated(share == null ? null : percentText(share), basis, minimum);
+}
+
+export function netReading(
+  net: number | null | undefined,
+  basis: number,
+  minimum = PERCEPTION_MIN_CLASSIFIED,
+): GatedReading {
+  return gated(formatNet(net ?? null), basis, minimum);
+}
+
+export function gatedFigure(
+  reading: GatedReading,
+  noun = 'classified',
+): { value: string | null; missingLabel: string } {
+  return {
+    value: reading.kind === 'value' ? reading.text : null,
+    missingLabel: `${availabilityLabel('too_few')} ${noun}`,
+  };
 }
 
 const REASON_COPY: Record<NonNullable<PerceptionResponse['reason']>, string> = {
@@ -49,22 +99,15 @@ const REASON_COPY: Record<NonNullable<PerceptionResponse['reason']>, string> = {
     'The classifier model changed after these runs started, so they were not classified.',
 };
 
-/** The heading and sentence for a read that has no value to show. */
 export function stateCopy(
   state: Exclude<PerceptionResponse['state'], 'value'>,
   reason: PerceptionResponse['reason'],
-): { heading: string; description: string } {
+): { heading: string; description: string | null } {
   switch (state) {
     case 'pending':
-      return {
-        heading: 'Classifying answers…',
-        description: 'Answers that name you are being read for sentiment. Check back shortly.',
-      };
+      return { heading: 'Classifying answers…', description: null };
     case 'no_mentions':
-      return {
-        heading: 'No answers named you',
-        description: 'Perception needs answers that mention your brand in the selected runs.',
-      };
+      return { heading: 'No answers named you', description: null };
     case 'unavailable':
       return {
         heading: 'Perception unavailable',
@@ -89,13 +132,95 @@ const UNAVAILABLE_SHORT: Record<NonNullable<PerceptionResponse['reason']>, strin
   model_changed: 'classifier model changed',
 };
 
-/** "N of M mentions classified", then every other bucket that is non-empty. */
+type Score = PerceptionResponse['entities'][number]['score'];
+type Theme = PerceptionResponse['themes'][number];
+
+export function negativeHeadline(
+  score: Score | null | undefined,
+  minimum = PERCEPTION_MIN_CLASSIFIED,
+): string | null {
+  if (!score || score.negative_share === null || !meetsMinimum(score.classified, minimum))
+    return null;
+  if (score.negative === 0) return 'AI says nothing negative about you in classified mentions';
+  return `AI says something negative about you in ${Math.round(score.negative_share * 100)}% of classified mentions`;
+}
+
+export function rankThemes(
+  themes: readonly Theme[],
+  order: 'negative' | 'positive',
+  limit: number,
+): Theme[] {
+  return themes
+    .filter((theme) => theme[order] > 0)
+    .sort((a, b) => b[order] - a[order] || a.theme.localeCompare(b.theme))
+    .slice(0, limit);
+}
+
+export function themeNegativeShare(
+  theme: Pick<Theme, 'negative' | 'positive'>,
+  minimum = PERCEPTION_MIN_CLASSIFIED,
+): number | null {
+  const polar = theme.negative + theme.positive;
+  return meetsMinimum(polar, minimum) ? theme.negative / polar : null;
+}
+
+export function sentimentTrend(
+  trend: PerceptionResponse['trend'],
+  formatDate: (iso: string) => string,
+  minimum = PERCEPTION_MIN_CLASSIFIED,
+) {
+  return trend.map((point, index) => ({
+    label: formatDate(point.completed_at),
+    value: meetsMinimum(point.score.classified, minimum) ? point.score.net_sentiment : null,
+    timestamp: Date.parse(point.completed_at),
+    breakBefore: index > 0 && !point.comparable,
+  }));
+}
+
+export type BreakdownRow =
+  | { kind: 'too_few'; classified: number; mentions: number; needed: number }
+  | {
+      kind: 'value';
+      classified: number;
+      mentions: number;
+      positive: number;
+      neutral: number;
+      negative: number;
+      net: number | null;
+    };
+
+export function breakdownRow(
+  row: PerceptionResponse['topics'][number],
+  minimum: number,
+): BreakdownRow {
+  const { score, coverage } = row;
+  const counts = { classified: score.classified, mentions: coverage.mentions };
+  if (!meetsMinimum(score.classified, minimum))
+    return { kind: 'too_few', ...counts, needed: minimum };
+  // `mixed` counts in the denominator only, so the three shares need not sum to one.
+  return {
+    kind: 'value',
+    ...counts,
+    positive: score.positive / score.classified,
+    neutral: score.neutral / score.classified,
+    negative: score.negative / score.classified,
+    net: score.net_sentiment,
+  };
+}
+
 export function coverageLine(coverage: PerceptionCoverage): string {
-  const parts = [`${coverage.classified} of ${coverage.mentions} mentions classified`];
+  return [
+    `${coverage.classified} of ${coverage.mentions} mentions classified`,
+    ...coverageExtras(coverage),
+  ].join(' · ');
+}
+
+export function coverageExtras(coverage: PerceptionCoverage): string[] {
+  const parts: string[] = [];
   if (coverage.pending) parts.push(`${coverage.pending} pending`);
   if (coverage.low_confidence) parts.push(`${coverage.low_confidence} low confidence`);
   if (coverage.not_assessable) parts.push(`${coverage.not_assessable} not assessable`);
   for (const { reason, count } of coverage.unavailable)
     parts.push(`${count} unavailable (${UNAVAILABLE_SHORT[reason]})`);
-  return parts.join(' · ');
+  return parts;
 }

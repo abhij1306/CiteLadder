@@ -3,20 +3,21 @@ import { ProjectLink } from '@/components/ui/project-link';
 
 import { CohortCompositionContext } from './cohort-composition-context';
 import { AppGrid } from '@/components/ui/app-grid';
-import { Badge } from '@/components/ui/badge';
+import { StatusMark } from '@/components/ui/status-mark';
+import { Tag } from '@/components/ui/tag';
+import { ActionButton } from '@/components/ui/actions';
 import { Button } from '@/components/ui/button';
 import { Delta } from '@/components/ui/delta';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Drawer } from '@/components/ui/drawer';
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
-import { ClampText, TableCell, TableRow } from '@/components/ui/table';
-import { TrendChart } from '@/components/ui/trend-chart';
-import { QueryState } from '@/components/ui/query-state';
+import { ClampText } from '@/components/ui/clamp-text';
+import { TableCell, TableCellLines, TableRow } from '@/components/ui/table';
+import { AreaChart } from '@/components/ui/area-chart';
 import { TextLink } from '@/components/ui/text-link';
-import { UnavailableValue } from '@/components/ui/unavailable-value';
+import { Absence } from '@/components/ui/absence';
 import type { SiteHealthOverview } from '@citeladder/contracts';
 import { issueTitle } from '@/lib/site-health/issues';
-import { formatScore, PLACEHOLDER, statusLabel } from '@/lib/site-health/status';
+import { formatScore, statusLabel } from '@/lib/site-health/status';
 import { textRole } from '@/components/ui/typography';
 import { Inline, Stack } from '@/components/ui/layout';
 import {
@@ -25,9 +26,34 @@ import {
   ledgerItemClasses,
 } from '@/components/ui/workspace';
 import { ICONS } from '@/lib/icons';
+import { StateBlock } from '@/components/ui/state-block';
+import { SectionContent, TitledSection } from '@/components/ui/section';
+import { availabilityLabel, formatCount, formatPercent, pluralCount } from '@/lib/format';
 
-function percent(value: number | null): string {
-  return value === null ? PLACEHOLDER : `${Math.round(value * 100)}%`;
+const MEASUREMENT_LABELS: Record<string, string> = {
+  measured: 'Measured',
+  limited_evidence: 'Limited evidence',
+  not_measured: 'Not checked',
+  excluded: 'Excluded',
+  not_applicable: availabilityLabel('not_applicable'),
+};
+
+function measurementLabel(state: string): string {
+  return MEASUREMENT_LABELS[state] ?? statusLabel(state);
+}
+
+function Unscored({
+  dimension,
+}: Readonly<{ dimension: SiteHealthOverview['aeo_dimensions'][number] }>) {
+  if (dimension.dimension_applicability === 'not_applicable')
+    return <Absence state="not_applicable" />;
+  if (dimension.dimension_measurement_state === 'not_measured')
+    return <Absence state="not_measured" />;
+  const label =
+    dimension.reason === 'measured_at_site_scope'
+      ? 'Site-scoped evidence'
+      : measurementLabel(dimension.dimension_measurement_state);
+  return <Absence state="unavailable" label={label} />;
 }
 
 export function OverviewDetails({ data }: Readonly<{ data: SiteHealthOverview }>) {
@@ -60,51 +86,41 @@ function DimensionLedger({
 }: Readonly<{ dimensions: SiteHealthOverview['aeo_dimensions'] }>) {
   return (
     <DataTable
-      title="AEO Readiness by pillar"
+      title="AEO readiness by pillar"
       toolbar={{
         actions: (
           <Button asChild variant="secondary">
-            <ProjectLink href="/site?tab=aeo-readiness">Open AEO Readiness</ProjectLink>
+            <ProjectLink href="/site?tab=aeo-readiness">Open AEO readiness</ProjectLink>
           </Button>
         ),
       }}
       columns={PILLAR_COLUMNS}
-      minWidth="sm"
     >
       {dimensions.map((dimension) => (
         <TableRow key={dimension.key}>
           <TableCell>
-            {/* Name over one caption line: the ledger is a scanning
-                surface, and a wrapping sentence pushes the score columns
-                off a screenful. Full text stays available on hover. */}
-            <div className="grid min-w-0">
-              <ClampText lines={1} className={textRole('emphasis', 'text-ink')}>
-                {dimension.label}
-              </ClampText>
-              <ClampText lines={1} className="type-caption">
-                {dimension.reason === 'measured_at_site_scope'
+            <TableCellLines
+              title
+              primary={dimension.label}
+              secondary={
+                dimension.reason === 'measured_at_site_scope'
                   ? `Measured at site scope · ${dimension.description}`
-                  : dimension.description}
-              </ClampText>
-            </div>
+                  : dimension.description
+              }
+            />
           </TableCell>
-          {/* The number only (decision D8); a pillar with no score says why. */}
           <TableCell numeric>
             {dimension.score === null ? (
-              <ClampText lines={1} className="type-caption">
-                {dimension.reason === 'measured_at_site_scope'
-                  ? 'Site-scoped evidence'
-                  : statusLabel(dimension.dimension_measurement_state)}
-              </ClampText>
+              <Unscored dimension={dimension} />
             ) : (
               formatScore(dimension.score)
             )}
           </TableCell>
           <TableCell numeric>
             {dimension.coverage === null ? (
-              <UnavailableValue state="not_measured" />
+              <Absence state="not_measured" />
             ) : (
-              percent(dimension.coverage)
+              formatPercent(dimension.coverage)
             )}
           </TableCell>
         </TableRow>
@@ -114,18 +130,15 @@ function DimensionLedger({
 }
 
 const PILLAR_COLUMNS: readonly DataTableColumn[] = [
-  { key: 'pillar', label: 'Pillar' },
-  { key: 'score', label: 'Score', width: 'figure', numeric: true },
-  { key: 'coverage', label: 'Coverage', width: 'figure', numeric: true },
+  { key: 'pillar', label: 'Pillar', kind: 'identity' },
+  { key: 'score', label: 'Score', kind: 'number' },
+  { key: 'coverage', label: 'Coverage', kind: 'number' },
 ];
 
-// Issues and advisories share the table, so a class column would print the
-// same word on most rows; an advisory carries its own badge beside its title
-// instead, as it does on a page's issue list.
 const TOP_ISSUE_COLUMNS: readonly DataTableColumn[] = [
-  { key: 'impact', label: 'Impact', width: 'figure' },
-  { key: 'issue', label: 'Issue' },
-  { key: 'pages', label: 'Pages', width: 'figure', numeric: true },
+  { key: 'impact', label: 'Impact', kind: 'status', width: 'figure' },
+  { key: 'issue', label: 'Issue', kind: 'identity' },
+  { key: 'pages', label: 'Pages affected', kind: 'number' },
 ];
 
 function TopIssues({ issues }: Readonly<{ issues: SiteHealthOverview['top_issues'] }>) {
@@ -149,22 +162,24 @@ function TopIssues({ issues }: Readonly<{ issues: SiteHealthOverview['top_issues
       {issues.map((issue) => (
         <TableRow key={`${issue.rule_id}-${issue.finding_class}`}>
           <TableCell className="whitespace-nowrap">
-            <Badge variant="status" value={impactTone(issue.impact_band)}>
+            <StatusMark variant="severity" value={impactSeverity(issue.impact_band)}>
               {impactLabel(issue.impact_band)}
-            </Badge>
+            </StatusMark>
           </TableCell>
           <TableCell>
             <Inline>
-              <TextLink text="body" href={issueHref(issue)} className="min-w-0">
-                {/* One line, cut with its full title in a tooltip: beside an
-                    Advisory badge in a half-width card, two clamped lines
-                    broke a title mid-word ("Recommend / ed schema"). */}
+              <TextLink
+                text="body"
+                underline="hover"
+                href={issueHref(issue)}
+                className="inline-flex min-h-6 min-w-0 items-center"
+              >
                 <ClampText lines={1}>{issueTitle(issue)}</ClampText>
               </TextLink>
-              {issue.finding_class === 'advisory' ? <Badge>Advisory</Badge> : null}
+              {issue.finding_class === 'advisory' ? <Tag>Advisory</Tag> : null}
             </Inline>
           </TableCell>
-          <TableCell numeric>{issue.affected_pages}</TableCell>
+          <TableCell numeric>{formatCount(issue.affected_pages)}</TableCell>
         </TableRow>
       ))}
     </DataTable>
@@ -176,49 +191,34 @@ function WebFundamentalsCard({
   onOpen,
 }: Readonly<{ data: SiteHealthOverview['web_fundamentals']; onOpen: () => void }>) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Web Fundamentals</CardTitle>
-        <CardDescription>What each page’s HTML and response headers show.</CardDescription>
-      </CardHeader>
-      <CardContent>
+    <TitledSection title="Web fundamentals">
+      <SectionContent>
         <Stack gap="workspace">
-          {/* One list, one area a row: a 2 × 2 grid of badges left uneven
-              cells in a row of equal-height cards. */}
-          <ul aria-label="Web Fundamentals areas" className={ledgerClasses()}>
+          <ul aria-label="Web fundamentals areas" className={ledgerClasses()}>
             {data.areas.map((area) => (
               <Inline as="li" key={area.key} className={ledgerItemClasses('justify-between')}>
-                <span className={textRole('label', 'capitalize')}>{area.key}</span>
-                <Badge variant="status" value={measurementTone(area.state)}>
-                  {statusLabel(area.state)}
-                </Badge>
+                <span className={textRole('body', 'text-ink-2 capitalize')}>{area.key}</span>
+                <MeasurementMark state={area.state} />
               </Inline>
             ))}
           </ul>
-          <Button variant="secondary" onClick={onOpen} className="justify-self-start">
-            View evidence
-          </Button>
+          <Inline>
+            <ActionButton action="viewEvidence" onClick={onOpen} />
+          </Inline>
         </Stack>
-      </CardContent>
-    </Card>
+      </SectionContent>
+    </TitledSection>
   );
 }
 
-/** Open issues on the tracked pages, one point per day an audit landed (SH-B9). */
 function OpenIssuesTrendCard({
   points,
 }: Readonly<{ points: SiteHealthOverview['open_issue_trend'] }>) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Open issues over time</CardTitle>
-        <CardDescription>
-          Each day&rsquo;s count after that day&rsquo;s crawls and re-audits of your tracked pages.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
+    <TitledSection title="Open issues over time">
+      <SectionContent>
         <Stack gap="item">
-          <TrendChart
+          <AreaChart
             data={points.map((point) => ({
               label: point.day,
               value: point.open_count,
@@ -226,6 +226,7 @@ function OpenIssuesTrendCard({
             }))}
             label="Open issues over time"
             name="Open issues"
+            you={false}
             height="sm"
             yMin={0}
             yFormat={(value) => `${Math.round(value)}`}
@@ -234,8 +235,8 @@ function OpenIssuesTrendCard({
             <p className="type-caption">The trend starts once audits land on two days.</p>
           ) : null}
         </Stack>
-      </CardContent>
-    </Card>
+      </SectionContent>
+    </TitledSection>
   );
 }
 
@@ -244,36 +245,30 @@ function OpenIssuesTrendCard({
  * Presentation resolves change-summary labels from the stable metric key.
  */
 const CHANGE_METRIC_LABELS: Record<string, string> = {
-  web_fundamentals_score: 'Web Fundamentals',
-  web_fundamentals_coverage: 'Web Fundamentals coverage',
-  aeo_readiness_score: 'AEO Readiness',
+  web_fundamentals_score: 'Web fundamentals',
+  web_fundamentals_coverage: 'Web fundamentals coverage',
+  aeo_readiness_score: 'AEO readiness',
   aeo_measurement_coverage: 'AEO checklist completion',
 };
 
 function ChangeSummaryCard({ data }: Readonly<{ data: SiteHealthOverview['change_summary'] }>) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Change summary</CardTitle>
-        <CardDescription>Change since the previous comparable crawl.</CardDescription>
-      </CardHeader>
-      <CardContent>
+    <TitledSection title="Score change">
+      <SectionContent>
         <Stack>
           {data.metrics.map((metric) => (
-            <Inline gap="compact" key={metric.key} className="type-body justify-between">
-              <span className="text-ink-secondary">
-                {CHANGE_METRIC_LABELS[metric.key] ?? metric.label}
-              </span>
+            <Inline gap="compact" key={metric.key} className="type-body text-ink-2 justify-between">
+              <span className="text-ink-2">{CHANGE_METRIC_LABELS[metric.key] ?? metric.label}</span>
               <ChangeDelta metricKey={metric.key} delta={metric.delta} />
             </Inline>
           ))}
           {data.state === 'unavailable' ? (
-            <QueryState kind="empty" inline message="No comparable snapshot yet." />
+            <StateBlock kind="empty" inline message="No comparable crawl yet." />
           ) : null}
           <CohortCompositionContext reason={data.reason} composition={data.cohort_composition} />
         </Stack>
-      </CardContent>
-    </Card>
+      </SectionContent>
+    </TitledSection>
   );
 }
 
@@ -299,10 +294,10 @@ function impactLabel(impactBand: number): 'High' | 'Medium' | 'Low' {
   return 'Low';
 }
 
-function impactTone(impactBand: number): 'danger' | 'warning' | 'info' {
-  if (impactBand >= 3) return 'danger';
-  if (impactBand === 2) return 'warning';
-  return 'info';
+function impactSeverity(impactBand: number): 'high' | 'medium' | 'low' {
+  if (impactBand >= 3) return 'high';
+  if (impactBand === 2) return 'medium';
+  return 'low';
 }
 
 function measurementTone(state: string): 'success' | 'warning' | 'info' {
@@ -311,11 +306,19 @@ function measurementTone(state: string): 'success' | 'warning' | 'info' {
   return 'info';
 }
 
+function MeasurementMark({ state }: Readonly<{ state: string }>) {
+  if (state === 'not_measured' || state === 'not_applicable')
+    return <Absence state={state} label={measurementLabel(state)} />;
+  return (
+    <StatusMark variant="status" value={measurementTone(state)}>
+      {measurementLabel(state)}
+    </StatusMark>
+  );
+}
+
 function issueHref(issue: SiteHealthOverview['top_issues'][number]): string {
   const params = new URLSearchParams({ rule: issue.rule_id });
-  // The tab the rule is listed under, so the filtered list is the one on screen.
   if (issue.section && issue.section !== 'technical') params.set('section', issue.section);
-  if (issue.finding_class === 'advisory') params.set('finding_class', issue.finding_class);
   return `/issues?${params.toString()}`;
 }
 
@@ -329,12 +332,7 @@ function WebFundamentalsDrawer({
   onOpenChange: (open: boolean) => void;
 }>) {
   return (
-    <Drawer
-      open={open}
-      onOpenChange={onOpenChange}
-      title="Web Fundamentals"
-      description="What each page’s HTML and response headers show, area by area."
-    >
+    <Drawer open={open} onOpenChange={onOpenChange} title="Web fundamentals">
       <div className={ledgerClasses()}>
         {data.areas.map((area) => (
           <Stack as="section" key={area.key} className={ledgerItemClasses()}>
@@ -342,25 +340,26 @@ function WebFundamentalsDrawer({
               title={<span className="capitalize">{area.key}</span>}
               description={
                 <>
-                  {percent(area.coverage)} evidence coverage · {area.passed_count} passed ·{' '}
-                  {area.missing_count} missing
+                  {area.coverage === null ? (
+                    <Absence state="not_measured" />
+                  ) : (
+                    formatPercent(area.coverage)
+                  )}{' '}
+                  evidence coverage · {formatCount(area.passed_count)} passed ·{' '}
+                  {formatCount(area.missing_count)} missing
                 </>
               }
-              actions={
-                <Badge variant="status" value={measurementTone(area.state)}>
-                  {statusLabel(area.state)}
-                </Badge>
-              }
+              actions={<MeasurementMark state={area.state} />}
             />
             <Stack>
               {area.top_findings.length === 0 ? (
-                <QueryState kind="empty" inline message="No missing checks in this area." />
+                <StateBlock kind="empty" inline message="No missing checks in this area." />
               ) : (
                 area.top_findings.map((finding) => (
                   <Stack gap="tight" key={finding.rule_id}>
-                    <span className={textRole('itemTitle')}>{finding.title}</span>
+                    <span className={textRole('body')}>{finding.title}</span>
                     <span className="type-caption">
-                      {finding.affected_pages} affected pages · {finding.remediation}
+                      {pluralCount(finding.affected_pages, 'page')} affected · {finding.remediation}
                     </span>
                   </Stack>
                 ))

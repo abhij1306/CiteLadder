@@ -17,6 +17,8 @@ import {
 } from './menu';
 import { focusByKeyboard } from '@/test/keyboard-focus';
 
+import { InfoHint } from './info-hint';
+
 import { Tooltip, TooltipProvider } from './tooltip';
 import { ToastProvider, useToast } from './toast';
 
@@ -39,6 +41,26 @@ describe('Dialog', () => {
     expect(screen.getByRole('dialog', { name: 'Launch audit' })).not.toHaveAttribute(
       'aria-describedby',
     );
+  });
+
+  it('opens on a leading field with the caret only, never past a first choice', () => {
+    const { rerender } = render(
+      <Dialog open onOpenChange={() => {}} title="Invite member">
+        <input aria-label="Email" />
+        <input type="checkbox" aria-label="Admin" />
+      </Dialog>,
+    );
+    const email = screen.getByRole('textbox', { name: 'Email' });
+    expect([email, email.hasAttribute('data-quiet-focus')]).toEqual([document.activeElement, true]);
+
+    rerender(<Dialog open={false} onOpenChange={() => {}} title="Invite member" />);
+    rerender(
+      <Dialog open onOpenChange={() => {}} title="Invite member">
+        <input type="checkbox" aria-label="Admin" />
+        <input aria-label="Email" />
+      </Dialog>,
+    );
+    expect(screen.getByRole('button', { name: 'Close dialog' })).toHaveFocus();
   });
 
   it('restores focus to the control that opened it', async () => {
@@ -65,18 +87,54 @@ describe('Dialog', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(trigger).toHaveFocus();
   });
+
+  it('returns focus to the menu trigger when a menu item opened it', async () => {
+    const user = userEvent.setup();
+
+    function MenuDialogHarness() {
+      const [open, setOpen] = useState(false);
+      return (
+        <>
+          <Menu>
+            <MenuTrigger>Manage project</MenuTrigger>
+            <MenuContent>
+              <MenuItem onSelect={() => setOpen(true)}>Edit project</MenuItem>
+            </MenuContent>
+          </Menu>
+          <Dialog open={open} onOpenChange={setOpen} title="Edit project">
+            <p>Project fields</p>
+          </Dialog>
+        </>
+      );
+    }
+
+    render(<MenuDialogHarness />);
+    await user.click(screen.getByRole('button', { name: 'Manage project' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Edit project' }));
+    expect(await screen.findByRole('dialog', { name: 'Edit project' })).toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(screen.getByRole('button', { name: 'Manage project' })).toHaveFocus();
+  });
 });
 
 describe('Drawer', () => {
   it('renders a labelled contextual sheet with a shared close action', () => {
     render(
-      <Drawer open onOpenChange={() => {}} title="Evidence" description="Persisted sources">
+      <Drawer
+        open
+        onOpenChange={() => {}}
+        title="Evidence"
+        description="Persisted sources"
+        footer={<button type="button">Save</button>}
+      >
         <p>Source details</p>
       </Drawer>,
     );
     expect(screen.getByRole('dialog', { name: 'Evidence' })).toBeInTheDocument();
     expect(screen.getByText('Persisted sources')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Close drawer' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save' }).parentElement?.tagName).toBe('FOOTER');
   });
 
   it('closes from Escape or the scrim and restores focus to the opening control', async () => {
@@ -145,7 +203,6 @@ describe('Menu', () => {
     const trigger = screen.getByRole('button', { name: 'Menu' });
     expect(trigger).toHaveAttribute('aria-haspopup', 'menu');
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
-    // Items are not mounted until opened.
     expect(screen.queryByText('Edit')).not.toBeInTheDocument();
   });
 
@@ -165,6 +222,37 @@ describe('Menu', () => {
       'data-state',
       'checked',
     );
+  });
+
+  it('reserves the check gutter on plain rows only in a menu with a checkable row', () => {
+    const lead = (name: string) =>
+      screen.getByRole('menuitem', { name }).querySelector('[data-menu-lead]');
+    const { unmount } = render(
+      <Menu open>
+        <MenuTrigger>Range</MenuTrigger>
+        <MenuContent>
+          <MenuItem>Reset</MenuItem>
+          <MenuRadioGroup value="month">
+            <MenuRadioItem value="week">Week</MenuRadioItem>
+            <MenuRadioItem value="month">Month</MenuRadioItem>
+          </MenuRadioGroup>
+        </MenuContent>
+      </Menu>,
+    );
+    expect(lead('Reset')).toBeInTheDocument();
+    expect(
+      screen.getByRole('menuitemradio', { name: 'Week' }).querySelector('[data-menu-lead]'),
+    ).toBeInTheDocument();
+    unmount();
+    render(
+      <Menu open>
+        <MenuTrigger>Actions</MenuTrigger>
+        <MenuContent>
+          <MenuItem>Reset</MenuItem>
+        </MenuContent>
+      </Menu>,
+    );
+    expect(lead('Reset')).toBeNull();
   });
 
   it('runs the item reached with the arrow keys and closes', async () => {
@@ -210,7 +298,68 @@ describe('Tooltip', () => {
   });
 });
 
+describe('InfoHint', () => {
+  it('opens on a press or keyboard focus, never on hover, and closes on a second press or Esc', async () => {
+    const user = userEvent.setup();
+    render(
+      <>
+        <InfoHint label="About reach">Share of answers that cite you.</InfoHint>
+        <button type="button">Elsewhere</button>
+      </>,
+    );
+    const button = screen.getByRole('button', { name: 'About reach' });
+    expect(button).toHaveAccessibleDescription('Share of answers that cite you.');
+    await user.hover(button);
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+    await user.click(button);
+    expect(screen.getByRole('tooltip')).toHaveTextContent('Share of answers that cite you.');
+    await user.click(button);
+    await waitFor(() => expect(screen.queryByRole('tooltip')).not.toBeInTheDocument());
+    await user.click(button);
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('tooltip')).not.toBeInTheDocument());
+    expect(button).toHaveFocus();
+    await user.click(screen.getByRole('button', { name: 'Elsewhere' }));
+    focusByKeyboard(button);
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('Share of answers that cite you.');
+    await user.tab();
+    expect(screen.getByRole('button', { name: 'Elsewhere' })).toHaveFocus();
+    await waitFor(() => expect(screen.queryByRole('tooltip')).not.toBeInTheDocument());
+  });
+});
+
 describe('ToastProvider', () => {
+  it('closes a plain notification after its time, leaving once its exit animation ends, but keeps one with an action', () => {
+    vi.useFakeTimers();
+    function Harness() {
+      const { notify } = useToast();
+      return (
+        <button
+          type="button"
+          onClick={() => {
+            notify('Prompt saved');
+            notify('Prompt archived', undefined, { action: { label: 'Undo', onClick: vi.fn() } });
+          }}
+        >
+          Notify
+        </button>
+      );
+    }
+    render(
+      <ToastProvider>
+        <Harness />
+      </ToastProvider>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Notify' }));
+    act(() => vi.advanceTimersByTime(60_000));
+    const saved = screen.getByText('Prompt saved').closest('li')!;
+    expect(saved).toHaveAttribute('data-state', 'closed');
+    fireEvent.animationEnd(saved);
+    expect(screen.queryByText('Prompt saved')).not.toBeInTheDocument();
+    expect(screen.getByText('Prompt archived')).toBeInTheDocument();
+    vi.useRealTimers();
+  });
+
   it('dismisses one of two notifications created in the same clock tick', async () => {
     const user = userEvent.setup();
     const clock = vi.spyOn(Date, 'now').mockReturnValue(1);
@@ -243,6 +392,7 @@ describe('ToastProvider', () => {
     expect(screen.getAllByRole('button', { name: 'Dismiss notification' })).toHaveLength(2);
 
     await user.click(screen.getAllByRole('button', { name: 'Dismiss notification' })[0]!);
+    fireEvent.animationEnd(screen.getByText('First notification').closest('li')!);
     await waitFor(() =>
       expect(screen.getAllByRole('button', { name: 'Dismiss notification' })).toHaveLength(1),
     );
@@ -250,7 +400,7 @@ describe('ToastProvider', () => {
     clock.mockRestore();
   });
 
-  it('shows at most three notifications, dropping the oldest, and runs an action', async () => {
+  it('shows at most three notifications, dropping the oldest, with the newest in front, and runs an action', async () => {
     const user = userEvent.setup();
     const onUndo = vi.fn();
 
@@ -280,11 +430,19 @@ describe('ToastProvider', () => {
       </ToastProvider>,
     );
     await user.click(screen.getByRole('button', { name: 'Notify four times' }));
+    fireEvent.animationEnd(screen.getByText('Run queued').closest('li')!);
     expect(screen.queryByText('Run queued')).not.toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: 'Dismiss notification' })).toHaveLength(3);
+    const toast = (title: string) => screen.getByText(title).closest('li')!;
+    const inFront = () =>
+      ['Crawl started', 'Prompt saved', 'Prompt deleted'].filter((title) =>
+        toast(title).hasAttribute('data-front'),
+      );
+    expect(inFront()).toEqual(['Prompt deleted']);
 
     await user.click(screen.getByRole('button', { name: 'Undo' }));
     expect(onUndo).toHaveBeenCalledTimes(1);
+    expect(inFront()).toEqual(['Prompt saved']);
   });
 });
 

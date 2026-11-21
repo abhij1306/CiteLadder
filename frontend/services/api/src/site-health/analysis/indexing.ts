@@ -1,4 +1,3 @@
-/** `noindex` judged against strong evidence of indexing intent; uncertainty stays unknown. */
 import { DAY_MS } from '../../calendar-days.ts';
 import { policy } from '../../config.ts';
 import { stripTrailing } from '../../text-order.ts';
@@ -9,7 +8,6 @@ const TRACKING = new Set(policy.site_health.tracking_params);
 const SERVER_RENDERED_MIN_WORDS = policy.site_health.page_analysis.facts.server_rendered_min_words;
 export type CheckResult = [outcome: string, evidence: Record<string, unknown>];
 
-/** A declared canonical resolved against the page URL; an unresolvable one stays as declared. */
 export function resolveCanonical(canonical: string, finalUrl: string) {
   const raw = canonical.trim();
   if (!raw) return '';
@@ -29,12 +27,10 @@ function webUrl(value: string) {
   }
 }
 
-/** Scheme, host and non-default port, or '' when the URL is not an absolute web URL. */
 function canonicalOrigin(value: string) {
   return webUrl(value)?.origin ?? '';
 }
 
-/** The comparison form: lower-cased origin, trailing slashes trimmed, tracking parameters dropped. */
 export function comparableUrl(value: string) {
   const raw = value.trim();
   let url: URL;
@@ -69,12 +65,6 @@ function recordCanonical(facts: Facts, evidence: Record<string, unknown>) {
   evidence.canonical_matches_final_url = comparableUrl(canonical) === comparableUrl(finalUrl);
 }
 
-/**
- * Only the owner's explicit policy overrides a page's own noindex. A sitemap
- * does not: Shopify and WordPress list every collection and archive in theirs,
- * including the ones they noindex on purpose. That conflict is
- * `technical.sitemap_noindex`'s finding.
- */
 function resolveIntent(facts: Facts, evidence: Record<string, unknown>) {
   const explicit = text(facts.indexing_policy).trim().toLowerCase();
   if (explicit === 'index') return ['intended_index', 'explicit_user_policy'] as const;
@@ -83,7 +73,6 @@ function resolveIntent(facts: Facts, evidence: Record<string, unknown>) {
   return ['intended_exclude', 'page_directive'] as const;
 }
 
-/** A sitemap should list only pages meant to be indexed. */
 export function checkSitemapNoindex(facts: Facts): CheckResult {
   if (facts.sitemap_member !== true) return ['not_applicable', { reason: 'not_in_sitemap' }];
   const noindex = Boolean(record(facts.robots).noindex);
@@ -92,11 +81,6 @@ export function checkSitemapNoindex(facts: Facts): CheckResult {
     : ['satisfied', { noindex }];
 }
 
-/**
- * A sitemap lists the URLs a site wants indexed; listing a page that names
- * another canonical is a mixed signal. A listed URL that redirects is
- * `technical.sitemap_redirect`'s finding, so this judges the page it reached.
- */
 export function checkSitemapCanonical(facts: Facts): CheckResult {
   if (facts.sitemap_member !== true) return ['not_applicable', { reason: 'not_in_sitemap' }];
   const declared = text(facts.canonical_url).trim();
@@ -116,13 +100,11 @@ export function checkSitemapCanonical(facts: Facts): CheckResult {
     : ['missing', { ...evidence, reason: 'sitemap_lists_non_canonical' }];
 }
 
-/** The sitemap should list the URL a crawler lands on, not one that redirects to it. */
 export function checkSitemapRedirect(facts: Facts): CheckResult {
   if (facts.sitemap_member !== true) return ['not_applicable', { reason: 'not_in_sitemap' }];
   const finalUrl = text(record(facts.delivery).final_url);
   const listedUrl = text(facts.sitemap_url).trim();
   const evidence = { listed_url: listedUrl.slice(0, 2048), final_url: finalUrl.slice(0, 2048) };
-  // Both sides in crawl identity form, so query order or tracking keys are not a redirect.
   const listed = canonicalUrl(listedUrl);
   const reached = canonicalUrl(finalUrl);
   if (!listed || !reached) return ['unknown', { ...evidence, reason: 'insufficient_evidence' }];
@@ -134,11 +116,6 @@ export function checkSitemapRedirect(facts: Facts): CheckResult {
 const LASTMOD_TOLERANCE_MS =
   policy.site_health.page_analysis.rules.sitemap_lastmod_tolerance_days * DAY_MS;
 
-/**
- * A sitemap `<lastmod>` is a recrawl hint search engines trust only while it is
- * accurate: it must parse, must not be in the future, and must not predate the
- * page's own declared publication or modification date.
- */
 export function checkSitemapLastmod(facts: Facts): CheckResult {
   if (facts.sitemap_member !== true) return ['not_applicable', { reason: 'not_in_sitemap' }];
   const lastmod = text(facts.sitemap_lastmod).trim();
@@ -158,10 +135,8 @@ export function checkSitemapLastmod(facts: Facts): CheckResult {
   if (declared > audit + LASTMOD_TOLERANCE_MS)
     return ['missing', { ...evidence, reason: 'sitemap_lastmod_in_future' }];
   const parsed = pageDates.map((value) => Date.parse(value)).filter((time) => !Number.isNaN(time));
-  // Without a readable page date there is nothing to hold the lastmod against.
   if (!parsed.length) return ['unknown', { ...evidence, reason: 'page_date_unavailable' }];
   const newest = Math.max(...parsed);
-  // A page date in the future is the content-date checks' finding, not a stale lastmod.
   if (newest > audit + LASTMOD_TOLERANCE_MS)
     return ['unknown', { ...evidence, reason: 'content_date_in_future' }];
   return newest > declared + LASTMOD_TOLERANCE_MS
@@ -169,11 +144,6 @@ export function checkSitemapLastmod(facts: Facts): CheckResult {
     : ['satisfied', evidence];
 }
 
-/**
- * Crawlers that do not run script never follow a script redirect, and a meta
- * refresh hides the destination behind a page that is not the content. Script
- * navigation is only a redirect when the page shows almost nothing else.
- */
 export function checkClientSideRedirect(facts: Facts): CheckResult {
   if (!facts.has_html) return ['not_applicable', { reason: 'no_html' }];
   const redirect = record(facts.client_redirect);

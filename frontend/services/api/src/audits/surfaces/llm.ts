@@ -1,4 +1,3 @@
-/** The `llm` surface: one direct answer-engine call per lease, retried within the task's budget. */
 import { record } from '../../db/json.ts';
 import { failureFacts, getLogger } from '../../logging.ts';
 import { answerRequestSchema } from '../../answer-engines/contracts.ts';
@@ -8,7 +7,6 @@ import type { ExecutionContext } from '../execution-context.ts';
 import { persistAnswerFailure, persistExecutionSuccess } from '../result-persistence.ts';
 import type { PhaseDeps, SurfaceAdapter, TaskFailure } from './adapter.ts';
 
-/** The answer request exactly as frozen at admission; an invalid one refuses the call. */
 export function directRequest(context: ExecutionContext) {
   const { task, audit, config, measurement } = context;
   const parsed = answerRequestSchema.safeParse({
@@ -74,7 +72,6 @@ export const llmSurface: SurfaceAdapter = {
       );
     } catch (error) {
       const safe = error instanceof ProviderError ? error : new ProviderError('unknown');
-      // The persisted code is `unknown` for a non-provider failure; the log keeps its class.
       getLogger('workers.audit').warning('audit_answer_failed', {
         task_id: claimed.id,
         engine: claimed.logical_engine,

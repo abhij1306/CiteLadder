@@ -1,3 +1,4 @@
+import '@/lib/zod-jitless';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { QueryClientProvider } from '@tanstack/react-query';
@@ -6,6 +7,7 @@ import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 import './app.css';
 import { getAppQueryClient } from '@/lib/api/query-client';
 import { installClientErrorListeners } from '@/lib/client-errors';
+import { installInteractionTiming } from '@/lib/interaction-timing';
 import { setUrlStateRouter } from '@/lib/navigation/url-state';
 
 import { appRoutes } from './router';
@@ -13,10 +15,9 @@ import { appRoutes } from './router';
 function mountApp(): void {
   // Before anything renders, so an error during the first paint is reported too.
   installClientErrorListeners();
+  installInteractionTiming();
   const queryClient = getAppQueryClient();
   const router = createBrowserRouter(appRoutes);
-  // URL-owned filter state writes through the router rather than around it, so
-  // `useLocation`/`useSearchParams` cannot go stale behind a filter change.
   setUrlStateRouter(router);
   const rootElement = document.getElementById('root');
 
@@ -33,6 +34,4 @@ function mountApp(): void {
   );
 }
 
-// `/browser-support.js` has already shown "Update your browser" in #root on a
-// browser below the support matrix; the app would break part way there.
 if (document.documentElement.dataset.browserSupport !== 'unsupported') mountApp();

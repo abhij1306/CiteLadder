@@ -36,7 +36,7 @@ vi.mock('@/lib/project/project-context', () => ({
 
 import { DataSourceSetup } from './data-source-setup';
 
-function connection(id: string, provider: 'gsc' | 'ga4', grantStatus = 'connected') {
+function connection(id: string, provider: 'gsc' | 'ga4' | 'bing', grantStatus = 'connected') {
   return {
     id,
     workspace_id: WS,
@@ -112,6 +112,37 @@ describe('DataSourceSetup', () => {
     expect(back.searchParams.get('range')).toBe('28d');
   });
 
+  it("shows the page's empty state until any source connects, then the rows", async () => {
+    const ue = userEvent.setup();
+    const page = (
+      <DataSourceSetup
+        required={['gsc']}
+        optional={['ga4', 'bing']}
+        title="Connect Search Console"
+        unconnected={{ heading: 'Connect Google and Bing' }}
+      />
+    );
+    serve([]);
+    const first = renderWithProviders(page, {
+      initialEntries: [`/performance?project=${PROJECT}`],
+    });
+
+    expect(await screen.findByRole('heading', { name: 'Connect Google and Bing' })).toBeVisible();
+    expect(screen.queryByTestId('data-source-setup')).toBeNull();
+    await ue.click(screen.getByRole('button', { name: 'Connect Bing' }));
+    expect(new URL(vi.mocked(hardNavigate).mock.calls[0]![0], 'https://app.test').pathname).toBe(
+      `/api/v1/integrations/workspaces/${WS}/oauth/bing/start`,
+    );
+    first.unmount();
+
+    serve([connection(GA4, 'bing')]);
+    renderWithProviders(page, { initialEntries: [`/performance?project=${PROJECT}`] });
+    expect(await screen.findByTestId('data-source-setup')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Connect Google and Bing' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Connect Google' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Connect Bing' })).toBeNull();
+  });
+
   it('after consent, lists the properties and offers the matching one as one click', async () => {
     const ue = userEvent.setup();
     let mapped: unknown = null;
@@ -135,7 +166,6 @@ describe('DataSourceSetup', () => {
     renderSetup(`/performance?project=${PROJECT}&connected=gsc`);
 
     expect(await screen.findByText('Google connected.')).toBeInTheDocument();
-    // Discovery starts by itself on return, for every source the consent covered.
     await ue.click(
       await screen.findByRole('button', { name: 'Use example.com for Google Search Console' }),
     );
@@ -146,7 +176,6 @@ describe('DataSourceSetup', () => {
         project_id: PROJECT,
       }),
     );
-    // GA4 exposes no site to match, so its only property is the suggestion.
     expect(
       screen.getByRole('button', { name: 'Use Main GA4 for Google Analytics 4' }),
     ).toBeInTheDocument();
@@ -161,7 +190,24 @@ describe('DataSourceSetup', () => {
     expect(
       await screen.findByRole('button', { name: 'Choose Search Console property' }),
     ).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: 'Choose the Search Console property' }),
+    ).toBeVisible();
     expect(screen.getByRole('button', { name: 'Reconnect Google' })).toBeInTheDocument();
+  });
+
+  it('names a failed mapping read instead of guessing a step from it', async () => {
+    mswServer.use(
+      http.get('/api/v1/integrations', () => HttpResponse.json([connection(GSC, 'gsc')])),
+      http.get('/api/v1/integrations/:id/mappings', () =>
+        HttpResponse.json({ error: { message: 'down' } }, { status: 403 }),
+      ),
+    );
+    renderSetup();
+
+    expect(await screen.findByText("Couldn't load your data sources")).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Choose Search Console property' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Connect Search Console' })).toBeNull();
   });
 
   it('asks a member to involve an admin instead of offering consent', async () => {
@@ -174,26 +220,19 @@ describe('DataSourceSetup', () => {
     expect(within(setup).queryByRole('button', { name: 'Connect Google' })).toBeNull();
   });
 
-  it('disappears once the required source imports into this project', async () => {
-    serve([connection(GSC, 'gsc')], { [GSC]: [mapping(GSC, PROJECT)] });
-    mswServer.use(
-      http.get(`/api/v1/integrations/${GSC}/syncs/progress`, () =>
-        HttpResponse.json({
-          connection_id: GSC,
-          state: 'complete',
-          total_windows: 1,
-          completed_windows: 1,
-          failed_windows: 0,
-          covered_from: '2026-01-01',
-          covered_through: '2026-07-20',
-        }),
-      ),
-    );
+  it('claims no missing source while the reads load', async () => {
+    let answer: (connections: unknown[]) => void = () => undefined;
+    const pending = new Promise<unknown[]>((resolve) => {
+      answer = resolve;
+    });
+    mswServer.use(http.get('/api/v1/integrations', async () => HttpResponse.json(await pending)));
     renderSetup();
 
-    // It shows while loading, then nothing: the screen keeps it mounted without noise.
-    expect(screen.getByTestId('data-source-setup')).toBeInTheDocument();
-    await waitFor(() => expect(screen.queryByTestId('data-source-setup')).toBeNull());
+    expect(screen.queryByRole('heading', { name: 'Connect Search Console' })).toBeNull();
+    answer([]);
+    expect(
+      await screen.findByRole('heading', { name: 'Connect Search Console' }),
+    ).toBeInTheDocument();
   });
 
   it('shows the ready content in place of the setup card once sources are ready', async () => {
@@ -212,8 +251,6 @@ describe('DataSourceSetup', () => {
       ),
     );
     renderSetup(undefined, 'Waiting for the first import.');
-
-    expect(screen.getByTestId('data-source-setup')).toBeInTheDocument();
     expect(await screen.findByText('Waiting for the first import.')).toBeInTheDocument();
     expect(screen.queryByTestId('data-source-setup')).toBeNull();
   });

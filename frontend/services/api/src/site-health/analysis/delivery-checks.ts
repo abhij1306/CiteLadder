@@ -1,4 +1,3 @@
-/** HTTP delivery, automated-consumer access and Web Fundamentals checks over persisted facts. */
 import { policy } from '../../config.ts';
 import { analysisPolicy } from './policy.ts';
 import { count, list, record, records, text, textList, type Facts } from './read-facts.ts';
@@ -9,7 +8,6 @@ const SERVER_RENDERED_MIN_WORDS = analysisPolicy.facts.server_rendered_min_words
 const SOFT_ERROR_PHRASES = ['page not found', '404 not found', 'does not exist'];
 export const passFail = (condition: boolean) => (condition ? 'satisfied' : 'missing');
 
-/** Whether the page is a JavaScript shell, with the evidence that decided it. */
 export function serverRenderSignals(facts: Facts): [boolean, Record<string, unknown>] {
   const body = record(facts.body);
   const words = count(body.word_count);
@@ -36,7 +34,6 @@ const crawlerAccess =
     const bots = policy.crawlers.bots.filter((bot) => bot.checks.includes(check));
     const botFacts = new Map(records(robots.bots).map((bot) => [text(bot.bot_id), bot]));
     const stance = new Map([...botFacts].map(([id, bot]) => [id, bot.root_access]));
-    // The root may be open while every sampled content URL is closed: that bot sees no pages.
     const sampled = (id: string) => text(botFacts.get(id)?.policy);
     const bounded = Object.fromEntries(
       bots.map((bot) => [bot.bot_id, stance.get(bot.bot_id) ?? 'unknown']),
@@ -57,12 +54,10 @@ const crawlerAccess =
           stance.get(bot.bot_id) === 'disallowed' || sampled(bot.bot_id) === 'all_disallowed',
       )
       .map((bot) => bot.label);
-    // Closing some paths (an admin area) is ordinary; it is evidence, not a failure.
     const restricted = bots
       .filter((bot) => sampled(bot.bot_id) === 'restricted')
       .map((bot) => bot.label);
     const detail = { ...evidence, blocked, restricted, checked: bots.map((bot) => bot.label) };
-    // A fetched but unreadable robots.txt proves nothing: no block observed is not a pass.
     if (!blocked.length && bots.some((bot) => stance.get(bot.bot_id) !== 'allowed'))
       return ['unknown', { ...detail, reason: 'robots_unreadable' }];
     return [passFail(!blocked.length), detail];
@@ -78,7 +73,6 @@ function robotsTxtPresent(facts: Facts): CheckResult {
   if (robots.fetched) return ['satisfied', evidence];
   if (robots.status === policy.site_health.crawl.robots_statuses.not_found)
     return ['missing', evidence];
-  // An unreadable file is not evidence of absence.
   return ['not_applicable', { ...evidence, reason: 'robots_not_fetched' }];
 }
 
@@ -155,7 +149,6 @@ const deliveryChecks: Record<string, (facts: Facts) => CheckResult> = {
       present,
       url: text(llms.url).slice(0, 2048),
     };
-    // A crawl that never requested llms.txt (a sample) has not observed its absence.
     if (!evidence.fetched)
       return ['not_applicable', { ...evidence, reason: 'insufficient_evidence' }];
     return [passFail(present), evidence];

@@ -1,4 +1,5 @@
 import { screen } from '@testing-library/react';
+import { figureText } from '@/test/figures';
 import { renderWithProviders as render } from '@/test/render';
 import { describe, expect, it } from 'vite-plus/test';
 
@@ -21,7 +22,7 @@ describe('ScoreSection', () => {
 
     render(<ScoreSection crawl={null} dashboard={dashboard} />);
 
-    expect(screen.getAllByText('Not measured')).toHaveLength(3);
+    expect(screen.getAllByText('Not measured')).toHaveLength(5);
   });
 
   it('preserves unavailable measurement states when scores are absent', () => {
@@ -56,14 +57,8 @@ describe('ScoreSection', () => {
 
     render(<ScoreSection crawl={null} dashboard={dashboard} />);
 
-    expect(
-      screen.getByRole('img', { name: 'Web Fundamentals score: 73 out of 100' }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole('img', { name: 'AEO Readiness score: 61 out of 100' }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole('img', { name: 'AEO Checklist Completion: 70 out of 100' }),
-    ).toBeInTheDocument();
+    expect(figureText('Web fundamentals')).toBe('73');
+    expect(figureText('AEO readiness')).toBe('61');
+    expect(figureText('AEO checklist completion')).toBe('70%');
   });
 });

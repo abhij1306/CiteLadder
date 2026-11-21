@@ -3,7 +3,8 @@ import { useMemo } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 
 import { Button } from '@/components/ui/button';
-import { MutationNotice } from '@/components/ui/mutation-notice';
+import { Icon } from '@/components/ui/icon';
+import { X } from '@/lib/icons';
 import type { MutationNotice as MutationNoticeData } from '@/lib/api/mutation-notice';
 import { Dialog } from '@/components/ui/dialog';
 import { Field } from '@/components/ui/field';
@@ -22,6 +23,7 @@ import {
   promptToFormValues,
   type PromptFormValues,
 } from '@/lib/prompts/forms';
+import { Notice } from '@/components/ui/notice';
 
 const INTENT_OPTIONS = intentValues.map((value) => ({
   value,
@@ -42,7 +44,7 @@ const STAGE_OPTIONS = buyerStageValues.map((value) => ({
 /** Saving wins over both; otherwise the verb follows which dialog this is. */
 function submitLabel(saving: boolean | undefined, editing: boolean): string {
   if (saving) return 'Saving…';
-  return editing ? 'Save changes' : 'Add prompt';
+  return editing ? 'Save changes' : 'Save prompt';
 }
 
 export function PromptFormDialog({
@@ -56,13 +58,11 @@ export function PromptFormDialog({
   error,
   limits,
 }: Readonly<{
-  /** The persona bound the API enforces, from the prompt-set list. */
   limits: Pick<PromptFormLimits, 'persona_max_chars'>;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   prompt?: Prompt;
   topics: readonly Topic[];
-  /** The topic a new prompt starts under: the one the reader is viewing. */
   defaultTopicId: string | null;
   onSubmit: (values: PromptFormValues) => Promise<void> | void;
   isSaving?: boolean;
@@ -108,10 +108,11 @@ export function PromptFormDialog({
     <Dialog
       open={open}
       onOpenChange={handleOpenChange}
-      title={isEdit ? 'Edit prompt' : 'Add prompt'}
+      title={isEdit ? 'Edit prompt' : 'Write a prompt'}
       footer={
         <>
-          <Button variant="ghost" onClick={() => handleOpenChange(false)}>
+          <Button variant="quiet" onClick={() => handleOpenChange(false)}>
+            <Icon icon={X} />
             Cancel
           </Button>
           <Button variant="primary" onClick={submit} disabled={isSaving}>
@@ -122,7 +123,7 @@ export function PromptFormDialog({
     >
       <form noValidate onSubmit={submit}>
         <Stack gap="workspace">
-          {error ? <MutationNotice notice={error} /> : null}
+          {error ? <Notice kind="mutation" notice={error} /> : null}
 
           <Field label="Topic">
             {(props) => (
@@ -152,7 +153,6 @@ export function PromptFormDialog({
             )}
           </Field>
 
-          {/* Tags are set on generation or import; editing corrects them. */}
           {isEdit ? (
             <Stack gap="workspace" className="desktop:grid-cols-2">
               <Field label="Intent">

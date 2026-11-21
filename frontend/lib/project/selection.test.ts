@@ -28,8 +28,6 @@ describe('resolveWorkspaceId', () => {
   };
 
   it('lets an authorized project decide its own workspace', () => {
-    // The project has already been membership-checked by the server, so its
-    // workspace outranks anything the URL or the device remembers.
     expect(
       resolveWorkspaceId({
         ...base,
@@ -51,15 +49,10 @@ describe('resolveWorkspaceId', () => {
   });
 
   it('discards a candidate the membership list does not contain', () => {
-    // Storage and URLs are conveniences. The list is the only authority, so a
-    // workspace the reader has been removed from resolves to one they have.
     expect(resolveWorkspaceId({ ...base, selectedWorkspaceId: 'gone' })).toBe(WORKSPACE_A);
   });
 
   it('trusts a remembered workspace provisionally while the list loads', () => {
-    // This is what lets a returning reader's scoped requests start in the same
-    // render as `me` rather than a round trip later; the backend still
-    // membership-checks every one of them.
     expect(
       resolveWorkspaceId({ ...base, workspaces: undefined, selectedWorkspaceId: WORKSPACE_B }),
     ).toBe(WORKSPACE_B);
@@ -72,7 +65,6 @@ describe('resolveWorkspaceId', () => {
 
 describe('resolveProjectId', () => {
   it('never substitutes an explicit id, even against a settled list without it', () => {
-    // The creation race: the list was fetched before the project existed.
     expect(
       resolveProjectId({
         requestedProjectId: PROJECT_2,
@@ -159,8 +151,6 @@ describe('resolveStatus', () => {
   });
 
   it('keeps a resolved project usable while the list reconciles', () => {
-    // Holding the shell for a refetch that only confirms what is already known
-    // is what made a brand new project look absent.
     expect(resolveStatus({ ...base, listSettled: false })).toBe('ready');
   });
 
@@ -176,9 +166,6 @@ describe('resolveStatus', () => {
   });
 
   it('holds at resolving while an explicit project is still being fetched', () => {
-    // The requested id becomes the active id immediately, so a workspace list
-    // that settles first would otherwise report `ready` with no active project
-    // and let a screen render against a project still in flight.
     expect(
       resolveStatus({ ...base, requestedProjectPending: true, hasResolvedProject: false }),
     ).toBe('resolving');

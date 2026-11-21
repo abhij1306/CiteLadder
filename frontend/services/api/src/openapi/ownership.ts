@@ -1,20 +1,10 @@
-/**
- * Every API operation carries one declared route family, every family is
- * served, and one route module serves each family.
- */
 import type { OpenApiDocument } from './document.ts';
 import { onlyOf } from '../lists.ts';
 
 export type OwnershipInputs = {
-  /** The browser API and API-host machine prefixes. */
   prefixes: readonly string[];
   families: readonly string[];
   document: OpenApiDocument;
-  /**
-   * The families each route module's own routes declare, keyed by module.
-   * A route's `/v1` mirror is not listed: it is the owning module's route
-   * published on the public API, not a second writer of `public-api`.
-   */
   modules: Readonly<Record<string, readonly string[]>>;
 };
 

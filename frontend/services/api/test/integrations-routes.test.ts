@@ -159,7 +159,6 @@ describe('integration connection routes', () => {
   it.each(['member', 'viewer', 'owner', 'admin'])(
     'gates %s discovery before provider I/O',
     async (role) => {
-      // A workspace has one Owner: the owner case is the workspace's own.
       const userId = role === 'owner' ? ownerId : await fixtures.user();
       if (role !== 'owner') await fixtures.member(workspaceId, userId, role);
       const token = vi
@@ -214,7 +213,6 @@ describe('integration connection routes', () => {
         `/api/v1/integrations/workspaces/${workspaceId}/oauth/gsc/start?return_to=${encodeURIComponent(returnTo)}`,
         { headers: { cookie: `${TEST_SESSION_COOKIE}=${token}` } },
       );
-    // Test configuration has no OAuth client, so the start fails before consent.
     const local = await start('/performance?range=28d&error=stale');
     expect(local.status).toBe(302);
     const location = new URL(local.headers.get('location')!);
@@ -287,7 +285,6 @@ describe('integration connection routes', () => {
       headers: { cookie: `${TEST_SESSION_COOKIE}=${token}`, 'x-workspace-id': workspace },
     });
     expect(response.status).toBe(204);
-    // The whole grant is disconnected: both mappings retire, nothing is deleted.
     expect(
       (
         await db
@@ -529,7 +526,6 @@ describe('integration connection routes', () => {
       .where('sync_kind', '=', 'backfill')
       .execute();
     expect(runs.length).toBeGreaterThan(0);
-    // Other tests exercise the explicit Performance enqueue independently.
     await db.deleteFrom('integration_sync_runs').where('mapping_id', '=', mapping.id).execute();
   });
 
@@ -630,8 +626,6 @@ describe('integration connection routes', () => {
     }[];
     expect(body.map((row) => row.connection_id).sort()).toEqual([...projectConnections].sort());
     expect(body.every((row) => row.status === 'queued')).toBe(true);
-    // Every property still has its run in flight, so nothing new is queued and
-    // the page tracks those same runs.
     const repeat = await sync();
     expect(repeat.status).toBe(202);
     const tracked = (await repeat.json()) as { sync_run_id: string }[];

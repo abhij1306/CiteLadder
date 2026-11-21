@@ -44,7 +44,6 @@ function page(
     },
   };
 }
-/** A complete pair whose B inventory observed none of A's unanalyzed pages. */
 const COMPLETE = { completePair: true, inventoryB: new Set<string>() } as const;
 const classes = (before: ChangePage, after: ChangePage) =>
   compareCrawls([before], [after], COMPLETE).map((item) => [item.field, item.change_class]);
@@ -113,7 +112,6 @@ describe('crawl comparison', () => {
       [added.siteUrlId, true, 'improvement'],
       ['00000000-0000-0000-0000-000000000001', false, 'potential-regression'],
     ]);
-    // A page B still observed but did not analyze is not removed.
     const observed = { completePair: true, inventoryB: new Set([page().siteUrlId]) } as const;
     expect(compareCrawls([page()], [added], observed).map((item) => item.site_url_id)).toEqual([
       added.siteUrlId,
@@ -202,7 +200,6 @@ const worker = (seed: SiteSeed) =>
 const hour = 3_600_000;
 const facts = { title: 'Pricing', headings: { h1_texts: ['Pricing'] } };
 
-/** Crawl A an hour before the seed's crawl B, both analysing the same two URLs. */
 async function pair() {
   const b = await fixtures.crawl();
   const a = {
@@ -265,11 +262,8 @@ describe('change_intel task', () => {
       summary: { total: 0, counts_by_class: {} },
     });
     expect(snapshot!.source_analysis_ids).toHaveLength(4);
-    // The insights refresh is requested regardless of GA4; its executor settles
-    // a project without GA4 without deriving anything.
     expect(await analyticsTasks(b)).toEqual([
       { task_kind: 'ai_traffic_insights_refresh', payload: {} },
-      // The crawl's content pages feed the content-angle refresh.
       {
         task_kind: 'content_angle_refresh',
         payload: { trigger_kind: 'site_crawl', trigger_id: b.crawlId },
@@ -278,7 +272,6 @@ describe('change_intel task', () => {
         task_kind: 'opportunity_refresh',
         payload: { trigger_kind: 'site_change', trigger_id: snapshot!.id },
       },
-      // No declaration is in its window, so no verification is queued.
     ]);
     const statuses = await db
       .selectFrom('site_crawl_tasks')
@@ -334,10 +327,8 @@ describe('change_intel task', () => {
         configuration: JSON.stringify(configuration),
         created_at: new Date(Date.now() - days * 24 * hour),
       });
-    // The page limit is the fetch budget left, not scope: it never breaks a pair.
     const compatible = await earlier(2, { discovery_mode: 'automatic', requested_page_limit: 50 });
     await earlier(1, { discovery_mode: 'manual' });
-    // A newer page rerun re-read one page; it is never the site baseline.
     await earlier(0.5, { discovery_mode: 'automatic', page_rerun: true });
     const other = await fixtures.crawl();
     await fixtures.sibling(other, { analyzed_url_count: 1, created_at: new Date(0) });
@@ -374,7 +365,6 @@ describe('change_intel task', () => {
     const { a, b } = await pair();
     const deselected = await fixtures.page(a, '/deselected', facts, { observed: true });
     const retired = await fixtures.page(a, '/retired', facts, { observed: true });
-    // B's discovery still observed the deselected page; it only did not analyze it.
     await db
       .insertInto('site_url_observations')
       .values({
@@ -418,7 +408,6 @@ describe('change_intel task', () => {
     expect([newer!.supersedes_id, late!.supersedes_id]).toEqual([null, null]);
     const current = await changesSummary(db, b.workspaceId, b.projectId, { a: null, b: null });
     expect([current.snapshot_id, current.crawl_b_id]).toEqual([newer!.id, b.crawlId]);
-    // A revision of the newer crawl's comparison chains onto its own snapshot.
     await db
       .updateTable('site_page_analyses')
       .set({ is_current: false })

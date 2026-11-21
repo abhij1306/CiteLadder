@@ -1,13 +1,16 @@
 import type { ComponentProps, ReactNode } from 'react';
+import { Icon } from '@/components/ui/icon';
 
-import { Badge } from '@/components/ui/badge';
+import { StatusMark } from '@/components/ui/status-mark';
+import { Tag } from '@/components/ui/tag';
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
 import { Inline } from '@/components/ui/layout';
 import { Pressable } from '@/components/ui/pressable';
 import { TextLink } from '@/components/ui/text-link';
-import { ClampText, TableCell, TableRow } from '@/components/ui/table';
+import { ClampText } from '@/components/ui/clamp-text';
+import { TableCell, TableRow } from '@/components/ui/table';
 import { Tooltip } from '@/components/ui/tooltip';
-import { MissingValue } from '@/components/ui/unavailable-value';
+import { Absence } from '@/components/ui/absence';
 import { textRole } from '@/components/ui/typography';
 import {
   count,
@@ -30,6 +33,7 @@ import {
   sortProps,
 } from '@/components/visibility/source-cells';
 import { NamedBrandMarks } from '@/components/visibility/named-brand-marks';
+import { ChevronRight } from '@/lib/icons';
 import { useEngineCatalog } from '@/lib/providers/engines';
 import { standingLabel } from '@/lib/visibility/source-pages';
 import { pageFormatBasis } from '@/lib/visibility/vocabulary';
@@ -37,45 +41,35 @@ import type { useVisibilityFilters } from '@/lib/visibility/use-visibility-dashb
 
 export type SourceFilters = ReturnType<typeof useVisibilityFilters>;
 
-/**
- * What the panel around a source table supplies: its toolbar, pager, the
- * background-refetch bar, the state that replaces the rows, and the page size
- * the body reserves. Loading, error and empty render inside the body under
- * the same header, so a filter change never moves the columns or the pager.
- */
 export type SourceTableFrame = Pick<
   ComponentProps<typeof DataTable>,
   'toolbar' | 'pager' | 'busy' | 'state' | 'pageSize'
 >;
 
-/** The name cell: the whole cell opens the source's own level. */
-function OpenSource({ onOpen, children }: Readonly<{ onOpen: () => void; children: ReactNode }>) {
+export function OpenSource({
+  onOpen,
+  children,
+}: Readonly<{ onOpen: () => void; children: ReactNode }>) {
   return (
-    <Pressable
-      onClick={onOpen}
-      className="hover:text-accent-ink flex max-w-full min-w-0 items-center transition-colors"
-    >
-      {children}
+    <Pressable onClick={onOpen} className="block min-w-0">
+      <Inline as="span" className="justify-between">
+        <span className="min-w-0">{children}</span>
+        <Icon icon={ChevronRight} className="text-ink-2 shrink-0" />
+      </Inline>
     </Pressable>
   );
 }
 
-/** A source's type, with the basis for the claim behind a tooltip and in hidden text. */
 function TypeChip({
   token,
   dimension,
   method,
 }: Readonly<{ token: string | null; dimension: 'domain' | 'url'; method?: string | null }>) {
   const label = typeLabel(token, dimension);
-  // A type nobody has established is "not measured", not a blank: the page has
-  // simply not been read and its address did not settle the question. The
-  // column header carries that explanation for the whole column.
-  if (!label) return <MissingValue />;
-  const chip = <Badge>{label}</Badge>;
+  if (!label) return <Absence />;
+  const chip = <Tag>{label}</Tag>;
   const basis = pageFormatBasis(method);
   if (!basis) return chip;
-  // The tooltip serves a pointer; the hidden text gives keyboard and screen
-  // reader users the same basis, since the chip itself cannot take focus.
   return (
     <>
       <Tooltip content={basis}>{chip}</Tooltip>
@@ -91,11 +85,6 @@ function domainColumns(
   engineLabel: (key: string) => string,
 ): DataTableColumn[] {
   return [
-    // Every figure takes the `figure` role and the source is the one flexible
-    // column; the hint sits on the header button, so a figure's width holds
-    // its label. Below the `xl` width the table scrolls behind the pinned
-    // source rather than squeezing it: at `lg` the source kept too little
-    // room for a domain on one line.
     { key: 'source', label: 'Source', sort: sortProps(sort, onSort, 'key') },
     {
       key: 'type',
@@ -106,10 +95,9 @@ function domainColumns(
     {
       key: 'cited',
       label: 'Cited in',
-      // A share here, a count in the URL table: the unit is on the header.
       sublabel: '% of answers',
       width: 'figure',
-      numeric: true,
+      kind: 'number',
       sort: sortProps(sort, onSort, 'response_rate'),
       hint: 'Answers that cited at least one page from this domain, as a share of all answers in the selection.',
     },
@@ -118,7 +106,7 @@ function domainColumns(
       label: 'Retrieved',
       sublabel: '% of answers',
       width: 'figure',
-      numeric: true,
+      kind: 'number',
       sort: sortProps(sort, onSort, 'retrieved'),
       hint: retrievedHint(
         'Answers that read at least one page from this domain, cited or not, as a share of the answers whose engine exposes what it read.',
@@ -130,8 +118,9 @@ function domainColumns(
       key: 'pages',
       label: 'Pages cited',
       width: 'figure',
-      numeric: true,
+      kind: 'number',
       desktopOnly: true,
+      priority: 'low',
       sort: sortProps(sort, onSort, 'retrieval_rate'),
       hint: 'Unique pages cited from this domain per answer in the selection.',
     },
@@ -139,7 +128,7 @@ function domainColumns(
       key: 'citations',
       label: 'Citations',
       width: 'figure',
-      numeric: true,
+      kind: 'number',
       sort: sortProps(sort, onSort, 'annotations'),
       hint: 'Every inline citation belonging to this domain.',
     },
@@ -147,8 +136,9 @@ function domainColumns(
       key: 'share',
       label: 'Citation share',
       width: 'figure',
-      numeric: true,
+      kind: 'number',
       desktopOnly: true,
+      priority: 'low',
       sort: sortProps(sort, onSort, 'citation_share'),
       hint: "This domain's citations as a share of every citation in the current filtered view.",
     },
@@ -156,23 +146,15 @@ function domainColumns(
       key: 'rate',
       label: 'Citation rate',
       width: 'figure',
-      numeric: true,
+      kind: 'number',
       desktopOnly: true,
+      priority: 'low',
       sort: sortProps(sort, onSort, 'citation_rate'),
-      hint: 'Citations per answer that cited this domain — not per answer in the selection.',
+      hint: 'Citations per answer that cited this domain, not per answer in the selection.',
     },
   ];
 }
 
-/**
- * The cited domains.
- *
- * Cited in and Retrieved sit next to each other on purpose: the first is how
- * often the engines cited the publisher, the second how often they read it.
- * A publisher read far more than it is cited is reaching the engines and still
- * losing the citation. Retrieved counts only answers whose engine exposes what
- * it read, so its denominator is those answers, never the whole selection.
- */
 export function DomainTable({
   rows,
   sort,
@@ -194,8 +176,6 @@ export function DomainTable({
     <DataTable
       label="Cited domains"
       columns={domainColumns(sort, onSort, retrieval, engines.label)}
-      minWidth="xl"
-      pinFirstColumn
       rowCount={rows.length}
       {...frame}
     >
@@ -215,7 +195,7 @@ export function DomainTable({
           />
           <NumericCell value={ratio(row.retrieval_rate)} desktopOnly />
           <NumericCell value={count(row.annotations)} />
-          <NumericCell value={percent(row.citation_share, 1)} desktopOnly />
+          <NumericCell value={percent(row.citation_share)} desktopOnly />
           <NumericCell value={ratio(row.citation_rate)} desktopOnly />
         </TableRow>
       ))}
@@ -229,10 +209,6 @@ function standingTone(standing: SourceItem['standing']) {
   return null;
 }
 
-/**
- * Where the business stands on the page, and the Action to get listed on it
- * when one exists. Only a read page carries a verdict.
- */
 function PageStandingCell({
   standing,
   actionId,
@@ -240,17 +216,17 @@ function PageStandingCell({
   const label = standingLabel(standing);
   const tone = standingTone(standing);
   return (
-    <Inline as="span" gap="meta">
+    <Inline as="span" gap="item" className="whitespace-nowrap">
       {tone ? (
-        <Badge variant="status" value={tone}>
+        <StatusMark variant="status" value={tone}>
           {label}
-        </Badge>
+        </StatusMark>
       ) : (
-        <ClampText lines={1} className={textRole('caption', 'text-ink-secondary')}>
+        <ClampText lines={1} className={textRole('caption', 'text-ink-2')}>
           {label}
         </ClampText>
       )}
-      {actionId ? <TextLink href={`/agent/actions/${actionId}`}>Action</TextLink> : null}
+      {actionId ? <TextLink href={`/actions/${actionId}`}>Action</TextLink> : null}
     </Inline>
   );
 }
@@ -261,9 +237,6 @@ function urlColumns(
   retrieval: SourcesData['retrieval'] | undefined,
   engineLabel: (key: string) => string,
 ): DataTableColumn[] {
-  // The URL is the one flexible column; every other column holds a role's
-  // width. Nine columns cannot fit beside a readable URL at the owner's 982px,
-  // so the table keeps a minimum width and scrolls behind the pinned URL.
   return [
     { key: 'url', label: 'URL', sort: sortProps(sort, onSort, 'key') },
     {
@@ -275,7 +248,7 @@ function urlColumns(
     {
       key: 'standing',
       label: 'On the page',
-      width: 'status',
+      width: 'category',
       desktopOnly: true,
       hint: 'Whether this page has been read, and where you stand on it. A gap lists competitors and not you.',
     },
@@ -284,7 +257,7 @@ function urlColumns(
       label: 'Cited in',
       sublabel: 'Answers',
       width: 'figure',
-      numeric: true,
+      kind: 'number',
       sort: sortProps(sort, onSort, 'responses'),
       hint: 'Answers that cited this URL.',
     },
@@ -293,7 +266,7 @@ function urlColumns(
       label: 'Retrieved',
       sublabel: 'Answers',
       width: 'figure',
-      numeric: true,
+      kind: 'number',
       sort: sortProps(sort, onSort, 'retrieved'),
       hint: retrievedHint(
         'Answers that read this URL, cited or not, among those whose engine exposes what it read.',
@@ -305,7 +278,8 @@ function urlColumns(
       key: 'rate',
       label: 'Citation rate',
       width: 'figure',
-      numeric: true,
+      kind: 'number',
+      priority: 'low',
       sort: sortProps(sort, onSort, 'citation_rate'),
       hint: 'Citations of this URL per answer that cited it.',
     },
@@ -313,38 +287,33 @@ function urlColumns(
       key: 'mentions',
       label: 'Mentions',
       width: 'figure',
-      numeric: true,
+      kind: 'number',
       desktopOnly: true,
+      priority: 'low',
       sort: sortProps(sort, onSort, 'mentions'),
       hint: 'Distinct brands named in the answers that cited this URL. Co-occurrence in the answer, not presence on the page.',
     },
     {
       key: 'mentioned',
       label: 'Mentioned',
-      width: 'status',
+      width: 'marks',
       desktopOnly: true,
+      priority: 'low',
       hint: 'The brands named in the answers that cited this URL. Co-occurrence in the answer, not presence on the page.',
     },
     {
       key: 'seen',
       label: 'Last seen',
       width: 'figure',
-      numeric: true,
+      kind: 'number',
       desktopOnly: true,
+      priority: 'low',
       sort: sortProps(sort, onSort, 'last_cited_at'),
       hint: 'The most recent run in this selection whose answer used this URL as a source.',
     },
   ];
 }
 
-/**
- * The cited pages.
- *
- * "Mentioned" is co-occurrence, never presence on the page: the chips are the
- * brands named in the ANSWERS that cited this URL, because no persisted row
- * links a mention to the citation beside it. The header tooltip says so, and
- * the column is not called "On page" for the same reason.
- */
 export function UrlTable({
   rows,
   sort,
@@ -365,8 +334,6 @@ export function UrlTable({
     <DataTable
       label="Cited URLs"
       columns={urlColumns(sort, onSort, retrieval, engines.label)}
-      minWidth="xl"
-      pinFirstColumn
       rowCount={rows.length}
       {...frame}
     >

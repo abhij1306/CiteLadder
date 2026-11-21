@@ -7,7 +7,6 @@ import { record } from '../db/json.ts';
 import { groupBy } from '../lists.ts';
 import type { Scope } from './sources.ts';
 
-/** The crawl's newest finished internal-link run with a result, if any. */
 export async function internalLinkRunId(db: Database, scope: Scope, crawlId: string) {
   const run = await db
     .selectFrom('site_internal_link_runs')
@@ -22,7 +21,6 @@ export async function internalLinkRunId(db: Database, scope: Scope, crawlId: str
   return run?.id ?? null;
 }
 
-/** One page Action per source page, holding every suggested link from it. */
 export async function internalLinkHits(
   db: Database,
   scope: Scope,
@@ -37,7 +35,6 @@ export async function internalLinkHits(
     .where('id', '=', runId)
     .executeTakeFirstOrThrow();
   const result = internalLinkAnalysisSchema.parse(run.result);
-  // The bar the run's links were judged against, frozen with the run.
   const threshold = Number(record(record(run.manifest).policy).accept_threshold);
   if (Number.isNaN(threshold) || threshold <= 0)
     throw new Error('Internal link run has no frozen accept_threshold');
@@ -59,8 +56,6 @@ export async function internalLinkHits(
       ],
       source_issue_ids: [],
       source_metric_ids: [run.id],
-      // How far the strongest suggested link clears the acceptance bar: a clear
-      // editorial win ranks above a borderline one instead of every page tying.
       value_factor: Math.max(...links.map((link) => link.usefulness)) / threshold,
       gap_factor: policy.opportunity.opportunities.SITE_GAP_FACTOR,
     };

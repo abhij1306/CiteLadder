@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vite-plus/test';
 
 import { readCsvFileText } from './read-file-text';
 
-/** `name\nCafé\n` as Windows-1252 bytes: `é` is the single byte 0xE9, not UTF-8. */
 const WINDOWS_1252_CAFE = new Uint8Array([
   0x6e, 0x61, 0x6d, 0x65, 0x0a, 0x43, 0x61, 0x66, 0xe9, 0x0a,
 ]);

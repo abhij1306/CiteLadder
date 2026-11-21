@@ -1,10 +1,3 @@
-/**
- * The fact verification request and its deterministic checks. The model
- * judges each claim against the frozen confirmed facts it is shown; code
- * decides what survives: only facts that were sent may be cited, a supported
- * or contradicted verdict must cite one, and a contradiction below its stricter
- * confidence floor is reported as inconclusive (low confidence).
- */
 import { createHash } from 'node:crypto';
 
 import type { ClaimVerdict, FactTopic } from '@citeladder/contracts/fact-checking';
@@ -17,7 +10,6 @@ import { canonicalJson } from '../canonical-json.ts';
 export type VerifyFact = { revisionId: string; topic: FactTopic; statement: string };
 export type VerifyClaim = { claimId: string; topic: FactTopic; claim: string; quote: string };
 
-/** What the model sees: short local ids, never record ids. */
 export type VerifyPackage = {
   verify_template_version: string;
   brand: string;
@@ -26,11 +18,6 @@ export type VerifyPackage = {
   claims: { claim_id: string; topic: FactTopic; claim: string; quote: string }[];
 };
 
-/**
- * Up to `max` facts on `topics` (in priority order), taken one per topic in
- * turn (frozen order within a topic), so a topic with many facts never crowds
- * another out and the claims' own topics lead each round.
- */
 function sharedByTopic(facts: readonly VerifyFact[], topics: readonly FactTopic[], max: number) {
   const queues = new Map<FactTopic, VerifyFact[]>(topics.map((topic) => [topic, []]));
   for (const fact of facts) queues.get(fact.topic)?.push(fact);
@@ -45,18 +32,12 @@ function sharedByTopic(facts: readonly VerifyFact[], topics: readonly FactTopic[
   return picked;
 }
 
-/**
- * The package for one answer's claims: the frozen facts on the claims' topics
- * and their neighbours (`scope`), capped. Local ids map back to fact revisions
- * and claims.
- */
 export function verifyPackage(input: {
   version: string;
   brand: string;
   language: string;
   facts: readonly VerifyFact[];
   claims: readonly VerifyClaim[];
-  /** A claim topic's checked topics, its own first. */
   scope: (topic: FactTopic) => readonly FactTopic[];
   maxFacts: number;
 }) {
@@ -121,12 +102,10 @@ export function verifyPrompt(
 export type VerifiedVerdict = {
   claimId: string;
   verdict: ClaimVerdict;
-  /** What the model said, before the deterministic downgrades. */
   modelVerdict: ClaimVerdict | null;
   factRevisionIds: string[];
   confidence: number | null;
   lowConfidence: boolean;
-  /** The model was sent this claim and left it out: no verdict, not `not_covered`. */
   modelOmitted: boolean;
 };
 
@@ -138,7 +117,6 @@ export type VerifyDropReason =
   | 'verdict_without_fact'
   | 'low_confidence_contradiction';
 
-/** One verdict per claim sent; every downgrade and drop is counted by reason. */
 export function validateVerdicts(
   output: VerifyOutput,
   ids: { factIds: ReadonlyMap<string, string>; claimIds: ReadonlyMap<string, string> },
@@ -189,7 +167,6 @@ export function validateVerdicts(
     const found = results.get(claimId);
     if (found) return found;
     drop('missing_claim');
-    // The stored verdict is a placeholder the read never shows: `modelOmitted` decides.
     return {
       claimId,
       verdict: 'not_covered',

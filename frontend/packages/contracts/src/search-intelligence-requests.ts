@@ -1,9 +1,3 @@
-/**
- * Request bodies of Search Intelligence: saved acquisition defaults, a cost
- * review of selected datasets, and citation matching. These own the wire
- * shape; the API `.extend`s each with its configured depth bounds, defaults
- * and dataset rules, and the browser types its arguments as `z.input` of them.
- */
 import { z } from 'zod';
 
 import { researchScopeSchema, searchDatasetKindSchema } from './search-intelligence.ts';
@@ -11,7 +5,6 @@ import { researchScopeSchema, searchDatasetKindSchema } from './search-intellige
 const locationCode = () => z.int().positive().nullable().default(null);
 const languageCode = () => z.string().max(16).default('');
 
-/** Saved acquisition defaults; omitted fields take the server's configured defaults. */
 export const searchPreferencesRequestSchema = z.object({
   research_scope: researchScopeSchema.optional(),
   owned_target_id: z.string().nullable().default(null),
@@ -19,14 +12,9 @@ export const searchPreferencesRequestSchema = z.object({
   location_code: locationCode(),
   language_code: languageCode(),
   reuse_recent: z.boolean().default(true),
-  // Pages per list dataset, by dataset kind.
   depths: z.record(z.string(), z.int().min(1)).optional(),
 });
 
-/**
- * One dataset a review asks for. The API checks which controls each kind
- * accepts against `SEARCH_DATASET_KINDS`.
- */
 export const searchDatasetSelectionRequestSchema = z.object({
   kind: searchDatasetKindSchema,
   competitor_id: z.uuid().nullable().default(null),
@@ -48,7 +36,6 @@ const searchReviewActionSchema = z.enum([
 ]);
 export type SearchReviewAction = z.infer<typeof searchReviewActionSchema>;
 
-/** A cost review of the selected datasets; nothing is fetched until the run is confirmed. */
 export const searchReviewRequestSchema = z.object({
   research_scope: researchScopeSchema.nullable().default(null),
   action: searchReviewActionSchema.default('analysis'),
@@ -63,7 +50,6 @@ export const searchReviewRequestSchema = z.object({
 });
 export type SearchReviewRequest = z.input<typeof searchReviewRequestSchema>;
 
-/** Match a saved backlink dataset's referring pages against the citations of selected runs. */
 export const searchCitationMatchRequestSchema = z.object({
   backlink_dataset_id: z.uuid(),
   audit_ids: z.array(z.uuid()).min(1).max(50),

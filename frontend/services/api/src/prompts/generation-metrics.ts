@@ -1,8 +1,3 @@
-/**
- * Deterministic measures of a generated prompt set: what run provenance
- * records as `distribution` and what the evaluation thresholds read. No model
- * output and no embeddings; every value is recomputable from the texts.
- */
 import { namesAlias } from '../analysis/aliases.ts';
 import { policy } from '../config.ts';
 import { jaccard } from '../lists.ts';
@@ -12,11 +7,9 @@ import { namesPlace } from './generation-plan.ts';
 import { promptTextHash } from './normalization.ts';
 import type { ObservedQuery } from './observed-queries.ts';
 
-/** A set's opening is its first word: "Which" twenty times is one opening. */
 const OPENING_WORDS = 1;
 
 export const words = (text: string) => text.toLowerCase().match(/[\p{L}\p{N}\p{M}]+/gu) ?? [];
-/** An unfilled template slot such as `[city]` or `{product}`. */
 export const hasPlaceholder = (text: string) => /[[{<][^[\]{}<>]*[\]}>]/u.test(text);
 
 type Counts = Record<string, number>;
@@ -27,7 +20,6 @@ const tally = (values: readonly string[]): Counts => {
 };
 const share = (part: number, whole: number) => (whole ? part / whole : 0);
 
-/** Counts by cohort, stage, intent, offering and persona, and located versus bare cells. */
 export function distribution(drafts: readonly Draft[], geo: readonly string[]) {
   return {
     total: drafts.length,
@@ -36,7 +28,6 @@ export function distribution(drafts: readonly Draft[], geo: readonly string[]) {
     intent: tally(drafts.map((draft) => draft.prompt_intent)),
     offering: tally(drafts.map((draft) => draft.slot.buyer_need.offering ?? '')),
     persona: tally(drafts.flatMap((draft) => draft.slot.buyer_need.audience ?? [])),
-    // Measured on the text: a planned market and a place the model added alike.
     located: drafts.filter((draft) => namesPlace(draft.text, geo)).length,
     bare: drafts.filter((draft) =>
       Object.keys(draft.slot.buyer_need).every((key) => key === 'offering' || key === 'market'),
@@ -45,19 +36,9 @@ export function distribution(drafts: readonly Draft[], geo: readonly string[]) {
 }
 
 const STOPWORDS = new Set(policy.prompts.binding.stopwords);
-/**
- * A prompt's comparable tokens: binding tokens, plural-folded, without the
- * stopwords a fold can produce ("nets" folds to the stopword "net"), so a
- * singular and a plural phrasing compare equal.
- */
 export const promptTokens = (text: string) =>
   new Set([...bindingTokens(text)].filter((token) => !STOPWORDS.has(token)));
 
-/**
- * Whether two prompts' tokens overlap at least `near_duplicate_jaccard`: one
- * answer would answer both. The one near-duplicate measure for admission and
- * the set metrics.
- */
 export const nearDuplicate = (a: ReadonlySet<string>, b: ReadonlySet<string>) =>
   a.size > 0 && jaccard(a, b) >= policy.prompts.generation.near_duplicate_jaccard;
 
@@ -66,14 +47,12 @@ export type SetMetricsInput = {
   stages: readonly string[];
   intents: readonly string[];
   offerings: readonly string[];
-  /** The offering each text was planned for, by index. */
   offeringOf: readonly string[];
   category: readonly string[];
   geo: readonly string[];
   brands: readonly string[];
 };
 
-/** Set-level quality measures the evaluation thresholds are written against. */
 export function setMetrics(input: SetMetricsInput) {
   const { texts } = input;
   const tokens = texts.map(promptTokens);
@@ -109,11 +88,6 @@ export function setMetrics(input: SetMetricsInput) {
   };
 }
 
-/**
- * Share of prompts phrased like an observed search of their own topic: token
- * Jaccard at least `likeness_min_jaccard` with one, without being its exact
- * copy. Operator evaluation only; no threshold fails on it.
- */
 export function observedLikeness(
   prompts: readonly { text: string; topic_id: string }[],
   observed: readonly Pick<ObservedQuery, 'text' | 'topic_id'>[],
@@ -136,7 +110,6 @@ export function observedLikeness(
   return share(alike.length, prompts.length);
 }
 
-/** Threshold names a generated set fails; empty when it is within all of them. */
 export function thresholdFailures(
   metrics: ReturnType<typeof setMetrics>,
   context: { market_scope: string; requested: number },

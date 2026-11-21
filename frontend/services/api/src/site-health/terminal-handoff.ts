@@ -1,4 +1,3 @@
-/** The exactly-once analytics handoff owed by a terminal crawl's persisted evidence. */
 import { sql } from 'kysely';
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
@@ -9,12 +8,6 @@ import { enqueueTask, enqueueCoalesced } from '../queue/enqueue.ts';
 import type { Crawl } from './site-task.ts';
 import { insightsRefresh } from '../config/ai-traffic.ts';
 
-/**
- * Enqueue analytics after change persistence, or with the crawl's own identity
- * when the crawl produced no usable analysis. A project with Traffic evidence
- * re-interprets Demand first and carries the trigger to Demand's Opportunity
- * refresh; a site-only project refreshes Opportunities directly.
- */
 export async function enqueueTerminalAnalyticsRefresh(
   db: Database,
   crawl: Crawl,
@@ -42,10 +35,8 @@ export async function enqueueTerminalAnalyticsRefresh(
     db,
     scope,
     { kind: 'site_crawl', id: crawl.id },
-    // With Traffic evidence, Demand re-interprets first and carries the refresh.
     { refresh: traffic ? null : { kind: triggerKind, id: triggerId } },
   );
-  // Content pages and owned matches depend on the crawl.
   await enqueueContentAngles(db, scope, { kind: 'site_crawl', id: crawl.id });
   if (!traffic) return;
   // Demand keys a revision by its first 24 characters.

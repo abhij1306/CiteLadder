@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { componentSchemas } from '../src/openapi/components.ts';
 import { openApiDocument } from '../src/openapi/document.ts';
 import type { RouteContract } from '../src/openapi/routes.ts';
+import { defineGetRoute } from '../src/routes/define.ts';
 
 const tag = z.object({ label: z.string() });
 const item = z.object({ id: z.string(), tags: z.array(tag) });
@@ -93,5 +94,44 @@ describe('shared OpenAPI components', () => {
         properties: { size: { type: 'number', default: 10 } },
       },
     });
+  });
+
+  it('publishes a parameter description on the parameter, not inside its schema', () => {
+    const route = defineGetRoute({
+      family: 'visibility',
+      authorize: 'public',
+      exposure: 'public',
+      path: '/v1/items',
+      params: {
+        path: {},
+        query: {
+          limit: { scalar: { kind: 'int', le: 5 }, default: 2, description: 'Rows per page.' },
+          cursor: { scalar: { kind: 'str' } },
+        },
+      },
+      response: z.object({}),
+      handle: async () => ({}),
+    });
+    const contract = route.publicContract ?? route.contract;
+    expect(openApiDocument([contract]).paths['/v1/items']?.get?.parameters).toEqual([
+      {
+        name: 'limit',
+        in: 'query',
+        required: false,
+        description: 'Rows per page.',
+        schema: {
+          type: 'integer',
+          minimum: -9007199254740991,
+          maximum: 5,
+          default: 2,
+        },
+      },
+      {
+        name: 'cursor',
+        in: 'query',
+        required: false,
+        schema: { type: ['string', 'null'] },
+      },
+    ]);
   });
 });

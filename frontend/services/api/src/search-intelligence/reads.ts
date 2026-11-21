@@ -1,8 +1,3 @@
-/**
- * Persisted Search Intelligence reads: readiness, runs, dataset rows and the
- * evidence handed to content work. Reads render what acquisition published;
- * none of them resolves a website or calls DataForSEO.
- */
 import { asApiErrorCode } from '@citeladder/contracts/error-codes';
 import type { searchReadinessSchema } from '@citeladder/contracts/search-intelligence';
 import { sql, type NotNull, type RawBuilder, type SqlBool } from 'kysely';
@@ -36,11 +31,6 @@ const savedDomains = z.array(z.string());
 
 export type Scope = { workspace: WorkspaceScope; projectId: string };
 
-/**
- * The newest published dataset of each acquisition identity (kind, target,
- * comparison, market and provider filters), newest first. A refresh replaces
- * the dataset the screen and the Agent read; earlier ones stay readable by ID.
- */
 function latestDatasets(db: Database, scope: Scope) {
   const identity = [
     'dataset_kind',
@@ -66,7 +56,6 @@ function latestDatasets(db: Database, scope: Scope) {
     .execute();
 }
 
-/** A published dataset of the project; one still collecting is not evidence yet. */
 async function publishedDataset(db: Database, scope: Scope, datasetId: string) {
   const dataset = await scope.workspace
     .selectFrom(db, 'search_intelligence_datasets')
@@ -124,7 +113,6 @@ export async function readiness(
       .orderBy('competitors.id')
       .execute(),
     researchAccount(db, scope.workspace),
-    // An unconfirmed cost review is a draft, never the acquisition the screen follows.
     scope.workspace
       .selectFrom(db, 'search_intelligence_runs')
       .selectAll()
@@ -143,7 +131,6 @@ export async function readiness(
     competitors: competitors.flatMap(
       (row) => competitorTarget(row, savedDomains.parse(row.domains)) ?? [],
     ),
-    // Every list dataset's depth: the saved one, else the policy default.
     preferences: {
       ...saved,
       ...searchMarket(project, saved),
@@ -151,7 +138,6 @@ export async function readiness(
     },
     latest_run: latest ? runView(latest) : null,
     datasets: datasets.map(datasetView),
-    // The Labs markets a review may choose: the ones `reviews.ts` accepts.
     markets: surfaceMarkets('google_ai_overview'),
     max_depth: si.max_depth,
   };
@@ -195,7 +181,6 @@ export type RowPageRequest = {
 const invalidCursor = () =>
   new ApiError(422, 'Dataset cursor is invalid', { code: asApiErrorCode('invalid_cursor') });
 
-/** The sort key: a typed column, or a numeric auxiliary metric. */
 function sortKey(sort: string): RawBuilder<unknown> {
   if (AUXILIARY_SORT_FIELDS.has(sort)) return sql`(${sql.ref('auxiliary')} ->> ${sort})::numeric`;
   if (ROW_SORT_FIELDS.has(sort)) return sql.ref(sort);
@@ -223,7 +208,6 @@ function matchingRows(
   return query;
 }
 
-/** The row id a cursor resumes after; the cursor must carry this page's filters. */
 function cursorRowId(cursor: string, cursorScope: string, filters: Record<string, unknown>) {
   let values: string[];
   try {
@@ -238,11 +222,6 @@ function cursorRowId(cursor: string, cursorScope: string, filters: Record<string
   return rowId;
 }
 
-/**
- * One keyset page of a published dataset's rows: sorted, nulls last, ties by
- * id. The cursor names the last row returned and is bound to the dataset and
- * every filter, so it cannot resume under another ordering or filter.
- */
 export async function datasetPage(
   db: Database,
   scope: Scope,
@@ -302,7 +281,6 @@ export async function datasetPage(
   };
 }
 
-/** The Action each live keyword-gap finding cites a row of, by row; a read, never a refresh. */
 async function gapActions(db: Database, scope: Scope) {
   const live = await scope.workspace
     .selectFrom(db, 'opportunities')
@@ -319,7 +297,6 @@ async function gapActions(db: Database, scope: Scope) {
   return byRow;
 }
 
-/** Selected rows of one published dataset, each with its dataset, for content work. */
 export async function contentHandoff(
   db: Database,
   scope: Scope,

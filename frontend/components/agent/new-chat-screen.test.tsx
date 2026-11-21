@@ -4,8 +4,10 @@ import { http, HttpResponse } from 'msw';
 import { Route, Routes, useParams } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vite-plus/test';
 
+import { AGENT_PASTE_ATTACHMENT_MIN_CHARS } from '@/lib/config/agent';
+import { openComposerSubmenu, pickFromComposerMenu } from '@/test/composer-menu';
 import { mswServer } from '@/test/msw-server';
-import { actionsPage } from '@/test/fixtures/actions';
+import { actionDetail, actionItem, actionsPage } from '@/test/fixtures/actions';
 import { makeProject } from '@/test/fixtures/project';
 import { renderWithProviders } from '@/test/render';
 
@@ -63,31 +65,6 @@ const ACCEPTED = {
 const PRICING = '77777777-7777-4777-8777-777777777771';
 const BLOG = '77777777-7777-4777-8777-777777777772';
 
-function actionItem(id: string, label: string) {
-  return {
-    id,
-    project_id: PROJECT,
-    target_kind: 'page',
-    target_label: label,
-    target_url: null,
-    target_prompt_id: null,
-    origin: 'evidence',
-    status: 'open',
-    priority_score: 1,
-    priority_band: 'low',
-    families: [],
-    approach: 'improve_page',
-    group: 'own_pages',
-    skill_id: 'gsc_optimize',
-    member_count: 1,
-    declarable_member_count: 1,
-    handoff: { context: 'action', message: `Work on ${label}.` },
-    evidence_cleared_at: null,
-    created_at: '2026-09-25T10:00:00Z',
-    updated_at: '2026-09-25T10:00:00Z',
-  };
-}
-
 const GROWTH_SKILL = {
   id: 'growth_plan',
   label: 'Growth plan',
@@ -98,24 +75,9 @@ const GROWTH_SKILL = {
 
 const WORKFLOW_CATALOG = {
   skills: [GROWTH_SKILL],
-  workflow_groups: [{ id: 'social', label: 'Social and video' }],
-  workflows: [
-    {
-      id: 'linkedin_post',
-      group: 'social',
-      label: 'LinkedIn post',
-      description: 'A short professional post.',
-      skill_id: 'content_create',
-      format_id: 'linkedin',
-      prompt: 'Write a LinkedIn post.',
-      inputs: [
-        { key: 'topic', label: 'Topic', required: true },
-        { key: 'tone', label: 'Tone', required: false },
-      ],
-    },
-  ],
+  workflows: [{ id: 'linkedin_post', label: 'LinkedIn post' }],
   output_kinds: [],
-  limits: { mentions_max: 5 },
+  limits: { mentions_max: 5, attachments_max: 3, attachment_max_chars: 40000 },
 };
 
 function baseHandlers(actions: ReturnType<typeof actionItem>[] = []) {
@@ -124,7 +86,14 @@ function baseHandlers(actions: ReturnType<typeof actionItem>[] = []) {
       HttpResponse.json({ ...detail(revision(REV1, 1, 'agent', '')), outputs: [] }),
     ),
     http.get('/api/v1/agent/skills', () =>
-      HttpResponse.json({ skills: [GROWTH_SKILL], limits: { mentions_max: 5 } }),
+      HttpResponse.json({
+        skills: [GROWTH_SKILL],
+        limits: {
+          mentions_max: 5,
+          attachments_max: 3,
+          attachment_max_chars: 40000,
+        },
+      }),
     ),
     http.get(`/api/v1/projects/${PROJECT}/actions`, () => HttpResponse.json(actionsPage(actions))),
   ];
@@ -218,37 +187,52 @@ describe('NewChatScreen', () => {
     ]);
   });
 
-  it('starts a workflow from its form only once its required inputs are filled', async () => {
+  it('sets the skill from the + menu as a removable chip', async () => {
     const bodies = captureChats();
-    mswServer.use(http.get('/api/v1/agent/skills', () => HttpResponse.json(WORKFLOW_CATALOG)));
     const user = userEvent.setup();
     renderNewChat('');
-    await user.click(await screen.findByRole('button', { name: /LinkedIn post/ }));
-    await user.click(screen.getByRole('button', { name: 'Start' }));
-    expect(screen.getByRole('textbox', { name: /Topic/ })).toHaveAttribute('aria-invalid', 'true');
-    expect(bodies).toEqual([]);
+    const message = await screen.findByLabelText('Message the agent');
+    await pickFromComposerMenu(user, /^Skills: Automatic$/, {
+      role: 'menuitemradio',
+      name: 'Growth plan',
+    });
+    const context = within(screen.getByRole('list', { name: 'Context for this request' }));
+    expect(context.getByText('Skill: Growth plan')).toBeVisible();
+    await user.type(message, 'Plan the quarter{Enter}');
 
-    await user.type(screen.getByRole('textbox', { name: /Topic/ }), 'Pricing changes');
-    await user.click(screen.getByRole('button', { name: 'Start' }));
     expect(await screen.findByText(`Opened chat ${CHAT}`)).toBeInTheDocument();
-    expect(bodies).toEqual([
-      expect.objectContaining({
-        message: 'Write a LinkedIn post.\n\nTopic: Pricing changes',
-        workflow_id: 'linkedin_post',
-      }),
-    ]);
+    expect(bodies).toEqual([{ message: 'Plan the quarter', skill_id: 'growth_plan', context: {} }]);
   });
 
-  it('sends a next step with its workflow pinned until the reader removes it', async () => {
+  it('sends a next step with its workflow pinned', async () => {
     const bodies = captureChats();
     mswServer.use(http.get('/api/v1/agent/skills', () => HttpResponse.json(WORKFLOW_CATALOG)));
     const user = userEvent.setup();
     renderNewChat('?workflow=linkedin_post&prompt=Promote+the+guide');
-    await screen.findByRole('button', { name: 'Remove workflow LinkedIn post' });
+    await screen.findByRole('button', { name: 'Remove Skill: LinkedIn post' });
     await user.click(screen.getByRole('button', { name: 'Send' }));
     expect(await screen.findByText(`Opened chat ${CHAT}`)).toBeInTheDocument();
     expect(bodies).toEqual([
       expect.objectContaining({ message: 'Promote the guide', workflow_id: 'linkedin_post' }),
+    ]);
+  });
+
+  it('replaces a pinned workflow with a skill picked from the + menu', async () => {
+    const bodies = captureChats();
+    mswServer.use(http.get('/api/v1/agent/skills', () => HttpResponse.json(WORKFLOW_CATALOG)));
+    const user = userEvent.setup();
+    renderNewChat('?workflow=linkedin_post&prompt=Promote+the+guide');
+    await screen.findByRole('button', { name: 'Remove Skill: LinkedIn post' });
+    await openComposerSubmenu(user, /^Skills: LinkedIn post$/);
+    expect(await screen.findByRole('menuitemradio', { name: 'LinkedIn post' })).toBeChecked();
+    screen.getByRole('menuitemradio', { name: 'Growth plan' }).focus();
+    await user.keyboard('{Enter}');
+    expect(screen.queryByRole('button', { name: 'Remove Skill: LinkedIn post' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Remove Skill: Growth plan' })).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Send' }));
+    expect(await screen.findByText(`Opened chat ${CHAT}`)).toBeInTheDocument();
+    expect(bodies).toEqual([
+      { message: 'Promote the guide', skill_id: 'growth_plan', context: {} },
     ]);
   });
 
@@ -304,18 +288,22 @@ describe('NewChatScreen', () => {
     expect(bodies).toEqual([{ message: 'Plan this', context: {} }]);
   });
 
-  it('reports a failed catalog read instead of showing no workflows', async () => {
-    // The first matching handler answers, so the failure goes ahead of the base set.
+  it('reports a failed catalog read instead of showing no skills', async () => {
     mswServer.use(
       http.get('/api/v1/agent/skills', () =>
         HttpResponse.json({ detail: 'Bad request' }, { status: 400 }),
       ),
       ...baseHandlers(),
     );
+    const user = userEvent.setup();
     renderNewChat('');
 
-    expect(await screen.findByText("Couldn't load skills and workflows")).toBeVisible();
-    expect(screen.queryByText('Or start from a workflow')).not.toBeInTheDocument();
+    expect(await screen.findByText("Couldn't load skills")).toBeVisible();
+    await openComposerSubmenu(user, /^Skills: Automatic$/);
+    expect(await screen.findByRole('menuitem', { name: "Couldn't load skills" })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
   });
 
   it('picks a skill with / and mentions an Action with @', async () => {
@@ -329,9 +317,7 @@ describe('NewChatScreen', () => {
     const message = await screen.findByLabelText('Message the agent');
     await user.type(message, '/');
     await user.click(await screen.findByRole('menuitemradio', { name: 'Growth plan' }));
-    expect(screen.getByRole('button', { name: 'Skill: Growth plan' })).toBeVisible();
-    // The pick hands focus and the caret back to the field on the next frame;
-    // typing before then lands ahead of the restored caret.
+    expect(screen.getByText('Skill: Growth plan')).toBeVisible();
     await waitFor(() => expect(message).toHaveFocus());
     await user.type(message, 'Compare @pric');
     await user.click(await screen.findByRole('option', { name: /Pricing page/ }));
@@ -350,11 +336,47 @@ describe('NewChatScreen', () => {
     ]);
   });
 
+  it('takes a long paste as a viewable, removable attachment and sends it apart from the text', async () => {
+    const bodies = captureChats();
+    const user = userEvent.setup();
+    renderNewChat('');
+    const brief = `Brief line\n${'x'.repeat(AGENT_PASTE_ATTACHMENT_MIN_CHARS)}`;
+    const message = await screen.findByLabelText('Message the agent');
+    await user.click(message);
+    await user.paste('Short ');
+    await user.paste(brief);
+    await user.paste(`Other\n${brief}`);
+    expect(message).toHaveValue('Short ');
+    expect(screen.getAllByRole('button', { name: 'View Pasted text, 2 lines' })).toHaveLength(1);
+    await user.click(screen.getByRole('button', { name: 'Remove Pasted text, 3 lines' }));
+    await user.click(screen.getByRole('button', { name: 'View Pasted text, 2 lines' }));
+    const viewer = await screen.findByRole('dialog', { name: 'Pasted text' });
+    expect(within(viewer).getByText(/^Brief line/).textContent).toBe(brief);
+    await user.click(within(viewer).getByRole('button', { name: 'Close dialog' }));
+    await user.type(message, 'summarize this{Enter}');
+
+    expect(await screen.findByText(`Opened chat ${CHAT}`)).toBeInTheDocument();
+    expect(bodies).toEqual([
+      {
+        message: 'Short summarize this',
+        context: {},
+        attachments: [{ kind: 'pasted_text', text: brief }],
+      },
+    ]);
+  });
+
   it('offers no further mention once the catalog-listed bound is reached', async () => {
     captureChats([actionItem(PRICING, 'Pricing page'), actionItem(BLOG, 'Blog hub')]);
     mswServer.use(
       http.get('/api/v1/agent/skills', () =>
-        HttpResponse.json({ skills: [GROWTH_SKILL], limits: { mentions_max: 1 } }),
+        HttpResponse.json({
+          skills: [GROWTH_SKILL],
+          limits: {
+            mentions_max: 1,
+            attachments_max: 3,
+            attachment_max_chars: 40000,
+          },
+        }),
       ),
     );
     const user = userEvent.setup();
@@ -368,18 +390,16 @@ describe('NewChatScreen', () => {
     expect(screen.queryByRole('option', { name: /Blog hub/ })).not.toBeInTheDocument();
   });
 
-  it('loads the wider mention pool only once @ is typed', async () => {
-    // Twelve Actions: the last two are past the table's first page of ten.
-    const queue = Array.from({ length: 12 }, (_, index) =>
-      actionItem(`77777777-7777-4777-8777-${String(index).padStart(12, '0')}`, `Guide${index + 1}`),
-    );
-    const limits: string[] = [];
+  it('searches every status by the typed text once @ is typed, and shows each status', async () => {
+    const measuring = { ...actionItem(PRICING, 'School uniforms'), status: 'done' };
+    const reads: string[] = [];
     mswServer.use(
-      // Ahead of the base handlers, so it answers the Actions reads.
       http.get(`/api/v1/projects/${PROJECT}/actions`, ({ request }) => {
-        const limit = new URL(request.url).searchParams.get('limit') ?? 'none';
-        limits.push(limit);
-        return HttpResponse.json(actionsPage(queue.slice(0, Number(limit))));
+        const params = new URL(request.url).searchParams;
+        reads.push(params.toString());
+        const q = params.get('q')?.toLowerCase() ?? '';
+        const found = params.get('status') === 'any' && measuring.target_label.toLowerCase();
+        return HttpResponse.json(actionsPage(found && found.includes(q) ? [measuring] : []));
       }),
       ...baseHandlers(),
     );
@@ -388,12 +408,74 @@ describe('NewChatScreen', () => {
 
     const message = await screen.findByLabelText('Message the agent');
     await user.type(message, 'Compare ');
-    // The page's own Top Actions read the shared first page; nothing wider yet.
-    await vi.waitFor(() => expect(limits).toEqual(['10']));
+    await vi.waitFor(() => expect(reads).toEqual(['limit=10']));
 
-    await user.type(message, '@Guide12');
-    expect(await screen.findByRole('option', { name: /Guide12/ })).toBeVisible();
-    expect(limits).toEqual(['10', '50']);
+    await user.type(message, '@uniform');
+    expect(await screen.findByRole('option', { name: /School uniforms\s*Done/u })).toBeVisible();
+    expect(reads.at(-1)).toBe('status=any&q=uniform&limit=20');
+  });
+
+  it('turns a pasted link to an Action of this project into a mention', async () => {
+    const bodies = captureChats();
+    serveAction();
+    const user = userEvent.setup();
+    renderNewChat('');
+
+    const message = await screen.findByLabelText('Message the agent');
+    await user.click(message);
+    await user.paste(`Find ${window.location.origin}/actions/${PRICING}?project=${PROJECT}`);
+    await waitFor(() => expect(message).toHaveValue('Find @Pricing page'));
+    expect(screen.getByRole('button', { name: 'Remove @Pricing page' })).toBeVisible();
+    await user.type(message, '{Enter}');
+
+    expect(await screen.findByText(`Opened chat ${CHAT}`)).toBeInTheDocument();
+    expect(bodies).toEqual([
+      expect.objectContaining({ message: 'Find @Pricing page', mentions: [PRICING] }),
+    ]);
+  });
+
+  it('resolves Action links at send once, and leaves one from another project as written', async () => {
+    const bodies = captureChats();
+    serveAction();
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let create!: () => void;
+    const creating = new Promise<void>((resolve) => {
+      create = resolve;
+    });
+    mswServer.use(
+      http.get(`/api/v1/actions/${BLOG}`, async () => {
+        await held;
+        return HttpResponse.json(actionDetail(BLOG, 'Blog hub', SIGNAL));
+      }),
+      http.post(`/api/v1/projects/${PROJECT}/agent/chats`, async ({ request }) => {
+        bodies.push(await request.json());
+        await creating;
+        return HttpResponse.json(ACCEPTED, { status: 202 });
+      }),
+    );
+    const own = `${window.location.origin}/actions/${PRICING}`;
+    const foreign = `${window.location.origin}/actions/${BLOG}`;
+    const user = userEvent.setup();
+    renderNewChat(`?prompt=${encodeURIComponent(`Compare ${own} with ${foreign}`)}`);
+
+    const message = await screen.findByDisplayValue(`Compare ${own} with ${foreign}`);
+    await user.type(message, '{Enter}');
+    await user.type(message, '{Enter}');
+    release();
+    await waitFor(() => expect(message).toHaveValue(`Compare @Pricing page with ${foreign}`));
+    expect(screen.getByRole('button', { name: 'Remove @Pricing page' })).toBeVisible();
+    create();
+
+    expect(await screen.findByText(`Opened chat ${CHAT}`)).toBeInTheDocument();
+    expect(bodies).toEqual([
+      expect.objectContaining({
+        message: `Compare @Pricing page with ${foreign}`,
+        mentions: [PRICING],
+      }),
+    ]);
   });
 
   it('restores the insertion point after a slash skill pick', async () => {
@@ -416,8 +498,10 @@ describe('NewChatScreen', () => {
     const message = await screen.findByLabelText('Message the agent');
     await user.type(message, '/');
     await user.click(await screen.findByRole('menuitemradio', { name: 'Growth plan' }));
-    await user.click(screen.getByRole('button', { name: 'Skill: Growth plan' }));
-    await user.click(screen.getByRole('menuitemradio', { name: 'Automatic' }));
+    await pickFromComposerMenu(user, /^Skills: Growth plan$/, {
+      role: 'menuitemradio',
+      name: 'Automatic',
+    });
     await user.type(message, 'Explain this{Enter}');
     expect(await screen.findByText(`Opened chat ${CHAT}`)).toBeVisible();
     expect(bodies).toEqual([{ message: 'Explain this', skill_id: null, context: {} }]);
@@ -439,9 +523,8 @@ describe('NewChatScreen', () => {
     expect(bodies).toEqual([{ message: 'Use /grow', context: {} }]);
   });
 
-  it('offers the top Actions open above the workflows, each title starting a chat on it', async () => {
+  it('offers the top Actions in the + menu, each starting a chat on it', async () => {
     mswServer.use(
-      http.get('/api/v1/agent/skills', () => HttpResponse.json(WORKFLOW_CATALOG)),
       ...baseHandlers([
         actionItem(PRICING, 'Pricing page'),
         actionItem(BLOG, 'Blog hub'),
@@ -449,35 +532,25 @@ describe('NewChatScreen', () => {
         actionItem('77777777-7777-4777-8777-777777777774', 'Careers'),
       ]),
     );
+    const user = userEvent.setup();
     renderNewChat('');
 
-    const recommended = await screen.findByRole('region', { name: 'Recommended Actions' });
-    // Capped at three, and nothing to expand first.
-    expect(await within(recommended).findAllByRole('listitem')).toHaveLength(3);
-    expect(within(recommended).queryByText('Careers')).not.toBeInTheDocument();
-    const start = within(recommended).getByRole('link', { name: 'Work on Pricing page' });
-    // Ids only: the Action's message is read on New chat, never put in the URL.
+    await openComposerSubmenu(user, /^Actions$/);
+    const start = await screen.findByRole('menuitem', { name: 'Work on Pricing page' });
+    expect(screen.getByRole('menuitem', { name: 'Work on Docs' })).toBeVisible();
+    expect(screen.queryByRole('menuitem', { name: 'Work on Careers' })).toBeNull();
+    expect(screen.getByRole('menuitem', { name: 'All Actions' })).toHaveAttribute(
+      'href',
+      `/actions?project=${PROJECT}`,
+    );
     expect(start).toHaveAttribute('href', `/agent?action_id=${PRICING}&project=${PROJECT}`);
-    expect(within(recommended).queryByText('Work on this')).not.toBeInTheDocument();
-    // The Actions come before the workflows.
-    const workflows = await screen.findByRole('region', { name: 'Or start from a workflow' });
-    expect(recommended.compareDocumentPosition(workflows)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
-    // The command hint is a caption that stays once typing starts.
     expect(screen.getByText('Type / to pick a skill or @ to mention an Action.')).toBeVisible();
   });
 
   function serveAction() {
     mswServer.use(
       http.get(`/api/v1/actions/${PRICING}`, () =>
-        HttpResponse.json({
-          ...actionItem(PRICING, 'Pricing page'),
-          approach: 'create_new',
-          diagnosis: {},
-          members: [],
-          member_measurement: {},
-          declarable_since: '2026-01-01T00:00:00Z',
-          declaration: null,
-        }),
+        HttpResponse.json({ ...actionDetail(PRICING, 'Pricing page'), approach: 'create_new' }),
       ),
     );
   }
@@ -488,7 +561,7 @@ describe('NewChatScreen', () => {
     renderNewChat(`?action_id=${PRICING}&prompt=Plan%20this`);
 
     const context = within(await screen.findByRole('list', { name: 'Context for this request' }));
-    expect(await context.findByText('Action: Pricing page · Create a new page')).toBeVisible();
+    expect(await context.findByText('Action: Create a new page: Pricing page')).toBeVisible();
     expect(screen.getByLabelText('Message the agent')).toHaveValue('Plan this');
   });
 
@@ -499,40 +572,78 @@ describe('NewChatScreen', () => {
     const user = userEvent.setup();
     renderNewChat(`?action_id=${PRICING}`);
 
-    // One line in the composer, above the written message; no other starting points.
     await screen.findByDisplayValue('Work on Pricing page.');
-    expect(screen.getByText('Action: Pricing page · Create a new page')).toBeVisible();
-    expect(screen.queryByRole('region', { name: 'Or start from a workflow' })).toBeNull();
-    expect(screen.queryByRole('region', { name: 'Recommended Actions' })).toBeNull();
+    expect(screen.getByText('Action: Create a new page: Pricing page')).toBeVisible();
+    expect(screen.queryByRole('region', { name: 'What should I work on?' })).toBeNull();
     expect(screen.queryByText('Type / to pick a skill or @ to mention an Action.')).toBeNull();
 
     await user.click(
-      screen.getByRole('button', { name: 'Remove Action: Pricing page · Create a new page' }),
+      screen.getByRole('button', { name: 'Remove Action: Create a new page: Pricing page' }),
     );
-    // The message stays as written; the workflows come back.
     expect(screen.getByLabelText('Message the agent')).toHaveValue('Work on Pricing page.');
-    expect(await screen.findByRole('region', { name: 'Or start from a workflow' })).toBeVisible();
+    expect(await screen.findByRole('region', { name: 'What should I work on?' })).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Send' }));
 
     expect(await screen.findByText(`Opened chat ${CHAT}`)).toBeInTheDocument();
     expect(bodies).toEqual([{ message: 'Work on Pricing page.', context: {} }]);
   });
 
-  it('opens a recommended Action with its message written, to edit or send as it is', async () => {
+  it('names what an Actions page hands over: one URL with its Actions and crawl, or an issue group’s URLs', async () => {
+    captureChats();
+    mswServer.use(
+      http.get(`/api/v1/projects/${PROJECT}/urls/${PAGE}/actions`, () =>
+        HttpResponse.json({
+          site_url_id: PAGE,
+          url: 'https://acme.test/shop/baby/bb0556',
+          page_kind: 'product',
+          last_crawled_at: '2026-11-14T10:00:00Z',
+          items: [actionItem(PRICING, 'Pricing page'), actionItem(BLOG, 'Blog')],
+        }),
+      ),
+      http.get(`/api/v1/actions/${PRICING}`, () =>
+        HttpResponse.json({
+          ...actionDetail(PRICING, 'Form controls missing accessible names'),
+          target_kind: 'issue_family',
+          page_count: 201,
+        }),
+      ),
+    );
+    const chips = async (first: string) => {
+      const list = within(await screen.findByRole('list', { name: 'Context for this request' }));
+      await list.findByText(first);
+      return list.getAllByRole('listitem').map((chip) => chip.firstChild?.textContent);
+    };
+
+    const { unmount } = renderNewChat(`?url_actions_id=${PAGE}`);
+    expect(await chips('URL: …/bb0556')).toEqual([
+      'URL: …/bb0556',
+      '2 actions on this URL',
+      'Crawl of Nov 14, 2026',
+    ]);
+    unmount();
+    renderNewChat(`?action_id=${PRICING}`);
+    expect(await chips('201 URLs (first 50 sent)')).toEqual([
+      'Action: Form controls missing accessible names · Issue across pages',
+      '201 URLs (first 50 sent)',
+      'Skill: From attached Action',
+    ]);
+  });
+
+  it('attaches an Action picked from the + menu, its message written to edit or send', async () => {
     const bodies = captureChats([actionItem(PRICING, 'Pricing page')]);
     serveAction();
     const user = userEvent.setup();
     renderNewChat('');
 
-    const recommended = await screen.findByRole('region', { name: 'Recommended Actions' });
-    await user.click(
-      await within(recommended).findByRole('link', { name: 'Work on Pricing page' }),
-    );
+    await screen.findByLabelText('Message the agent');
+    await pickFromComposerMenu(user, /^Actions$/, {
+      role: 'menuitem',
+      name: 'Work on Pricing page',
+    });
 
-    // Written from the Action once it is read.
     const message = await screen.findByDisplayValue('Work on Pricing page.');
     expect(message).toHaveAccessibleName('Message the agent');
-    expect(screen.getByText('Action: Pricing page · Create a new page')).toBeVisible();
+    expect(screen.getByText('Action: Create a new page: Pricing page')).toBeVisible();
     await user.type(message, ' Start with the title.');
     await user.click(screen.getByRole('button', { name: 'Send' }));
 
@@ -554,7 +665,6 @@ describe('NewChatScreen', () => {
     const user = userEvent.setup();
     renderNewChat('');
 
-    await user.click(await screen.findByText('Get a briefing on what to work on'));
     const briefing = await screen.findByRole('region', { name: 'What should I work on?' });
     expect(await within(briefing).findByText(/top 2 open Actions/)).toBeVisible();
     await user.click(within(briefing).getByRole('button', { name: 'Brief me' }));

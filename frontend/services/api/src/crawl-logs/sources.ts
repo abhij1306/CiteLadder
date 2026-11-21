@@ -15,7 +15,6 @@ import { requirePubSubReader } from './gcp-client.ts';
 import { crawlLogAvailabilitySchema } from '@citeladder/contracts/ai-traffic';
 import { crawlSourceCreateRequestSchema } from '@citeladder/contracts/crawl-log-requests';
 
-/** The contract body plus each setup's declaration rules. */
 export const createSourceSchema = crawlSourceCreateRequestSchema
   .refine(
     (input) =>
@@ -43,12 +42,10 @@ export const createSourceSchema = crawlSourceCreateRequestSchema
         'A Google Cloud source declares its subscription and sample rate only; other setups declare neither',
     },
   );
-/** A Firehose stream through the filter Lambda keeps recognized crawlers only. */
 const FIREHOSE_FILTERED = {
   kind: 'filtered',
   description: 'CiteLadder filter Lambda: recognized crawler requests only',
 } as const;
-/** Each setup's mapping preset and source kind. */
 const SETUPS = {
   cloudflare_worker: { preset: 'cloudflare_worker_template', kind: 'webhook' },
   cloudflare_logpush: { preset: 'cloudflare_logpush_http_requests', kind: 'webhook' },
@@ -62,13 +59,11 @@ const SETUPS = {
 >;
 type SourceKind = (typeof SETUPS)[keyof typeof SETUPS]['kind'];
 const LIVE: readonly string[] = ['webhook', 'pull'] satisfies readonly SourceKind[];
-/** Sources that collect continuously; one per host may be live. */
 export const isLiveKind = (kind: string) => LIVE.includes(kind);
 const token = () => 'clw_' + randomBytes(32).toString('base64url');
 const NONCE_ALPHABET = 'abcdefghijklmnopqrstuvwxyz234567';
 /** 26 lowercase base32 characters: a valid GCP label value. 256 % 32 = 0, so unbiased. */
 const nonce = () => [...randomBytes(26)].map((byte) => NONCE_ALPHABET[byte % 32]).join('');
-/** The columns only a pull source carries; null for webhooks and uploads. */
 function pullColumns(input: z.output<typeof createSourceSchema>) {
   if (input.setup !== 'gcp_pubsub_pull' || input.subscription === undefined)
     return {
@@ -173,7 +168,6 @@ export async function createSource(
       .where('workspace_id', '=', scope.workspaceId)
       .where('user_id', '=', actorId)
       .executeTakeFirstOrThrow();
-    // Only a webhook authenticates its sender; a pull source holds no secret.
     const secret = kind === 'webhook' ? token() : null;
     const id = randomUUID();
     await trx
@@ -258,7 +252,6 @@ export async function mutateSource(
     return { id, token: secret };
   });
 }
-/** The project's live pull source with this id, or undefined. */
 export function findLivePullSource(db: Database, scope: CrawlScope, id: string) {
   return db
     .selectFrom('crawl_log_sources')
@@ -270,7 +263,6 @@ export function findLivePullSource(db: Database, scope: CrawlScope, id: string) 
     .where('status', '=', 'active')
     .executeTakeFirst();
 }
-/** A live pull source in the project, for a command that acts on it. */
 export async function pullSourceFor(db: Database, scope: CrawlScope, id: string) {
   const source = await findLivePullSource(db, scope, id);
   if (source) return source;
@@ -284,10 +276,6 @@ export async function pullSourceFor(db: Database, scope: CrawlScope, id: string)
   if (!exists) throw notFound('Crawl log source');
   throw new ApiError(409, 'Only a live Google Cloud source has a subscription to check');
 }
-/**
- * The customer installed the sink filter for the current crawler catalog. Days
- * from the next one on can reach complete coverage again.
- */
 export async function confirmSinkFilter(
   db: Database,
   scope: CrawlScope,

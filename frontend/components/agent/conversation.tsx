@@ -1,41 +1,43 @@
-import { Pencil, RotateCcw } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { Fragment, useEffect, useState, type ReactNode } from 'react';
 
+import { ActionChip } from '@/components/agent/action-chip';
+import { ActivityChain } from '@/components/agent/activity-chain';
 import { EvidenceChips } from '@/components/agent/evidence-chips';
+import { JUMP_LINK } from '@/components/agent/jump-link';
 import { LiveActivity } from '@/components/agent/live-activity';
-import { MessageTime } from '@/components/agent/message-time';
-import { skillLabel, useSkillCatalog } from '@/components/agent/skill-picker';
+import { ProposalCards } from '@/components/agent/proposal-cards';
+import { skillLabel } from '@/components/agent/skill-picker';
 import { threadItems } from '@/components/agent/thread-items';
 import { TurnFailure } from '@/components/agent/turn-failure';
+import { turnParts } from '@/components/agent/turn-parts';
 import { useAgentCatalog } from '@/components/agent/use-agent-catalog';
 import { WebSources } from '@/components/agent/web-sources';
-import { ProjectLink } from '@/components/ui/project-link';
 import { Button } from '@/components/ui/button';
-import { cardClasses } from '@/components/ui/card';
-import { AgentThread, AgentTurn, UserTurn } from '@/components/ui/chat-dock';
+import { AgentThread, AgentTurn, PastedTextChip, UserTurn } from '@/components/ui/chat-dock';
 import { CopyButton } from '@/components/ui/copy-button';
 import { Disclosure } from '@/components/ui/disclosure';
+import { DisplayTime } from '@/components/ui/display-time';
 import { Icon } from '@/components/ui/icon';
 import { Inline, Stack } from '@/components/ui/layout';
 import { Pressable } from '@/components/ui/pressable';
 import { TextLink } from '@/components/ui/text-link';
 import { textRole } from '@/components/ui/typography';
 import { treeBranchClasses } from '@/components/ui/workspace';
+import { Pencil, RotateCcw } from '@/lib/icons';
 import { documentAnchor, latestOutput, outputPlacements } from '@/lib/agent/documents';
+import { citedActions } from '@/lib/agent/evidence';
 import { agentHandoffHref } from '@/lib/agent/handoff';
-import { runStepLabel, toolCallLabel } from '@/lib/agent/vocabulary';
-import { runOutcome } from '@/lib/agent/run-state';
+import { activityRows } from '@/lib/agent/activity';
+import { isPageReading, isRunActive, runOutcome } from '@/lib/agent/run-state';
 import type { AgentChatDetail, AgentMessage, AgentOutput } from '@/lib/api/agent';
 import { useAgentLinkHosts } from '@/lib/agent/link-hosts';
-import { ContentMarkdown } from '@/lib/markdown/markdown';
+import { ContentMarkdown, MarkdownText } from '@/lib/markdown/markdown';
 import { cn } from '@/lib/utils';
 
-/**
- * Messages and the chat's documents in conversational order (each document
- * after the reply that last wrote it), followed by current activity and
- * recovery. Follow-ups never jump ahead of earlier work.
- */
+import './conversation.css';
+
 export function Conversation({
+  workspaceId,
   detail,
   renderOutput,
   onRefine,
@@ -45,51 +47,76 @@ export function Conversation({
   canSend,
   pendingMessage = null,
 }: Readonly<{
+  workspaceId: string;
   detail: AgentChatDetail;
-  /** How one document is shown in the thread; omitted, documents are not shown. */
   renderOutput?: (output: AgentOutput) => ReactNode;
   onRefine: (instruction: string) => void;
-  /** Puts a request back in the composer to edit. */
   onRecover: (message: AgentMessage) => void;
-  /** Sends a request again as a new turn. */
   onRetry: (message: AgentMessage) => void;
   hasDraft?: boolean;
   canSend: boolean;
-  /** A message whose send is in flight, shown before the server accepts it. */
   pendingMessage?: string | null;
 }>) {
-  const skills = useSkillCatalog();
+  const { skills } = useAgentCatalog();
   const output = latestOutput(detail);
   const { byMessage, unplaced } = outputPlacements(detail);
+  const items = threadItems(detail, new Set(byMessage.keys()));
+  const deferred = useDeferredAtOpen(detail.chat.id, items.map(itemKey));
+  const older = (key: string, holdsDocument = false) =>
+    deferred.has(key) && !holdsDocument ? 'render-when-visible' : undefined;
   const documents = (outputs: readonly AgentOutput[] | undefined) =>
     renderOutput
       ? outputs?.map((placed) => (
-          <div
-            key={placed.id}
-            id={documentAnchor(placed.id)}
-            className={cn(cardClasses(), 'min-w-0')}
-          >
+          <div key={placed.id} id={documentAnchor(placed.id)} className="min-w-0">
             {renderOutput(placed)}
           </div>
         ))
       : null;
   return (
     <AgentThread>
+      <ReplyAnnouncement key={detail.chat.id} detail={detail} />
       <ContextUsed context={detail.context} />
       {renderOutput ? <DocumentList outputs={detail.outputs} /> : null}
-      <Stack as="ol" gap="workspace" aria-label="Messages">
-        {threadItems(detail, new Set(byMessage.keys())).map((item) =>
+      {/* One `minmax(0, 1fr)` column at each level: an auto track would grow to
+          a turn's widest unbreakable line (a long URL chip) and scroll the thread sideways. */}
+      <Stack as="ol" gap="workspace" aria-label="Messages" className="grid-cols-1">
+        {items.map((item) =>
           item.kind === 'message' ? (
-            <Stack as="li" gap="workspace" key={item.message.id}>
+            <Stack
+              as="li"
+              gap="workspace"
+              key={item.message.id}
+              className={cn(
+                TURN,
+                older(item.message.id, Boolean(renderOutput) && byMessage.has(item.message.id)),
+              )}
+            >
               <MessageBubble
                 message={item.message}
                 skill={skillLabel(skills, item.message.skill_id)}
+                actions={detail.actions}
+                after={
+                  <>
+                    <ProposalCards
+                      workspaceId={workspaceId}
+                      proposals={item.message.proposals}
+                      actions={detail.actions}
+                    />
+                    {documents(byMessage.get(item.message.id))}
+                  </>
+                }
               />
-              {documents(byMessage.get(item.message.id))}
             </Stack>
           ) : (
-            <Stack as="li" gap="workspace" key={item.request?.id ?? item.failures[0].id}>
-              {item.request ? <MessageBubble message={item.request} skill={null} /> : null}
+            <Stack
+              as="li"
+              gap="workspace"
+              key={item.request?.id ?? item.failures[0].id}
+              className={cn(TURN, older(itemKey(item)))}
+            >
+              {item.request ? (
+                <MessageBubble message={item.request} skill={null} actions={detail.actions} />
+              ) : null}
               <TurnFailure failures={item.failures} outcome={item.outcome} />
             </Stack>
           ),
@@ -118,8 +145,42 @@ export function Conversation({
     </AgentThread>
   );
 }
+const TURN = 'min-w-0 grid-cols-1';
 
-/** The latest reply wrote this document and the turn finished. */
+type ThreadItem = ReturnType<typeof threadItems>[number];
+const itemKey = (item: ThreadItem) =>
+  item.kind === 'message' ? item.message.id : (item.request?.id ?? item.failures[0].id);
+
+function useDeferredAtOpen(chatId: string, keys: readonly string[]): ReadonlySet<string> {
+  const atOpen = () => ({ chatId, keys: new Set(keys.slice(0, -4)) });
+  const [opened, setOpened] = useState(atOpen);
+  if (opened.chatId === chatId) return opened.keys;
+  const next = atOpen();
+  setOpened(next);
+  return next.keys;
+}
+
+function ReplyAnnouncement({ detail }: Readonly<{ detail: AgentChatDetail }>) {
+  const reply = [...detail.messages].reverse().find((message) => message.role === 'agent');
+  const [openedWith] = useState(reply?.id);
+  const [announced, setAnnounced] = useState<string | undefined>();
+  const busy = isRunActive(detail.latest_run) || isPageReading(detail.page_fetch);
+  const fresh = reply && !busy && reply.id !== openedWith && reply.id !== announced ? reply : null;
+  const freshId = fresh?.id;
+  // A screen reader queues the text when it lands; emptying the region later is silent.
+  useEffect(() => {
+    if (!freshId) return;
+    const timer = setTimeout(() => setAnnounced(freshId), REPLY_ANNOUNCEMENT_MS);
+    return () => clearTimeout(timer);
+  }, [freshId]);
+  return (
+    <div aria-live="polite" aria-busy={busy} className="sr-only">
+      {fresh ? <MarkdownText markdown={fresh.content} /> : null}
+    </div>
+  );
+}
+const REPLY_ANNOUNCEMENT_MS = 5000;
+
 function hasFreshDeliverable(detail: AgentChatDetail, output: AgentOutput): boolean {
   const revision = output.latest_revision;
   const reply = detail.messages.at(-1);
@@ -133,17 +194,16 @@ function hasFreshDeliverable(detail: AgentChatDetail, output: AgentOutput): bool
   );
 }
 
-/** With more than one document, a list that jumps to each in the thread. */
 function DocumentList({ outputs }: Readonly<{ outputs: readonly AgentOutput[] }>) {
   if (outputs.length < 2) return null;
   return (
     <Stack as="nav" gap="tight" aria-label="Documents">
-      <span className={textRole('label')}>Documents</span>
+      <span className={textRole('body', 'text-ink-2')}>Documents</span>
       <Stack as="ol" gap="tight" className={treeBranchClasses()}>
         {outputs.map((output) => (
           <li key={output.id}>
             <Pressable
-              className={textRole('caption', 'hover:text-accent-ink w-auto')}
+              className={textRole('caption', `${JUMP_LINK} w-auto`)}
               onClick={() =>
                 document
                   .getElementById(documentAnchor(output.id))
@@ -159,11 +219,6 @@ function DocumentList({ outputs }: Readonly<{ outputs: readonly AgentOutput[] }>
   );
 }
 
-/**
- * What the reader can do with the latest turn: try a failed or stopped request
- * again or edit it first, or regenerate a finished reply. Each sends a new
- * turn; nothing earlier in the chat is rewritten.
- */
 function TurnActions({
   detail,
   canSend,
@@ -188,7 +243,7 @@ function TurnActions({
         <Icon icon={RotateCcw} />
         {ended ? 'Try again' : 'Regenerate'}
       </Button>
-      <Button variant="ghost" onClick={() => onEdit(request)}>
+      <Button variant="quiet" onClick={() => onEdit(request)}>
         <Icon icon={Pencil} />
         {hasDraft ? 'Replace draft with last request' : 'Edit last request'}
       </Button>
@@ -212,51 +267,95 @@ function PendingMessage({ text }: Readonly<{ text: string }>) {
 function MessageBubble({
   message,
   skill,
-}: Readonly<{ message: AgentMessage; skill: string | null }>) {
+  actions,
+  after,
+}: Readonly<{
+  message: AgentMessage;
+  skill: string | null;
+  actions: AgentChatDetail['actions'];
+  after?: ReactNode;
+}>) {
   const knownHosts = useAgentLinkHosts(message.web_sources);
   if (message.role === 'user')
     return (
       <UserTurn
         text={message.content}
         footer={
-          message.mentions.length > 0 ? (
-            <Inline as="ul" aria-label="Mentioned Actions" className="flex-wrap">
-              {message.mentions.map((mention) => (
-                <li key={mention.id}>
-                  <TextLink href={`/agent/actions/${mention.id}`} text="caption">
-                    @{mention.label}
-                  </TextLink>
-                </li>
-              ))}
-            </Inline>
-          ) : null
+          <>
+            {message.attachments.length > 0 ? (
+              <Inline as="ul" aria-label="Attachments" className="flex-wrap">
+                {message.attachments.map((attachment, index) => (
+                  <PastedTextChip
+                    key={index} // NOSONAR -- a saved message's attachments never reorder and may repeat; position is the identity
+                    text={attachment.text}
+                  />
+                ))}
+              </Inline>
+            ) : null}
+            {message.mentions.length > 0 ? (
+              <Inline as="ul" aria-label="Mentioned Actions" className="flex-wrap">
+                {message.mentions.map((mention) => {
+                  const action = actions.find((item) => item.id === mention.id);
+                  return (
+                    <li key={mention.id} className="min-w-0">
+                      {action ? (
+                        <ActionChip action={action} prefix="@" />
+                      ) : (
+                        <span className={textRole('caption', 'block truncate')}>
+                          @{mention.label}
+                        </span>
+                      )}
+                    </li>
+                  );
+                })}
+              </Inline>
+            ) : null}
+          </>
         }
       />
     );
+  const chips = citedActions(message.evidence_refs, actions).map((action) => ({
+    text: action.target_label,
+    node: <ActionChip action={action} />,
+  }));
   return (
     <AgentTurn
-      time={<MessageTime value={message.created_at} />}
+      time={<DisplayTime value={message.created_at} />}
       meta={skill ? `Skill: ${skill}` : undefined}
     >
-      <ContentMarkdown markdown={message.content} density="compact" knownHosts={knownHosts} />
-      <Inline className="flex-wrap">
-        <EvidenceChips refs={message.evidence_refs} />
-        <CopyButton value={message.content} variant="ghost">
-          Copy reply
-        </CopyButton>
-      </Inline>
-      <WebSources sources={message.web_sources} />
-      {message.steps.length > 0 ? (
-        <Disclosure title={runSummary(message.steps)}>
-          <Stack as="ul" gap="tight" className={treeBranchClasses()}>
-            {message.steps.map((step, index) => (
-              <li key={`${step.kind}-${index}`} className={textRole('caption')}>
-                {stepLabel(step)}
-              </li>
-            ))}
-          </Stack>
-        </Disclosure>
-      ) : null}
+      {turnParts(message).map((part) => {
+        switch (part.kind) {
+          case 'steps':
+            return <ActivityChain key="steps" rows={activityRows(part.steps)} />;
+          case 'text':
+            return (
+              <ContentMarkdown
+                key="text"
+                markdown={part.markdown}
+                density="compact"
+                knownHosts={knownHosts}
+                chips={chips}
+              />
+            );
+          case 'evidence':
+            return (
+              <Inline key="evidence" className="flex-wrap">
+                <EvidenceChips refs={part.refs} />
+                <CopyButton value={message.content} variant="quiet">
+                  Copy reply
+                </CopyButton>
+              </Inline>
+            );
+          case 'sources':
+            return <WebSources key="sources" sources={part.sources} />;
+          case 'outputs':
+            return after ? <Fragment key="outputs">{after}</Fragment> : null;
+          default: {
+            const unknown: never = part;
+            return unknown;
+          }
+        }
+      })}
     </AgentTurn>
   );
 }
@@ -272,7 +371,7 @@ function ContextUsed({ context }: Readonly<{ context: AgentChatDetail['context']
     opportunity: 'Recommendation',
     demand: 'Demand evidence',
     site_health: 'Page diagnosis',
-    search_intelligence: 'Selected Keyword Research rows',
+    search_intelligence: 'Selected Keyword research rows',
     issue_group: 'Selected issue group',
     site_facts: 'Selected crawl robots policy',
     upstream_revision: 'Selected document revision',
@@ -295,9 +394,7 @@ function ContextUsed({ context }: Readonly<{ context: AgentChatDetail['context']
           <p className={textRole('caption')}>Action: {context.action.label}</p>
         ) : null}
         {omissions.length > 0 ? (
-          <p className={textRole('caption')}>
-            Some older messages or context were left out to fit this turn.
-          </p>
+          <p className={textRole('caption')}>Some older context was left out to fit this turn.</p>
         ) : null}
       </Stack>
     </Disclosure>
@@ -307,11 +404,6 @@ function promptItems(prompt: NonNullable<AgentChatDetail['context']['prompt']>, 
   const value = prompt[key];
   return Array.isArray(value) ? value : [];
 }
-/**
- * After a deliverable: refinements revise it in this chat; next steps start a
- * new chat with the workflow that takes the work forward, carrying the exact
- * revision as its brief. Both come from the server catalog for the kind.
- */
 function FollowUps({
   kind,
   title,
@@ -348,55 +440,20 @@ function FollowUps({
         <Inline as="nav" aria-label="Next steps" className="flex-wrap">
           <span className={textRole('caption')}>Next, in a new chat:</span>
           {next.map(({ workflow, prompt }) => (
-            <Button key={workflow.id} asChild variant="ghost">
-              <ProjectLink
-                href={agentHandoffHref({
-                  actionId,
-                  prompt,
-                  workflowId: workflow.id,
-                  outputRevision: { outputId, revisionId },
-                })}
-              >
-                {workflow.label}
-              </ProjectLink>
-            </Button>
+            <TextLink
+              key={workflow.id}
+              href={agentHandoffHref({
+                actionId,
+                prompt,
+                workflowId: workflow.id,
+                outputRevision: { outputId, revisionId },
+              })}
+            >
+              {workflow.label}
+            </TextLink>
           ))}
         </Inline>
       ) : null}
     </Stack>
   );
-}
-
-type MessageStep = AgentMessage['steps'][number];
-
-function runSummary(steps: readonly MessageStep[]): string {
-  const count = (kind: string) => steps.filter((step) => step.kind === kind).length;
-  const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
-  const calls = count('model'),
-    reads = count('tool'),
-    searches = count('search');
-  return [
-    'Run complete',
-    plural(calls, 'model call', 'model calls'),
-    reads > 0 ? plural(reads, 'data read', 'data reads') : null,
-    searches > 0 ? plural(searches, 'web search', 'web searches') : null,
-  ]
-    .filter(Boolean)
-    .join(' · ');
-}
-
-function stepLabel(step: MessageStep): string {
-  if (step.kind === 'skill') return toolCallLabel({ tool: 'load_skill', status: 'completed' });
-  if (step.kind === 'document')
-    return toolCallLabel({ tool: 'save_document', status: 'completed' });
-  if (step.kind === 'suggestion')
-    return toolCallLabel({ tool: 'suggest_edits', status: 'completed' });
-  if (step.kind === 'search')
-    return step.query ? `Searched the web: ${step.query}` : 'Searched the web';
-  if (step.kind === 'tool')
-    return runStepLabel({
-      tool: step.tool ?? 'read_data',
-      status: step.status ?? 'unknown',
-    });
-  return step.ordinal ? `Model call ${step.ordinal}` : 'Worked on the reply';
 }

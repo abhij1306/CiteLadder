@@ -1,8 +1,3 @@
-/**
- * The Prompt Builder's "Review topics" step as data: the project's topics
- * plus proposals, edited locally and written only as one confirmed plan.
- * Proposals fill gaps beside the existing topics and never replace them.
- */
 import type { TopicConfirmPlan } from '@citeladder/contracts/prompt-requests';
 import type { Topic, TopicPreview } from '@citeladder/contracts';
 import { orderTopicsForRail } from '@/lib/prompts/topic-tree';
@@ -21,7 +16,6 @@ export type TopicRow =
   | { kind: 'proposed'; key: string; name: string; offerings: string[] }
   | { kind: 'added'; key: string; name: string };
 
-/** Every existing topic, in rail order, unedited. */
 export function topicRows(topics: readonly Topic[]): TopicRow[] {
   return orderTopicsForRail(topics).map(({ topic, nested }) => ({
     kind: 'existing',
@@ -33,7 +27,6 @@ export function topicRows(topics: readonly Topic[]): TopicRow[] {
   }));
 }
 
-/** The rows with a fresh set of proposals in place of any earlier ones. */
 export function withProposals(
   rows: readonly TopicRow[],
   proposals: readonly Proposal[],
@@ -50,7 +43,6 @@ export function withProposals(
   ];
 }
 
-/** The rows with more proposals appended (the "+N more" overflow). */
 export function addProposals(
   rows: readonly TopicRow[],
   proposals: readonly Proposal[],
@@ -67,7 +59,6 @@ export function addProposals(
   ];
 }
 
-/** The plan the rows describe: removed and renamed existing topics, and every new one. */
 export function topicPlan(rows: readonly TopicRow[]): TopicConfirmPlan {
   const plan: TopicConfirmPlan = { create: [], rename: [], delete: [] };
   for (const row of rows) {
@@ -85,7 +76,6 @@ export function topicPlan(rows: readonly TopicRow[]): TopicConfirmPlan {
 export const planIsEmpty = (plan: TopicConfirmPlan) =>
   !plan.create.length && !plan.rename.length && !plan.delete.length;
 
-/** Why the rows cannot be confirmed as they stand, or null when they can. */
 export function planProblem(rows: readonly TopicRow[]): string | null {
   const live = rows.filter((row) => !(row.kind === 'existing' && row.removed));
   if (live.some((row) => !row.name.trim())) return 'Every topic needs a name.';

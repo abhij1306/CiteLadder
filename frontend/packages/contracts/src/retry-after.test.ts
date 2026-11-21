@@ -14,7 +14,6 @@ describe('Retry-After', () => {
     expect(retryAfterSeconds(header, now)).toBe(seconds);
   });
 
-  // Each of these once meant "retry now" to the answer-engine client.
   it.each([
     [null],
     [undefined],

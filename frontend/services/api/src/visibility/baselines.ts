@@ -1,20 +1,3 @@
-/**
- * Each finalized run's comparable baseline, persisted on
- * `audit_comparison_baselines` by audit finalization in its own transaction.
- *
- * One row per requestable cohort and engine selector (every engine the run
- * measured, and all engines together), holding what the comparison walk
- * (`comparison.ts`, the single rule) found: the nearest compatible earlier
- * run in the same market, the comparison status, and the runs passed over.
- * Visibility and Overview both read it, so they name the same baseline, and
- * neither walks the history per request.
- *
- * Two runs of a project can finalize concurrently, so neither sees the other
- * uncommitted. Each finalization therefore takes the project's baseline lock
- * before writing: whichever commits second sees the first. It writes its own
- * rows and then rewrites the rows of runs completed after it that it can
- * reach, so a later run that finalized first still names it.
- */
 import { randomUUID } from 'node:crypto';
 import { sql } from 'kysely';
 
@@ -30,17 +13,11 @@ import { loadMeasuredRuns, type RunScope } from './runs.ts';
 
 const visibility = policy.visibility;
 
-/**
- * Persist the run's baselines and refresh the later runs that can reach it.
- * The caller holds the run's finalization transaction, after the run's metric
- * snapshot, completion time and dashboard status are written.
- */
 export async function persistComparisonBaselines(
   db: Database,
   input: { workspaceId: string; auditId: string },
 ): Promise<void> {
   const written = await writeRunBaselines(db, input.workspaceId, input.auditId, async (scope) => {
-    // Serializes the project's baseline writers; released at commit.
     await subjectXactLock(db, `comparison-baselines:${scope.projectId}`);
   });
   if (!written) return;
@@ -54,7 +31,6 @@ export async function persistComparisonBaselines(
   for (const run of later) await writeRunBaselines(db, input.workspaceId, run.auditId); // NOSONAR -- One transaction connection: runs rewrite in order.
 }
 
-/** Compute and upsert one run's baseline rows; the run's scope, or null for a run never compared. */
 async function writeRunBaselines(
   db: Database,
   workspaceId: string,
@@ -81,18 +57,15 @@ async function writeRunBaselines(
     .where('audit.workspace_id', '=', workspaceId)
     .where('audit.id', '=', auditId)
     .executeTakeFirst();
-  // Only brand runs are compared; a run without completion has no history before it.
   if (run?.audit_scope !== visibility.brand_audit_scope || run.completed_at === null) return null;
   const completedAt = run.completed_at;
   const scope = { workspaceId, projectId: run.project_id, marketId: run.market_id };
   await beforeWalk?.(scope);
-  // Every selector walks the same recent history, read once.
   const candidates = await loadMeasuredRuns(db, scope, {
     fromAt: null,
     toAt: completedAt,
     newest: visibility.selection_max_runs,
   });
-  // The engines the run measured: finalization writes each one's slice in every cohort.
   const engines = Object.keys(
     metricObject(cohortMetrics(run.metrics, visibility.core_cohort).per_engine),
   ).sort(compareText);

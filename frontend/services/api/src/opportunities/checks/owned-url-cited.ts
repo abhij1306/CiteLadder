@@ -1,12 +1,3 @@
-/**
- * An answer to the gap's prompts cites your page, in a visibility run after
- * go-live (content optimization section 5). The expectation is frozen at
- * declaration: an improved page freezes its URL and the angle's prompts; a new
- * page freezes the prompts and the owned URLs already cited for them, so only
- * an owned URL outside that set meets it. The user never names the URL, and a
- * later reclustering or rematch never changes what is measured. A citation
- * says nothing about which version of the page the engine read.
- */
 import { sql } from 'kysely';
 import { z } from 'zod';
 import { parseContentGapEvidence } from '@citeladder/contracts/opportunity-evidence';
@@ -31,13 +22,8 @@ type Check = CheckOf<'owned_url_cited'>;
 
 const sorted = (values: Iterable<string>) => [...new Set(values)].sort(compareText);
 
-/** A cited URL as the content-angle refresh compares owned pages. */
 const canonical = (url: string) => canonicalPage(url) ?? url;
 
-/**
- * The default market's dashboard-ready brand runs, every engine and both
- * brand cohorts: Visibility's evidence statement, as content gaps read it.
- */
 const selection = (scope: Scope, auditId: string | null): RunSelection => ({
   ...scope,
   marketId: null,
@@ -49,11 +35,6 @@ const selection = (scope: Scope, auditId: string | null): RunSelection => ({
   toAt: null,
 });
 
-/**
- * What a content-gap finding freezes, before any baseline: the angle's
- * prompts the library still held at the refresh (a deleted one can never be
- * run again), and the improved page or the planned one.
- */
 function gapOf(member: MemberFacts) {
   const gap = parseContentGapEvidence(member.rule_id, member.evidence);
   if (!gap) return null;
@@ -81,11 +62,6 @@ function gapOf(member: MemberFacts) {
   };
 }
 
-/**
- * The owned URLs cited in answers to these prompts by the default market's
- * runs observed from `from` to go-live, and those runs: what a new page must
- * add to.
- */
 async function baseline(db: Database, scope: Scope, promptIds: string[], from: string, to: string) {
   const rows = await evidenceScope(db, selection(scope, null))
     .innerJoin('citations as c', 'c.analysis_id', 'ra.id')
@@ -107,11 +83,6 @@ const refsSchema = z.object({
   prompt_reference: z.object({ prompt_ids: z.array(z.uuid()).min(1) }).nullish(),
 });
 
-/**
- * Analyze a page: the page and prompts the declared revision's chat was
- * started for, or null when the revision came from another kind of chat. The
- * chat recorded them when it started, so the declaration still chooses nothing.
- */
 async function analyzedPage({ db, scope, outputRevisionId }: FreezeContext): Promise<Check | null> {
   if (!outputRevisionId) return null;
   const chat = await db
@@ -176,10 +147,6 @@ async function freezeGap(member: MemberFacts, context: FreezeContext): Promise<C
   };
 }
 
-/**
- * The owned URLs this run's successful answers to the check's prompts cite,
- * or why it cannot say: none of the prompts ran, or none was answered.
- */
 async function citedInRun(ctx: ReadContext, auditId: string, check: Check) {
   const d = ctx.declaration;
   const scope = { workspaceId: d.workspace_id, projectId: d.project_id };
@@ -204,7 +171,6 @@ async function citedInRun(ctx: ReadContext, auditId: string, check: Check) {
   return new Set(rows.flatMap((row) => (row.url ? [canonical(row.canonical_url ?? row.url)] : [])));
 }
 
-/** Whether this run is one Visibility reads: the default market's dashboard-ready brand run. */
 function isVisibilityRun(ctx: ReadContext, auditId: string) {
   const d = ctx.declaration;
   const scope = { workspaceId: d.workspace_id, projectId: d.project_id };
@@ -233,7 +199,6 @@ export const ownedUrlCitedCheck: CheckModule<'owned_url_cited'> = {
     return checks;
   },
   async read(ctx, source, check) {
-    // Another market's or a Commerce run says nothing about these prompts here.
     if (!(await isVisibilityRun(ctx, source.id))) return null;
     const cited = await citedInRun(ctx, source.id, check);
     if (typeof cited === 'string') return outcome(ctx.reading, 'unavailable', cited);
@@ -244,6 +209,5 @@ export const ownedUrlCitedCheck: CheckModule<'owned_url_cited'> = {
         : [...cited].some((url) => !expectation.baseline_urls.includes(url));
     return outcome(ctx.reading, met ? 'met' : 'unmet');
   },
-  // A new page has no URL to name until one is cited.
   subject: (check) => (check.expectation.target === 'page' ? check.expectation.url : null),
 };

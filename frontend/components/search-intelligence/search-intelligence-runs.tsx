@@ -1,24 +1,18 @@
-import { RefreshCw } from 'lucide-react';
-
 import { Button } from '@/components/ui/button';
-import { Callout } from '@/components/ui/callout';
 import { DisplayTime } from '@/components/ui/display-time';
 import { Drawer } from '@/components/ui/drawer';
 import { Stack } from '@/components/ui/layout';
-import { MutationNotice } from '@/components/ui/mutation-notice';
-import { panelClasses } from '@/components/ui/panel';
-import { QueryState } from '@/components/ui/query-state';
-import { ReadError } from '@/components/ui/read-error';
 import { Skeleton } from '@/components/ui/skeleton';
-import { StatRow } from '@/components/ui/stat-row';
 import { textRole } from '@/components/ui/typography';
 import type { SearchIntelligenceRun } from '@/lib/api/search-intelligence';
 import { formatCount } from '@/lib/format';
 import { words } from '@/lib/ai-traffic/vocabulary';
 import { SEARCH_RUN_STATES } from '@/lib/search-intelligence/status';
 import { reportedCost, runEstimate } from './search-intelligence-format';
+import { Notice } from '@/components/ui/notice';
+import { StateBlock } from '@/components/ui/state-block';
+import { FigureStrip } from '@/components/ui/figure-strip';
 
-/** Why an acquisition stopped, in the reader's terms. */
 const STOP_REASONS: Readonly<Record<string, string>> = {
   cost_ceiling_reached:
     'The next request could have cost more than the estimate you confirmed, so it was not sent.',
@@ -45,18 +39,15 @@ export function RunNotice({
   cancelling,
 }: Readonly<{
   run: SearchIntelligenceRun | null;
-  /** Cancel and Review again are offered only to a role that may run analyses. */
   onCancel?: (runId: string) => void;
-  /** Opens the analysis review: the recovery for a stopped run. */
   onReview?: () => void;
   cancelling: boolean;
 }>) {
   if (!run) return null;
   if (SEARCH_RUN_STATES[run.status].active)
     return (
-      <Callout
+      <Notice
         tone="info"
-        icon={RefreshCw}
         action={
           onCancel ? (
             <Button variant="secondary" disabled={cancelling} onClick={() => onCancel(run.id)}>
@@ -66,28 +57,27 @@ export function RunNotice({
         }
       >
         Analysis in progress: {run.completed_calls} of {run.planned_calls} requests complete.
-      </Callout>
+      </Notice>
     );
   if (!['partial', 'failed', 'uncertain'].includes(run.status)) return null;
   const reason =
     STOP_REASONS[run.error_code] ||
     run.error_detail ||
     `${run.completed_calls} of ${run.planned_calls} requests completed.`;
-  // A stopped analysis is recovered by reviewing and running it again.
   return (
-    <MutationNotice
-      notice={{
-        message: `Analysis ${SEARCH_RUN_STATES[run.status].label.toLowerCase()}. ${reason} Saved results remain available below.`,
-        retryable: false,
-      }}
-      recovery={
+    <Notice
+      tone="warning"
+      standing
+      action={
         onReview ? (
           <Button type="button" variant="secondary" onClick={onReview}>
             Review again
           </Button>
         ) : undefined
       }
-    />
+    >
+      {`Analysis ${SEARCH_RUN_STATES[run.status].label.toLowerCase()}. ${reason} Saved results remain available below.`}
+    </Notice>
   );
 }
 
@@ -103,25 +93,24 @@ export function CostDetails({
   onOpenChange: (open: boolean) => void;
   runs: SearchIntelligenceRun[] | undefined;
   pending: boolean;
-  /** The failed read, or null when the history loaded. */
   error: unknown;
   onRetry: () => void;
 }>) {
-  let content = <QueryState kind="empty" inline message="No analysis has been run yet." />;
+  let content = <StateBlock kind="empty" inline message="No analysis has been run yet." />;
   if (runs?.length) {
     content = (
-      <Stack as="ul" gap="compact">
+      <Stack as="ul" gap="section">
         {runs.map((run) => (
-          <Stack as="li" gap="compact" key={run.id} className={panelClasses()}>
+          <Stack as="li" gap="compact" key={run.id}>
             <Stack gap="tight">
-              <p className={textRole('itemTitle')}>
+              <p className={textRole('body')}>
                 {words(run.action)} · {SEARCH_RUN_STATES[run.status].label}
               </p>
               <p className={textRole('caption')}>
                 <DisplayTime value={run.created_at} />
               </p>
             </Stack>
-            <StatRow
+            <FigureStrip
               segments={[
                 {
                   key: 'estimated',
@@ -142,7 +131,7 @@ export function CostDetails({
                 {
                   key: 'uncertain',
                   label: 'Requests with unknown outcome',
-                  value: run.uncertain_calls,
+                  value: formatCount(run.uncertain_calls),
                 },
               ]}
             />
@@ -153,16 +142,17 @@ export function CostDetails({
   }
   if (error)
     content = (
-      <ReadError error={error} fallback="Cost history could not be loaded." onRetry={onRetry} />
+      <Notice
+        kind="read"
+        error={error}
+        fallback="Cost history could not be loaded."
+        title="Cost history could not be loaded"
+        onRetry={onRetry}
+      />
     );
-  if (pending) content = <Skeleton variant="block" />;
+  if (pending) content = <Skeleton variant="list" />;
   return (
-    <Drawer
-      open={open}
-      onOpenChange={onOpenChange}
-      title="Cost details"
-      description="What each confirmed analysis was estimated to cost and what it was charged."
-    >
+    <Drawer open={open} onOpenChange={onOpenChange} title="Cost details">
       {content}
     </Drawer>
   );

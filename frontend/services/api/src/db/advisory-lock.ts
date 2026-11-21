@@ -1,11 +1,3 @@
-/**
- * Transaction-scoped PostgreSQL advisory locks keyed by entity.
- *
- * A key is the personalized 8-byte BLAKE2b of the 4-byte big-endian namespace
- * and the entity UUID's bytes, read as a signed big-endian integer. Both
- * so every writer of an entity derives the same key, and
- * `pg_advisory_xact_lock` releases it at COMMIT/ROLLBACK.
- */
 import { createHash } from 'node:crypto';
 
 import { blake2b } from '@noble/hashes/blake2.js';
@@ -22,7 +14,6 @@ function uuidBytes(id: string): Uint8Array {
   );
 }
 
-/** The signed 64-bit lock key for one entity of a lock family. */
 function advisoryLockKey(family: LockFamily, id: string): bigint {
   const input = new Uint8Array(20);
   new DataView(input.buffer).setUint32(0, family.namespace);
@@ -34,7 +25,6 @@ function advisoryLockKey(family: LockFamily, id: string): bigint {
   return new DataView(digest.buffer, digest.byteOffset, 8).getBigInt64(0);
 }
 
-/** Block until this transaction holds the entity's lock. */
 export async function advisoryXactLock(
   db: Database,
   family: LockFamily,
@@ -44,7 +34,6 @@ export async function advisoryXactLock(
   await sql`select pg_advisory_xact_lock(${key}::bigint)`.execute(db);
 }
 
-/** A lock keyed by subject text: the signed 8-byte SHA-256 prefix of `subject`. */
 export async function subjectXactLock(db: Database, subject: string): Promise<void> {
   const key = createHash('sha256').update(subject).digest().readBigInt64BE(0).toString();
   await sql`select pg_advisory_xact_lock(${key}::bigint)`.execute(db);

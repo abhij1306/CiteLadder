@@ -18,9 +18,7 @@ type ToolResult = {
 export type ToolOutcome = {
   status: 'completed' | 'unavailable' | 'failed' | 'refused';
   text: string;
-  /** Every record the read returned: the attempt's record. */
   refs: ToolResult['artifactRefs'];
-  /** The records in `text`, which the model received: the turn's sources (invariant 12). */
   received: ToolResult['artifactRefs'];
   omissions: Json[];
   hash: string;
@@ -56,7 +54,6 @@ export function toolDefinitions(
     .toSorted((a, b) => compareText(a.name, b.name));
 }
 
-/** Server-pinned scope; registry entries are read adapters, never HTTP or SQL tools. */
 export class ToolRegistry {
   readonly #tools: Map<string, ReadTool>;
   readonly version: string;
@@ -81,7 +78,6 @@ export class ToolRegistry {
   ): Promise<ToolOutcome> {
     await authorize(db, scope);
     const tool = this.#tools.get(name);
-    // Refusals tell the model how to correct the call; it reads them as a tool result.
     if (!tool)
       return refused('unknown_tool', `Unknown tool ${name}. Call one of the listed tools.`);
     if (Object.hasOwn(args, 'project_id') || Object.hasOwn(args, 'workspace_id'))
@@ -107,7 +103,6 @@ export class ToolRegistry {
         error: '',
       };
     } catch (error) {
-      // A correctable argument is refused with the owner's reason; anything else failed.
       const problem = callerMessage(error);
       if (problem !== null) return refused('invalid_arguments', problem);
       return {
@@ -117,11 +112,6 @@ export class ToolRegistry {
     }
   }
 }
-/**
- * Whether a bounded result still names a record. A record whose section the
- * bound dropped never reached the model, so it is not a source; a record the
- * text names by id or `record_uri` did.
- */
 function mentions(text: string, ref: ToolResult['artifactRefs'][number]) {
   return [ref.id, ref.record_uri].some(
     (value) => typeof value === 'string' && value !== '' && text.includes(JSON.stringify(value)),
@@ -163,8 +153,6 @@ export function boundToolData(data: Json, maxChars: number, splitOverview = fals
     if (envelope().length > maxChars) {
       delete selected[key];
       omitted.splice(index, 0, key);
-      // Composite overviews contain independent evidence families. Keep whole
-      // smaller families instead of losing the entire overview to one large one.
       if (
         splitOverview &&
         key === 'evidence' &&
@@ -187,7 +175,6 @@ export function boundToolData(data: Json, maxChars: number, splitOverview = fals
     omissions: [{ reason: 'tool_result_truncated', count: 1, sections: omitted }],
   };
 }
-/** A call not run: `error` is the recorded code, `text` what the model is told. */
 export function refused(error: string, text: string): ToolOutcome {
   return { status: 'refused', text, refs: [], received: [], omissions: [], hash: '', error };
 }

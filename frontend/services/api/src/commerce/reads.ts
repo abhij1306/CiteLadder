@@ -10,6 +10,7 @@ import { sql } from 'kysely';
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { jsonObject } from '../db/json.ts';
+import { persistedStatuses, statusView } from '../opportunities/action-status.ts';
 import { catalogApplicability, UNCATEGORIZED_KEY } from './projection-facts.ts';
 import { ApiError } from '../errors.ts';
 
@@ -19,21 +20,12 @@ export function commerceMissing(message: string): never {
   throw new ApiError(404, message, { code: 'commerce_not_found' });
 }
 
-/**
- * The catalog as navigation: product and category names, memberships and the
- * projection's progress. Each row's evidence (attributes, variants, field
- * sources) stays on the stored row. Products are bounded by configuration
- * (first by name) with the full count beside them; category counts always
- * cover every product. The reads are independent and run together.
- */
 export async function catalog(db: Database, scope: CommerceScope) {
-  // Archived products are out of the catalog; their history stays on their pages.
   const ownedProducts = db
     .selectFrom('commerce_products')
     .where('workspace_id', '=', scope.workspaceId)
     .where('project_id', '=', scope.projectId)
     .where('lifecycle_state', '=', 'active');
-  // The listed products, first by name; memberships are read for these only.
   const listed = ownedProducts
     .orderBy('name')
     .orderBy('canonical_url')
@@ -46,8 +38,6 @@ export async function catalog(db: Database, scope: CommerceScope) {
   const [products, total, categories, memberships, categoryCounts, projection] = await Promise.all([
     listed.select(['id', 'canonical_url', 'name', 'brand']).execute(),
     ownedProducts.select(db.fn.countAll<string>().as('count')).executeTakeFirstOrThrow(),
-    // A row named "Uncategorized" (the platform default) is no category: its
-    // products read as uncategorized.
     db
       .selectFrom('commerce_categories')
       .select(['id', 'name', 'parent_category_id'])
@@ -59,7 +49,6 @@ export async function catalog(db: Database, scope: CommerceScope) {
       .select(['product_id', 'category_id'])
       .where('product_id', 'in', listed.select('id'))
       .execute(),
-    // Category counts cover every active product, listed or not.
     ownedMemberships
       .select((eb) => ['category_id', eb.fn.countAll<string>().as('count')])
       .where('product_id', 'in', ownedProducts.select('id'))
@@ -85,7 +74,6 @@ export async function catalog(db: Database, scope: CommerceScope) {
     categories: categories
       .map(({ parent_category_id: parent, ...row }) => ({
         ...row,
-        // A parent the list does not show leaves its child at the top.
         parent_id: parent && shown.has(parent) ? parent : null,
         product_count: counts.get(row.id) ?? 0,
       }))
@@ -101,12 +89,6 @@ export async function catalog(db: Database, scope: CommerceScope) {
 
 const PROJECTION_TASK = 'commerce_catalog_projection';
 
-/**
- * Projection progress for the catalog header: live tasks, and the failures of
- * the latest projected crawl only, so one old failure is not reported forever.
- * Served alone too, so a screen waiting on projections polls this, not the
- * catalog.
- */
 export async function catalogProjection(db: Database, scope: CommerceScope) {
   const terminal = [...policy.task_queue.terminal];
   const tasks = db
@@ -240,9 +222,8 @@ export async function buyerPrompts(db: Database, scope: CommerceScope, id?: stri
   );
 }
 
-const SETTLED_ACTION_STATUSES = ['done', 'dismissed'];
+const SETTLED_ACTION_STATUSES = persistedStatuses(['done', 'dismissed']);
 
-/** Live commerce Opportunities keyed to the target, by the Action that holds them. */
 export async function targetActions(
   db: Database,
   scope: CommerceScope,
@@ -258,14 +239,11 @@ export async function targetActions(
     .where('o.opportunity_type', '=', 'commerce')
     .where('o.target_key', '=', `${target.kind}:${target.id}`)
     .where('o.superseded_at', 'is', null)
-    // The status readers see: `done` exists only there, never as a stored decision.
     .where('a.effective_status', 'not in', SETTLED_ACTION_STATUSES)
     .orderBy('o.priority_score', 'desc')
     .orderBy('a.id')
     .execute();
-  // An Action holding several of the target's Opportunities is listed once,
-  // under its highest-priority title.
   const byAction = new Map<string, (typeof rows)[number]>();
   for (const row of rows) if (!byAction.has(row.id)) byAction.set(row.id, row);
-  return [...byAction.values()];
+  return [...byAction.values()].map((row) => ({ ...row, status: statusView(row.status).status }));
 }

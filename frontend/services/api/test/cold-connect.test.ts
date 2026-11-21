@@ -1,4 +1,3 @@
-/** Post-connect exercises native successor admission and persisted projections. */
 import { afterAll, expect, it } from 'vitest';
 import { sql } from 'kysely';
 import { enqueuePostSyncProjections } from '../src/integrations/projections.ts';
@@ -16,10 +15,8 @@ afterAll(async () => {
 });
 
 it('refreshes AI Referrals after classification, not also before it, for referral runs', async () => {
-  // One GA4 connection per workspace: each run gets its own tenant.
   const extrasOnly = await importSeed(db, await tenant(db, fixtures), 'ga4_channel_daily');
   const referral = await importSeed(db, await tenant(db, fixtures), 'ga4_source_medium_daily');
-  // The referral run also carries an extras dataset.
   await metric(db, referral, {
     dataset: 'ga4_channel_daily',
     values: ['Organic Search', '20260728'],
@@ -75,7 +72,6 @@ it('shares one queued Traffic refresh per window and queues a successor once it 
           ])
           .where('id', '=', seed.syncRunId)
           .executeTakeFirstOrThrow();
-        // A failed run always refreshes, whatever it imported.
         await enqueuePostSyncProjections(trx, run, true);
       }
     });
@@ -158,7 +154,6 @@ it('takes a first connect through both workers to analysis_ready without provide
     .select(sql<boolean>`available_at > now()`.as('deferred'))
     .where('workspace_id', '=', t.workspaceId)
     .execute();
-  // Insight refresh is coalesced and debounced independently of readiness.
   expect(tasks.filter((row) => row.task_kind === 'ai_traffic_insights_refresh')).toEqual([
     {
       task_kind: 'ai_traffic_insights_refresh',
@@ -190,7 +185,6 @@ it('takes a first connect through both workers to analysis_ready without provide
   expect(
     next.body.items.some((row) => queries.body.items.some((first) => first.id === row.id)),
   ).toBe(false);
-  // The TS worker drains the readiness chain, Opportunity refresh included.
   expect(await readProjectReadiness(db, t)).toMatchObject({
     stage: 'analysis_ready',
     connection_count: 2,

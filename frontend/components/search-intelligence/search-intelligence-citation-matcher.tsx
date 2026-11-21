@@ -2,18 +2,15 @@ import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 
 import { Button } from '@/components/ui/button';
-import { MutationNotice } from '@/components/ui/mutation-notice';
 import { mutationNoticeForError } from '@/lib/api/mutation-notice';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Inline, Stack } from '@/components/ui/layout';
 import { ledgerClasses, ledgerItemClasses } from '@/components/ui/workspace';
-import { QueryState } from '@/components/ui/query-state';
 import { Select } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/components/ui/toast';
 import { useDisplayTimeZone } from '@/lib/display-timezone';
 import { formatDisplayTimestamp, pluralCount } from '@/lib/format';
-import { ReadError, readErrorProps } from '@/components/ui/read-error';
 import { runsQueries } from '@/lib/api/runs';
 import {
   searchIntelligenceMutations,
@@ -21,6 +18,8 @@ import {
 } from '@/lib/api/search-intelligence';
 import { useProjectScope } from '@/lib/project/active-project-scope';
 import { referringLists } from './search-intelligence-format';
+import { Notice, readErrorProps } from '@/components/ui/notice';
+import { StateBlock } from '@/components/ui/state-block';
 
 export function SearchIntelligenceCitationMatcher({
   datasets,
@@ -28,9 +27,7 @@ export function SearchIntelligenceCitationMatcher({
   onDerived,
 }: Readonly<{
   datasets: SearchIntelligenceDataset[];
-  /** The website the Backlinks tab shows; its list is the one matched first. */
   targetOrigin?: string;
-  /** The matches are saved and the readiness is refreshed. */
   onDerived: () => void;
 }>) {
   const { workspaceId, projectId } = useProjectScope();
@@ -38,10 +35,8 @@ export function SearchIntelligenceCitationMatcher({
   const timeZone = useDisplayTimeZone();
   const { notify } = useToast();
   const [selectedAudits, setSelectedAudits] = useState<string[]>([]);
-  // The reader picks which website's list to match, starting from the one on screen.
   const lists = referringLists(datasets);
   const [listId, setListId] = useState('');
-  // Never another site's list unless the reader picks it by name.
   const referring =
     lists.find((dataset) => dataset.id === listId) ??
     lists.find((dataset) => dataset.target_origin === targetOrigin);
@@ -70,14 +65,18 @@ export function SearchIntelligenceCitationMatcher({
   if (!referring) return null;
   if (audits.isError)
     return (
-      <ReadError {...readErrorProps(audits)} fallback="Visibility audits could not be loaded." />
+      <Notice
+        kind="read"
+        {...readErrorProps(audits)}
+        fallback="Visibility audits could not be loaded."
+        title="Visibility audits could not be loaded"
+      />
     );
-  if (audits.isPending) return <Skeleton variant="block" />;
-  // Only an audit with answers can have cited sources.
+  if (audits.isPending) return <Skeleton variant="list" />;
   const answered = audits.data.filter((audit) => audit.completed_count > 0);
   if (!answered.length)
     return (
-      <QueryState
+      <StateBlock
         kind="empty"
         inline
         message="No Visibility audit has answers yet. Run one in Visibility, then match its citations here."
@@ -88,15 +87,10 @@ export function SearchIntelligenceCitationMatcher({
       current.includes(auditId) ? current.filter((id) => id !== auditId) : [...current, auditId],
     );
   return (
-    // The drawer is the surface and its title the heading; a Card here would
-    // nest one object inside another.
     <Stack gap="compact">
-      <p className="type-body">
-        Choose the Visibility audits whose cited sources to compare with the domains that link to
-        you.
-      </p>
       {derive.isError ? (
-        <MutationNotice
+        <Notice
+          kind="mutation"
           notice={mutationNoticeForError(derive.error, { action: 'compare the cited sources' })}
         />
       ) : null}
@@ -114,14 +108,14 @@ export function SearchIntelligenceCitationMatcher({
             as="label"
             key={audit.id}
             gap="compact"
-            className={ledgerItemClasses('type-body justify-between')}
+            className={ledgerItemClasses('type-body text-ink-2 justify-between')}
           >
             <Checkbox
               checked={selectedAudits.includes(audit.id)}
               onCheckedChange={() => toggle(audit.id)}
               label={formatDisplayTimestamp(audit.created_at, timeZone)}
             />
-            <span className="text-ink-muted">{pluralCount(audit.completed_count, 'answer')}</span>
+            <span className="text-ink-2">{pluralCount(audit.completed_count, 'answer')}</span>
           </Inline>
         ))}
       </div>

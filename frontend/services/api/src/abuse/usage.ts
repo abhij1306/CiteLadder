@@ -23,7 +23,6 @@ import {
 } from '../config/settings.ts';
 import { getLogger } from '../logging.ts';
 
-/** The `Retry-After` a request refused for too many active jobs carries. */
 export function activeJobRetrySeconds(source: SettingSource = process.env): number {
   return resolveSpec(
     'active_job_retry_after_seconds',
@@ -32,7 +31,6 @@ export function activeJobRetrySeconds(source: SettingSource = process.env): numb
   ) as number;
 }
 
-/** A resolved budget: who it counts, its persisted operation, its limit and its window. */
 export type Budget = {
   subject: BudgetSubject;
   operation: string;
@@ -40,17 +38,12 @@ export type Budget = {
   windowSeconds: number;
 };
 
-/** Budgets whose limit and window are fixed policy numbers, with no overridable setting. */
 type FixedBudgetName = {
   [K in BudgetName]: (typeof budgets)[K] extends { limit: number; windowSeconds: number }
     ? K
     : never;
 }[BudgetName];
 
-/**
- * A named budget from `config/abuse.ts`. Overridable limits resolve from
- * `settings`: the startup settings wherever a config is in reach.
- */
 export function budget(name: FixedBudgetName): Budget;
 export function budget(name: BudgetName, settings: SettingSource): Budget;
 export function budget(name: BudgetName, settings?: SettingSource): Budget {
@@ -68,21 +61,26 @@ export function budget(name: BudgetName, settings?: SettingSource): Budget {
   };
 }
 
-/** Spend `amount` units of `budget` for `subject`, or throw 429 with `Retry-After`. */
+export type BudgetState = { remaining: number; resetSeconds: number };
+
 export async function spendBudget(
+  db: Database,
+  budgetToSpend: Budget,
+  subject: string,
+  options: { amount?: number; at?: Date } = {},
+): Promise<void> {
+  await spendBudgetState(db, budgetToSpend, subject, options);
+}
+
+export async function spendBudgetState(
   db: Database,
   { subject: kind, ...limit }: Budget,
   subject: string,
   { amount = 1, at = new Date() }: { amount?: number; at?: Date } = {},
-): Promise<void> {
+): Promise<BudgetState> {
   return enforceSubjectRequest(db, kind, subject, { ...limit, amount }, at);
 }
 
-/**
- * Count `amount` units for `subject` without refusing: a threshold budget,
- * read by `budgetReached`, that changes how a request is handled rather than
- * whether it is admitted.
- */
 export async function countUse(
   db: Database,
   { subject: kind, operation, windowSeconds }: Budget,
@@ -92,7 +90,6 @@ export async function countUse(
   await addToWindow(db, kind, subject, { operation, windowSeconds, amount }, at);
 }
 
-/** Whether `subject` has used all of `budget` in the current window. */
 export async function budgetReached(
   db: Database,
   { subject: kind, operation, limit, windowSeconds }: Budget,
@@ -110,7 +107,6 @@ export async function budgetReached(
   return (row?.count ?? 0) >= limit;
 }
 
-/** Forget every window of one subject's named budget (a proven owner resets their failures). */
 export async function releaseBudget(
   db: Database,
   name: BudgetName,
@@ -125,7 +121,6 @@ export async function releaseBudget(
     .execute();
 }
 
-/** Subjects are case-folded and hashed; no raw address or identifier is stored. */
 function subjectHash(subjectValue: string): string {
   return createHash('sha256').update(subjectValue.trim().toLowerCase()).digest('hex');
 }
@@ -139,9 +134,13 @@ function windowOf(windowSeconds: number, now: Date) {
   };
 }
 
+function secondsUntil(expires: Date, now: Date): number {
+  return Math.max(1, Math.ceil((expires.getTime() - now.getTime()) / 1000));
+}
+
 function throttled(subjectKind: BudgetSubject, operation: string, expires: Date, now: Date) {
   getLogger('api.abuse').info('request.throttled', { operation, subject_kind: subjectKind });
-  const retryAfter = Math.max(1, Math.ceil((expires.getTime() - now.getTime()) / 1000));
+  const retryAfter = secondsUntil(expires, now);
   return new ApiError(
     429,
     subjectKind === 'workspace' ? 'Workspace usage limit exceeded' : 'Too many requests',
@@ -156,26 +155,23 @@ async function enforceSubjectRequest(
   subjectValue: string,
   { operation, limit, windowSeconds, amount }: Omit<Budget, 'subject'> & { amount: number },
   now: Date,
-): Promise<void> {
+): Promise<BudgetState> {
   if (![limit, windowSeconds, amount].every((value) => Number.isInteger(value) && value > 0)) {
     throw new Error('Usage limit, window and amount must be positive integers');
   }
   const { expires } = windowOf(windowSeconds, now);
   if (amount > limit) throw throttled(subjectKind, operation, expires, now);
-  const admitted = await addToWindow(
+  const count = await addToWindow(
     db,
     subjectKind,
     subjectValue,
     { operation, windowSeconds, amount, limit },
     now,
   );
-  if (!admitted) throw throttled(subjectKind, operation, expires, now);
+  if (count === null) throw throttled(subjectKind, operation, expires, now);
+  return { remaining: limit - count, resetSeconds: secondsUntil(expires, now) };
 }
 
-/**
- * Add `amount` to the subject's current window in one atomic upsert. With a
- * `limit`, an addition that would pass it changes nothing and returns false.
- */
 async function addToWindow(
   db: Database,
   subjectKind: BudgetSubject,
@@ -187,7 +183,7 @@ async function addToWindow(
     limit,
   }: Pick<Budget, 'operation' | 'windowSeconds'> & { amount: number; limit?: number },
   now: Date,
-): Promise<boolean> {
+): Promise<number | null> {
   const { started, expires } = windowOf(windowSeconds, now);
   const added = await db
     .insertInto('usage_windows')
@@ -212,10 +208,9 @@ async function addToWindow(
     })
     .returning('count')
     .executeTakeFirst();
-  return added !== undefined;
+  return added === undefined ? null : added.count;
 }
 
-/** Delete a bounded batch of security events older than the retention cutoff. */
 export async function pruneSecurityEvents(
   db: Database,
   now: Date,
@@ -247,7 +242,6 @@ export async function pruneSecurityEvents(
   });
 }
 
-/** Delete a bounded batch of expired windows; live windows are never touched. */
 export async function pruneUsageWindows(
   db: Database,
   now: Date,

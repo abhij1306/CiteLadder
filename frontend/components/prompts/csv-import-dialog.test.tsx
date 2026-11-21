@@ -48,7 +48,6 @@ describe('CsvImportDialog file flow', () => {
     const user = userEvent.setup();
     renderDialog();
 
-    // "topic,prompt\nCafés,Best café near me?" with é as the Windows-1252 byte 0xE9.
     const bytes = new Uint8Array([
       ...new TextEncoder().encode('topic,prompt\nCaf'),
       0xe9,

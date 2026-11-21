@@ -131,9 +131,6 @@ export class AuditScheduler {
         }
         const failures = schedule.failure_count + 1;
         const enabled = failures < this.settings.max_consecutive_failures;
-        // `next_run_at` keeps anchoring the cadence: the same occurrence retries
-        // after an ownerless lease, and success advances from the original anchor.
-        // A schedule paused by failures holds no lease, so Resume plans at once.
         await trx
           .updateTable('audit_schedules')
           .set({
@@ -157,7 +154,6 @@ export class AuditScheduler {
       }
     });
   }
-  /** How long a retryable refusal asks to wait: its `Retry-After`, else the failure delay. */
   private retrySeconds(error: ApiError) {
     return retryAfterSeconds(error.headers?.['retry-after']) ?? this.settings.failure_retry_seconds;
   }
@@ -171,7 +167,6 @@ export class AuditScheduler {
   private async planUntilBudget(at: Date, canAdmit: () => boolean) {
     let created = 0;
     for (let count = 0; count < this.settings.claim_batch_size && canAdmit(); count++) {
-      // Claim one occurrence so stopping does not strand a preclaimed batch.
       const [claim] = await this.claimDue(at, 1); // NOSONAR -- Lease one occurrence before checking the next admission.
       if (!claim) break;
       if (await this.planClaim(claim, this.now())) created++; // NOSONAR -- Finish the leased occurrence before claiming another.

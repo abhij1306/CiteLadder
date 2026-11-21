@@ -1,4 +1,3 @@
-/** Agent context orchestrates existing persisted owners, never acquisition. */
 import { agentContextRefsSchema } from '@citeladder/contracts/agent';
 import { policy } from '../config.ts';
 import { plainJson, record } from '../db/json.ts';
@@ -85,12 +84,6 @@ async function resolveIssueGroup(db: OriginDb, scope: OriginScope, refs: OriginR
     },
   };
 }
-/**
- * The topic and prompts a page chat optimizes for (Analyze a page): the
- * topic's name and the chosen prompts it still holds. A topic since deleted
- * reads as null and a prompt since archived or moved is counted apart, never
- * dropped silently.
- */
 async function resolvePrompts(db: OriginDb, scope: OriginScope, refs: OriginRefs) {
   const ref = refs.prompt_reference;
   if (!ref) return null;
@@ -102,6 +95,10 @@ async function resolvePrompts(db: OriginDb, scope: OriginScope, refs: OriginRefs
     prompts: prompts.map((prompt) => prompt.text),
     unavailable_prompt_count: chosen.size - prompts.length,
   };
+}
+async function resolveObjection(db: OriginDb, scope: OriginScope, refs: OriginRefs) {
+  if (refs.objection_group_id) throw new AgentError('agent_context_unavailable');
+  return null;
 }
 async function resolveOrigins(
   db: Parameters<ContextReader>[0],
@@ -172,6 +169,7 @@ async function resolveOrigins(
   if (refs.page_snapshot_reference && !fetchedPage)
     throw new AgentError('agent_context_unavailable');
   const targetPrompts = await resolvePrompts(db, scope, refs);
+  const objection = await resolveObjection(db, scope, refs);
   const targetUrl =
     target?.normalized_url ||
     refs.target_url?.trim() ||
@@ -195,6 +193,7 @@ async function resolveOrigins(
     upstream,
     fetchedPage,
     targetPrompts,
+    objection,
   };
 }
 
@@ -214,6 +213,7 @@ export const readAgentContext: ContextReader = async (db, scope, raw, request) =
       upstream,
       fetchedPage,
       targetPrompts,
+      objection,
     } = await resolveOrigins(db, scope, refs, request);
     const query = [request, opportunity?.target_theme, demand?.signal.topic_cluster]
       .filter(Boolean)
@@ -272,6 +272,7 @@ export const readAgentContext: ContextReader = async (db, scope, raw, request) =
         site_facts: siteFacts,
         fetched_page: fetchedPage,
         target_prompts: targetPrompts,
+        objection,
       }).filter(([, value]) => value != null),
     );
     return {

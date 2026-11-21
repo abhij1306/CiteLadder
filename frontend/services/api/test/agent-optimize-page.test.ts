@@ -1,10 +1,3 @@
-/**
- * The Agent's optimize-page workflow through the served chat route (content
- * optimization phase 2, PR 1): a page chat starts only on one of the latest
- * crawl's content pages, commits its page fetch and no turn, and the fetch
- * queues the chat's one first turn. The site is recorded; nothing reaches the
- * network or a model.
- */
 import { randomUUID } from 'node:crypto';
 
 import { afterAll, describe, expect, it, vi } from 'vitest';
@@ -37,7 +30,6 @@ const PAGE = 'https://example.test/crm-pricing';
 const ARTICLE =
   '<html><head><title>CRM pricing compared</title></head><body><main><h1>CRM pricing</h1><p>Plans and prices.</p></main></body></html>';
 
-/** A signed-in owner of a crawled project whose one content page is PAGE. */
 async function setup() {
   const seed = await fixtures.crawl();
   workspaces.push(seed.workspaceId);
@@ -103,7 +95,6 @@ describe('optimize-page chats', () => {
     expect(accepted.status).toBe(202);
     const created = agentChatCreatedSchema.parse(await accepted.json());
     expect(created.run).toBeNull();
-    // The www twin resolves to the crawl's own page.
     expect((await fetchTasks(seed.workspaceId)).map(({ payload }) => payload)).toMatchObject([
       { chat_id: created.chat_id, url: PAGE, workflow_id: 'optimize_page' },
     ]);

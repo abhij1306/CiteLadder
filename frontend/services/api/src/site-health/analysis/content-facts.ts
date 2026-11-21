@@ -1,4 +1,3 @@
-/** Bounded content and citability facts spoken by the primary content, not page chrome. */
 import {
   ancestors,
   attribute,
@@ -23,7 +22,6 @@ import {
 } from './regions.ts';
 
 const facts = analysisPolicy.facts;
-// Table bounds are the source-page differentiation policy, shared by design.
 const tableBounds = policy.content_differentiation;
 const HEADINGS = new Set(['h1', 'h2', 'h3', 'h4', 'h5', 'h6']);
 // A capitalized name of up to six words, then a provider verb. Every
@@ -62,6 +60,7 @@ export function emptyContentFacts() {
     },
     primary_heading_outline: [] as { level: number; text: string }[],
     primary_table_headers: [] as string[][],
+    primary_paragraph_word_counts: [] as number[],
     question_answer_relationships: [] as ReturnType<typeof questionAnswerRelationships>,
   };
 }
@@ -132,6 +131,19 @@ function substantiveProposition(scope: Owned) {
   return '';
 }
 
+function paragraphWordCounts(scope: Owned) {
+  const counts: number[] = [];
+  let scanned = 0;
+  for (const paragraph of elements(scope.region, 'p')) {
+    if (++scanned > regionPolicy.max_containers_scanned) break;
+    if (!owned(paragraph, scope) || isMetadataOrCta(paragraph)) continue;
+    const count = words(squash(textContent(paragraph))).length;
+    if (count) counts.push(count);
+    if (counts.length >= limits.paragraphs_kept) break;
+  }
+  return counts;
+}
+
 function providerIdentity(proposition: string) {
   for (const sentence of proposition.trim().split(/(?<=[.!?])\s+/u)) {
     const provider = PROVIDER.exec(sentence)?.groups?.provider?.trim();
@@ -157,7 +169,6 @@ function isCtaAnchor(node: HtmlElement) {
   return Boolean(classes) && classes.split(/[\s_-]+/u).some((token) => CTA_TOKENS.has(token));
 }
 
-/** The path a call to action leads to; `mailto:`/`tel:` keep only their scheme. */
 function actionPath(href: string) {
   const scheme = /^([a-z][a-z0-9+.-]*):/iu.exec(href)?.[1]?.toLowerCase();
   if (scheme === 'mailto' || scheme === 'tel') return `${scheme}:`;
@@ -202,7 +213,6 @@ function entityProposition(scope: Owned, proposition: string) {
   };
 }
 
-/** A prose article/rich-text body outside repeated items, independent of its URL or schema. */
 function authoredContent(scope: Owned) {
   for (const node of scannedElements(scope.region)) {
     if ((node.tagName !== 'article' && !hasRichTextToken(node)) || !owned(node, scope)) continue;
@@ -212,7 +222,6 @@ function authoredContent(scope: Owned) {
   return false;
 }
 
-/** Facts read from the primary region outside recommendation and non-prose card lists. */
 export function contentFacts(page: PageScope) {
   const scope: Owned = {
     region: page.region,
@@ -232,11 +241,11 @@ export function contentFacts(page: PageScope) {
     entity_proposition: entityProposition(scope, proposition),
     primary_heading_outline: headingOutline(scope),
     primary_table_headers: tableHeaders(scope),
+    primary_paragraph_word_counts: paragraphWordCounts(scope),
     question_answer_relationships: questionAnswerRelationships(scope),
   };
 }
 
-/** Unique, whitespace-collapsed, case-insensitively deduplicated values. */
 function appendUnique(values: string[], seen: Set<string>, value: string, max: number) {
   const cleaned = squash(value).slice(0, max);
   const key = cleaned.toLowerCase();
@@ -291,7 +300,6 @@ export function formFields(root: HtmlNode) {
   return fields;
 }
 
-/** The longest visible primary-content ordered list outside repeated card grids. */
 export function orderedListSteps(page: PageScope) {
   let longest = 0;
   for (const list of elements(page.region, 'ol')) {

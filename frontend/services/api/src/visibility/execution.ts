@@ -1,13 +1,9 @@
-/**
- * One execution's persisted analysis and citation evidence.
- *
- * Shared API/MCP reader. Keyed on the execution (`AuditTask`) id clients
- * receive from the executions list; provenance comes from the frozen task
- * and audit snapshots, never from live configuration.
- */
 import { sql } from 'kysely';
 
+import { brandPosition, competitorPosition } from '../analysis/position.ts';
 import { executionFrozenProvenance } from '../analysis/provenance.ts';
+import { storedFirstNamed } from '../analysis/win-rate.ts';
+import { storedAnswerFormats } from '../analysis/answer-formats.ts';
 import {
   citationClassificationSchema,
   executionEvidenceSchema,
@@ -18,11 +14,13 @@ import type { Database } from '../db/database.ts';
 import { record } from '../db/json.ts';
 import { wireUtc, utcText } from '../db/timestamps.ts';
 import { scalarText } from '../text-order.ts';
+import { brandIdentities, markFirstNamed, type BrandIdentity } from './brand-identities.ts';
 import { AnalysisNotFoundError } from './selection.ts';
 import { executionSurfaceEvidence } from './surface.ts';
 import { executionClaims } from './accuracy.ts';
 import { executionPerception } from './perception.ts';
 import { executionAds } from './ads.ts';
+import { searchOf } from './prompt-answers.ts';
 
 export type ExecutionEvidenceResponse = z.input<typeof executionEvidenceSchema>;
 
@@ -32,13 +30,46 @@ function scoreObject(score: unknown): Record<string, unknown> | null {
   throw new TypeError('stored score is not an object');
 }
 
-/** Stored competitor mentions are names, not arbitrary iterable values. */
 function competitorsMentioned(score: Record<string, unknown> | null): string[] {
   const names = score?.competitors_mentioned;
   if (names === null || names === undefined) return [];
   if (!Array.isArray(names) || !names.every((name) => typeof name === 'string'))
     throw new TypeError('stored competitors_mentioned is not a list of names');
   return names;
+}
+
+type Named = ExecutionEvidenceResponse['named'][number];
+
+const offsetOf = (value: unknown) => (typeof value === 'number' ? value : null);
+
+function namedBusinesses(
+  score: Record<string, unknown> | null,
+  brand: { mentioned: boolean; name: string; offset: number | null },
+): Named[] {
+  const offsets = record(score?.competitor_first_offsets);
+  const named: Named[] = [
+    ...(brand.mentioned
+      ? [
+          {
+            name: brand.name,
+            kind: 'brand' as const,
+            offset: brand.offset,
+            position: brandPosition(brand.offset, offsets),
+          },
+        ]
+      : []),
+    ...competitorsMentioned(score).map((name) => ({
+      name,
+      kind: 'competitor' as const,
+      offset: Object.hasOwn(offsets, name) ? offsetOf(offsets[name]) : null,
+      position: competitorPosition(score ?? {}, name),
+    })),
+  ];
+  const rank = (entry: Named) => entry.position ?? Number.POSITIVE_INFINITY;
+  return named
+    .map((entry, index) => ({ entry, index }))
+    .sort((a, b) => rank(a.entry) - rank(b.entry) || a.index - b.index)
+    .map(({ entry }) => entry);
 }
 
 export async function getExecutionEvidence(
@@ -83,12 +114,22 @@ export async function getExecutionEvidence(
     .executeTakeFirst();
   const audit = await db
     .selectFrom('audits')
-    .select('configuration')
+    .select(['configuration', 'project_id'])
     .where('id', '=', analysis.audit_id)
     .where('workspace_id', '=', input.workspaceId)
     .executeTakeFirst();
   const score = scoreObject(analysis.score);
-  const [search_surface, perception, claims, ads] = await Promise.all([
+  const identities = audit
+    ? await brandIdentities(db, { workspaceId: input.workspaceId, projectId: audit.project_id })
+    : new Map<string, BrandIdentity>();
+  const [brandMention, search_surface, perception, claims, ads] = await Promise.all([
+    db
+      .selectFrom('brand_mentions')
+      .select('brand_name')
+      .where('analysis_id', '=', analysis.id)
+      .where('workspace_id', '=', input.workspaceId)
+      .limit(1)
+      .executeTakeFirst(),
     executionSurfaceEvidence(db, {
       workspaceId: input.workspaceId,
       taskId: input.taskId,
@@ -143,8 +184,16 @@ export async function getExecutionEvidence(
     unintended_domain_cited: analysis.unintended_domain_cited,
     citation_count: analysis.citation_count,
     search_used: analysis.search_used,
+    search: searchOf(analysis),
     search_query_count: analysis.search_query_count,
     avg_position: analysis.avg_position,
+    first_named: markFirstNamed(storedFirstNamed(analysis), identities),
+    named: namedBusinesses(score, {
+      mentioned: analysis.brand_mentioned,
+      name: brandMention?.brand_name ?? '',
+      offset: analysis.brand_first_offset,
+    }),
+    answer_formats: storedAnswerFormats(analysis),
     score,
     citations: citations.map((citation) => ({
       ...citation,

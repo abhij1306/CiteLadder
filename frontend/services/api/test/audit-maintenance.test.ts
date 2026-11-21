@@ -153,7 +153,6 @@ describe('audit recovery against PostgreSQL', () => {
         parents.push(auditId);
       });
     const reclaimed = await Promise.all([maintenance.runOnce(at), maintenance.runOnce(at)]);
-    // Concurrent SKIP LOCKED passes may defer a sibling task while its audit is locked.
     reclaimed.push(await maintenance.runOnce(at));
     expect(reclaimed.reduce((a, b) => a + b, 0)).toBe(3);
     const tasks = await db
@@ -164,11 +163,13 @@ describe('audit recovery against PostgreSQL', () => {
     expect(tasks.find((row) => row.id === t.tasks[0]!.id)).toMatchObject({
       status: 'retry_wait',
       attempt_count: 1,
+      provider_poll_count: 0,
       lease_owner: null,
     });
     expect(tasks.find((row) => row.id === t.tasks[1]!.id)).toMatchObject({
       status: 'submission_uncertain',
       attempt_count: 3,
+      provider_poll_count: 1,
     });
     expect(tasks.find((row) => row.id === t.tasks[2]!.id)).toMatchObject({ status: 'failed' });
     expect(parents).toContain(t.auditId);

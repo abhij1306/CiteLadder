@@ -1,18 +1,13 @@
-/**
- * Deterministic checks on the model's output. Only what the answer verifiably
- * says survives: a quote must be found in that entity's own passages, an
- * unknown entity is dropped, and every drop is counted by reason.
- */
 import { factTopicSchema, type FactTopic } from '@citeladder/contracts/fact-checking';
 
 import type { FactCheckPolicy, PerceptionPolicy } from '../config/perception.ts';
+import { idsByName, nameKey } from '../projects/themes.ts';
 import type { ExtractedClaim, Label, PerceptionOutput } from './model.ts';
 import type { PerceptionPackage, Span } from './passages.ts';
 
 export type VerifiedAspect = {
-  theme: string;
+  theme_id: string | null;
   polarity: 'positive' | 'negative';
-  /** The answer's own text at `start`..`end` (code points). */
   quote: string;
   start: number;
   end: number;
@@ -23,10 +18,8 @@ export type EntitySentiment = {
   entity_name: string;
   entity_kind: 'brand' | 'competitor';
   label: Label;
-  /** Null when the model returned nothing for an entity it was sent. */
   confidence: number | null;
   low_confidence: boolean;
-  /** The model was sent this entity and left it out: no judgement, not `not_assessable`. */
   model_omitted: boolean;
   passage_spans: Span[];
   aspects: VerifiedAspect[];
@@ -45,7 +38,6 @@ export type DropReason =
   | 'claim_duplicate'
   | 'claim_limit';
 
-/** `text` with whitespace runs collapsed to one space, and each kept char's source index. */
 function collapsed(text: string) {
   let out = '';
   const source: number[] = [];
@@ -60,7 +52,6 @@ function collapsed(text: string) {
   return { out, source };
 }
 
-/** The code-point offsets of `quote` inside one of `spans`, after whitespace normalisation. */
 export function locateQuote(quote: string, spans: readonly Span[]) {
   const wanted = quote.replaceAll(/\s+/gu, ' ').trim();
   if (!wanted) return null;
@@ -77,11 +68,10 @@ export function locateQuote(quote: string, spans: readonly Span[]) {
   return null;
 }
 
-/** The aspects whose quotes are found in the entity's passages, themes mapped to the list. */
 function verifiedAspects(
   aspects: PerceptionOutput['entities'][number]['aspects'],
   spans: readonly Span[],
-  themes: ReadonlySet<string>,
+  themes: { ids: ReadonlyMap<string, string>; fallback: string },
   drop: (reason: DropReason) => void,
 ): VerifiedAspect[] {
   return aspects.flatMap((aspect) => {
@@ -90,10 +80,17 @@ function verifiedAspects(
       drop('quote_not_found');
       return [];
     }
-    const theme = themes.has(aspect.theme) ? aspect.theme : 'other';
-    if (theme !== aspect.theme) drop('theme_other');
+    const key = nameKey(aspect.theme);
+    const themeId = themes.ids.get(key) ?? null;
+    if (themeId === null && key !== themes.fallback) drop('theme_other');
     return [
-      { theme, polarity: aspect.polarity, quote: found.text, start: found.start, end: found.end },
+      {
+        theme_id: themeId,
+        polarity: aspect.polarity,
+        quote: found.text,
+        start: found.start,
+        end: found.end,
+      },
     ];
   });
 }
@@ -101,14 +98,17 @@ function verifiedAspects(
 export function validateOutput(
   pkg: PerceptionPackage,
   output: PerceptionOutput,
-  policy: Pick<PerceptionPolicy, 'min_confidence' | 'max_aspects_per_entity' | 'themes'>,
+  policy: Pick<PerceptionPolicy, 'min_confidence' | 'max_aspects_per_entity' | 'project_themes'>,
 ) {
   const drops: Partial<Record<DropReason, number>> = {};
   const drop = (reason: DropReason, count = 1) => {
     if (count > 0) drops[reason] = (drops[reason] ?? 0) + count;
   };
   const sent = new Map(pkg.entities.map((entity) => [entity.entity_id, entity]));
-  const themes = new Set(policy.themes);
+  const themes = {
+    ids: idsByName(pkg.themes),
+    fallback: nameKey(policy.project_themes.fallback),
+  };
   const results = new Map<string, EntitySentiment>();
   for (const row of output.entities) {
     const entity = sent.get(row.entity_id);
@@ -139,8 +139,6 @@ export function validateOutput(
       aspects,
     });
   }
-  // Every entity sent gets a row, so coverage never silently shrinks; one the
-  // model left out is marked omitted, never read as its `not_assessable` judgement.
   const entities = pkg.entities.map((entity): EntitySentiment => {
     const result = results.get(entity.entity_id);
     if (result) return result;
@@ -160,12 +158,10 @@ export function validateOutput(
   return { entities, drops };
 }
 
-/** A brand claim whose quote was found in the brand's own passages. */
 export type VerifiedClaim = {
   ordinal: number;
   topic: FactTopic;
   claim: string;
-  /** The answer's own text at `start`..`end` (code points). */
   quote: string;
   start: number;
   end: number;
@@ -173,10 +169,6 @@ export type VerifiedClaim = {
   low_confidence: boolean;
 };
 
-/**
- * The brand's claims that survive: quoted from the brand's passages (never a
- * competitor's), on an allowed topic, one per quote, at most the cap.
- */
 export function validateClaims(
   pkg: PerceptionPackage,
   claims: readonly ExtractedClaim[],

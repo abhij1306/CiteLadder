@@ -11,7 +11,6 @@ import { strictValidate } from '@citeladder/contracts/validation';
 import { apiClient } from './client';
 import { queryKeys } from './query-keys';
 
-/** The active workspace's public API keys (Owner/Admin). */
 export const apiKeysApi = {
   list: async (workspaceId: string, signal?: AbortSignal) =>
     strictValidate(
@@ -41,10 +40,6 @@ export const apiKeyQueries = {
     }),
 };
 
-/**
- * The key list re-reads in the background: a created key's one-time secret is
- * shown, and a revocation's confirmation closes, as soon as the write lands.
- */
 const refreshApiKeys = (client: QueryClient) => {
   void client.invalidateQueries({ queryKey: queryKeys.apiKeys.all });
 };

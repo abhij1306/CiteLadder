@@ -1,10 +1,3 @@
-/**
- * AI Referrals: the persisted referral projection for one project.
- *
- * Shared reader for API and Agent tools. It serves a persisted snapshot or the
- * empty payload, never a recomputation, and reports the window it actually
- * resolved rather than the one requested.
- */
 import { aiReferralSourceRowSchema, aiReferralsSchema } from '@citeladder/contracts/ai-traffic';
 import { sql } from 'kysely';
 import { z } from 'zod';
@@ -20,7 +13,6 @@ import { firstOf } from '../lists.ts';
 const analytics = policy.analytics;
 const PRESET_DAYS: Readonly<Record<string, number>> = analytics.preset_range_days;
 
-/** An invalid granularity, range or window: the route answers 422. */
 export class AiReferralsQueryError extends Error {}
 
 export type AiReferralsResponse = z.infer<typeof aiReferralsSchema>;
@@ -29,7 +21,6 @@ const granularitySchema = aiReferralsSchema.shape.granularity;
 export type AiReferralsQuery = {
   workspaceId: string;
   projectId: string;
-  /** `YYYY-MM-DD`, as the date parameters parse. */
   fromDate: string | null;
   toDate: string | null;
   rangeToken: string | null;
@@ -64,7 +55,6 @@ function validateWindow(fromDate: string | null, toDate: string | null): void {
   }
 }
 
-/** Stored counts must be exact integers; missing is not observed zero. */
 const sessionCount = z
   .union([z.number(), z.string().trim().min(1)])
   .pipe(z.coerce.number<string | number>().int().nonnegative().max(Number.MAX_SAFE_INTEGER));
@@ -73,7 +63,6 @@ function laxShare(value: unknown): number | null {
   return firstOf(metricSeriesPoints([{ value }]), 'the series point built for one value').value;
 }
 
-/** `ai_referral_sources`: the stored per-source rows as served; a malformed value is a 500. */
 export function aiReferralSources(raw: unknown) {
   const rows: unknown[] = Array.isArray(raw) ? raw : [];
   return rows.filter(isObject).map((row) => ({
@@ -111,8 +100,6 @@ export async function readAiReferrals(
     .where('analyzer_version', '=', analytics.ai_referral_analyzer_version)
     .where('formula_version', '=', analytics.ai_referral_formula_version);
   if (query.rangeToken !== null) {
-    // The preset marker, not the window's length: a sync window can happen to
-    // be exactly 30 days long without being "Last 30 days".
     snapshots = snapshots
       .where('preset_window_days', '=', PRESET_DAYS[query.rangeToken]!)
       .orderBy('window_end', 'desc')
@@ -122,7 +109,9 @@ export async function readAiReferrals(
       .where('window_start', '=', sql<Date>`${query.fromDate}::date`)
       .where('window_end', '=', sql<Date>`${query.toDate}::date`);
   } else {
-    snapshots = snapshots.orderBy('window_end', 'desc').orderBy('window_start', 'desc');
+    // A sync writes its own window and the preset family on one end date; on a
+    // tie the longest window wins, never a one-day sync window.
+    snapshots = snapshots.orderBy('window_end', 'desc').orderBy('window_start', 'asc');
   }
   const snapshot = await snapshots.limit(1).executeTakeFirst();
   const versions = {
@@ -134,7 +123,6 @@ export async function readAiReferrals(
       snapshotId: null,
       response: aiReferralsSchema.parse({
         project_id: query.projectId,
-        // No snapshot resolved a window, whatever was requested.
         window_start: null,
         window_end: null,
         granularity: granularitySchema.parse(granularity),

@@ -39,7 +39,6 @@ function configureOAuth() {
   return fetch;
 }
 
-/** A workspace whose owner completed Google consent once, with a consent to repeat. */
 async function connectedGsc() {
   configureOAuth();
   const userId = await fixtures.user();
@@ -233,10 +232,16 @@ describe('integration OAuth state and persistence', () => {
       new URL(
         (await startOAuth(db, { userId, workspaceId, provider: 'gsc', returnTo })).url,
       ).searchParams.get('state')!;
-    expect(await stateReturnPath(await stateFor('/demand?connected=gsc&tab=all'))).toBe(
-      '/demand?tab=all',
-    );
-    for (const hostile of ['//evil.test', 'https://evil.test/demand', '/admin', 'demand'])
+    expect(
+      await stateReturnPath(await stateFor('/search-intelligence?connected=gsc&tab=demand')),
+    ).toBe('/search-intelligence?tab=demand');
+    for (const hostile of [
+      '//evil.test',
+      'https://evil.test/search-intelligence',
+      '/admin',
+      '/demand',
+      'search-intelligence',
+    ])
       expect(await stateReturnPath(await stateFor(hostile))).toBeNull();
     expect(await stateReturnPath('forged.state.value')).toBeNull();
   });

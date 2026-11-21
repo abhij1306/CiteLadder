@@ -1,4 +1,3 @@
-/** Published views of persisted Search Intelligence runs, datasets and rows. */
 import {
   searchDatasetSchema,
   type searchRowSchema,
@@ -20,7 +19,6 @@ type Dataset = Selectable<SearchIntelligenceDatasets>;
 type Row = Selectable<SearchIntelligenceRows>;
 
 const researchScope = searchDatasetSchema.shape.research_scope;
-// Datasets published before scope was recorded were exact-host research.
 const UNRECORDED_RESEARCH_SCOPE = 'exact_host';
 
 const iso = (value: Date | null): string | null => value?.toISOString() ?? null;
@@ -28,7 +26,6 @@ const iso = (value: Date | null): string | null => value?.toISOString() ?? null;
 export function runView(run: Run): z.input<typeof searchRunSchema> {
   return {
     id: run.id,
-    // The column is plain text; a value outside the published lifecycle is a defect, not a status.
     status: searchRunStatusSchema.parse(run.status),
     action: run.action,
     pricing_version: run.pricing_version,
@@ -58,7 +55,6 @@ export function datasetView(dataset: Dataset): z.input<typeof searchDatasetSchem
     'search_intelligence_datasets.provider_filters',
   );
   const summary = jsonObject(dataset.summary, 'search_intelligence_datasets.summary');
-  // A provider total beyond the integer column is kept in the summary.
   const oversizedTotal = typeof summary.provider_total === 'number' ? summary.provider_total : null;
   return {
     id: dataset.id,
@@ -86,7 +82,6 @@ export function datasetView(dataset: Dataset): z.input<typeof searchDatasetSchem
   };
 }
 
-/** A row's auxiliary metrics beside its typed columns; the typed columns win. */
 export function rowView(row: Row): z.input<typeof searchRowSchema> {
   const auxiliary = jsonObject(row.auxiliary, 'search_intelligence_rows.auxiliary');
   return {

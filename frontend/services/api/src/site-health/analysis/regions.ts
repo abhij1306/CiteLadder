@@ -1,9 +1,3 @@
-/**
- * Structural page regions: the primary content region, chrome landmarks and
- * repeated card lists. Nothing here decides what a page is; it reports what is
- * present and where, so later extractors read the page's own content rather
- * than its navigation, footer or recommendation carousels.
- */
 import {
   ancestors,
   attribute,
@@ -54,7 +48,6 @@ const isHidden = (node: HtmlElement) =>
 const isMainLandmark = (node: HtmlElement) =>
   node.tagName === 'main' || node.tagName === 'article' || role(node) === 'main';
 
-/** Whether a header belongs to the page's own main/article content. */
 function headerIsPageOwned(node: HtmlElement) {
   let depth = 0;
   for (const ancestor of ancestors(node)) {
@@ -73,7 +66,6 @@ function excludedSelf(node: HtmlElement) {
 }
 
 const excludedCache = new WeakMap<HtmlElement, boolean>();
-/** Whether the element or any ancestor is chrome, non-rendered or hidden. */
 function insideExcluded(node: HtmlElement): boolean {
   const cached = excludedCache.get(node);
   if (cached !== undefined) return cached;
@@ -83,7 +75,6 @@ function insideExcluded(node: HtmlElement): boolean {
   return result;
 }
 
-/** Whether the element is outside every region-excluded subtree; fails closed past the depth bound. */
 export function regionNodeIsVisible(node: HtmlElement): boolean {
   let current: HtmlElement | null = node;
   for (let depth = 0; depth < r.max_ancestor_depth; depth++) {
@@ -94,7 +85,6 @@ export function regionNodeIsVisible(node: HtmlElement): boolean {
   return current === null;
 }
 
-/** Whether an element is outside non-rendered or explicitly hidden subtrees. */
 export function nodeIsRendered(node: HtmlElement): boolean {
   let current: HtmlElement | null = node;
   for (let depth = 0; depth < r.max_ancestor_depth && current; depth++) {
@@ -104,7 +94,6 @@ export function nodeIsRendered(node: HtmlElement): boolean {
   return true;
 }
 
-/** Text nodes in `node` that the region contract considers visible. */
 export function* visibleTextNodes(node: HtmlNode): Generator<HtmlText> {
   for (const text of textNodes(node)) {
     const parent = parentElement(text);
@@ -122,7 +111,6 @@ export function outsideContainers(node: HtmlNode, containers: ReadonlySet<HtmlEl
   return true;
 }
 
-/** Visible text of `node`, skipping the given containers, bounded in size. */
 export function regionText(node: HtmlNode, excluded: ReadonlySet<HtmlElement> = new Set()) {
   const collected: string[] = [];
   let size = 0;
@@ -163,11 +151,6 @@ const rankAbove = (left: number[], right: number[]) => {
   return false;
 };
 
-/**
- * The strongest visible main/article candidate, else `<body>`. Invalid pages
- * often carry several `<main>` elements for drawers and overlays, so ties are
- * broken by page-content evidence rather than document order.
- */
 function primaryRegion(root: HtmlNode): PrimaryRegion {
   const eligible: { node: HtmlElement; source: string }[] = [];
   for (const node of elements(root)) {
@@ -190,7 +173,6 @@ function primaryRegion(root: HtmlNode): PrimaryRegion {
   return body ? { node: body, source: 'body_minus_chrome' } : { node: root, source: 'root' };
 }
 
-/** The landmark region an element sits in; chrome is identified by the DOM, not by repetition. */
 export function elementRegion(node: HtmlElement): string {
   let current: HtmlElement | null = node;
   for (let depth = 0; depth < r.max_ancestor_depth && current; depth++) {
@@ -228,7 +210,6 @@ const compatible = (left: CardShape, right: CardShape) =>
 
 function isCardList(candidate: HtmlElement) {
   if (RICH_TEXT_TAGS.has(candidate.tagName)) return false;
-  // A wrapper around the page identity is not a repeated item collection.
   if ([...elements(candidate, 'h1')].some(regionNodeIsVisible)) return false;
   const counts = new Map<string, { shape: CardShape; count: number }>();
   for (const child of childElements(candidate)) {
@@ -267,14 +248,11 @@ function headingNamesAnotherDocument(heading: HtmlElement, { finalUrl, baseUrl }
         comparableUrl(target.href) !== comparableUrl(finalUrl)
       )
         return true;
-    } catch {
-      // An unusable link cannot establish an excerpt's target document.
-    }
+    } catch {}
   }
   return false;
 }
 
-/** A featured article whose heading names another document is an excerpt, even on its own. */
 function linkedArticleExcerpt(node: HtmlElement, urls: DocumentUrls) {
   if (node.tagName !== 'article') return false;
   let scanned = 0;
@@ -296,7 +274,6 @@ const isRecommendation = (node: HtmlElement) => {
   return r.content_recommendation_tokens.some((token) => identity.includes(token));
 };
 
-/** Repeated item collections, recommendation modules and isolated linked article excerpts. */
 function cardListContainers(region: HtmlNode, urls: DocumentUrls): HtmlElement[] {
   const containers: HtmlElement[] = [];
   const excerpts: HtmlElement[] = [];
@@ -307,8 +284,6 @@ function cardListContainers(region: HtmlNode, urls: DocumentUrls): HtmlElement[]
     if (linkedArticleExcerpt(candidate, urls)) excerpts.push(candidate);
     if (isCardList(candidate) || isRecommendation(candidate)) containers.push(candidate);
   }
-  // Repeated sections can resemble cards when each contains links. Keep the
-  // actual nested collections without excluding their section/page wrappers.
   const wrappers = new Set<HtmlElement>();
   for (const container of containers) {
     let depth = 0;
@@ -323,13 +298,11 @@ function cardListContainers(region: HtmlNode, urls: DocumentUrls): HtmlElement[]
   ];
 }
 
-/** The primary region and its repeated card lists, resolved once per page. */
 export type PageScope = {
   root: HtmlNode;
   region: HtmlNode;
   source: string;
   finalUrl: string;
-  /** What the page's relative links resolve against: its `<base href>`, else `finalUrl`. */
   baseUrl: string;
   cards: ReadonlySet<HtmlElement>;
 };
@@ -363,7 +336,6 @@ function containerLabel(container: HtmlElement) {
   return '';
 }
 
-/** A bounded, serializable name for a collection: its tag and semantic label, never selectors. */
 export function containerName(container: HtmlElement) {
   return {
     tag: container.tagName.slice(0, 32),
@@ -430,7 +402,6 @@ function adjacentBranches(node: HtmlElement, container: HtmlElement) {
   return false;
 }
 
-/** How an affordance relates to a collection, or '' when it does not. */
 export function structuralRelation(node: HtmlElement, container: HtmlElement) {
   if (hasAncestor(node, container)) return 'contained';
   if (hasAncestor(container, node)) return 'contains';
@@ -440,7 +411,6 @@ export function structuralRelation(node: HtmlElement, container: HtmlElement) {
   return '';
 }
 
-/** Whether `node` is visible, outside `containers`, and inside `region` within the depth bound. */
 export function pageOwned(
   node: HtmlElement,
   region: HtmlNode,

@@ -26,6 +26,7 @@ const list: BrandFactList = {
       updated_at: '2026-10-10T00:00:00Z',
     },
   ],
+  limits: { statement_max_chars: 300, facts_import_max_rows: 150 },
 };
 
 beforeAll(() => mswServer.listen({ onUnhandledFrame: 'error' }));

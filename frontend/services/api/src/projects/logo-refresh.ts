@@ -24,7 +24,6 @@ export function rasterType(body: Buffer): string | null {
     return 'image/webp';
   return null;
 }
-/** A logo source that could not be read; the next candidate may still succeed. */
 function logLogoFetchFailure(phase: 'homepage' | 'icon', error: unknown, startedAt: number) {
   logger.info('brand_logo_fetch_failed', {
     phase,
@@ -48,12 +47,9 @@ async function fetchLogo(url: string, fetcher: WebsiteFetcher, signal: AbortSign
     });
     if (page.status >= 200 && page.status < 300) {
       base = page.url;
-      // The homepage HTML parses off the API's event loop; the refresh deadline
-      // also bounds waiting behind other jobs on the shared parse pool.
       icons = await abortable(() => pageIconsAsync(page.body, base), signal);
     }
   } catch (error) {
-    // The well-known fallback can still work when the homepage cannot.
     logLogoFetchFailure('homepage', error, homepageAt);
   }
   const candidates = [
@@ -73,7 +69,6 @@ async function fetchLogo(url: string, fetcher: WebsiteFetcher, signal: AbortSign
       if (result.status >= 200 && result.status < 300 && type)
         return { ...result, contentType: type };
     } catch (error) {
-      // Only validated raster bytes become a ready cache asset.
       logLogoFetchFailure('icon', error, candidateAt);
     }
   }
@@ -81,7 +76,6 @@ async function fetchLogo(url: string, fetcher: WebsiteFetcher, signal: AbortSign
 }
 type Target = { domain: string; url: string; brandId: string | null; competitorIds: string[] };
 async function attach(db: Database, scope: ProjectScope, target: Target, assetId: string) {
-  // Recheck the identity after network I/O: an editor may have changed it.
   const project = await db
     .selectFrom('projects')
     .select('website_url')
@@ -105,7 +99,6 @@ async function attach(db: Database, scope: ProjectScope, target: Target, assetId
         ),
       )
       .execute();
-  // The caller holds the project lock on one transaction connection; keep reads and writes ordered.
   for (const id of target.competitorIds) {
     const competitor = await db
       .selectFrom('competitors')
@@ -129,11 +122,6 @@ async function attach(db: Database, scope: ProjectScope, target: Target, assetId
       .execute();
   }
 }
-/**
- * The global cache key for a website's logo: its registrable domain with private
- * suffixes honoured, so `a.github.io` and `b.github.io` never share an asset
- * while `www.example.com` still shares `example.com`'s.
- */
 function logoKey(value: string) {
   try {
     const { url } = websiteIdentity(value);
@@ -178,7 +166,6 @@ export async function refreshLogos(db: Database, scope: ProjectScope, fetcher = 
   const missing: Target[] = [];
   await db.transaction().execute(async (trx) => {
     await acquireProjectLock(trx, scope.projectId);
-    // Attach cached assets serially on the same locked transaction connection.
     for (const target of targets.values()) {
       const asset = cached.find((item) => item.domain === target.domain);
       if (asset?.status === cfg.status_ready && asset.image_data) {
@@ -192,7 +179,6 @@ export async function refreshLogos(db: Database, scope: ProjectScope, fetcher = 
     }
   });
   const signal = AbortSignal.timeout(cfg.refresh_timeout_seconds * 1000);
-  // Batch to enforce the configured concurrency while sharing one deadline.
   for (let offset = 0; offset < missing.length; offset += cfg.fetch_concurrency) {
     if (signal.aborted) break;
     const outcomes = await Promise.all(
@@ -202,7 +188,6 @@ export async function refreshLogos(db: Database, scope: ProjectScope, fetcher = 
     );
     await db.transaction().execute(async (trx) => {
       await acquireProjectLock(trx, scope.projectId);
-      // Persist each asset before reading its ID and attaching it on this transaction connection.
       for (const { target, logo } of outcomes) {
         // A miss under this request's own deadline says nothing about the host;
         // it must not become a shared failure that blocks every tenant's retry.

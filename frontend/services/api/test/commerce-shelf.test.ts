@@ -3,6 +3,7 @@ import { afterAll, afterEach, describe, expect, it } from 'vitest';
 import { asOwner, testDatabase } from './support.ts';
 import { VisibilityFixtures } from './visibility-fixtures.ts';
 import { auditTenant } from './audit-fixtures.ts';
+import { carousel, carouselAnswer, carouselCard } from './commerce-answer-fixtures.ts';
 import { auditRuntime } from '../src/audits/config.ts';
 import { auditInput } from '../src/audits/inputs.ts';
 import { createAudits } from '../src/audits/creation.ts';
@@ -52,7 +53,6 @@ const emptyTarget: FrozenShelfTarget = {
   products: [],
   approved_competitors: [],
 };
-/** A Commerce audit whose prompt targets a Shoes category holding one frozen Acme product. */
 async function shoeAudit(repetitions: number) {
   const t = await auditTenant(db, fixtures),
     foreign = await auditTenant(db, fixtures);
@@ -116,7 +116,6 @@ describe('frozen Commerce shelf projections', () => {
         throw new Error('unavailable');
       },
     });
-    // A failed resolver call keeps the span as evidence and records the failure.
     expect(unresolved).toMatchObject([
       {
         span: { rank: 1, orderObservable: true },
@@ -196,17 +195,13 @@ describe('frozen Commerce shelf projections', () => {
     ]);
   });
   it("accepts an AI-observed PDP only when the answer carries it and it is not the business's own", () => {
-    // The sentence's full stop is not part of the URL.
     const answer = 'Try https://rival.example/p/1. Or https://www.shop.example/p/2';
     const evidence = { answer, citations: [], ownedHosts: ['shop.example'] };
     expect(resolvedCompetitorUrl('https://rival.example/p/1', evidence)).toBe(
       'https://rival.example/p/1',
     );
-    // Invented by the resolver: nowhere in the answer.
     expect(resolvedCompetitorUrl('https://other.example/p/3', evidence)).toBeNull();
-    // The business's own product page.
     expect(resolvedCompetitorUrl('https://www.shop.example/p/2', evidence)).toBeNull();
-    // A citation alone is not an independently resolved PDP.
     expect(
       resolvedCompetitorUrl('https://rival.example/p/1', {
         ...evidence,
@@ -250,9 +245,7 @@ describe('frozen Commerce shelf projections', () => {
     expect(holder('The Acme Runner is the pick')).toBe('owned:Acme Runner');
     expect(holder('Rival Runner, a cheaper alternative to the Acme Runner')).toBe('competitor');
     expect(holder('The Acme Runner beats the Rival Runner')).toBe('owned:Acme Runner');
-    // A prefix of a longer word is not the product.
     expect(holder('Acme Runners club meets weekly')).toBe('none');
-    // Brand plus a colour both Acme products share names neither.
     expect(holder('Anything black from Acme')).toBe('none');
     expect(holder('Acme Trailblazer edition')).toBe('owned:Acme Runner');
   });
@@ -280,7 +273,6 @@ describe('frozen Commerce shelf projections', () => {
       average_shelf_position: null,
       first_position_win_rate: null,
     });
-    // One answer naming the same product three times holds one slot, at its best rank.
     expect(
       shelfMetrics(
         ['one'],
@@ -303,7 +295,6 @@ describe('frozen Commerce shelf projections', () => {
       first_position_win_rate: 1,
       recognized_slot_count: 2,
     });
-    // Text list and carousel both rank from 1; the carousel's ranks order the execution.
     const rival = { product_id: null, competitor_candidate_id: 'rival' };
     expect(
       shelfMetrics(
@@ -351,7 +342,6 @@ describe('frozen Commerce shelf projections', () => {
       share_of_shelf: 0.5,
       recognized_slot_count: 2,
     });
-    // A shelf held only by unreviewed or rejected rivals has no slot to share.
     expect(shelfMetrics(['one'], [pending, rejected])).toMatchObject({
       product_visibility: 0,
       share_of_shelf: null,
@@ -409,7 +399,6 @@ describe('frozen Commerce shelf projections', () => {
       model: 'fixture',
       resolve: async (spans) => {
         calls++;
-        // Model I/O runs after the context read, with no persistence transaction/row lock.
         return {
           recommendations: spans.map((span, index) => ({
             span: index,
@@ -422,7 +411,6 @@ describe('frozen Commerce shelf projections', () => {
         };
       },
     });
-    // The owned span matches deterministically; the other two share one call.
     expect(calls).toBe(1);
     await expect(
       prepareShelfExecution(db, { ...task, workspace_id: foreign.workspaceId }, result, null),
@@ -491,7 +479,6 @@ describe('frozen Commerce shelf projections', () => {
       .where('audit_id', '=', auditId)
       .execute();
     expect(snapshots).toHaveLength(1);
-    // The pending AI-observed rival holds no slot until it is approved.
     expect(snapshots[0]).toMatchObject({
       product_visibility: 1,
       share_of_shelf: 1,
@@ -502,7 +489,6 @@ describe('frozen Commerce shelf projections', () => {
     expect(new Set(snapshots[0]!.source_observation_ids as string[])).toEqual(
       new Set(observations.map((row) => row.id)),
     );
-    // Recreate the older writer boundary: the answer committed without shelf derivation.
     await db.deleteFrom('commerce_shelf_snapshots').where('audit_id', '=', auditId).execute();
     await db
       .deleteFrom('commerce_observation_citations')
@@ -533,8 +519,6 @@ describe('frozen Commerce shelf projections', () => {
       new Set([artifactId]),
     );
     await projections.finalize(t.workspaceId, auditId);
-    // The same answer to a branded comparison prompt names the owned brand by
-    // design, so it leaves the shelf: no execution, no slot, no source.
     await db.deleteFrom('commerce_shelf_snapshots').where('audit_id', '=', auditId).execute();
     await db
       .updateTable('audit_prompt_snapshots')
@@ -561,47 +545,10 @@ describe('frozen Commerce shelf projections', () => {
       claims = await queue.claim('carousel-worker', 3, { workspaceId: t.workspaceId, auditId });
     expect(claims).toHaveLength(3);
     const beforeAnyMatch = new Date(Date.now() - 1000);
-    const carousel = (items: Record<string, unknown>[]) => ({
-      status_code: 20000,
-      tasks: [
-        {
-          id: 'scraper-task',
-          status_code: 20000,
-          result: [{ items: [{ type: 'chat_gpt_products', items }] }],
-        },
-      ],
-    });
-    const card = (fields: Record<string, unknown>) => ({
-      type: 'chat_gpt_products_element',
-      ...fields,
-    });
-    const answer = (task: AuditTask, envelope: unknown): ExecutionResult => ({
-      logical_engine: 'chatgpt',
-      transport_provider: 'openai',
-      transport_model: task.transport_model,
-      answer_text: 'These are the top picks.',
-      search_used: false,
-      search_events: [],
-      finish_reason: 'stop',
-      raw_finish_reason: 'stop',
-      latency_ms: 1,
-      provider_metadata: { raw_response: envelope },
-      retrieved_sources: null,
-      citations: [],
-      normalized_usage: {
-        uncached_input_tokens: null,
-        cached_input_tokens: null,
-        output_tokens: null,
-        reasoning_tokens: null,
-        total_tokens: null,
-        web_search_requests: null,
-        provider_cost_microusd: null,
-      },
-    });
     const envelopes = [
       carousel([
         { type: 'chat_gpt_ad', title: 'Sponsored runner', url: 'https://ads.example/runner' },
-        card({
+        carouselCard({
           title: 'Acme Road Runner in Grey, Size: 9 | …',
           url: 'https://shop.example/products/road?utm_source=chatgpt.com',
           product_id: 'own-key',
@@ -611,7 +558,7 @@ describe('frozen Commerce shelf projections', () => {
           tag: 'Best overall value',
           images: ['https://images.example/own.jpg'],
         }),
-        card({
+        carouselCard({
           title: 'Rival Trail Runner',
           url: 'https://rival.example/products/trail?utm_source=chatgpt.com',
           product_id: 'rival-key',
@@ -619,12 +566,10 @@ describe('frozen Commerce shelf projections', () => {
         }),
       ]),
     ];
-    // A later answer names both by product key only, under other titles.
     const keysOnly = carousel([
-      card({ title: 'Another listing for the rival', product_id: 'rival-key' }),
-      card({ title: 'Renamed listing', product_id: 'own-key' }),
+      carouselCard({ title: 'Another listing for the rival', product_id: 'rival-key' }),
+      carouselCard({ title: 'Renamed listing', product_id: 'own-key' }),
     ]);
-    // The same cards in an answer captured before any key was matched, derived last.
     envelopes.push(keysOnly, keysOnly);
     const capturedAt = [undefined, undefined, beforeAnyMatch];
     const taskIds: string[] = [];
@@ -635,7 +580,7 @@ describe('frozen Commerce shelf projections', () => {
       tasks.push(task.id);
       taskIds.push(task.id);
       running.push(task);
-      const result = answer(task, envelopes[index]);
+      const result = carouselAnswer(task, envelopes[index]);
       const derive = await prepareShelfExecution(db, task, result, null);
       const artifactId = await persistExecutionSuccess(
         db,
@@ -669,7 +614,6 @@ describe('frozen Commerce shelf projections', () => {
       canonical_url: 'https://rival.example/products/trail',
       product_name: 'Rival Trail Runner',
     });
-    // The sponsored card holds no slot; the organic cards rank from 1.
     expect(slotsOf(taskIds[0]!)).toMatchObject([
       {
         rank: 1,
@@ -721,7 +665,6 @@ describe('frozen Commerce shelf projections', () => {
       [1, 'unresolved', null, null],
       [2, 'unresolved', null, null],
     ]);
-    // Text spans stay recommendations beside the carousel.
     const surfaces = await db
       .selectFrom('commerce_recommendation_observations')
       .select('surface_kind')
@@ -734,14 +677,88 @@ describe('frozen Commerce shelf projections', () => {
       'shopping_result',
       'shopping_result',
     ]);
-    // Another workspace cannot read this audit's shelf context.
     await expect(
       prepareShelfExecution(
         db,
         { ...running[0]!, workspace_id: foreign.workspaceId },
-        answer(running[0]!, envelopes[0]),
+        carouselAnswer(running[0]!, envelopes[0]),
         null,
       ),
     ).rejects.toThrow();
+  });
+  it('attaches a marketplace card of a competitor known under another target to that product', async () => {
+    const { t, foreign, auditId } = await shoeAudit(1);
+    const known = (tenant: typeof t, url: string, createdAt: Date) =>
+      db
+        .insertInto('commerce_competitor_candidates')
+        .values({
+          id: randomUUID(),
+          workspace_id: tenant.workspaceId,
+          project_id: tenant.projectId,
+          target_kind: 'category',
+          target_id: randomUUID(),
+          canonical_url: url,
+          product_name: 'Bluebird Bean Club',
+          brand_name: 'Bluebird',
+          evidence: '{}',
+          source_kind: 'provider',
+          state: 'approved',
+          created_at: createdAt,
+        })
+        .execute();
+    await known(foreign, 'https://foreign.example/products/club', new Date(Date.now() - 60_000));
+    await known(t, 'https://bluebird.example/products/club', new Date());
+    const queue = new AuditQueue(db, 120);
+    const [claim] = await queue.claim('marketplace-worker', 1, {
+      workspaceId: t.workspaceId,
+      auditId,
+    });
+    const marked = await queue.markRunning(claim!, claim!.lease_owner);
+    const task = marked!.task;
+    tasks.push(task.id);
+    const result = carouselAnswer(
+      task,
+      carousel([
+        carouselCard({
+          title: 'Bluebird Bean Club Coffee Subscription - Walmart.com',
+          url: 'https://www.walmart.com/ip/bluebird-bean-club/123',
+          merchants: 'Walmart',
+        }),
+      ]),
+    );
+    const derive = await prepareShelfExecution(db, task, result, null);
+    await persistExecutionSuccess(db, task, claim!.lease_owner, result, derive);
+
+    const candidates = await db
+      .selectFrom('commerce_competitor_candidates')
+      .select(['id', 'target_kind', 'canonical_url', 'product_name', 'state'])
+      .where('workspace_id', '=', t.workspaceId)
+      .orderBy('target_kind')
+      .execute();
+    expect(candidates.map(({ id: _id, ...row }) => row)).toEqual([
+      {
+        target_kind: 'category',
+        canonical_url: 'https://bluebird.example/products/club',
+        product_name: 'Bluebird Bean Club',
+        state: 'approved',
+      },
+      {
+        target_kind: 'category',
+        canonical_url: 'https://bluebird.example/products/club',
+        product_name: 'Bluebird Bean Club',
+        state: 'pending',
+      },
+    ]);
+    const slot = await db
+      .selectFrom('commerce_recommendation_observations')
+      .select(['competitor_candidate_id', 'merchant_url'])
+      .where('workspace_id', '=', t.workspaceId)
+      .where('task_id', '=', task.id)
+      .where('surface_kind', '=', 'shopping_result')
+      .executeTakeFirstOrThrow();
+    expect(slot.merchant_url).toBe('https://www.walmart.com/ip/bluebird-bean-club/123');
+    expect(candidates.filter((row) => row.state === 'pending').map((row) => row.id)).toEqual([
+      slot.competitor_candidate_id,
+    ]);
   });
 });

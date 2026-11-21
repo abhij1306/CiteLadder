@@ -9,6 +9,7 @@ import {
   persistSurfaceFailure,
   persistExecutionSuccess,
   appendProviderAttempt,
+  retryDelay,
   type DeriveExecution,
 } from './result-persistence.ts';
 import { type AuditRuntime } from './config.ts';
@@ -55,11 +56,9 @@ async function appendObservation(db: Database, task: AuditTask, result: Overview
       )
       .execute();
 }
-/** Whether a Google AI Overview result is an observation (present or absent) rather than a failure. */
 export const isOverviewObservation = (result: OverviewResult) =>
   searchPolicy.surface.successful_outcomes.includes(result.outcome);
 
-/** Observation, raw evidence, derived analysis and queue terminal state share the owned transaction. */
 export function persistOverviewObservation(
   db: Database,
   task: AuditTask,
@@ -82,7 +81,6 @@ export function persistOverviewObservation(
   );
 }
 
-/** A failed overview keeps its observation as evidence and terminalizes the task without analysis. */
 export function persistOverviewFailure(
   db: Database,
   task: AuditTask,
@@ -122,7 +120,6 @@ type SurfaceExchange = {
   paid?: boolean;
   resetPoll?: boolean;
 };
-/** Paid intent already committed. This phase records the exchange and parks without spending the retry budget. */
 export function persistSurfaceExchange(
   db: Database,
   claimed: AuditTask,
@@ -165,6 +162,36 @@ export function persistSurfaceExchange(
       new Date(at.getTime() + exchange.delaySeconds * 1000),
       at,
     );
+    return true;
+  });
+}
+
+/**
+ * A submission the provider refused (a rate limit) created no task, so it may be sent again:
+ * clear the intent and park for a fresh submit without spending an attempt. The cleared intent
+ * puts the task back under the run cap, which bounds the retries.
+ */
+export function releaseRefusedSubmission(
+  db: Database,
+  claimed: AuditTask,
+  owner: string,
+  error: ProviderError,
+  runtime: AuditRuntime,
+  at = new Date(),
+) {
+  return db.transaction().execute(async (trx) => {
+    const locked = await ownedAuditTask(trx, claimed, owner);
+    if (!locked) return false;
+    const task = await trx
+      .updateTable('audit_tasks')
+      .set({ provider_submission_ref: '', provider_task_submitted_at: null, updated_at: at })
+      .where('id', '=', claimed.id)
+      .where('workspace_id', '=', claimed.workspace_id)
+      .returningAll()
+      .executeTakeFirstOrThrow();
+    await appendProviderAttempt(trx, task, at, { error });
+    const delay = retryDelay(runtime, task.attempt_count, error.retryAfterSeconds);
+    await parkAuditTask(trx, task, 'retry_wait', new Date(at.getTime() + delay * 1000), at);
     return true;
   });
 }

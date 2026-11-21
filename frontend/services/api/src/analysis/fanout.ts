@@ -1,4 +1,3 @@
-/** Deterministic search-event normalization and settled per-answer fanout. */
 import type { visibilityExecutionEvidenceSchema } from '@citeladder/contracts/visibility-evidence';
 import type { z } from 'zod';
 import { record } from '../db/json.ts';
@@ -21,10 +20,6 @@ function eventText(value: unknown): string {
   return value === null || value === undefined ? '' : (JSON.stringify(value) ?? '');
 }
 
-/**
- * A stored event list, tolerantly: a non-list is no events, an entry with no
- * recognized field is malformed and skipped, and an empty query stays empty.
- */
 function normalizeEvents(raw: unknown): SearchEvent[] {
   if (!Array.isArray(raw)) return [];
   return raw.flatMap((entry) => {
@@ -45,7 +40,6 @@ function normalizeEvents(raw: unknown): SearchEvent[] {
 
 export type EventSource = 'raw_artifact' | 'audit_task' | 'none';
 
-/** The artifact's events when it has any, else the task's copy; never both. */
 export function selectEvents(
   artifactEvents: unknown,
   taskEvents: unknown,

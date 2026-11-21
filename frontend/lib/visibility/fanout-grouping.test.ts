@@ -28,10 +28,6 @@ function execution(
 
 describe('normalizeSearch', () => {
   it('caps a search past the endpoint bound so both sides filter alike', () => {
-    // 513 characters: one past what the fanout endpoint accepts. The browser
-    // used to filter the table by the whole string while the server was asked
-    // about the first 512, so the table and the "matches elsewhere" count
-    // described different searches.
     const pasted = 'a'.repeat(SEARCH_MAX_LENGTH) + 'b';
     expect(pasted).toHaveLength(513);
 

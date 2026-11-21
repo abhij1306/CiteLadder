@@ -1,19 +1,21 @@
 import { useRef, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 
-import { Badge } from '@/components/ui/badge';
+import { StatusMark } from '@/components/ui/status-mark';
+import { Tag } from '@/components/ui/tag';
+
 import { Button } from '@/components/ui/button';
-import { Callout } from '@/components/ui/callout';
+import { Icon } from '@/components/ui/icon';
 import { CsvImportFileInput } from '@/components/ui/csv-import';
 import { Dialog } from '@/components/ui/dialog';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Inline, Stack } from '@/components/ui/layout';
 import { TreeCheckOption, TreeList } from '@/components/ui/list-row';
-import { MutationNotice } from '@/components/ui/mutation-notice';
 import { TabPanel, Tabs } from '@/components/ui/tabs';
 import { textRole } from '@/components/ui/typography';
 import { ledgerClasses, ledgerItemClasses } from '@/components/ui/workspace';
+import { X } from '@/lib/icons';
 import { commerceMutations } from '@/lib/api/commerce';
 import { mutationNoticeForError } from '@/lib/api/mutation-notice';
 import { downloadCsv } from '@/lib/csv/download';
@@ -27,6 +29,7 @@ import {
 } from '@/lib/products/catalog-import';
 import type { CatalogImportRequest } from '@citeladder/contracts/commerce-requests';
 import type { CatalogImport, CatalogImportStage } from '@citeladder/contracts/commerce-suite';
+import { Notice } from '@/components/ui/notice';
 
 type Source = CatalogImportRequest['source'];
 const SOURCES = [
@@ -42,7 +45,6 @@ const STATUS_LABEL: Record<CatalogImport['row_outcomes'][number]['status'], stri
   rejected: 'Rejected',
 };
 
-/** A file picker for one feed or CSV file, naming the file chosen, with its sample download. */
 function FilePick({
   label,
   accept,
@@ -59,7 +61,7 @@ function FilePick({
   return (
     <Stack gap="compact">
       <CsvImportFileInput label={label} accept={accept} onSelect={(next) => onFile(next ?? null)} />
-      {file ? <p className={textRole('body')}>Chosen: {file.name}</p> : null}
+      {file ? <p className={textRole('body', 'text-ink-2')}>Chosen: {file.name}</p> : null}
       <div>
         <Button
           variant="secondary"
@@ -72,7 +74,6 @@ function FilePick({
   );
 }
 
-/** The proposed category tree with a box per category; a cleared box leaves out its branch. */
 function CategoryReview({
   stage,
   unticked,
@@ -85,14 +86,14 @@ function CategoryReview({
   const leftOut = leftOutCategories(stage.categories, unticked);
   return (
     <Stack>
-      <p className={textRole('body')}>
+      <p className={textRole('body', 'text-ink-2')}>
         {pluralCount(stage.products, 'product')} ready from {stage.source_label}
         {stage.rejected ? `; ${pluralCount(stage.rejected, 'row')} cannot be imported` : ''}.
       </p>
       {stage.categories.length ? (
         <Stack gap="compact">
-          <h3 className={textRole('itemTitle')}>Categories</h3>
-          <p className={textRole('body')}>
+          <h3 className={textRole('subheading')}>Categories</h3>
+          <p className={textRole('body', 'text-ink-2')}>
             Clear a category to leave it and the categories under it out of your catalog.
           </p>
           <TreeList label="Proposed categories">
@@ -103,20 +104,19 @@ function CategoryReview({
                 depth={node.depth}
                 checked={!leftOut.has(node.key)}
                 disabled={leftOut.has(node.key) && !unticked.has(node.key)}
-                badge={node.existing ? <Badge>In catalog</Badge> : null}
+                badge={node.existing ? <Tag>In catalog</Tag> : null}
                 onCheckedChange={() => onToggle(node.key)}
               />
             ))}
           </TreeList>
         </Stack>
       ) : (
-        <p className={textRole('body')}>The file names no categories.</p>
+        <p className={textRole('body', 'text-ink-2')}>The file names no categories.</p>
       )}
     </Stack>
   );
 }
 
-/** Added, updated, unchanged and rejected rows; rejected rows first, each with its reason. */
 function ImportResults({
   result,
   repeated,
@@ -124,9 +124,9 @@ function ImportResults({
   return (
     <Stack>
       {repeated ? (
-        <Callout tone="info">This content was imported before; these are its results.</Callout>
+        <Notice tone="info">This content was imported before; these are its results.</Notice>
       ) : null}
-      <p aria-label="Import results" className={textRole('body')}>
+      <p aria-label="Import results" className={textRole('body', 'text-ink-2')}>
         {result.created} added, {result.updated} updated, {result.unchanged} unchanged,{' '}
         {result.rejected} rejected
       </p>
@@ -141,13 +141,13 @@ function ImportResults({
             >
               <span className="text-ink-tertiary tabular-nums">Row {row.row_number}</span>
               {row.status === 'rejected' ? (
-                <Badge variant="status" value="danger">
+                <StatusMark variant="status" value="danger">
                   {STATUS_LABEL[row.status]}
-                </Badge>
+                </StatusMark>
               ) : (
-                <Badge>{STATUS_LABEL[row.status]}</Badge>
+                <Tag>{STATUS_LABEL[row.status]}</Tag>
               )}
-              {row.detail ? <span className="text-ink-secondary">{row.detail}</span> : null}
+              {row.detail ? <span className="text-ink-2">{row.detail}</span> : null}
             </Inline>
           ))}
         </ul>
@@ -156,7 +156,6 @@ function ImportResults({
   );
 }
 
-/** The first step: pick a source and name the store or file, with why the last try failed. */
 function SourceStep({
   source,
   onSource,
@@ -173,7 +172,6 @@ function SourceStep({
   onStore: (store: string) => void;
   file: File | null;
   onFile: (file: File | null) => void;
-  /** Why the chosen file could not be read, such as a file that is not UTF-8. */
   readError: string | null;
   stageError: Error | null;
 }>) {
@@ -187,10 +185,7 @@ function SourceStep({
         spaced
       >
         <TabPanel value="shopify">
-          <Field
-            label="Store domain"
-            hint="Your own domain or your store’s .myshopify.com address. Its public product list is read once."
-          >
+          <Field label="Store domain" hint="Your domain or .myshopify.com address">
             {(props) => (
               <Input
                 {...props}
@@ -219,15 +214,16 @@ function SourceStep({
               onFile={onFile}
               sample={CATALOG_SAMPLE}
             />
-            <p className={textRole('body')}>
+            <p className={textRole('body', 'text-ink-2')}>
               Title and brand are required. A category is a path such as Footwear &gt; Running.
             </p>
           </Stack>
         </TabPanel>
       </Tabs>
-      {readError ? <Callout tone="negative">{readError}</Callout> : null}
+      {readError ? <Notice tone="negative">{readError}</Notice> : null}
       {stageError ? (
-        <MutationNotice
+        <Notice
+          kind="mutation"
           notice={mutationNoticeForError(stageError, { action: 'read the products' })}
         />
       ) : null}
@@ -235,11 +231,6 @@ function SourceStep({
   );
 }
 
-/**
- * Add products from a Shopify store, a Merchant Center feed or the CSV
- * template (CM3): stage the source, confirm its category tree, then read what
- * was added, updated, unchanged and rejected.
- */
 export function AddProductsDialog({
   workspaceId,
   projectId,
@@ -260,9 +251,7 @@ export function AddProductsDialog({
   const [unticked, setUnticked] = useState<ReadonlySet<string>>(new Set());
   const [readError, setReadError] = useState<string | null>(null);
   const [reading, setReading] = useState(false);
-  // Set before the file read starts, so a second click cannot stage it twice.
   const submitting = useRef(false);
-  // Bumped by every new choice or reset; a read that finishes after one is dropped.
   const selection = useRef(0);
   const release = () => {
     selection.current += 1;
@@ -292,7 +281,6 @@ export function AddProductsDialog({
     setReadError(null);
     release();
   };
-  // Held from the click until the stage request settles.
   const settled = {
     onSettled: () => {
       submitting.current = false;
@@ -343,7 +331,8 @@ export function AddProductsDialog({
       <Stack>
         <CategoryReview stage={staged} unticked={unticked} onToggle={toggle} />
         {apply.error ? (
-          <MutationNotice
+          <Notice
+            kind="mutation"
             notice={mutationNoticeForError(apply.error, { action: 'import the products' })}
           />
         ) : null}
@@ -360,8 +349,6 @@ export function AddProductsDialog({
           onClick={() =>
             apply.mutate({
               importId: staged.import_id,
-              // Every category shown cleared, so one also reached by a path
-              // without its cleared parent is left out as the review showed.
               excluded_categories: [...leftOutCategories(staged.categories, unticked)],
             })
           }
@@ -389,7 +376,8 @@ export function AddProductsDialog({
     const busy = reading || stage.isPending;
     footer = (
       <>
-        <Button variant="secondary" onClick={() => close(false)}>
+        <Button variant="quiet" onClick={() => close(false)}>
+          <Icon icon={X} />
           Cancel
         </Button>
         <Button variant="primary" disabled={!ready || busy} onClick={() => void submit()}>
@@ -400,14 +388,7 @@ export function AddProductsDialog({
   }
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={close}
-      title="Add products"
-      description="Products go live only after you confirm their categories."
-      width="wide"
-      footer={footer}
-    >
+    <Dialog open={open} onOpenChange={close} title="Add products" width="wide" footer={footer}>
       {body}
     </Dialog>
   );

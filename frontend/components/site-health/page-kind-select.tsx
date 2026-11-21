@@ -6,11 +6,6 @@ const OPTIONS = [
   ...PAGE_KINDS.map((pageKind) => ({ value: pageKind, label: pageKindLabel(pageKind) })),
 ];
 
-/**
- * The page-kind filter (site-health v2 P1) shared by the pages inventory and
- * the issues list, as one entry of their All filters menu; its empty option
- * clears the filter (all page kinds).
- */
 export function pageKindFilter({
   value,
   onChange,

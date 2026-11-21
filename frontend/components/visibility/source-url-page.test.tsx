@@ -48,21 +48,20 @@ describe('what a cited page means for you', () => {
   it('names the competitors listed where you are not, with their lines, and opens the Action', () => {
     render(<SourceUrlPageCard url={URL} page={page()} loading={false} />);
 
-    expect(screen.getByText('Competitors are listed on this page and you are not.')).toBeVisible();
     const listed = screen.getByText('Listed here').parentElement!;
-    expect(within(listed).getByText('Globex', { selector: '[data-badge-tone]' })).toBeVisible();
+    expect(
+      within(listed).getByText('Globex', { selector: '[data-status-tone] span' }),
+    ).toBeVisible();
     const quote = screen.getByRole('blockquote');
     expect(quote).toHaveTextContent('Globex leads the list for small teams.');
     expect(within(quote).getByText('Globex', { selector: 'mark' })).toBeVisible();
     expect(screen.getByRole('link', { name: 'Open the Action' })).toHaveAttribute(
       'href',
-      expect.stringContaining(`/agent/actions/${ACTION}`),
+      expect.stringContaining(`/actions/${ACTION}`),
     );
     expect(
       screen.getByText('Searched 4,200 characters of readable text; no form of the name matched.'),
     ).toBeVisible();
-    // The request opens New chat on the Action, which writes its message; the
-    // link carries the id alone.
     const draft = screen.getByRole('link', { name: 'Draft the request' });
     const chat = new globalThis.URL(draft.getAttribute('href')!, 'https://app.test');
     expect({ path: chat.pathname, ...Object.fromEntries(chat.searchParams) }).toEqual({
@@ -86,25 +85,28 @@ describe('what a cited page means for you', () => {
       />,
     );
 
-    expect(
-      screen.getByText('The publisher blocks automated access, so this page has not been read.'),
-    ).toBeVisible();
+    expect(screen.getByText('Publisher blocks automated access')).toBeVisible();
     expect(screen.queryByText(/not found on the page/i)).toBeNull();
     expect(screen.queryByRole('link', { name: /Action|request/ })).toBeNull();
   });
 
-  it("offers nothing to do on a competitor's own page", () => {
-    render(
+  it("shows no card on a competitor's own page", () => {
+    const { rerender } = render(
+      <SourceUrlPageCard
+        url={URL}
+        page={page({ source_class: 'competitor_owned', standing: 'read' })}
+        loading={false}
+      />,
+    );
+    expect(screen.getByText('On this page')).toBeVisible();
+
+    rerender(
       <SourceUrlPageCard
         url={URL}
         page={page({ source_class: 'competitor_owned', standing: 'competitor' })}
         loading={false}
       />,
     );
-
-    expect(
-      screen.getByText("This is a competitor's own page, so it cannot list you."),
-    ).toBeVisible();
-    expect(screen.queryByRole('link', { name: 'Open the Action' })).toBeNull();
+    expect(screen.queryByText('On this page')).toBeNull();
   });
 });

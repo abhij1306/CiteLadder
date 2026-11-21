@@ -10,9 +10,5 @@ const adapters = {
   llm_scraper: llmScraperAdapter,
 } satisfies Record<NonNullable<ReturnType<typeof surfaceKindOf>>, SurfaceAdapter>;
 
-/**
- * The adapter for a task's route surface kind. An engine no route serves has no
- * surface to observe: it fails before any call, as an unavailable answer route does.
- */
 export const surfaceAdapter = (logicalEngine: string): SurfaceAdapter =>
   adapters[surfaceKindOf(logicalEngine) ?? 'llm'];

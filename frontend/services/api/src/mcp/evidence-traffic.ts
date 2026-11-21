@@ -1,4 +1,3 @@
-/** Search, analytics and AI-traffic reads over their persisted owners. */
 import { policy } from '../config.ts';
 import { crawlLogs } from '../config/crawl-logs.ts';
 import {
@@ -52,7 +51,6 @@ export async function performanceRead(
     normalization: dashboard.normalization_version,
   };
   if (!snapshotId) {
-    // Nothing connected is its own state, not a range that has yet to be projected.
     const { stage } = await readProjectReadiness(db, scope);
     return {
       ...unavailable(
@@ -141,7 +139,6 @@ export async function queryEvidence(
       artifact_refs: [reference('query_snapshot', page.snapshot.id)],
     };
   } catch (error) {
-    // The owner's 404 is "this exact window was never projected", not a failure.
     if (error instanceof ApiError && error.status === 404)
       return {
         ...unavailable('exact_query_evidence_window_not_projected'),
@@ -210,8 +207,6 @@ export async function crawlLogsRead(
   args: CrawlArgs & { view: 'summary' | 'crawlers' | 'coverage' | 'requests' },
 ): Promise<Evidence> {
   const options = crawlOptions(args);
-  // No source and nothing retained in the window is its own state: empty
-  // views would read as an observed zero. A revoked source keeps its history.
   if (crawlNotConnected(await crawlSummary(db, scope, options)))
     return unavailable('not_connected');
   const reader = {
@@ -223,15 +218,10 @@ export async function crawlLogsRead(
   return { state: 'available', ...(await reader(db, scope, options)) };
 }
 
-/** No crawl-log source is connected and the window holds no retained crawl measurement. */
 function crawlNotConnected(crawl: Awaited<ReturnType<typeof crawlSummary>>) {
   return crawl.connection === 'not_connected' && crawl.requests === null;
 }
 
-/**
- * True when none of a page's AI-activity sources answers for the window: no
- * crawl logs, no GA4 property and no completed AI Visibility run.
- */
 async function aiTrafficNotConnected(
   db: ProjectRead['db'],
   scope: ProjectRead['scope'],
@@ -273,7 +263,6 @@ export async function aiTrafficUrl(
   const canonical = canonicalPage(args.url, project.website_url);
   if (!canonical || new URL(canonical).origin !== new URL(project.website_url).origin)
     throw new McpInputError('URL must be on the project origin');
-  // The ingestion owner's identity: a redacted secret path never joins.
   const identity = pathIdentity(args.url, project.website_url);
   if (!identity?.url_hash) return unavailable('url_not_joinable');
   if (await aiTrafficNotConnected(db, scope, args)) return unavailable('not_connected');

@@ -24,7 +24,6 @@ import { evidenceObservedAt, isEvidenceKind } from './evidence-announcement.ts';
 import { buildVerificationResult, type Declaration } from './verification-result.ts';
 import { refreshActionStatus } from './action-status.ts';
 const p = policy.opportunity.opportunities;
-/** The announced evidence this task re-checks declarations against. */
 async function verificationSource(db: Database, task: QueueTask, project: string): Promise<Source> {
   const payload = record(task.payload);
   const kind = scalarText(payload.trigger_kind || '');
@@ -36,18 +35,11 @@ async function verificationSource(db: Database, task: QueueTask, project: string
   if (!observed) throw new Error('Implementation verification source is not terminal');
   return { kind, id, observed_at: observed };
 }
-/** Exact source timestamp used by verification idempotency. */
 function sourceRevision(text: string): string {
   const parsed = parseDatetime(text);
   if (!parsed) throw new Error('Invalid verification timestamp');
   return epochMicros(parsed).toString();
 }
-/**
- * The declarations this source can still measure: declared before it was
- * observed, within the longest verification window, and holding a check of a
- * kind this source reads. Each check is then read only inside its own kind's
- * window. Everything else keeps its last observation untouched.
- */
 async function declarations(
   db: Database,
   task: QueueTask,
@@ -166,15 +158,10 @@ async function recordVerification(
       })
       .onConflict((oc) => oc.columns(['workspace_id', 'idempotency_key']).doNothing())
       .execute();
-    // The newest observation decides whether the Action reads as measuring or done.
     await refreshActionStatus(trx, task.workspace_id, declaration.action_id);
   });
 }
 
-/**
- * The queue claim is already committed. Each declaration folds in its own
- * short transaction; a retry repeats only what had not been appended.
- */
 export const verifyImplementationEvents: Executor = async (task, context) => {
   const project = await taskProject(context.db, task);
   const source = await verificationSource(context.db, task, project);

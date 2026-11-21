@@ -33,7 +33,6 @@ export function requireActiveTransport(row: Connection) {
       'This connection uses a retired transport and is historical and read-only',
     );
 }
-/** The `Authorization` header value for a provider's login/password pair. */
 export function basicAuthorization(pair: { login: string; password: string }) {
   const credentials = Buffer.from(`${pair.login}:${pair.password}`).toString('base64');
   return `Basic ${credentials}`;

@@ -1,18 +1,17 @@
-/**
- * Persisted measurement rows for the visibility read tests.
- *
- * Every NOT NULL column without a schema default gets an explicit value. Rows are
- * removed per workspace in `cleanup`, children before parents.
- */
 import { randomUUID } from 'node:crypto';
 import { fanoutProjection } from '../src/analysis/fanout.ts';
+import type { FirstNamed } from '@citeladder/contracts/audits';
+import { firstNamedColumns } from '../src/analysis/win-rate.ts';
 
 import type { Database } from '../src/db/database.ts';
+import { record } from '../src/db/json.ts';
 import { persistComparisonBaselines } from '../src/visibility/baselines.ts';
 import { persistSourceAggregates } from '../src/visibility/source-aggregates.ts';
 import { Fixtures } from './support.ts';
 
 const now = () => new Date();
+const firstNamedFixture = (first: FirstNamed | undefined) =>
+  firstNamedColumns(first ?? { kind: 'none' });
 
 export type Json = Parameters<typeof JSON.stringify>[0];
 
@@ -27,6 +26,7 @@ export type ObservationInput = {
 
 export type ExecutionInput = {
   auditId: string;
+  promptId?: string;
   engine?: string;
   transportModel?: string;
   transportProvider?: string;
@@ -37,16 +37,15 @@ export type ExecutionInput = {
   cohort?: string;
   taskStatus?: string;
   repetition?: number;
-  /** Stored search events on the task, and on its immutable artifact. */
   taskEvents?: Json;
   artifactEvents?: Json;
   providerMetadata?: Json;
-  /** Null: the task never produced an analysis (a failed retrieval). */
   analysis?: {
     brandMentioned?: boolean;
     brandFirstOffset?: number | null;
     ownedCited?: boolean;
     avgPosition?: number | null;
+    firstNamed?: FirstNamed;
     searchUsed?: boolean;
     searchQueryCount?: number;
     score?: Json;
@@ -62,13 +61,14 @@ export type ExecutionInput = {
     }[];
     brandMentions?: string[];
     competitorMentions?: string[];
-    /** Pages the answer read; omitted means the surface exposed no reads. */
+    mentionOffsets?: Record<string, number>;
     retrieved?: { url: string; isOwned?: boolean; urlHash?: string | null }[];
   } | null;
   observation?: ObservationInput;
 };
 
 const TABLES_BY_WORKSPACE = [
+  'audit_topic_metrics',
   'audit_source_aggregates',
   'audit_answer_aggregates',
   'opportunities',
@@ -128,7 +128,6 @@ export class VisibilityFixtures extends Fixtures {
     return id;
   }
 
-  /** A cached logo asset, which a brand or competitor mark points at. */
   private async logoAsset(): Promise<string> {
     const id = randomUUID();
     await this.database
@@ -194,11 +193,9 @@ export class VisibilityFixtures extends Fixtures {
     return id;
   }
 
-  /** A dashboard-ready brand run with one engine snapshot per engine. */
   async audit(
     tenant: Tenant,
     options: {
-      /** Null for an audit that has not settled. */
       completedAt?: Date | null;
       status?: string;
       configuration?: Json;
@@ -224,7 +221,11 @@ export class VisibilityFixtures extends Fixtures {
         completed_count: 0,
         failed_count: 0,
         error_message: '',
-        configuration: JSON.stringify(options.configuration ?? {}),
+        configuration: JSON.stringify({
+          prompt_selection: 'set',
+          measurement_policy: { retrieval_enabled: true },
+          ...record(options.configuration),
+        }),
         completed_at: options.completedAt === undefined ? now() : options.completedAt,
         created_at: now(),
         updated_at: now(),
@@ -264,7 +265,6 @@ export class VisibilityFixtures extends Fixtures {
     return id;
   }
 
-  /** One execution: prompt snapshot, task, and optionally analysis and observation. */
   async execution(
     tenant: Tenant,
     input: ExecutionInput,
@@ -272,13 +272,11 @@ export class VisibilityFixtures extends Fixtures {
     const engine = input.engine ?? 'chatgpt';
     const model = input.transportModel ?? 'test-model';
     const provider = input.transportProvider ?? 'test';
-    // One prompt snapshot per (run, index): unnamed indexes count up per run.
     const promptIndex = input.promptIndex ?? this.promptIndexes.get(input.auditId) ?? 0;
     this.promptIndexes.set(
       input.auditId,
       Math.max(promptIndex + 1, this.promptIndexes.get(input.auditId) ?? 0),
     );
-    // A run freezes each prompt once; its other executions share the snapshot.
     const existing = await this.database
       .selectFrom('audit_prompt_snapshots')
       .select('id')
@@ -293,6 +291,7 @@ export class VisibilityFixtures extends Fixtures {
           id: snapshotId,
           workspace_id: tenant.workspaceId,
           audit_id: input.auditId,
+          prompt_id: input.promptId,
           prompt_index: promptIndex,
           text: input.promptText ?? `prompt ${promptIndex}`,
           theme: input.theme ?? '',
@@ -353,7 +352,7 @@ export class VisibilityFixtures extends Fixtures {
     return { taskId, analysisId };
   }
 
-  private async analysis(
+  async analysis(
     tenant: Tenant,
     input: ExecutionInput,
     taskId: string,
@@ -406,6 +405,8 @@ export class VisibilityFixtures extends Fixtures {
         unintended_domain_cited: false,
         citation_count: citations.length,
         avg_position: spec.avgPosition ?? null,
+        ...firstNamedFixture(spec.firstNamed),
+        answer_format_state: 'not_applicable',
         search_used: spec.searchUsed ?? false,
         search_query_count: spec.searchQueryCount ?? 0,
         ...fanoutProjection({
@@ -429,16 +430,22 @@ export class VisibilityFixtures extends Fixtures {
       analysis_id: id,
       created_at: now(),
     };
+    const offsets = spec.mentionOffsets;
     for (const name of spec.brandMentions ?? []) {
       await this.database
         .insertInto('brand_mentions')
-        .values({ ...mention, id: randomUUID(), brand_name: name })
+        .values({ ...mention, id: randomUUID(), brand_name: name, first_offset: offsets?.[name] })
         .execute();
     }
     for (const name of spec.competitorMentions ?? []) {
       await this.database
         .insertInto('competitor_mentions')
-        .values({ ...mention, id: randomUUID(), competitor_name: name })
+        .values({
+          ...mention,
+          id: randomUUID(),
+          competitor_name: name,
+          first_offset: offsets?.[name],
+        })
         .execute();
     }
     for (const [ordinal, citation] of citations.entries()) {
@@ -522,7 +529,6 @@ export class VisibilityFixtures extends Fixtures {
     }
   }
 
-  /** A run's persisted aggregate, as analysis finalization writes it. */
   async metricSnapshot(
     tenant: Tenant,
     auditId: string,
@@ -531,10 +537,6 @@ export class VisibilityFixtures extends Fixtures {
       visibilityScore?: number;
       analyzerVersion?: string;
       scoringRuleVersion?: string;
-      /**
-       * False for a history run only a later run's walk reads: its own
-       * baselines are never compared, so finalizing it is wasted setup.
-       */
       finalize?: boolean;
     },
   ): Promise<string> {
@@ -560,18 +562,15 @@ export class VisibilityFixtures extends Fixtures {
         created_at: now(),
       })
       .execute();
-    // Finalization persists the run's comparable baselines once its snapshot exists.
     if (input.finalize !== false)
       await persistComparisonBaselines(this.database, { workspaceId: tenant.workspaceId, auditId });
     return id;
   }
 
-  /** A run's persisted Sources facts over its seeded answers, as finalization writes them. */
   async sourceAggregates(tenant: Tenant, auditId: string, at = now()): Promise<void> {
     await persistSourceAggregates(this.database, { workspaceId: tenant.workspaceId, auditId, at });
   }
 
-  /** One prompt's persisted score for a run. */
   async promptScore(
     tenant: Tenant,
     auditId: string,
@@ -617,7 +616,6 @@ export class VisibilityFixtures extends Fixtures {
     return id;
   }
 
-  /** A page this project knows, optionally with a live action on it. */
   async sourcePage(
     tenant: Tenant,
     input: { urlHash: string; url: string; pageFormat?: string; action?: string },

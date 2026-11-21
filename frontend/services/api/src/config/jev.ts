@@ -97,7 +97,6 @@ export const jev = {
     minimum: 0,
     maximum: 1,
   },
-  /** Provisional thresholds of the core-only `names_a_business` question, calibrated apart. */
   answerable_flag_below: {
     env: ['JEV_ANSWERABLE_FLAG_BELOW'],
     type: 'float',
@@ -183,11 +182,6 @@ export const quality = {
       },
     },
   },
-  /**
-   * Asked of brand diagnostics only, which name the business and so can
-   * assert things about it. Comparisons also name a competitor, which the
-   * judge's state cannot tell apart from the tracked brand.
-   */
   brand_noul_questions: {
     grounded_claims: {
       instructions:
@@ -198,18 +192,9 @@ export const quality = {
       },
     },
   },
-  /**
-   * The topic choice asked when a run spans several topics: a draft the judge
-   * places under another selected topic with at least `topic_refile_at`
-   * probability is filed there. Provisional until calibrated.
-   */
   topic_instructions:
     "Which topic is `candidate.question` mainly about: the kind of product or service it asks for options of? A question about a single item belongs to that item's topic, not to a bundle, package or accessory topic the item could be part of.",
   topic_refile_at: 0.6,
-  /**
-   * Asked of core drafts only (branded diagnostics and comparisons name the
-   * brand by design), under the `answerable_*` thresholds.
-   */
   core_noul_questions: {
     names_a_business: {
       instructions:
@@ -221,11 +206,6 @@ export const quality = {
       },
     },
   },
-  /**
-   * The judge's intent choices that seek understanding or setup rather than
-   * something to buy: a core draft the judge places in one fails, whatever its
-   * own label said.
-   */
   core_advice_intents: ['learn', 'implement'],
   intent_instructions: 'What does the person asking `candidate.question` want from the answer?',
   intent_descriptions: {
@@ -252,7 +232,6 @@ export const quality = {
 
 export const qualityGatesReported = ['off', 'unavailable'];
 
-/** Cross-field validation runs at startup. */
 export function validateJevSettings(settings: Record<keyof typeof jev, unknown>): void {
   if (
     Number(settings.fail_below) > Number(settings.flag_below) ||

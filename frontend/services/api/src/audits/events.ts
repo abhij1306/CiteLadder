@@ -9,11 +9,6 @@ type AuditEvent = Awaited<ReturnType<typeof auditEvents>>[number];
 
 const frame = (event: AuditEvent) => ({ id: event.id, event: event.event_type, data: event });
 
-/**
- * An audit's events as a tail. A stream ends after its maximum duration, or
- * sooner when the stream slot finds the caller's access ended: the client
- * resumes with Last-Event-ID through the full authorization path.
- */
 export function auditEventTail(
   db: Database,
   stream: {

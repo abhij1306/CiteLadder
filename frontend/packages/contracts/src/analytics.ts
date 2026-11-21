@@ -13,10 +13,6 @@ import { z } from 'zod';
 /** Snapshot bucket granularity (`AiReferralsSnapshot.granularity`). */
 export const snapshotGranularitySchema = z.enum(['day', 'week', 'month']);
 
-/**
- * One dated point of a metric series. A `null` value is an UNAVAILABLE bucket
- * and renders as a chart gap — never coerced to a misleading zero.
- */
 const metricSeriesPointSchema = z.object({
   date: z.string(),
   value: z.number().nullable(),

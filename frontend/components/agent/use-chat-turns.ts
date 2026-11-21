@@ -13,20 +13,13 @@ import {
   type AgentChatDetail,
   type AgentMessage,
 } from '@/lib/api/agent';
-import type { AgentContextRefs } from '@citeladder/contracts/agent';
+import type { AgentAttachment, AgentContextRefs } from '@citeladder/contracts/agent';
 
-/**
- * The persisted chat. Reads never run the agent. While a turn is active its
- * stream shows progress; without an open stream (another tab, a reload, a
- * dropped connection) the chat is polled until the run reaches a terminal
- * state, and it is read again the moment a stream closes.
- */
 export function useChatDetail(workspaceId: string, chatId: string) {
   const query = useQuery({
     ...agentQueries.chat(workspaceId, chatId),
     enabled: Boolean(workspaceId && chatId),
     refetchInterval: (state) => {
-      // A page chat is read until its page fetch queues the first turn.
       if (isPageReading(state.state.data?.page_fetch)) return AGENT_PAGE_FETCH_POLL_MS;
       const run = state.state.data?.latest_run;
       return run && isRunActive(run) && !isLiveTurnConnected(run.id) ? runPollMs(run) : false;
@@ -37,7 +30,6 @@ export function useChatDetail(workspaceId: string, chatId: string) {
   useEffect(() => {
     if (closed) void refetch();
   }, [closed, refetch]);
-  // The server queued a page chat's first turn; it runs inside this tab's stream.
   const fetchedTurn = fetchedTurnToStart(query.data);
   useEffect(() => {
     if (fetchedTurn) startLiveTurn(chatId, fetchedTurn, workspaceId);
@@ -48,22 +40,19 @@ export function useChatDetail(workspaceId: string, chatId: string) {
 export type NewChatInput = {
   message: string;
   skillId: string | null | undefined;
-  /** A defined workflow; the server pins its skill and format. */
   workflowId?: string;
   actionId?: string;
   context: AgentContextRefs;
   mentions?: string[];
+  attachments?: AgentAttachment[];
 };
 
-/** Starts a chat once per accepted request; `onCreated` receives its id. */
 export function useCreateChat(
   workspaceId: string,
   projectId: string,
   onCreated: (chatId: string) => void,
 ) {
   const requestKey = useRequestKey();
-  // The descriptor reads the saved conversation before success resolves, so
-  // the current composer stays until the chat can render.
   const mutation = useMutation(agentMutations.createChat(workspaceId));
   const start = ({
     message,
@@ -72,6 +61,7 @@ export function useCreateChat(
     actionId,
     context,
     mentions = [],
+    attachments = [],
   }: NewChatInput) => {
     const input = {
       message: message.trim(),
@@ -80,6 +70,7 @@ export function useCreateChat(
       action_id: actionId,
       context,
       ...(mentions.length > 0 ? { mentions } : {}),
+      ...(attachments.length > 0 ? { attachments } : {}),
     };
     mutation.mutate(
       { projectId, idempotencyKey: requestKey.keyFor({ projectId, input }), input },
@@ -98,7 +89,6 @@ export function useCreateChat(
   };
 }
 
-/** An ordinary follow-up; only requested work creates an output revision. */
 export function useFollowUp(workspaceId: string, detail: AgentChatDetail) {
   const chatId = detail.chat.id;
   const [draft, setDraft] = useState('');
@@ -110,51 +100,58 @@ export function useFollowUp(workspaceId: string, detail: AgentChatDetail) {
   const mutation = useMutation(agentMutations.sendMessage({ workspaceId, projectId }));
   // The composer as it is when a send is accepted, not as it was when sent:
   // typing during the round trip must survive the acceptance.
-  const composer = useRef({ draft, mentions: commands.mentions });
+  const composer = useRef({ draft, mentions: commands.mentions, pastes: commands.pastes.items });
   useEffect(() => {
-    composer.current = { draft, mentions: commands.mentions };
+    composer.current = { draft, mentions: commands.mentions, pastes: commands.pastes.items };
   });
   type Turn = Parameters<typeof mutation.mutate>[0];
-  /**
-   * Every send goes through here: an accepted turn retires its request key,
-   * and clears the composer only if it still holds what was sent.
-   */
-  const submit = (turn: Turn) =>
+  const userMessages = detail.messages.filter((message) => message.role === 'user').length;
+  const [sentAt, setSentAt] = useState(userMessages);
+  const awaitingSaved = mutation.isSuccess && userMessages <= sentAt;
+  const submit = (turn: Turn) => {
+    setSentAt(userMessages);
     mutation.mutate(turn, {
       onSuccess: (_accepted, variables) => {
         requestKey.accepted();
-        const { draft: current, mentions } = composer.current;
+        const { draft: current, mentions, pastes } = composer.current;
         const submittedMentions = variables.mentions ?? [];
         const unchangedMentions =
           mentions.length === submittedMentions.length &&
           mentions.every((mention, index) => mention.id === submittedMentions[index]);
-        if (current.trim() === variables.message && unchangedMentions) {
+        const submittedPastes = variables.attachments ?? [];
+        const unchangedPastes =
+          pastes.length === submittedPastes.length &&
+          pastes.every((paste, index) => paste.text === submittedPastes[index]?.text);
+        if (current.trim() === variables.message && unchangedMentions && unchangedPastes) {
           setDraft('');
           commands.clear();
         }
       },
     });
-  /** The skill choice a recorded request was sent with, as the picker's tri-state. */
+  };
   const skillFor = (message: AgentMessage) => {
     if (message.skill_source === 'user') return message.skill_id;
     return message.skill_source === 'automatic' ? null : undefined;
   };
-  const request = (message: string, skill: string | null | undefined, mentions: string[]) => ({
+  const request = (
+    message: string,
+    skill: string | null | undefined,
+    sent: { mentions: string[]; attachments: AgentAttachment[] },
+  ) => ({
     chatId,
     message,
     skillId: skill,
-    ...(mentions.length > 0 ? { mentions } : {}),
+    ...(sent.mentions.length > 0 ? { mentions: sent.mentions } : {}),
+    ...(sent.attachments.length > 0 ? { attachments: sent.attachments } : {}),
   });
   const send = (message: string) => {
     const text = message.trim();
     if (!text) return;
-    setLastMessage(text);
-    const typed = request(
-      text,
-      skillId,
-      commands.mentions.map((mention) => mention.id),
-    );
-    submit({ ...typed, idempotencyKey: requestKey.keyFor(typed) });
+    commands.prepare({ message: text, edit: setDraft }, (prepared) => {
+      setLastMessage(prepared.message);
+      const typed = request(prepared.message, skillId, prepared);
+      submit({ ...typed, idempotencyKey: requestKey.keyFor(typed) });
+    });
   };
   return {
     draft,
@@ -164,27 +161,26 @@ export function useFollowUp(workspaceId: string, detail: AgentChatDetail) {
     recover: (message: AgentMessage) => {
       setDraft(message.content);
       setSkillId(skillFor(message));
-      commands.restore(message.mentions);
+      commands.restore({ mentions: message.mentions, pastes: message.attachments });
     },
-    /** Sends a recorded request again as a new turn, leaving the draft alone. */
     resend: (message: AgentMessage) =>
       submit({
-        ...request(
-          message.content,
-          skillFor(message),
-          message.mentions.map((mention) => mention.id),
-        ),
+        ...request(message.content, skillFor(message), {
+          mentions: message.mentions.map((mention) => mention.id),
+          attachments: message.attachments,
+        }),
         idempotencyKey: newIdempotencyKey(),
       }),
-    /** The message being sent, shown in the thread before the server accepts it. */
-    pendingMessage: mutation.isPending ? (mutation.variables?.message ?? null) : null,
+    pendingMessage:
+      mutation.isPending || awaitingSaved ? (mutation.variables?.message ?? null) : null,
     skillId,
     setSkillId,
     lastMessage,
     send,
     commands,
-    pending: mutation.isPending,
+    pending: mutation.isPending || commands.resolving,
     failure: mutation.isError ? agentWriteFailure(mutation.error, 'send the message') : null,
+    failedMessage: mutation.isError ? (mutation.variables?.message ?? null) : null,
     retrySubmission: () => {
       if (mutation.variables) submit(mutation.variables);
     },

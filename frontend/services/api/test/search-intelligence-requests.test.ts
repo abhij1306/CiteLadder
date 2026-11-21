@@ -103,7 +103,6 @@ describe('reviewed Search Intelligence requests', () => {
       'and',
       ['domain_from', 'not_like', '%.example.com'],
     ]);
-    // Each page is one billed task; each row is billed once, whatever the page split.
     const rate = (key: keyof typeof policy.search_intelligence.rates) =>
       Number(policy.search_intelligence.rates[key]) * 1e6;
     const quote = (calls: number, rows: number, task: number, row: number) =>

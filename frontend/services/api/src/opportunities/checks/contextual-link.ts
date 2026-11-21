@@ -1,7 +1,3 @@
-/**
- * A selected contextual-link suggestion appears in the source page's main
- * content in a later complete capture.
- */
 import { internalLinkAnalysisSchema, internalLinkSchema } from '@citeladder/contracts/site-health';
 import { policy } from '../../config.ts';
 import { record } from '../../db/json.ts';
@@ -14,11 +10,6 @@ import { pageAnalysis } from './read-context.ts';
 
 const NAVIGATION_REGIONS = new Set(['nav', 'header', 'footer', 'aside']);
 
-/**
- * A later complete capture verifies an observed main-content link, never a
- * model score. The anchor was a suggestion the editor may reword, so any
- * main-content link to the destination satisfies the check.
- */
 export function contextualLinkObserved(
   rawFacts: unknown,
   check: Pick<CheckOf<'contextual_link'>, 'extractor_version' | 'target_url'>,
@@ -41,7 +32,6 @@ export function contextualLinkObserved(
       (anchor) => typeof anchor.url === 'string' && linkUrl(anchor.url, base) === check.target_url,
     );
   if (matching.some((anchor) => anchor.region === 'main')) return true;
-  // An unclassified region might be the article body: no confident "missing".
   if (matching.some((anchor) => !NAVIGATION_REGIONS.has(String(anchor.region)))) return null;
   return false;
 }
@@ -51,10 +41,6 @@ export const contextualLinkCheck: CheckModule<'contextual_link'> = {
   leg: policy.opportunity.actions.LEG_CRAWL,
   sources: ['site_crawl'],
   measurable: () => true,
-  /**
-   * Freeze exactly the selected, still-current suggestions. The page's other
-   * findings keep their own checks in the same declaration.
-   */
   async freeze(members, { db, scope, recommendationIds }) {
     if (!members.length && !recommendationIds.length) return [];
     const selected = new Set(recommendationIds);

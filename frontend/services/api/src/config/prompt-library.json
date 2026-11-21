@@ -18,6 +18,7 @@
     "topic_name_max_chars": 255,
     "import_max_rows": 500,
     "create_batch_max": 50,
+    "bulk_prompts_max": 500,
     "import_max_bytes": 1048576,
     "intents": ["comparison", "discovery", "local", "purchase", "service"],
     "branded_cohorts": ["brand_diagnostic", "comparison"],
@@ -308,7 +309,12 @@
     "organic_cohorts": ["core"],
     "all_cohort": "all",
     "all_cohorts": ["comparison", "core"],
-    "requestable_cohorts": ["all", "commerce", "comparison", "core"]
+    "requestable_cohorts": ["all", "commerce", "comparison", "core"],
+    "brand_named_cohorts": ["brand_diagnostic"],
+    "perception_cohorts": {
+      "comparison": ["brand_diagnostic", "comparison"],
+      "all": ["brand_diagnostic", "comparison", "core"]
+    }
   },
   "prompt_set_name": "AI Visibility"
 }

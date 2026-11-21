@@ -1,25 +1,12 @@
 import * as DropdownPrimitive from '@radix-ui/react-dropdown-menu';
-import { CalendarDays } from 'lucide-react';
 import { useState } from 'react';
 
 import { Calendar } from '@/components/ui/calendar';
 import { FIELD_BOX } from '@/components/ui/input';
 import { MENU_PANEL } from '@/components/ui/menu';
+import { CalendarDays } from '@/lib/icons';
 import { cn } from '@/lib/utils';
 
-/**
- * DateField — an ISO date input with a calendar picker beside it.
- *
- * Replaces `<input type="date">`, whose popup is drawn by the BROWSER: it
- * ignores the design tokens entirely, and differs between Chrome, Safari and
- * Firefox, so the one control on the surface that opened a picker looked like
- * no other control in the product. The text input stays — typing a date is
- * often faster than clicking to it, and it keeps the field usable with a
- * keyboard alone — and the button opens the token-styled `Calendar`.
- *
- * The value is an ISO `YYYY-MM-DD` string throughout (see `Calendar` for why
- * a `Date` would be the wrong currency here).
- */
 export function DateField({
   value,
   onChange,
@@ -40,7 +27,6 @@ export function DateField({
   ariaLabel: string;
   id?: string;
   'aria-describedby'?: string;
-  /** Accepts `aria-invalid` directly, so it drops into a `Field` render prop. */
   'aria-invalid'?: boolean;
   invalid?: boolean;
   disabled?: boolean;
@@ -53,7 +39,7 @@ export function DateField({
       className={cn(
         'focus-frame flex items-center gap-2 pe-1',
         FIELD_BOX,
-        disabled && 'cursor-not-allowed opacity-45',
+        disabled && 'cursor-not-allowed opacity-60',
         className,
       )}
     >
@@ -68,7 +54,7 @@ export function DateField({
         disabled={disabled}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="text-ink placeholder:text-ink-muted text-body-sm h-full min-w-0 flex-1 bg-transparent font-mono tabular-nums disabled:cursor-not-allowed"
+        className="type-body placeholder:text-ink-2 min-w-0 flex-1 self-stretch bg-transparent tabular-nums disabled:cursor-not-allowed"
       />
       <DropdownPrimitive.Root open={open} onOpenChange={setOpen}>
         <DropdownPrimitive.Trigger asChild>
@@ -76,9 +62,9 @@ export function DateField({
             type="button"
             aria-label={`${ariaLabel}: open calendar`}
             disabled={disabled}
-            className="focus-ring text-ink-muted enabled:hover:text-ink not-data-[state=open]:enabled:hover:overlay-hover data-[state=open]:overlay-pressed data-[state=open]:text-ink inline-flex size-[var(--field-end-target)] shrink-0 items-center justify-center rounded-xs transition-colors"
+            className="focus-ring text-ink-2 enabled:hover:text-ink not-data-[state=open]:enabled:hover:overlay-hover data-[state=open]:overlay-pressed data-[state=open]:text-ink rounded-mark hit-area inline-flex size-[var(--target-min)] shrink-0 items-center justify-center transition-colors"
           >
-            <CalendarDays className="size-4" aria-hidden />
+            <CalendarDays className="size-3.5" aria-hidden />
           </button>
         </DropdownPrimitive.Trigger>
         <DropdownPrimitive.Portal>

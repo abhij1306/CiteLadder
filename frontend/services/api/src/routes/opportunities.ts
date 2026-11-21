@@ -1,8 +1,3 @@
-/**
- * The `opportunities` family: the persisted catalog, the row detail and the
- * shared order. Every lookup is filtered by the active workspace, so a foreign
- * id is a 404. Refreshes run only from evidence triggers.
- */
 import { policy } from '../config.ts';
 import { readBody } from '../http/body.ts';
 import { parseUuid } from '../http/uuid.ts';
@@ -17,7 +12,6 @@ import {
 } from '@citeladder/contracts/opportunities';
 
 const family = 'opportunities';
-// Routes under the project path resolve the project in the session read.
 const projectFamily = { family, authorize: 'active-project' } as const;
 const root = '/api/v1/projects/{project_id}/opportunities';
 const o = policy.opportunity.opportunities;

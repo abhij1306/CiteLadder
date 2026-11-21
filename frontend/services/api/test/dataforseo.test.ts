@@ -106,6 +106,14 @@ describe('DataForSEO paid submission boundary', () => {
       ).rejects.toMatchObject({ code: 'provider_account_unavailable', retryable: false });
     },
   );
+  it.each([
+    ['envelope', { status_code: 40202, tasks: null }],
+    ['task', { status_code: 20000, tasks: [{ status_code: 40209 }] }],
+  ])('reports a rate limit in the %s body as a retryable refusal', async (_, body) => {
+    await expect(
+      client(async () => Response.json(body)).submit('google_ai_overview', request),
+    ).rejects.toMatchObject({ code: 'rate_limit', retryable: true });
+  });
   it('retrieves for free using only the committed ID', async () => {
     let calls = 0;
     const result = await client(async (url, options) => {

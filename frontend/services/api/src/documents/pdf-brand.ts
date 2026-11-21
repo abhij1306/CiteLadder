@@ -23,7 +23,8 @@ import {
 } from '@citeladder/contracts/brand-logo';
 import { create as parseFont } from 'fontkit';
 
-/** The tokens a document paints with, by the `globals.css` custom property that owns each. */
+import { oklchToHex } from './oklch.ts';
+
 const TOKENS = {
   ink: '--color-ink',
   inkSecondary: '--color-ink-secondary',
@@ -40,12 +41,6 @@ const TOKENS = {
 export type Tone = keyof typeof TOKENS;
 export type Palette = Readonly<Record<Tone, string>>;
 
-/**
- * `display` sets headings in Inter 500; `text` and `medium` set Inter;
- * `figure` (a figure cell) and `figureMedium` (a headline figure, a rank) set
- * their digits in the figure face and everything else in Inter, as the app's
- * figure roles do.
- */
 export type Style = 'text' | 'medium' | 'display' | 'figure' | 'figureMedium';
 type Family = 'display' | 'text' | 'figure' | 'fallback';
 type Weight = 400 | 500;
@@ -73,7 +68,6 @@ type Source = {
   directory: string;
   prefix: string;
   weights: Weight[];
-  /** A face that sets only these characters, from its Latin subset alone. */
   only?: ReadonlySet<number>;
 };
 const SOURCES: readonly Source[] = [
@@ -106,7 +100,6 @@ const SOURCES: readonly Source[] = [
 
 type FontFile = { family: Family; weight: Weight; bytes: Buffer; characters: ReadonlySet<number> };
 type Face = { name: string; characters: ReadonlySet<number> };
-/** A style's faces in lookup order; the first is the face for unsupported glyphs. */
 export type FaceChain = readonly [Face, ...Face[]];
 
 let fontFiles: Promise<FontFile[]> | undefined;
@@ -117,7 +110,6 @@ async function sourceFiles(source: Source): Promise<FontFile[]> {
   const pattern = new RegExp(String.raw`^${source.prefix}-${subset}-(400|500)-normal\.woff$`, 'u');
   const names = (await readdir(source.directory))
     .filter((name) => pattern.test(name) && source.weights.some((w) => name.includes(`-${w}-`)))
-    // Latin first, so the common case finds its glyphs in the first face.
     .sort(
       (a, b) =>
         Number(!a.includes('-latin-')) - Number(!b.includes('-latin-')) || a.localeCompare(b),
@@ -141,7 +133,6 @@ async function sourceFiles(source: Source): Promise<FontFile[]> {
   );
 }
 
-/** Retries a failed load next time: a transient read error must not fail every later document. */
 function cached<T>(current: Promise<T> | undefined, load: () => Promise<T>, reset: () => void) {
   const value = current ?? load();
   value.catch(reset);
@@ -170,7 +161,6 @@ async function tokenSource(): Promise<string> {
   }
 }
 
-/** Each token's first (light) declaration, with `var()` references resolved. */
 function parsePalette(css: string): Palette {
   const declared = new Map<string, string>();
   for (const match of css.matchAll(/^[ \t]*(--[a-z0-9-]+)[ \t]*:([^;{}]+);/gimu)) {
@@ -181,9 +171,9 @@ function parsePalette(css: string): Palette {
     const value = declared.get(name);
     const reference = /^var\((--[a-z0-9-]+)\)$/iu.exec(value ?? '')?.[1];
     if (reference && !seen.has(reference)) return resolve(reference, new Set([...seen, name]));
-    if (!value || !/^#[0-9a-f]{6}$/iu.test(value))
-      throw new Error(`Design token ${name} has no light hex value`);
-    return value;
+    const hex = value && (/^#[0-9a-f]{6}$/iu.test(value) ? value : oklchToHex(value));
+    if (!hex) throw new Error(`Design token ${name} has no light sRGB colour`);
+    return hex;
   };
   const token = (tone: Tone) => resolve(TOKENS[tone], new Set());
   return {
@@ -212,7 +202,6 @@ export function brandPalette(): Promise<Palette> {
   return tokens;
 }
 
-/** Registers every face on the document; returns each style's faces in lookup order. */
 export async function registerFaces(
   document: PDFKit.PDFDocument,
 ): Promise<Record<Style, FaceChain>> {
@@ -237,22 +226,12 @@ export async function registerFaces(
   };
 }
 
-/**
- * fontkit applies the faces' standard ligatures by default, and the text layer
- * then maps an fi, ff or fl glyph back to its first letter only, so copied or
- * searched text reads "frst". Tabular figures keep any digit in a heading's
- * Inter aligned; figures in data roles use the `figure` styles,
- * whose digits come from the figure face, as on the web.
- * @types/pdfkit types only the tag-list form; pdfkit hands the value to
- * fontkit, whose tag-to-boolean form is the only way to turn a default off.
- */
 export const TEXT_FEATURES = {
   liga: false,
   clig: false,
   tnum: true,
 } as unknown as PDFKit.Mixins.OpenTypeFeatures[];
 
-/** Draws the lockup with its top-left corner at (x, y), in its light values. */
 export function drawLogo(
   document: PDFKit.PDFDocument,
   palette: Palette,
@@ -267,7 +246,6 @@ export function drawLogo(
     document.roundedRect(bar.x, bar.y, bar.width, bar.height, 1.1).fill(palette.accent);
   for (const glyph of LOGO_GLYPHS) {
     const color = glyph.tone === 'accent' ? palette.accent : palette.ink;
-    // Stroke and fill share one colour, so the SVG's stroke-then-fill order is moot.
     document
       .save()
       .translate(glyph.x, LOGO_GLYPH_BASELINE)

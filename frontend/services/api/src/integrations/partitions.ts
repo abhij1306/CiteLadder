@@ -1,4 +1,3 @@
-/** Partition replacement is independent of dimension identities, including empty extracts. */
 import { sql } from 'kysely';
 import type { Database } from '../db/database.ts';
 import { record, strings } from '../db/json.ts';
@@ -25,7 +24,6 @@ const complete = sql<boolean>`a.id is not null and (r.status = 'succeeded' or a.
     where bad.workspace_id=r.workspace_id and bad.sync_run_id=r.id and bad.dataset=a.dataset
       and (bad.extract_metadata->>'truncated' = 'true' or ${incompatibleLanding('bad')}))`;
 
-/** Apply to an integration_metric_rows query (plain table or the given alias). */
 export function selectedPartition(alias = 'integration_metric_rows') {
   const col = (name: string) => aliased(alias, name);
   return sql<boolean>`${col('resync_seq')} = (
@@ -38,7 +36,6 @@ export function selectedPartition(alias = 'integration_metric_rows') {
 }
 
 export type PartitionScope = { workspaceId: string; projectId: string; start: string; end: string };
-/** Guard multi-query projections against a revision committing between scans. */
 export async function partitionEpoch(
   db: Database,
   scope: Pick<PartitionScope, 'workspaceId' | 'projectId'>,
@@ -52,7 +49,6 @@ export async function partitionEpoch(
   );
   return firstOf(result.rows, 'the partition epoch aggregate row').epoch;
 }
-/** The latest day covered by a complete partition of `dataset`, rows or not. */
 export async function partitionAnchor(
   db: Database,
   workspaceId: string,
@@ -69,18 +65,12 @@ export async function partitionAnchor(
   return result.rows[0]?.day ?? null;
 }
 
-/**
- * Days in `start`..`end` that a complete partition of any of `datasets`
- * covers: imported days, with or without rows. A gap no sync has completed
- * is not counted.
- */
 export async function importedDayCount(
   db: Database,
   scope: PartitionScope,
   datasets: readonly string[],
 ) {
   if (datasets.length === 0) return 0;
-  // Completeness is judged once per partition, before its days are expanded.
   const result = await sql<{ days: number }>`with covered as materialized (
       select distinct greatest(r.window_start::date,${scope.start}::date) as first_day,
         least(r.window_end::date,${scope.end}::date) as last_day
@@ -102,11 +92,6 @@ const latestSearchConsoleRow = (workspaceId: string, projectId: string) =>
     where m.workspace_id=${workspaceId}::uuid and m.project_id=${projectId}::uuid
       and m.dataset=${searchConsoleDay} and ${selectedPartition('m')})`;
 
-/**
- * The Search Console anchor: the latest day with selected date-only rows.
- * A property that has never reported a row falls back to its complete
- * coverage, where an empty day cannot be told apart from lag.
- */
 export async function searchConsoleAnchor(db: Database, workspaceId: string, projectId: string) {
   const result = await sql<{
     day: string | null;
@@ -118,7 +103,6 @@ export async function searchConsoleAnchor(db: Database, workspaceId: string, pro
   );
 }
 
-/** The providers with an active property mapping into the project. */
 export async function mappedProviders(
   db: Database,
   scope: Pick<PartitionScope, 'workspaceId' | 'projectId'>,
@@ -134,7 +118,6 @@ export async function mappedProviders(
   return new Set(rows.map((row) => row.provider));
 }
 
-/** The provider a dataset is imported from, by its name prefix. */
 export const datasetProvider = (dataset: string) => dataset.split('_')[0] ?? dataset;
 
 // Flags naming which revision was selected rather than describing the selected
@@ -148,10 +131,6 @@ export type DayQuality = {
   not_yet_reported: boolean;
 };
 
-/**
- * Whether a day's selected partition can observe a zero: it exists, carries
- * no evidence flag, and is not a Search Console day still unreported.
- */
 export function observesZero(quality: DayQuality) {
   return (
     quality.revision !== null &&
@@ -168,11 +147,6 @@ export async function partitionQuality(db: Database, scope: PartitionScope, data
     provider === 'gsc'
       ? sql<boolean>`coalesce(d.day > (select day from search_console),false)`
       : sql<boolean>`false`;
-  // Search Console finalizes days in order, within its finality days. A
-  // selected revision that reported a row on or after a day, or fetched it
-  // after those days, read it final. Otherwise it may have read the day before
-  // Search Console finalized it: not yet reported, even once a later revision
-  // reports later days. Sync re-reads such a day until it is past that bound.
   const unfinalized =
     provider === 'gsc'
       ? sql<boolean>`coalesce(bool_or(s.revision is not null

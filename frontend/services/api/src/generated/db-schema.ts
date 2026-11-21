@@ -36,6 +36,8 @@ export interface Actions {
   effective_status: string;
   evidence_cleared_at: Timestamp | null;
   families: Json;
+  goal: string | null;
+  goal_grouping: string | null;
   group_key: string;
   id: string;
   last_member_opportunity_ids: Generated<Json>;
@@ -62,6 +64,13 @@ export interface ActionStatusEvents {
   next_status: string;
   previous_status: string;
   project_id: string;
+  workspace_id: string;
+}
+
+export interface ActionUrls {
+  action_id: string;
+  project_id: string;
+  site_url_id: string;
   workspace_id: string;
 }
 
@@ -92,6 +101,7 @@ export interface AgentInstructionRevisions {
 }
 
 export interface AgentMessages {
+  attachments: Generated<Json>;
   author_user_id: string | null;
   chat_id: string;
   content: string;
@@ -100,6 +110,7 @@ export interface AgentMessages {
   id: string;
   mentions: Json;
   project_id: string;
+  proposals: Generated<Json>;
   reply_to_message_id: string | null;
   role: string;
   sequence: number;
@@ -462,6 +473,18 @@ export interface AnswerPerceptions {
   workspace_id: string;
 }
 
+export interface AnswerUntrackedNames {
+  analysis_id: string;
+  audit_id: string;
+  created_at: Timestamp;
+  id: string;
+  name: string;
+  name_key: string;
+  perception_id: string;
+  project_id: string;
+  workspace_id: string;
+}
+
 export interface ApiIdempotency {
   api_key_id: string;
   created_at: Timestamp;
@@ -500,6 +523,7 @@ export interface AuditAnswerAggregates {
   logical_engine: string;
   project_id: string;
   prompt_keys: string[];
+  topic_id: string | null;
   workspace_id: string;
 }
 
@@ -540,6 +564,20 @@ export interface AuditEvents {
   workspace_id: string;
 }
 
+export interface AuditFanoutTerms {
+  analyzer_version: string;
+  audit_id: string;
+  created_at: Timestamp;
+  id: string;
+  previous_audit_id: string | null;
+  project_id: string;
+  source_analysis_ids: Json;
+  terms: Json;
+  total_searches: number;
+  unreported_engines: string[];
+  workspace_id: string;
+}
+
 export interface AuditPromptSnapshots {
   audit_id: string;
   buyer_stage: string;
@@ -553,6 +591,8 @@ export interface AuditPromptSnapshots {
   prompt_intent: string;
   text: string;
   theme: string;
+  topic_id: string | null;
+  topic_name: string | null;
   workspace_id: string;
 }
 
@@ -628,6 +668,7 @@ export interface AuditSourceAggregates {
   prompt_keys: string[];
   source_class: string | null;
   source_taxonomy_version: string | null;
+  topic_id: string | null;
   url_hash: string | null;
   urls: string[];
   workspace_id: string;
@@ -679,6 +720,20 @@ export interface AuditTasks {
   transport_model: string;
   transport_provider: string;
   updated_at: Timestamp;
+  workspace_id: string;
+}
+
+export interface AuditTopicMetrics {
+  analyzer_version: string;
+  audit_id: string;
+  created_at: Timestamp;
+  id: string;
+  metrics: Json;
+  project_id: string;
+  source_analysis_ids: Json;
+  topic_id: string;
+  topic_name: string;
+  visibility_score: number;
   workspace_id: string;
 }
 
@@ -926,6 +981,17 @@ export interface Citations {
   url_hash: string | null;
   url_identity_method: string | null;
   url_identity_version: string | null;
+  workspace_id: string;
+}
+
+export interface ClaimVerdictOverrides {
+  claim_verdict_id: string;
+  created_at: Timestamp;
+  created_by_user_id: string | null;
+  from_verdict: string;
+  id: string;
+  note: string | null;
+  to_verdict: string;
   workspace_id: string;
 }
 
@@ -1751,12 +1817,18 @@ export interface MonitoredSiteUrls {
 export interface ObservedEntityCandidates {
   analyzer_version: string;
   audit_id: string;
+  citation_count: number | null;
   created_at: Timestamp;
-  domain: string;
+  decided_at: Timestamp | null;
+  decided_by_user_id: string | null;
+  domain: string | null;
   engine_count: number;
+  engine_total: number;
   id: string;
+  kind: string;
   market_relevant: boolean;
   name: string;
+  name_key: string | null;
   project_id: string;
   prompt_count: number;
   qualification_reason: string;
@@ -1954,6 +2026,17 @@ export interface Projects {
   subindustry: string;
   updated_at: Timestamp;
   website_url: string;
+  workspace_id: string;
+}
+
+export interface ProjectThemes {
+  created_at: Timestamp;
+  id: string;
+  name: string;
+  position: number;
+  project_id: string;
+  source: string;
+  updated_at: Timestamp;
   workspace_id: string;
 }
 
@@ -2258,6 +2341,8 @@ export interface ReferralEvents {
 export interface ResponseAnalyses {
   ads_parser_version: string | null;
   analyzer_version: string;
+  answer_format_state: string;
+  answer_formats: string[] | null;
   artifact_id: string;
   audit_id: string;
   avg_position: number | null;
@@ -2272,7 +2357,10 @@ export interface ResponseAnalyses {
   fanout_projection_version: Generated<string>;
   fanout_queries: Generated<string[]>;
   fanout_state: Generated<string>;
+  first_named_kind: string;
+  first_named_name: string | null;
   id: string;
+  in_text_link_count: number | null;
   logical_engine: string;
   owned_citation_count: number;
   owned_domain_cited: boolean;
@@ -2528,6 +2616,7 @@ export interface SiteCrawls {
   failed_url_count: number;
   id: string;
   inventory_complete: boolean;
+  live_counters: Json | null;
   partial_reason: string;
   profile_id: string;
   project_id: string;
@@ -2668,6 +2757,12 @@ export interface SiteHealthProfiles {
   workspace_id: string;
 }
 
+export interface SiteHealthSnapshotAnalyses {
+  analysis_id: string;
+  snapshot_id: string;
+  workspace_id: string;
+}
+
 export interface SiteHealthSnapshots {
   aeo_measurement_coverage: number | null;
   aeo_measurement_state: string;
@@ -2710,10 +2805,8 @@ export interface SiteHealthSnapshots {
   search_eligibility: string;
   selected_url_count: number;
   severity_counts: Json | null;
-  source_analysis_ids: string[] | null;
   source_artifact_ids: string[] | null;
   source_attempt_ids: string[] | null;
-  source_evaluation_ids: string[] | null;
   source_task_ids: string[] | null;
   status_counts: Json | null;
   technical_defect_affected_page_count: number;
@@ -2761,7 +2854,6 @@ export interface SiteIssueCatalogs {
   project_id: string;
   reference_snippets: Generated<Json>;
   rule_catalog_version: string;
-  sources: Json;
   summary: Json;
   updated_at: Timestamp;
   workspace_id: string;
@@ -2942,6 +3034,17 @@ export interface SiteRuleEvaluations {
   source_artifact_id: string;
   supporting_artifact_ids: string[] | null;
   weight: number;
+  workspace_id: string;
+}
+
+export interface SiteSitemapEntries {
+  crawl_id: string;
+  created_at: Timestamp;
+  id: string;
+  lastmod: string | null;
+  listed_url: string;
+  project_id: string;
+  site_url_id: string;
   workspace_id: string;
 }
 
@@ -3212,6 +3315,7 @@ export interface WorkspaceSiteHealthRuntime {
 
 export interface DB {
   action_status_events: ActionStatusEvents;
+  action_urls: ActionUrls;
   actions: Actions;
   agent_chats: AgentChats;
   agent_instruction_revisions: AgentInstructionRevisions;
@@ -3233,16 +3337,19 @@ export interface DB {
   answer_ad_observations: AnswerAdObservations;
   answer_claims: AnswerClaims;
   answer_perceptions: AnswerPerceptions;
+  answer_untracked_names: AnswerUntrackedNames;
   api_idempotency: ApiIdempotency;
   api_keys: ApiKeys;
   audit_answer_aggregates: AuditAnswerAggregates;
   audit_comparison_baselines: AuditComparisonBaselines;
   audit_engine_snapshots: AuditEngineSnapshots;
   audit_events: AuditEvents;
+  audit_fanout_terms: AuditFanoutTerms;
   audit_prompt_snapshots: AuditPromptSnapshots;
   audit_schedules: AuditSchedules;
   audit_source_aggregates: AuditSourceAggregates;
   audit_tasks: AuditTasks;
+  audit_topic_metrics: AuditTopicMetrics;
   audits: Audits;
   bot_activity_daily: BotActivityDaily;
   bot_ip_range_snapshots: BotIpRangeSnapshots;
@@ -3259,6 +3366,7 @@ export interface DB {
   branded_query_overrides: BrandedQueryOverrides;
   brands: Brands;
   citations: Citations;
+  claim_verdict_overrides: ClaimVerdictOverrides;
   claim_verdicts: ClaimVerdicts;
   commerce_catalog_revisions: CommerceCatalogRevisions;
   commerce_categories: CommerceCategories;
@@ -3318,6 +3426,7 @@ export interface DB {
   page_snapshots: PageSnapshots;
   performance_dimension_stats: PerformanceDimensionStats;
   project_markets: ProjectMarkets;
+  project_themes: ProjectThemes;
   projects: Projects;
   prompt_candidates: PromptCandidates;
   prompt_generation_runs: PromptGenerationRuns;
@@ -3354,6 +3463,7 @@ export interface DB {
   site_fetch_artifacts: SiteFetchArtifacts;
   site_fetch_attempts: SiteFetchAttempts;
   site_health_profiles: SiteHealthProfiles;
+  site_health_snapshot_analyses: SiteHealthSnapshotAnalyses;
   site_health_snapshots: SiteHealthSnapshots;
   site_internal_link_events: SiteInternalLinkEvents;
   site_internal_link_runs: SiteInternalLinkRuns;
@@ -3365,6 +3475,7 @@ export interface DB {
   site_page_analyses: SitePageAnalyses;
   site_page_link_metrics: SitePageLinkMetrics;
   site_rule_evaluations: SiteRuleEvaluations;
+  site_sitemap_entries: SiteSitemapEntries;
   site_url_observations: SiteUrlObservations;
   site_urls: SiteUrls;
   source_page_entity_presences: SourcePageEntityPresences;

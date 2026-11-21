@@ -5,17 +5,12 @@ import type { Database } from '../db/database.ts';
 import type { CrawlLogSources } from '../generated/db-schema.ts';
 import { crawlLogs } from '../config/crawl-logs.ts';
 
-/**
- * Why a live source stopped delivering. An accepted receipt clears any reason
- * in the transaction that stores it, except one only a passing check lifts.
- */
 export type StallReason = z.infer<typeof crawlStallReasonSchema>;
 /** Reasons a receipt cannot disprove: a failed subscription check holds until a check passes. */
 export const CHECK_HELD_STALLS: readonly string[] = [
   'verification_failed',
 ] satisfies readonly StallReason[];
 
-/** Record a refusal the sender cannot see in a receipt; the first reason and time stay. */
 export async function markStalled(
   db: Database,
   source: Pick<Selectable<CrawlLogSources>, 'workspace_id' | 'project_id' | 'id'>,
@@ -48,10 +43,6 @@ export async function clearStall(
     .execute();
 }
 
-/**
- * A workspace's live webhook and verified pull sources older than `stalled_after_hours` with no
- * accepted receipt inside that window become `no_receipts`. Bounded per call.
- */
 export async function stallQuietSources(db: Database, workspaceId: string, now = new Date()) {
   const since = new Date(now.getTime() - crawlLogs.stalled_after_hours * 3600000);
   await db
@@ -65,7 +56,6 @@ export async function stallQuietSources(db: Database, workspaceId: string, now =
         .selectFrom('crawl_log_sources as s')
         .select('s.id')
         .where('s.workspace_id', '=', workspaceId)
-        // A pull source is quiet only once it was verified; before that it never pulls.
         .where((eb) =>
           eb.or([
             eb('s.kind', '=', 'webhook'),

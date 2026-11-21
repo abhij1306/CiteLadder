@@ -1,8 +1,8 @@
 import { chooseFilterOption, openFilterRow } from '@/test/all-filters';
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { afterAll, afterEach, beforeAll, expect, it } from 'vite-plus/test';
+import { afterAll, afterEach, beforeAll, beforeEach, expect, it } from 'vite-plus/test';
 
 import type {
   SearchIntelligenceDataset,
@@ -73,6 +73,12 @@ const readiness: SearchIntelligenceReadiness = {
 };
 
 beforeAll(() => mswServer.listen({ onUnhandledFrame: 'error' }));
+beforeEach(() => {
+  window.history.replaceState(null, '', '/search-intelligence?tab=overview');
+  mswServer.use(
+    http.get(`/api/v1/projects/${project.id}/demand/latest`, () => new Promise(() => {})),
+  );
+});
 afterEach(() => mswServer.resetHandlers());
 afterAll(() => mswServer.close());
 
@@ -106,7 +112,6 @@ it('offers the first analysis from the empty overview', async () => {
   expect(await screen.findByRole('dialog', { name: 'Review analysis cost' })).toBeInTheDocument();
 });
 
-/** A published dataset for one of the project's websites. */
 function dataset(
   hostname: string,
   overrides: Partial<SearchIntelligenceDataset>,
@@ -168,7 +173,6 @@ it('tells a Member who may not add the login who can, without sending them to se
 });
 
 it('offers citation matching only for the website whose list is on screen', async () => {
-  // Reads behind the tab's views are not under test; an empty error keeps them quiet.
   mswServer.use(http.get(`${root}/*`, () => HttpResponse.json({}, { status: 404 })));
   renderPage({
     ...readiness,
@@ -185,7 +189,6 @@ it('offers citation matching only for the website whose list is on screen', asyn
   await screen.findByRole('radiogroup', { name: 'backlinks view' });
   expect(await openFilterRow(userEvent.setup(), 'Website', 'www.example.com')).toBeVisible();
   await userEvent.keyboard('{Escape}');
-  // The website and market read as one caption in the strip, not a filter.
   expect(
     screen.getByText(
       (_, node) =>
@@ -202,10 +205,35 @@ it('offers citation matching only for the website whose list is on screen', asyn
   ).toBeInTheDocument();
 });
 
+it('moves between Demand and the research tabs on one tab row, keeping focus and the masthead', async () => {
+  window.history.replaceState(null, '', '/search-intelligence');
+  renderPage({
+    ...readiness,
+    datasets: [dataset('www.example.com', { summary: { organic_keywords: 12 } })],
+  });
+  const masthead = () => document.querySelector('header[data-masthead]') as HTMLElement;
+  const actionNames = () =>
+    within(masthead())
+      .getAllByRole('button')
+      .map((button) => button.textContent);
+  const demand = await screen.findByRole('tab', { name: 'Demand' });
+  await within(masthead()).findByRole('button', { name: 'New analysis' });
+  const onDemand = actionNames();
+  expect(onDemand).toEqual(expect.arrayContaining(['Cost details', 'Refresh', 'New analysis']));
+  demand.focus();
+  await userEvent.keyboard('{ArrowRight}');
+  const overview = screen.getByRole('tab', { name: 'Overview' });
+  expect(overview).toHaveFocus();
+  expect(overview).toHaveAttribute('aria-selected', 'true');
+  expect(actionNames()).toEqual(onDemand);
+  await userEvent.keyboard('{ArrowLeft}');
+  expect(screen.getByRole('tab', { name: 'Demand' })).toHaveFocus();
+  expect(actionNames()).toEqual(onDemand);
+});
+
 it('keeps the tab row when Keyword Research cannot be read', async () => {
   mswServer.use(
     http.get(root, () =>
-      // A 4xx is not retried, so the failure shows without waiting out a backoff.
       HttpResponse.json({ error: { code: 'invalid', message: 'Read failed' } }, { status: 422 }),
     ),
   );
@@ -235,9 +263,10 @@ it('offers a stopped analysis its recovery: review and run it again', async () =
     ...readiness,
     latest_run: { ...run, status: 'failed', error_code: 'acquisition_queue_terminal' },
   });
-  expect(await screen.findByRole('alert')).toHaveTextContent(
-    'The analysis stopped before every request finished.',
-  );
+  expect(
+    await screen.findByText(/The analysis stopped before every request finished\./),
+  ).toBeVisible();
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: 'Review again' }));
   expect(await screen.findByRole('dialog', { name: 'Review analysis cost' })).toBeInTheDocument();
 });

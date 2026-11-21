@@ -1,14 +1,8 @@
-/**
- * The cross-run visibility trend: one point per run, or per UTC bucket.
- *
- * A projection of the project's persisted snapshots; a project with no matching
- * history is an empty list, never an error. An explicit model or retrieval
- * slice filters sources before anything is folded.
- */
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { toUtc, type ParsedDatetime } from '../http/datetimes.ts';
-import { applyMarks, rankingMarks } from './ranking-marks.ts';
+import { applyIdentities, brandIdentities } from './brand-identities.ts';
+import { withPointSentiments } from './ranking-sentiment.ts';
 import {
   loadMeasuredRuns,
   trendSource,
@@ -17,6 +11,7 @@ import {
   type TrendSource,
 } from './runs.ts';
 import { TrendQueryError, validateEngineAndRange, validateCohort } from './selection.ts';
+import { withTrendEvents } from './trend-events.ts';
 import { bucketPoints, bucketStart, rawPoint, type TrendPoint } from './trend-folding.ts';
 
 const visibility = policy.visibility;
@@ -31,11 +26,8 @@ export type TrendQuery = {
   cohort: string;
 };
 
-/** The run as a source of this slice, or null when the slice excludes it. */
 function sliceSource(run: MeasuredRun, query: TrendQuery): TrendSource | null {
   const source = trendSource(run, query.logicalEngine, query.cohort);
-  // Slices match the exact frozen identity, so a multi-model point never
-  // lands in a model slice.
   if (source === null) return null;
   if (query.transportModel !== null && source.transportModel !== query.transportModel) return null;
   if (query.retrievalEnabled !== null && source.retrievalEnabled !== query.retrievalEnabled)
@@ -43,14 +35,6 @@ function sliceSource(run: MeasuredRun, query: TrendQuery): TrendSource | null {
   return source;
 }
 
-/**
- * The slice's newest `trend_max_runs` sources in the window, oldest first.
- * Runs are read newest first, a page of `trend_max_runs + 1` at a time, and
- * the slice filters each page, so a narrow slice still reaches its older
- * runs. One source past the bound shows where history was cut: it leaves the
- * trend and, in a bucketed view, so does every source sharing its bucket, so
- * no point folds part of a bucket.
- */
 async function newestSources(
   db: Database,
   scope: RunScope,
@@ -69,7 +53,6 @@ async function newestSources(
       const source = sliceSource(run, query);
       if (source !== null) newestFirst.push(source);
     }
-    // A short page is the end of the window's history.
     const [oldest] = page;
     if (oldest === undefined || page.length <= bound) break;
     olderThan = oldest.auditId;
@@ -96,12 +79,11 @@ export async function getVisibilityTrends(
   validateCohort(query.cohort);
   const sources = await newestSources(db, scope, query);
   if (sources.length === 0) return [];
-  // Cap points after folding, so a run-heavy week is still one point and
-  // never crowds out the weeks before it. The newest points stay, in order.
   const points = (
     query.granularity === 'run' ? sources.map(rawPoint) : bucketPoints(sources, query.granularity)
   ).slice(-visibility.trend_max_points);
-  const marks = await rankingMarks(db, scope);
-  for (const point of points) applyMarks(point.rankings, marks);
-  return points;
+  const marks = await brandIdentities(db, scope);
+  for (const point of points) applyIdentities(point.rankings, marks);
+  const withEvents = await withTrendEvents(db, scope, sources, points);
+  return withPointSentiments(db, scope, query, withEvents);
 }

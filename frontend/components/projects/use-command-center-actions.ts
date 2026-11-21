@@ -12,8 +12,6 @@ export function useCommandCenterActions(data: CommandCenter, project: Project) {
   const reorder = useMutation(
     projectMutations.reorderActions({ workspaceId: project.workspace_id, projectId: project.id }),
   );
-  // The version the next reorder names: the one a reorder returned, or, after
-  // a refusal, the one the command center was read with.
   const reorderTo = (ordered: Opportunity[]) =>
     reorder.mutate(
       { ordered, expectedVersion: orderVersion.current },

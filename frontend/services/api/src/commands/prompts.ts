@@ -1,10 +1,3 @@
-/**
- * Prompt library commands: the one write path the browser, the public API and
- * MCP share. Each takes an actor checked against its permission, then calls
- * the prompt owners scoped to the caller's project (`RecordScope`): a set,
- * prompt or topic outside it is a 404, so no caller checks project ownership
- * itself.
- */
 import type { z } from 'zod';
 
 import { budget, spendBudget } from '../abuse/usage.ts';
@@ -13,6 +6,7 @@ import type { Database } from '../db/database.ts';
 import type { RecordScope } from '../db/workspace-scope.ts';
 import { ApiError } from '../errors.ts';
 import { isNonEmpty } from '../lists.ts';
+import * as bulk from '../prompts/bulk.ts';
 import * as candidates from '../prompts/candidates.ts';
 import type { GenerationInput } from '../prompts/generation-input.ts';
 import { generatePrompts } from '../prompts/generation.ts';
@@ -22,14 +16,11 @@ import * as topicPreview from '../prompts/topic-preview.ts';
 import * as topics from '../prompts/topics.ts';
 import { permission, type Authorized } from './permission.ts';
 
-/** Changing the library. */
 export const PROMPTS_WRITE = permission({ capability: 'write', scope: 'prompts:write' });
-/** A metered model call for the library: generation and topic proposals. */
 export const PROMPTS_RUN = permission({ capability: 'run', scope: 'prompts:write' });
 type Writer = Authorized<typeof PROMPTS_WRITE>;
 type Runner = Authorized<typeof PROMPTS_RUN>;
 
-/** The scope the actor's records are found in. */
 const scopeOf = (actor: Writer, projectId: string | null): RecordScope => ({
   workspaceId: actor.workspaceId,
   projectId,
@@ -85,6 +76,24 @@ export function setPromptStatuses(
   return prompts.bulkSetStatus(db, scopeOf(actor, projectId), promptSetId, input);
 }
 
+export function assignPromptTopic(
+  db: Database,
+  actor: Writer,
+  projectId: string,
+  input: z.infer<typeof bulk.promptBulkTopic>,
+) {
+  return bulk.assignPromptTopic(db, { workspaceId: actor.workspaceId, projectId }, input);
+}
+
+export function deletePrompts(
+  db: Database,
+  actor: Writer,
+  projectId: string,
+  input: z.infer<typeof bulk.promptBulkDelete>,
+) {
+  return bulk.deletePrompts(db, { workspaceId: actor.workspaceId, projectId }, input);
+}
+
 /**
  * Import spends the workspace's `bulk_import` window first, then checks the raw
  * byte size, and only then parses the body: a refused, oversized or invalid
@@ -131,7 +140,6 @@ export function deleteTopic(
   return topics.deleteTopic(db, scopeOf(actor, projectId), topicId);
 }
 
-/** The Prompt Builder's reviewed topic plan: deletes, renames and creates at once. */
 export function confirmTopics(
   db: Database,
   actor: Writer,
@@ -141,16 +149,10 @@ export function confirmTopics(
   return topics.confirmTopics(db, actor.workspaceId, projectId, input);
 }
 
-/** Proposing topics makes a metered model call, so it needs the run capability. */
 export function previewTopics(db: Database, actor: Runner, projectId: string) {
   return topicPreview.previewTopics(db, actor.workspaceId, projectId);
 }
 
-/**
- * A retried run with the same Idempotency-Key replays the staged run without
- * provider I/O. A set's project never changes, so the set is found in the
- * caller's project before generation resolves it again under its locks.
- */
 export async function startGeneration(
   db: Database,
   actor: Runner,

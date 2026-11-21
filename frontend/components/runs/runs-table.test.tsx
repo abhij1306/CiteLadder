@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { cleanup, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vite-plus/test';
 
@@ -7,12 +7,6 @@ import { renderWithProviders as render } from '@/test/render';
 
 import { RunsTable } from './runs-table';
 
-/**
- * The runs list. The list arrives whole and is paginated client-side, so the
- * assertions that matter are that a long history stays navigable and that every
- * row still reaches its own run — a "View" link that loses the id is how a user
- * ends up unable to open the run they just launched.
- */
 const PAGE_SIZE = 10;
 
 function audit(index: number, overrides: Partial<Audit> = {}): Audit {
@@ -49,33 +43,84 @@ function renderTable(audits: Audit[]) {
   return render(<RunsTable audits={audits} status={null} emptyHeading="No failed runs" />);
 }
 
+const runLinks = () => screen.getAllByRole('link', { name: /audit|repair run/ });
+
 describe('RunsTable', () => {
-  it('links each row to its own run', () => {
-    const rows = [audit(1), audit(2)];
+  it('names each row by its run and links it to that run', () => {
+    const rows = [audit(1), audit(2, { created_at: '2026-07-30T00:00:00Z' })];
     renderTable(rows);
 
-    const links = screen.getAllByRole('link', { name: 'View' });
+    const links = runLinks();
+    expect(links[0]).toHaveAccessibleName('Brand audit · Aug 1, 2026');
     expect(links[0]).toHaveAttribute('href', `/runs/${rows[0]!.id}`);
+    expect(links[1]).toHaveAccessibleName('Brand audit · Jul 30, 2026');
     expect(links[1]).toHaveAttribute('href', `/runs/${rows[1]!.id}`);
   });
 
   it.each([
-    ['brand', 'Brand'],
-    ['commerce', 'Commerce'],
-  ])('distinguishes a %s-scope run', (scope, label) => {
-    // Brand and Commerce runs measure different things; a shared list has to
-    // say which one a row is.
-    renderTable([audit(1, { audit_scope: scope as Audit['audit_scope'] })]);
+    [{ audit_scope: 'brand' }, 'Brand audit · Aug 1, 2026'],
+    [{ audit_scope: 'commerce' }, 'Commerce audit · Aug 1, 2026'],
+    [
+      { audit_scope: 'brand', parent_audit_id: '99999999-1111-4111-8111-111111111111' },
+      'Brand repair run · Aug 1, 2026',
+    ],
+  ] as const)('distinguishes a run by what it measured (%o)', (overrides, name) => {
+    renderTable([audit(1, overrides)]);
 
-    expect(screen.getByText(label)).toBeVisible();
+    expect(screen.getByRole('link', { name })).toBeVisible();
   });
 
-  it('keeps the column headers and states the absence when the filter leaves no runs', () => {
+  it('sorts by a column on its header and marks the sorted column', async () => {
+    const user = userEvent.setup();
+    renderTable([
+      audit(1, { failed_count: 0 }),
+      audit(2, { failed_count: 7, created_at: '2026-07-01T00:00:00Z' }),
+    ]);
+    expect(runLinks()[0]).toHaveAttribute('href', `/runs/${audit(1).id}`);
+    expect(screen.getByRole('columnheader', { name: /Run/ })).toHaveAttribute(
+      'aria-sort',
+      'descending',
+    );
+
+    await user.click(screen.getByRole('button', { name: /Failed/ }));
+
+    expect(runLinks()[0]).toHaveAttribute('href', `/runs/${audit(2).id}`);
+    expect(screen.getByRole('columnheader', { name: /Failed/ })).toHaveAttribute(
+      'aria-sort',
+      'descending',
+    );
+    expect(screen.getByRole('columnheader', { name: /Run/ })).not.toHaveAttribute(
+      'aria-sort',
+      'descending',
+    );
+    expect(window.location.search).toBe('?sort=-failed');
+    cleanup();
+    renderTable([
+      audit(1, { failed_count: 0 }),
+      audit(2, { failed_count: 7, created_at: '2026-07-01T00:00:00Z' }),
+    ]);
+    expect(runLinks()[0]).toHaveAttribute('href', `/runs/${audit(2).id}`);
+  });
+
+  it('returns to the first page when the sort changes', async () => {
+    const user = userEvent.setup();
+    const rows = Array.from({ length: 25 }, (_, i) => audit(i + 1, { failed_count: i }));
+    renderTable(rows);
+    await user.click(screen.getByRole('button', { name: /next/i }));
+    expect(window.location.search).toBe('?page=2');
+
+    await user.click(screen.getByRole('button', { name: /Failed/ }));
+    expect(window.location.search).toBe('?sort=-failed');
+
+    expect(runLinks()[0]).toHaveAttribute('href', `/runs/${rows[24]!.id}`);
+  });
+
+  it('gives way to one empty state, head included, when there are no runs', () => {
     renderTable([]);
 
-    expect(screen.getByRole('columnheader', { name: 'Status' })).toBeInTheDocument();
+    expect(screen.queryByRole('columnheader')).toBeNull();
     expect(screen.getByRole('heading', { level: 3, name: 'No failed runs' })).toBeVisible();
-    expect(screen.queryByRole('link', { name: 'View' })).toBeNull();
+    expect(screen.queryByRole('link', { name: /audit/ })).toBeNull();
   });
 
   it('shows every run when the history fits on one page', () => {
@@ -95,13 +140,12 @@ describe('RunsTable', () => {
     const rows = Array.from({ length: 25 }, (_, i) => audit(i + 1));
     renderTable(rows);
 
-    const first = screen.getAllByRole('link', { name: 'View' })[0]!;
+    const first = runLinks()[0]!;
     expect(first).toHaveAttribute('href', `/runs/${rows[0]!.id}`);
 
     await user.click(screen.getByRole('button', { name: /next/i }));
 
-    // Page two starts at the eleventh run, not back at the first.
-    const afterPaging = screen.getAllByRole('link', { name: 'View' })[0]!;
+    const afterPaging = runLinks()[0]!;
     expect(afterPaging).toHaveAttribute('href', `/runs/${rows[PAGE_SIZE]!.id}`);
   });
 
@@ -112,7 +156,17 @@ describe('RunsTable', () => {
     await user.click(screen.getByRole('button', { name: /next/i }));
     await user.click(screen.getByRole('button', { name: /next/i }));
 
-    // 25 runs over pages of 10 leaves five on the last page.
     expect(bodyRows()).toHaveLength(5);
+  });
+
+  it('announces the polling note in a live region that was mounted while idle', () => {
+    const { rerender } = renderTable([audit(1)]);
+    const region = screen.getByRole('status');
+    expect(region).toBeEmptyDOMElement();
+
+    rerender(<RunsTable audits={[audit(1)]} status="Updating" emptyHeading="No failed runs" />);
+
+    expect(screen.getByRole('status')).toBe(region);
+    expect(region).toHaveTextContent('Updating');
   });
 });

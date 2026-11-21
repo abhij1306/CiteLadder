@@ -9,6 +9,7 @@ import {
 import adsEnvelope from './fixtures/chatgpt-ads/envelope.json' with { type: 'json' };
 import fullCards from './fixtures/chatgpt-products/full-cards.json' with { type: 'json' };
 import titleTagCards from './fixtures/chatgpt-products/title-tag-cards.json' with { type: 'json' };
+import mixedOverview from './fixtures/google-ai-overview/mixed-elements.json' with { type: 'json' };
 const task = (status: number, items?: unknown) => ({
   status_code: 20000,
   tasks: [
@@ -46,43 +47,36 @@ describe('observed surface parsing', () => {
       aio_present: null,
     });
   });
-  it('reads nested visible text and tables while keeping reference cards separate from text and inline links', () => {
-    const result = parseOverview(
-      task(20000, [
-        {
-          type: 'ai_overview',
-          rank_absolute: 2,
-          references: [{ url: 'https://publisher.example/ref', title: 'Acme card only' }],
-          items: [
-            {
-              type: 'ai_overview_element',
-              text: 'A useful answer',
-              markdown: 'duplicate markdown',
-              references: [{ url: 'https://publisher.example/ref' }],
-              items: [
-                {
-                  type: 'ai_overview_expanded_element',
-                  table: { table_header: ['Brand'], table_content: [['Rival', 'Shoes']] },
-                  links: [{ url: 'https://rival.example/shoes', title: 'Shoes' }],
-                },
-              ],
-            },
-          ],
-        },
-      ]),
-      'ours',
-    );
+  it('reads every documented element type, expanded components and per-element references', () => {
+    const result = parseOverview(mixedOverview, 'ours');
     if (typeof result === 'string') throw new Error('Expected terminal result');
     expect(result).toMatchObject({
       outcome: 'ai_overview_present',
-      aio_serp_position: 2,
-      answer_text: 'A useful answer\n\nBrand\n\nRival Shoes',
-      links: [{ url: 'https://rival.example/shoes', element_index: 0 }],
-      references: [{ url: 'https://publisher.example/ref' }],
+      aio_serp_position: 1,
+      answer_text: [
+        'Acme and Rival lead for flat feet.',
+        'Brand',
+        'Arch',
+        'Acme High',
+        'Rival Medium',
+        'Flat feet shoe review',
+        'A podiatrist compares stability shoes.',
+        'How to choose',
+        'Look for firm midsoles.',
+        'Fit',
+        'Try shoes late in the day.',
+        'Replace them every 500 miles.',
+      ].join('\n\n'),
+      links: [
+        { url: 'https://acme.example/stability', element_index: 0 },
+        { url: 'https://fit.example/guide', element_index: 3 },
+      ],
       observed_at: new Date('2026-01-02T12:00:00Z'),
     });
     expect(overviewAnswer(result).citations.map((c) => c.url)).toEqual([
-      'https://publisher.example/ref',
+      'https://runner.example/flat-feet',
+      'https://lab.example/arch-test',
+      'https://fit.example/guide',
     ]);
     expect(
       parseOverview(
@@ -299,7 +293,6 @@ describe('ChatGPT shopping carousel parsing', () => {
         image_url: 'https://images.example/card-4.jpg',
       },
     ]);
-    // The scraper answer still parses with the carousel in the page.
     expect(
       parseScraper(titleTagCards, '11110537-2641-0626-0000-a43fc092bb93', 'chatgpt_search'),
     ).toMatchObject({ logical_engine: 'chatgpt_search' });

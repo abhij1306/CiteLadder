@@ -212,6 +212,18 @@ describe('audit schedule management', () => {
     expect(
       (await request(a.userId, 'PATCH', a.projectId, `/${row.id}`, { cadence: null })).status,
     ).toBe(422);
+    expect(
+      (
+        await request(a.userId, 'POST', a.projectId, '', {
+          ...input(a.setId),
+          audit_scope: 'probe',
+        })
+      ).status,
+    ).toBe(422);
+    expect(
+      (await request(a.userId, 'PATCH', a.projectId, `/${row.id}`, { audit_scope: 'probe' }))
+        .status,
+    ).toBe(422);
     expect((await request(a.userId, 'DELETE', a.projectId, `/${row.id}`)).status).toBe(204);
   });
 });

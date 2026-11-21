@@ -31,7 +31,6 @@ type Seed = {
   tasks: string[];
 };
 const seeds: Seed[] = [];
-/** Native fixtures seed catalog evidence; the analyzer owner enqueues its projections. */
 async function seed() {
   const value = await commerceFixture<Omit<Seed, 'tasks'>>('seed');
   const tasks = await projectionTasks(value);
@@ -64,7 +63,6 @@ afterAll(async () => {
   await db.destroy();
 });
 
-/** The projected rows' evidence, which the catalog list deliberately leaves out. */
 function storedProducts(scope: Omit<Seed, 'tasks'>) {
   return db
     .selectFrom('commerce_products')
@@ -199,7 +197,6 @@ describe('catalog projection PostgreSQL boundary', () => {
       id,
       'category',
     );
-    // Native audit admission reads the projected catalog with provenance.
     await db
       .updateTable('commerce_prompt_targets')
       .set({ approved_at: new Date() })
@@ -251,6 +248,37 @@ describe('catalog projection PostgreSQL boundary', () => {
       .where('workspace_id', '=', s.workspaceId)
       .execute();
   }, 20_000);
+  it('projects a shelf onto the category holding its URL when no category owns its name', async () => {
+    const s = await seed();
+    const held = randomUUID();
+    await db
+      .insertInto('commerce_categories')
+      .values({
+        id: held,
+        workspace_id: s.workspaceId,
+        project_id: s.projectId,
+        name: 'Old tools',
+        normalized_name: 'old tools',
+        role: 'unknown',
+        canonical_url: 'https://example.com/collections/tools',
+        field_sources: '{}',
+        source_analysis_id: null,
+        projector_version: '',
+        created_at: new Date(),
+        updated_at: new Date(),
+      })
+      .execute();
+    for (const task of s.tasks) await execute(task);
+    expect(await storedCategory(s, held)).toEqual({
+      name: 'Tools',
+      canonical_url: 'https://example.com/collections/tools',
+    });
+    await db
+      .updateTable('analytics_tasks')
+      .set({ status: 'succeeded' })
+      .where('workspace_id', '=', s.workspaceId)
+      .execute();
+  }, 20_000);
   it('keeps edited fields and an edited category set over later crawl evidence', async () => {
     const s = await seed();
     const imported = await importCatalog(
@@ -281,7 +309,6 @@ describe('catalog projection PostgreSQL boundary', () => {
       .selectAll()
       .where('id', '=', own.tasks[0]!)
       .executeTakeFirstOrThrow();
-    // Terminal: a retry cannot find it either, so the task must not spend its attempts.
     await expect(
       projectCatalog({ ...task, payload: { source_analysis_id: foreign.analyses[1]! } }, context),
     ).rejects.toMatchObject({ code: 'commerce_source_missing' });
@@ -303,8 +330,6 @@ describe('catalog projection outcomes', () => {
       .select('artifact_id')
       .where('id', '=', sold.analyses[1]!)
       .executeTakeFirstOrThrow();
-    // A sold-out PDP: no SKU, no price, no product cards. As a "shelf" it
-    // would take its own heading's name and claim products it does not list.
     await asOwner((owner) =>
       owner
         .updateTable('site_fetch_artifacts')
@@ -372,7 +397,6 @@ describe('catalog projection outcomes', () => {
     });
     await businessContext(s, { business_model: 'b2b_saas' });
     expect((await catalog(db, s)).projection.applicability).toBe('not_applicable');
-    // No confirmed model, or one we do not recognize, is unknown, not "does not apply".
     await businessContext(s, {});
     expect((await catalog(db, s)).projection.applicability).toBe('unknown');
     await businessContext(s, { business_model: 'subscription_box' });
@@ -380,7 +404,6 @@ describe('catalog projection outcomes', () => {
   }, 20_000);
 });
 
-/** Stored page facts as the extractor writes them, read the way Commerce reads them. */
 const stored = (override: Record<string, unknown>) => readFacts(storedFacts(override));
 
 describe('projection decisions over stored facts', () => {
@@ -501,7 +524,6 @@ describe('projection decisions over stored facts', () => {
         [],
       ).names,
     ).toEqual(['Dresses']);
-    // The breadcrumb trail is the category path, top first.
     expect(
       productCategories(
         stored({ commerce: { breadcrumbs: ['Home', 'Women', 'Dresses', 'Linen dress'] } }),
@@ -524,7 +546,6 @@ describe('projection decisions over stored facts', () => {
         '',
       ),
     ).toBe('Tools');
-    // An index crumb or the platform default names no shelf.
     expect(
       categoryTitle(
         stored({

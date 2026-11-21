@@ -54,7 +54,6 @@ export function selectedItemDataset(capabilities: unknown): string {
     : 'ga4_item_source_medium_daily';
 }
 
-/** Snapshots in either stored shape remain resumable. */
 export function artifactOffset(snapshot: unknown): number {
   if (snapshot === null || typeof snapshot !== 'object') return -1;
   const fields = snapshot as Record<string, unknown>;

@@ -10,11 +10,7 @@ import { operatorMain } from '../src/cli/operator.ts';
 const execute = promisify(execFile);
 const root = fileURLToPath(new URL('../../../../', import.meta.url));
 const systemEnv = Object.fromEntries(
-  Object.entries(process.env).filter(([key]) =>
-    /^(PATH|SYSTEMROOT|WINDIR|TEMP|TMP|COMSPEC|PATHEXT|USERPROFILE|LOCALAPPDATA|APPDATA|PROCESSOR_ARCHITECTURE|OS)$/iu.test(
-      key,
-    ),
-  ),
+  Object.entries(process.env).filter(([key]) => /^(PATH|TMPDIR)$/u.test(key)),
 );
 it('reports actionable reviewed failures while withholding arbitrary error messages', async () => {
   const stderr = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -28,7 +24,6 @@ it('reports actionable reviewed failures while withholding arbitrary error messa
       throw new Error('fixture-sensitive-value');
     });
     expect(stderr).toHaveBeenLastCalledWith('Error');
-    // A database failure names its SQLSTATE, never the server's message.
     await operatorMain(async () => {
       throw Object.assign(new Error('password authentication failed for user "fixture"'), {
         code: '28P01',

@@ -1,7 +1,6 @@
 import { policy } from '../config.ts';
 
 const stopWords = new Set(policy.content_differentiation.stop_words);
-/** Distinct lexical terms shared by persisted content comparisons and grounding. */
 export function lexicalTokens(value: string, minLength = 2) {
   return new Set(
     value
@@ -11,7 +10,6 @@ export function lexicalTokens(value: string, minLength = 2) {
   );
 }
 
-/** The share of `terms` that `tokens` contains: an owned page's normalized coverage of a query. */
 export function termCoverage(terms: ReadonlySet<string>, tokens: ReadonlySet<string>): number {
   if (!terms.size) return 0;
   let covered = 0;

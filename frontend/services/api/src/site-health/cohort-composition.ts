@@ -1,4 +1,3 @@
-/** Scored page-kind composition between the previous comparable snapshot and this crawl. */
 import { compareText } from '../text-order.ts';
 
 type CountByKind = Readonly<Record<string, number>>;
@@ -26,11 +25,6 @@ function shareShifted(
   );
 }
 
-/**
- * Composition changed when a page kind joined or left the scored cohort, or any
- * kind's share of it moved by the configured threshold; plain count drift below
- * that keeps the snapshots comparable without composition context.
- */
 export function cohortComposition({
   previous,
   current,

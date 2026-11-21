@@ -26,9 +26,9 @@ vi.mock('@/lib/project/project-context', () => ({
 
 import { UserMenuController, UserMenuTrigger } from './user-menu';
 
-function renderMenu(presenters: readonly ('sidebar' | 'compact')[]) {
+function renderMenu(presenters: readonly ('sidebar' | 'compact')[], path = '/visibility') {
   return render(
-    <MemoryRouter initialEntries={['/visibility']}>
+    <MemoryRouter initialEntries={[path]}>
       <TooltipProvider>
         <UserMenuController>
           <>
@@ -45,14 +45,26 @@ function renderMenu(presenters: readonly ('sidebar' | 'compact')[]) {
 describe('UserMenu', () => {
   afterEach(() => window.localStorage.clear());
 
-  it('links to Settings and to connecting AI assistants, in that order', async () => {
+  it.each([
+    ['/settings', 'page'],
+    ['/settings?tab=connections', 'page'],
+    ['/settings?tab=integrations', null],
+    ['/visibility', null],
+  ])('marks the account button as the location on %s', (path, current) => {
+    renderMenu(['sidebar'], path);
+    const account = screen.getByRole('button', { name: /local@citeladder\.local/i });
+    if (current) expect(account).toHaveAttribute('aria-current', current);
+    else expect(account).not.toHaveAttribute('aria-current');
+  });
+
+  it('links to Settings and to MCP connections, in that order', async () => {
     const user = userEvent.setup();
     renderMenu(['sidebar']);
 
     await user.click(screen.getByRole('button', { name: /local@citeladder\.local/i }));
 
     const items = within(await screen.findByRole('menu')).getAllByRole('menuitem');
-    expect(items.map((item) => item.textContent)).toEqual(['Settings', 'Connect AI assistants']);
+    expect(items.map((item) => item.textContent)).toEqual(['Settings', 'MCP connections']);
     // asChild renders the menuitem as the Link anchor itself.
     expect(items[0]).toHaveAttribute('href', `/settings?workspace=${WORKSPACE}`);
     expect(items[1]).toHaveAttribute('href', `/settings?tab=connections&workspace=${WORKSPACE}`);

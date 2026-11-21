@@ -1,19 +1,38 @@
-import { useQuery } from '@tanstack/react-query';
-import { useCallback, useRef, useState } from 'react';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
-import type { ComposerCommands, Mention } from '@/components/agent/command-menu';
-import { matchOptions, type CommandOption, type CommandToken } from '@/lib/agent/composer-commands';
+import type { ComposerCommands, ComposerPastes, PastedText } from '@/components/agent/command-menu';
+import {
+  actionLinks,
+  matchOptions,
+  withLinkMentions,
+  type CommandOption,
+  type CommandToken,
+  type Mention,
+} from '@/lib/agent/composer-commands';
 import { approachLabel } from '@/lib/agent/vocabulary';
 import { useAgentCatalog } from '@/components/agent/use-agent-catalog';
 import { actionsQueries } from '@/lib/api/actions';
+import {
+  AGENT_MENTION_SEARCH_DEBOUNCE_MS,
+  AGENT_PASTE_ATTACHMENT_MIN_CHARS,
+} from '@/lib/config/agent';
+import { useDebounced } from '@/lib/use-debounced';
 
 const ACTION = 'action:';
 
-/**
- * The composer's `/` skill command and `@` Action mentions. Mentions are
- * typed Action IDs the server resolves and authorizes when the turn is
- * queued; their labels here are only for display.
- */
+type Prepared = { message: string; mentions: string[]; attachments: PastedText[] };
+
+type Draft = Readonly<{ message: string; edit: (change: (current: string) => string) => void }>;
+
+export type ComposerMenuState = {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  skillsOnly: boolean;
+  onSelect: () => void;
+  onCloseAutoFocus: (event: Event) => void;
+};
+
 export function useComposerCommands({
   workspaceId,
   projectId,
@@ -21,29 +40,42 @@ export function useComposerCommands({
   workspaceId: string;
   projectId: string;
 }>): ComposerCommands & {
+  pastes: ComposerPastes;
   clear: () => void;
-  restore: (mentions: readonly Mention[]) => void;
-  skillPicker: {
-    open: boolean;
-    onOpenChange: (open: boolean) => void;
-    onSelect: () => void;
-    onCloseAutoFocus: (event: Event) => void;
-  };
+  restore: (saved: { mentions: readonly Mention[]; pastes: readonly PastedText[] }) => void;
+  prepare: (draft: Draft, send: (prepared: Prepared) => void) => void;
+  resolving: boolean;
+  menu: ComposerMenuState;
+  scope: { workspaceId: string; projectId: string };
 } {
+  const client = useQueryClient();
   const [mentions, setMentions] = useState<Mention[]>([]);
-  const [skillPickerOpen, setSkillPickerOpen] = useState(false);
+  const [pastes, setPastes] = useState<ComposerPastes['items'][number][]>([]);
+  const pasteCount = useRef(0);
+  const keyed = (text: string) => ({ key: `paste-${++pasteCount.current}`, text });
+  const latestMentions = useRef(mentions);
+  const latestPastes = useRef(pastes);
+  useEffect(() => {
+    latestMentions.current = mentions;
+    latestPastes.current = pastes;
+  }, [mentions, pastes]);
+  const [resolving, setResolving] = useState(false);
+  const resolvingRef = useRef(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [skillsOnly, setSkillsOnly] = useState(false);
   const removeCommand = useRef<(() => void) | null>(null);
   const restoreFocus = useRef<(() => void) | null>(null);
-  // Most messages mention nothing, so the pool loads only once `@` is typed.
-  const [poolWanted, setPoolWanted] = useState(false);
-  const onTrigger = useCallback((trigger: CommandToken['trigger']) => {
-    if (trigger === '@') setPoolWanted(true);
+  const [search, setSearch] = useState<string | null>(null);
+  const onTrigger = useCallback((trigger: CommandToken['trigger'], query: string) => {
+    if (trigger === '@') setSearch(query);
   }, []);
-  // The mention bound the server enforces travels on the catalog the composer screens load.
-  const mentionsMax = useAgentCatalog().limits?.mentions_max ?? null;
+  const searched = useDebounced(search, AGENT_MENTION_SEARCH_DEBOUNCE_MS);
+  const limits = useAgentCatalog().limits;
+  const mentionsMax = limits?.mentions_max ?? null;
   const actions = useQuery({
-    ...actionsQueries.mentionPool({ workspaceId, projectId }),
-    enabled: poolWanted && Boolean(workspaceId && projectId),
+    ...actionsQueries.mentionSearch({ workspaceId, projectId }, searched ?? ''),
+    enabled: searched !== null && Boolean(workspaceId && projectId),
+    placeholderData: keepPreviousData,
   });
 
   const mentioned = new Set(mentions.map((mention) => mention.id));
@@ -53,13 +85,42 @@ export function useComposerCommands({
       key: `${ACTION}${action.id}`,
       label: action.target_label,
       detail: approachLabel(action.approach) ?? undefined,
+      status: action.status,
       replacement: `@${action.target_label}`,
     }));
+
+  const resolveLinks = async (text: string) => {
+    const links = actionLinks(text, { origin: window.location.origin, projectId });
+    const resolved = await Promise.all(
+      links.map(async ({ url, actionId }) => {
+        try {
+          const action = await client.fetchQuery(actionsQueries.detail(workspaceId, actionId));
+          return action.project_id === projectId
+            ? [{ url, mention: { id: action.id, label: action.target_label } }]
+            : [];
+        } catch {
+          return [];
+        }
+      }),
+    );
+    return resolved.flat();
+  };
+
+  const applyLinks = (text: string, resolved: Awaited<ReturnType<typeof resolveLinks>>) => {
+    const next = withLinkMentions({
+      text,
+      mentions: latestMentions.current,
+      resolved,
+      max: mentionsMax ?? 0,
+    });
+    latestMentions.current = next.mentions;
+    setMentions(next.mentions);
+    return next.text;
+  };
 
   return {
     options: (token) => {
       if (token.trigger === '/') return [];
-      // Until the catalog lists the bound, no mention is offered that the server might refuse.
       if (mentionsMax === null || mentions.length >= mentionsMax) return [];
       return matchOptions(actionOptions, token.query);
     },
@@ -70,24 +131,59 @@ export function useComposerCommands({
         { id: option.key.slice(ACTION.length), label: option.label },
       ]);
     },
+    onPaste: (pasted, edit) => {
+      void resolveLinks(pasted).then((resolved) => {
+        if (resolved.length) edit((current) => applyLinks(current, resolved));
+      });
+    },
+    prepare: ({ message, edit }, send) => {
+      if (resolvingRef.current) return;
+      const finish = (text: string) =>
+        send({
+          message: text,
+          mentions: latestMentions.current.map((mention) => mention.id),
+          attachments: pasteAttachments(latestPastes.current),
+        });
+      if (!actionLinks(message, { origin: window.location.origin, projectId }).length) {
+        finish(message);
+        return;
+      }
+      resolvingRef.current = true;
+      setResolving(true);
+      void resolveLinks(message)
+        .then((resolved) => {
+          const text = applyLinks(message, resolved);
+          if (text !== message)
+            edit((current) => (current.trim() === message.trim() ? text : current));
+          finish(text);
+        })
+        .finally(() => {
+          resolvingRef.current = false;
+          setResolving(false);
+        });
+    },
+    resolving,
     mentions,
     openSkillPicker: (remove, focus) => {
       removeCommand.current = remove;
       restoreFocus.current = focus;
-      setSkillPickerOpen(true);
+      setMenuOpen(true);
+      setSkillsOnly(true);
     },
     closeSkillPicker: () => {
-      if (!skillPickerOpen) return false;
-      setSkillPickerOpen(false);
+      if (!menuOpen) return false;
+      setMenuOpen(false);
       removeCommand.current = null;
       return true;
     },
-    skillPicker: {
-      open: skillPickerOpen,
+    menu: {
+      open: menuOpen,
       onOpenChange: (open) => {
-        setSkillPickerOpen(open);
-        if (!open) removeCommand.current = null;
+        setMenuOpen(open);
+        if (open) setSkillsOnly(false);
+        else removeCommand.current = null;
       },
+      skillsOnly,
       onSelect: () => {
         removeCommand.current?.();
         removeCommand.current = null;
@@ -99,8 +195,36 @@ export function useComposerCommands({
         restoreFocus.current = null;
       },
     },
+    scope: { workspaceId, projectId },
     onRemoveMention: (id) => setMentions((current) => current.filter((item) => item.id !== id)),
-    clear: () => setMentions([]),
-    restore: (saved) => setMentions([...saved]),
+    pastes: {
+      items: pastes,
+      add: (text) => {
+        const fits =
+          limits != null &&
+          text.length >= AGENT_PASTE_ATTACHMENT_MIN_CHARS &&
+          text.length <= limits.attachment_max_chars &&
+          pastes.length < limits.attachments_max;
+        if (fits) {
+          const paste = keyed(text);
+          setPastes((current) => [...current, paste]);
+        }
+        return fits;
+      },
+      remove: (key) => setPastes((current) => current.filter((paste) => paste.key !== key)),
+    },
+    clear: () => {
+      setMentions([]);
+      setPastes([]);
+    },
+    restore: (saved) => {
+      setMentions([...saved.mentions]);
+      setPastes(saved.pastes.map(({ text }) => keyed(text)));
+    },
   };
+}
+export type ComposerState = ReturnType<typeof useComposerCommands>;
+
+function pasteAttachments(pastes: ComposerPastes['items']): PastedText[] {
+  return pastes.map(({ text }) => ({ kind: 'pasted_text', text }));
 }

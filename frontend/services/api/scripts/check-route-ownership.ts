@@ -1,7 +1,3 @@
-/**
- * Check that every native route declares one manifest family, every family is
- * served, and one route module serves each family.
- */
 import { ROUTE_FAMILIES } from '@citeladder/contracts/route-ownership';
 
 import { policy } from '../src/config.ts';

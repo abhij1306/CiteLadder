@@ -1,13 +1,3 @@
-/**
- * Amazon Data Firehose HTTP endpoint delivery: translates a Firehose request
- * into `ingest()` batches and answers in Firehose's response contract. It
- * never writes rows itself.
- *
- * Firehose counts only a 200 as delivered, retries other statuses until its
- * retry window ends, never follows a redirect, and drops a 413 batch without
- * S3 backup. A retried request keeps its request ID, so the idempotency key
- * returns the original receipts and spends no quota.
- */
 import { z } from 'zod';
 import type { Selectable } from 'kysely';
 import type { Database } from '../db/database.ts';
@@ -46,7 +36,6 @@ export type FirehoseHeaders = {
   encoding: string | undefined;
 };
 
-/** Firehose's response body: the request ID echoed, server time, and a message on failure. */
 function reply(status: number, requestId: string, errorMessage?: string): Response {
   const body = JSON.stringify({
     requestId,
@@ -63,13 +52,11 @@ function reply(status: number, requestId: string, errorMessage?: string): Respon
   });
 }
 
-/** One record's newline-separated log lines, or null when it cannot be decoded. */
 function recordLines(data: string): string[] | null {
   const text = base64Text(data, MAX_RECORD_BYTES);
   return text === null ? null : text.split(/\r?\n/u).filter((line) => line.trim());
 }
 
-/** Parse and decode the envelope; a bad record is isolated and counted, never fatal. */
 function envelope(text: string, requestId: string) {
   let value: unknown;
   try {
@@ -85,7 +72,6 @@ function envelope(text: string, requestId: string) {
   let rejected = 0;
   for (const record of parsed.data.records) {
     const decoded = recordLines(record.data);
-    // One record may hold many lines; append without spreading them as arguments.
     if (decoded) for (const line of decoded) lines.push(line);
     else rejected += 1;
   }
@@ -95,7 +81,6 @@ function envelope(text: string, requestId: string) {
 /** The key of one chunk; chunk 0 is committed last, so it marks a fully stored request. */
 const chunkKey = (requestId: string, index: number) => `firehose:${requestId}:${index}`;
 
-/** Admit the lines as idempotent chunks, each within the per-batch line bound. */
 async function admit(
   db: Database,
   source: Selectable<CrawlLogSources>,
@@ -119,7 +104,6 @@ async function admit(
       tokenHash: source.token_hash!,
       quotaChecked: true,
       accessChecked: true,
-      // Chunk 0's receipt carries the whole request, undecodable records included.
       rejectedRecords: index === 0 ? rejected : 0,
       receivedBytes: index === 0 ? receivedBytes : 0,
     };
@@ -127,7 +111,6 @@ async function admit(
   }
 }
 
-/** Firehose's status for an admission refusal: 200 means delivered, anything else retries. */
 function statusFor(error: ApiError): number {
   if ([401, 409, 413, 429].includes(error.status)) return error.status;
   if ([400, 415, 422].includes(error.status)) return 400;
@@ -150,10 +133,8 @@ export async function firehoseDelivery(
     source = await authorizeToken(db, sourceId, `Bearer ${headers.accessKey ?? ''}`);
     if (source.setup !== 'aws_firehose')
       throw new ApiError(409, 'This source is not an Amazon Firehose source');
-    // A retried request whose every chunk is stored is answered without reading the body.
     const stored = await batchQuota(db, source, now, chunkKey(requestId, 0));
     if (stored) {
-      // Refuses a stored unsupported format exactly as its first delivery was refused.
       answeredReceipt(stored);
       return reply(200, requestId);
     }

@@ -1,81 +1,96 @@
-import { useId, useState, type ComponentPropsWithoutRef } from 'react';
-import { X } from 'lucide-react';
+import type { ComponentPropsWithoutRef, ReactNode } from 'react';
 
+import { UrlCutParts } from '@/components/ui/clamp-text';
+import { ProjectLink } from '@/components/ui/project-link';
+import { ArrowRight, X } from '@/lib/icons';
 import { cn } from '@/lib/utils';
 
-/**
- * The tag face: 24px, the sans label style (12px medium, normal tracking and
- * figures, set here so a tag inside a figure never inherits the figure's
- * tight tracking) in `ink` on `surface` with a 1px `line` border, `radius-xs`. It is
- * never wider than its container.
- */
-export const TAG_FACE =
-  'bg-surface text-ink border-line border inline-flex h-6 max-w-full min-w-0 shrink-0 items-center gap-1 rounded-xs px-2 font-sans text-caption tracking-normal normal-nums whitespace-nowrap';
+const TAG_FACE =
+  'type-caption border border-rule text-ink-2 inline-flex min-h-5 max-w-full min-w-0 shrink-0 items-center gap-0.5 rounded-mark px-1.5 normal-nums whitespace-nowrap [[data-public-surface]_&]:min-h-[var(--tag-height)] [[data-public-surface]_&]:px-2 [[data-public-surface]_&]:bg-surface [[data-public-surface]_&]:text-ink';
 
-/**
- * Tag — a neutral chip for a topic, engine or active filter, optionally
- * removable (`onRemove` adds a remove button named "Remove …"). Status is a
- * `Badge`, never a Tag; tags are never coloured and never buttons.
- *
- * A tag never overflows its container: a text label is one line, cut with an
- * ellipsis, its full text in the tooltip. A tag whose children are not plain
- * text truncates its own label span (`min-w-0 truncate`).
- */
-export function Tag({
+type TagKind =
+  | { kind?: 'category' | 'draft' }
+  | {
+      kind: 'removable';
+      onRemove: () => void;
+      removeLabel?: string;
+    };
+
+type SpanProps = Omit<ComponentPropsWithoutRef<'span'>, 'children'> & { children?: ReactNode };
+type TagProps = Readonly<SpanProps & TagKind>;
+
+function TagShell({
+  kind,
   className,
   children,
-  onRemove,
-  removeLabel,
-  ...props
-}: Readonly<
-  ComponentPropsWithoutRef<'span'> & {
-    onRemove?: () => void;
-    /** What the remove button removes, when the children are not plain text. */
-    removeLabel?: string;
-  }
->) {
+  end,
+  ...span
+}: Readonly<SpanProps & { kind: 'category' | 'draft' | 'removable'; end?: ReactNode }>) {
   const text = typeof children === 'string' ? children : undefined;
   return (
-    <span title={text} {...props} className={cn(TAG_FACE, onRemove && 'pe-0.5', className)}>
+    <span
+      title={text}
+      {...span}
+      data-tag-kind={kind}
+      className={cn(
+        TAG_FACE,
+        kind === 'removable' && 'pe-0.5',
+        kind === 'draft' && 'border-control-line border-dashed',
+        className,
+      )}
+    >
       {text === undefined ? children : <span className="min-w-0 truncate">{text}</span>}
-      {onRemove ? (
-        <button
-          type="button"
-          aria-label={`Remove ${removeLabel ?? (typeof children === 'string' ? children : 'tag')}`}
-          onClick={onRemove}
-          className="focus-ring text-ink-muted hover:overlay-hover hover:text-ink grid size-5 place-items-center rounded-xs transition-colors"
-        >
-          <X className="size-3.5" aria-hidden />
-        </button>
-      ) : null}
+      {end}
     </span>
   );
 }
 
-/** Two tags and a "+n" control that expands the rest in place, for touch and keyboard. */
-export function TagGroup({ labels }: Readonly<{ labels: readonly string[] }>) {
-  const [expanded, setExpanded] = useState(false);
-  const id = useId();
-  const visible = expanded ? labels : labels.slice(0, 2);
+export function Tag(props: TagProps) {
+  if (props.kind === 'removable') {
+    const { kind, onRemove, removeLabel, ...span } = props;
+    const text = typeof span.children === 'string' ? span.children : undefined;
+    return (
+      <TagShell
+        {...span}
+        kind={kind}
+        end={
+          <button
+            type="button"
+            aria-label={`Remove ${removeLabel ?? text ?? 'tag'}`}
+            onClick={onRemove}
+            className="focus-ring text-ink-2 hover:overlay-hover hover:text-ink rounded-mark hit-area grid size-4 place-items-center transition-colors"
+          >
+            <X className="size-3" aria-hidden />
+          </button>
+        }
+      />
+    );
+  }
+  const { kind = 'category', ...span } = props;
+  return <TagShell {...span} kind={kind} />;
+}
+
+export function RecordTag({
+  href,
+  label,
+  labelKind = 'text',
+  status,
+}: Readonly<{ href: string; label: string; labelKind?: 'text' | 'url'; status?: ReactNode }>) {
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-1">
-      <span id={id} className="contents">
-        {visible.map((label, index) => (
-          <Tag key={`${index}:${label}`}>{label}</Tag>
-        ))}
-      </span>
-      {labels.length > 2 ? (
-        <button
-          type="button"
-          className={cn(TAG_FACE, 'focus-ring hover:overlay-hover')}
-          aria-expanded={expanded}
-          aria-controls={id}
-          aria-label={expanded ? 'Show fewer tags' : `Show ${labels.length - 2} more tags`}
-          onClick={() => setExpanded(!expanded)}
-        >
-          {expanded ? 'Show less' : `+${labels.length - 2}`}
-        </button>
-      ) : null}
-    </div>
+    <ProjectLink
+      href={href}
+      data-tag-kind="record"
+      className={cn(TAG_FACE, 'hover:overlay-hover focus-ring align-middle no-underline')}
+    >
+      {labelKind === 'url' ? (
+        <span className="flex min-w-0">
+          <UrlCutParts text={label} />
+        </span>
+      ) : (
+        <span className="min-w-0 truncate">{label}</span>
+      )}
+      {/* Read as two words; flex layout drops the space visually. */} {status}
+      <ArrowRight className="size-3 shrink-0" aria-hidden />
+    </ProjectLink>
   );
 }

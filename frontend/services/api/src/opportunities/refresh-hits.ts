@@ -1,8 +1,5 @@
-/**
- * Opportunity hits mapped from other owners' persisted signals: approved
- * Change Intelligence regressions, promoted Demand signals and Commerce
- * product-metric, catalog and shelf gaps.
- */
+import { queryRelevanceSchema } from '@citeladder/contracts/opportunity-evidence';
+
 import { policy } from '../config.ts';
 import { siteHealth } from '../config/site-health.ts';
 import { rules } from '../analysis/opportunities/detectors.ts';
@@ -19,15 +16,11 @@ const o = policy.opportunity.opportunities;
 const r = siteHealth.change_intel;
 type Json = Record<string, unknown>;
 
-// ---------------------------------------------------------------------------
-// Change Intelligence
-// ---------------------------------------------------------------------------
 const RULE_BY_CLASS: Readonly<Record<string, string>> = {
   [r.class_regression]: 'site_change_potential_regression',
   [r.class_critical]: 'site_change_critical_regression',
 };
 
-/** The rule an unexpected change promotes to, or null when it promotes nothing. */
 export function changeRule(row: {
   change_class: string;
   field: string;
@@ -48,9 +41,6 @@ export function changeRule(row: {
     evidence.metadata_consistency !== 'inconsistent'
   )
     return null;
-  // A date moved without the text is a cosmetic refresh; a small edit without
-  // the date is an inconsistency. A substantial rewrite is history, not an
-  // action, whatever its date did.
   if (evidence.content_change_classification === 'unchanged') return 'site_change_cosmetic_refresh';
   if (evidence.content_change_classification === 'minor_change')
     return 'site_change_metadata_inconsistency';
@@ -64,7 +54,6 @@ type ChangeCrawl = {
   extractor_version: string;
 };
 
-/** Only approved, unexpected regressions observed for this exact newer crawl. */
 export async function changeHits(
   db: Database,
   workspaceId: string,
@@ -124,7 +113,6 @@ type ChangeRow = {
   after_value: unknown;
 };
 
-/** One approved regression as a hit; null for a change nothing promotes. */
 function changeHit(pair: ChangePair, row: ChangeRow): DetectorHit | null {
   const rule = changeRule({
     change_class: row.change_class,
@@ -162,9 +150,6 @@ function changeHit(pair: ChangePair, row: ChangeRow): DetectorHit | null {
   };
 }
 
-// ---------------------------------------------------------------------------
-// Demand
-// ---------------------------------------------------------------------------
 type DemandSignal = {
   id: string;
   signal_type: string;
@@ -186,7 +171,6 @@ function demandTargets(
   return [null, null];
 }
 
-/** One promoted Demand signal as an Opportunity hit; null without a target. */
 function demandHit(snapshotId: string, signal: DemandSignal): DetectorHit | null {
   const evidence = record(signal.evidence);
   const text = (value: unknown) => (typeof value === 'string' ? value : '');
@@ -201,7 +185,6 @@ function demandHit(snapshotId: string, signal: DemandSignal): DetectorHit | null
   const metricIds = evidence.source_metric_row_ids;
   return {
     rule_id: ruleIds[signal.signal_type]!,
-    // The signal's identity is stable across snapshots.
     target: { kind: 'demand', identity_hash: signal.identity_hash, url, query },
     evidence: {
       demand_snapshot_id: snapshotId,
@@ -210,7 +193,12 @@ function demandHit(snapshotId: string, signal: DemandSignal): DetectorHit | null
       metrics: { ...record(signal.metrics) },
       coverage: { ...record(signal.coverage) },
       limitations: Array.isArray(signal.limitations) ? [...signal.limitations] : [],
-      query_relevance: 'query_relevance' in evidence ? evidence.query_relevance : null,
+      query_relevance:
+        evidence.query_relevance == null
+          ? null
+          : queryRelevanceSchema
+              .catch({ state: 'unknown', reason: 'invalid_evidence' })
+              .parse(evidence.query_relevance),
     },
     source_analysis_ids: [],
     source_issue_ids: [],
@@ -223,7 +211,6 @@ function demandHit(snapshotId: string, signal: DemandSignal): DetectorHit | null
   };
 }
 
-/** The current demand snapshot's active promoted signals, as hits. */
 export async function demandHits(
   db: Database,
   scope: Scope,
@@ -244,9 +231,6 @@ export async function demandHits(
   return signals.flatMap((signal) => demandHit(snapshot.id, signal) ?? []);
 }
 
-// ---------------------------------------------------------------------------
-// Commerce
-// ---------------------------------------------------------------------------
 function commerceHit(
   rule: string,
   target: Extract<TargetRef, { kind: 'product' | 'category' }>,
@@ -276,7 +260,6 @@ type ShelfSnapshot = {
 const CATALOG_FIELDS = ['name', 'description', 'brand', 'price', 'currency'] as const;
 type CatalogProduct = Record<(typeof CATALOG_FIELDS)[number], unknown> & { id: string };
 
-/** A product with an empty catalog field and at least one observation. */
 function missingFieldHit(product: CatalogProduct, observationIds: string[]): DetectorHit | null {
   const missing = CATALOG_FIELDS.filter(
     (field) => product[field] === null || product[field] === '',
@@ -368,7 +351,6 @@ async function alternativeHits(
   return results;
 }
 
-/** The latest Commerce run's category shelf gaps; none without a Commerce run. */
 async function shelfHits(db: Database, scope: Scope, auditId: string | null) {
   if (auditId === null) return [];
   const snapshots = await new WorkspaceScope(scope.workspaceId)
@@ -376,18 +358,12 @@ async function shelfHits(db: Database, scope: Scope, auditId: string | null) {
     .select(['id', 'target_id', 'target_kind', 'product_visibility'])
     .where('project_id', '=', scope.projectId)
     .where('audit_id', '=', auditId)
-    // A target with no successful execution was not measured, not unmentioned.
     .where('successful_execution_count', '>', 0)
     .orderBy('id')
     .execute();
   return alternativeHits(db, scope.workspaceId, snapshots, auditId);
 }
 
-/**
- * Commerce gaps, in (rule, target) order: the per-product metric findings
- * over the window ending at `asOf`, catalog field gaps, and the latest
- * Commerce run's category shelf gaps.
- */
 export async function commerceHits(
   db: Database,
   scope: Scope,

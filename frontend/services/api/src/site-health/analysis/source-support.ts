@@ -1,4 +1,3 @@
-/** Source links observed inside the primary content, without inferring that they prove a claim. */
 import { getDomain } from 'tldts';
 
 import {
@@ -35,11 +34,9 @@ type SourceSupport = ReturnType<typeof emptySourceSupport>;
 const normalHost = (host: string) => host.toLowerCase().replace(/\.$/u, '');
 // Private suffixes count: `a.github.io` and `b.github.io` are different sites.
 const registrable = (host: string) => getDomain(host, { allowPrivateDomains: true }) ?? host;
-/** The same host, or a host on the same registrable domain: one site's subdomains. */
 export const sameSite = (host: string, base: string) =>
   host === base || (Boolean(base) && registrable(host) === registrable(base));
 
-/** The external host of an http(s) link, or '' for same-site or non-web links. */
 function externalHost(url: URL, base: string) {
   if (!['http:', 'https:'].includes(url.protocol) || !url.hostname) return '';
   const host = normalHost(url.hostname);
@@ -91,11 +88,9 @@ function recordAnchor(
     facts.attached_sources.push(item);
 }
 
-/** A heading opens a references or methodology section; a peer or higher heading closes it. */
 function nextSection(node: HtmlElement, current: { name: string; level: number }) {
   const level = Number(node.tagName[1]);
   const heading = stripLeading(stripTrailing(squash(textContent(node).toLowerCase()), ':'), ':');
-  // "Sources and review date" opens a sources section: a configured heading as the leading words.
   const opening = SECTION_HEADINGS.find(
     (name) => heading === name || heading.startsWith(`${name} `),
   );
@@ -114,12 +109,6 @@ const inOrderedList = (node: HtmlElement) => {
   return false;
 };
 
-/**
- * Whether a heading or link belongs to the page's own content. A numbered
- * reference list is a repeated linked collection, so the card heuristic
- * excludes it; under a references heading its links are the sources, while
- * related-content cards there stay excluded.
- */
 function ownedNode(node: HtmlElement, page: PageScope, inSection: boolean) {
   const isHeading = HEADINGS.has(node.tagName);
   if (!isHeading && node.tagName !== 'a') return false;

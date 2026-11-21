@@ -32,7 +32,6 @@ const updateSchedule = vi.spyOn(runsApi, 'updateSchedule');
 const WORKSPACE_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 let workspaceId = WORKSPACE_ID;
 
-/** The schedules on `/runs`, under the gate's project in the current workspace. */
 function RoutedSchedules(props: ComponentProps<typeof AuditSchedules>) {
   return (
     <ActiveProjectScopeProvider
@@ -60,7 +59,20 @@ describe('AuditSchedules', () => {
     renderWithProviders(
       <RoutedSchedules
         projectId="11111111-1111-4111-8111-111111111111"
-        promptSets={[{ id: '22222222-2222-4222-8222-222222222222', name: 'Core prompts' } as never]}
+        promptSets={[
+          {
+            id: '66666666-6666-4666-8666-666666666666',
+            name: 'Commerce Buyer Prompts',
+            kind: 'commerce',
+            created_at: '2026-10-01T00:00:00Z',
+          } as never,
+          {
+            id: '22222222-2222-4222-8222-222222222222',
+            name: 'Core prompts',
+            kind: 'brand',
+            created_at: '2026-01-01T00:00:00Z',
+          } as never,
+        ]}
       />,
     );
 
@@ -87,12 +99,46 @@ describe('AuditSchedules', () => {
     await waitFor(() => expect(listSchedules).toHaveBeenCalledTimes(2));
   });
 
+  it('asks for a prompt set when none is chosen, and schedules once one is', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <RoutedSchedules
+        projectId="11111111-1111-4111-8111-111111111111"
+        promptSets={[
+          {
+            id: '66666666-6666-4666-8666-666666666666',
+            name: 'Commerce Buyer Prompts',
+            kind: 'commerce',
+            created_at: '2026-10-01T00:00:00Z',
+          } as never,
+        ]}
+      />,
+    );
+    const select = screen.getByRole('combobox', { name: 'Prompt set' });
+    expect(select).toHaveTextContent('Choose a prompt set');
+    expect(screen.getByRole('button', { name: 'Schedule audit' })).toBeDisabled();
+
+    await user.click(select);
+    await user.click(screen.getByRole('option', { name: 'Commerce Buyer Prompts' }));
+    expect(select).toHaveTextContent('Commerce Buyer Prompts');
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Schedule audit' })).toBeEnabled(),
+    );
+  });
+
   it('offers no engine and schedules nothing while no provider is connected', async () => {
     listConnections.mockResolvedValue([]);
     renderWithProviders(
       <RoutedSchedules
         projectId="11111111-1111-4111-8111-111111111111"
-        promptSets={[{ id: '22222222-2222-4222-8222-222222222222', name: 'Core prompts' } as never]}
+        promptSets={[
+          {
+            id: '22222222-2222-4222-8222-222222222222',
+            name: 'Core prompts',
+            kind: 'brand',
+            created_at: '2026-01-01T00:00:00Z',
+          } as never,
+        ]}
       />,
     );
 
@@ -153,6 +199,9 @@ describe('AuditSchedules', () => {
     renderWithProviders(<RoutedSchedules projectId={projectId} promptSets={[]} />);
 
     expect(await screen.findByText(/Paused/)).toBeVisible();
+    expect(screen.getByRole('listitem')).toHaveTextContent(
+      'Weekly · Removed prompt set · Brand visibility · ChatGPT API',
+    );
     await user.click(screen.getByRole('button', { name: 'Resume' }));
 
     await waitFor(() =>
@@ -169,24 +218,35 @@ describe('AuditSchedules', () => {
     listSchedules.mockResolvedValue([
       {
         id: '44444444-4444-4444-8444-444444444444',
+        prompt_set_id: '22222222-2222-4222-8222-222222222222',
         cadence: 'weekly',
         engines: ['chatgpt'],
         enabled: false,
         failure_count: 3,
-        last_error: 'provider_key_missing',
-        audit_scope: 'brand',
+        last_error: 'execution_credentials_unavailable',
+        audit_scope: 'commerce',
         next_run_at: null,
       } as never,
     ]);
     renderWithProviders(
       <RoutedSchedules
         projectId="11111111-1111-4111-8111-111111111111"
-        promptSets={[{ id: '22222222-2222-4222-8222-222222222222', name: 'Core prompts' } as never]}
+        promptSets={[
+          {
+            id: '22222222-2222-4222-8222-222222222222',
+            name: 'Core prompts',
+            kind: 'brand',
+            created_at: '2026-01-01T00:00:00Z',
+          } as never,
+        ]}
       />,
       { projectSelection: selectionAs('viewer') },
     );
 
     expect(await screen.findByText(/Paused/)).toBeVisible();
+    expect(screen.getByRole('listitem')).toHaveTextContent(
+      'Weekly · Core prompts · Commerce AI Shelf · ChatGPT APIPausedNo provider key is connected for its engines',
+    );
     expect(screen.queryByRole('button', { name: 'Resume' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Schedule audit' })).toBeNull();
     expect(screen.queryByRole('combobox', { name: 'Cadence' })).toBeNull();

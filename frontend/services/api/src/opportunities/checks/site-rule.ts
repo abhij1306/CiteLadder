@@ -1,4 +1,3 @@
-/** A Site Health rule on the declared page passes in a later crawl. */
 import { siteIssueEvidenceSchema } from '@citeladder/contracts/opportunity-evidence';
 
 import { policy } from '../../config.ts';
@@ -12,10 +11,6 @@ import { pageAnalysis } from './read-context.ts';
 
 const foldedIssues = siteIssueEvidenceSchema.pick({ issues: true });
 
-/**
- * Every Site Health rule a page finding folds together, in rule order; empty
- * when its evidence names none, which nothing can then verify.
- */
 function issueRuleIds(member: MemberFacts): string[] {
   const parsed = foldedIssues.safeParse(member.evidence);
   if (!parsed.success) return [];
@@ -27,7 +22,6 @@ export const siteRuleCheck: CheckModule<'site_rule'> = {
   leg: policy.opportunity.actions.LEG_CRAWL,
   sources: ['site_crawl'],
   measurable: (member) => issueRuleIds(member).length > 0,
-  /** One check per folded rule: the finding verifies only when every one passes (SH-B2). */
   freeze(members) {
     return Promise.resolve(
       members.flatMap((member) => {

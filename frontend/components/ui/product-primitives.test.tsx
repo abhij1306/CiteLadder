@@ -1,22 +1,22 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
-import { Inbox } from 'lucide-react';
+import userEvent from '@testing-library/user-event';
+import { useState } from 'react';
 import { describe, expect, it, vi } from 'vite-plus/test';
 
+import { Inbox } from '@/lib/icons';
 import { ApiError } from '@/lib/api/errors';
 
 import { Avatar } from './avatar';
 import { Button } from './button';
-import { Card, CardHeader, CardTitle } from './card';
-import { ChartSwatch } from './chart';
 import { Delta } from './delta';
-import { choiceFilter } from './all-filters';
-import { FilterBar, FilterTrigger } from './filter-bar';
+import { choiceFilter, rangeFilter, singleFilter, type FilterIcon } from './all-filters';
+import { FilterBar } from './filter-bar';
 import { DataTable } from './data-table';
 import { Meter } from './meter';
 import { Pager, pageNumberControls } from './pager';
-import { QueryState } from './query-state';
+import { StateBlock } from './state-block';
 import { SearchField } from './search-field';
-import { StatRow } from './stat-row';
+import { FigureStrip } from './figure-strip';
 import { Table, TableCell, TableHeader, TableRow } from './table';
 import { SortableTableHead } from './table-heads';
 import { SegmentedControl } from './tabs';
@@ -25,15 +25,16 @@ import { renderWithProviders } from '@/test/render';
 
 import { ArrowLink, TextLink } from './text-link';
 import { TooltipProvider } from './tooltip';
+import { Section, SectionHeader, SectionTitle } from '@/components/ui/section';
 
-describe('CardHeader actions', () => {
+describe('SectionHeader actions', () => {
   it('keeps the actions in the header beside the title', () => {
     render(
-      <Card aria-label="Issues">
-        <CardHeader actions={<Button>Export</Button>}>
-          <CardTitle>Issues</CardTitle>
-        </CardHeader>
-      </Card>,
+      <Section aria-label="Issues">
+        <SectionHeader actions={<Button>Export</Button>}>
+          <SectionTitle>Issues</SectionTitle>
+        </SectionHeader>
+      </Section>,
     );
     const header = screen.getByRole('heading', { name: 'Issues' }).closest('header');
     expect(header).not.toBeNull();
@@ -41,19 +42,30 @@ describe('CardHeader actions', () => {
   });
 });
 
+function spokenText(root: Element) {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let text = '';
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    if (!node.parentElement?.closest('[aria-hidden="true"]')) text += node.textContent ?? '';
+  }
+  return text;
+}
+
 describe('Delta', () => {
   it('says the rounded direction in words, tones it by policy and never fakes a zero', () => {
     const { container, rerender } = render(
       <Delta value={-1.24} unit=" pp" policy="lower-is-better" context="vs last week" />,
     );
     const fall = screen.getByText('1.2 pp').closest('[data-direction]');
-    expect(fall?.textContent).toBe('↓down 1.2 ppvs last week');
-    // A falling rank is an improvement under lower-is-better.
+    expect(fall?.textContent).toBe('down −1.2 ppvs last week');
+    expect(fall ? spokenText(fall) : null).toBe('down 1.2 ppvs last week');
     expect(fall).toHaveAttribute('data-outcome', 'improved');
 
-    // +0.04 rounds to a displayed 0.0: flat, spoken as no change.
-    rerender(<Delta value={0.04} />);
-    expect(container.textContent).toBe('→no change 0.0');
+    rerender(<Delta value={0.04} unit=" pp" />);
+    const flat = container.querySelector('[data-direction]');
+    expect(flat).toHaveAttribute('data-direction', 'flat');
+    expect(flat?.textContent).toBe('no change±0 pp');
+    expect(flat ? spokenText(flat) : null).toBe('no change');
 
     rerender(
       <TooltipProvider>
@@ -64,15 +76,28 @@ describe('Delta', () => {
   });
 });
 
-describe('StatRow', () => {
-  it('names a missing value, draws a score as a ring and makes a pressable stat a toggle', () => {
+describe('FigureStrip', () => {
+  it('names a missing value, prints a real zero and makes a pressable figure a toggle', () => {
     const onSelect = vi.fn();
-    render(
-      <StatRow
+    const onConnect = vi.fn();
+    renderWithProviders(
+      <FigureStrip
         label="Delivery"
         segments={[
-          { key: 'ttfb', label: 'TTFB', value: null },
-          { key: 'score', label: 'Crawl', score: { value: 72, label: 'Crawl score' } },
+          {
+            key: 'ttfb',
+            label: 'TTFB',
+            value: null,
+            action: { label: 'Connect logs', onSelect: onConnect },
+          },
+          { key: 'errors', label: 'Errors', value: 0 },
+          {
+            key: 'score',
+            label: 'Crawl',
+            value: '72',
+            sub: 'Last crawl',
+            action: { label: 'View details', href: '/issues' },
+          },
           {
             key: 'orphans',
             label: 'Orphaned pages',
@@ -83,23 +108,28 @@ describe('StatRow', () => {
           },
         ]}
       />,
+      { projectSelection: null },
     );
     const group = screen.getByRole('group', { name: 'Delivery' });
-    expect(within(group).getByText('TTFB').closest('[data-stat-segment]')).toHaveTextContent(
-      'Not measured',
-    );
-    // A score is its ring (decision D8): one image named with the number, no bar.
-    expect(within(group).getByRole('img', { name: 'Crawl score: 72 out of 100' })).toBeVisible();
-    expect(within(group).queryByRole('meter')).not.toBeInTheDocument();
+    const cell = (label: string) => within(group).getByText(label).closest('[data-figure-cell]');
+    expect(cell('TTFB')).toHaveTextContent('Not measured');
+    expect(cell('Errors')?.textContent).toBe('Errors0');
+    expect(cell('Crawl')?.textContent).toBe('CrawlLast crawl72');
+    expect(
+      within(group).getByRole('button', { name: 'Basis of Crawl' }),
+    ).toHaveAccessibleDescription('Last crawl');
+    fireEvent.click(within(group).getByRole('button', { name: 'TTFB' }));
+    expect(onConnect).toHaveBeenCalledOnce();
+    expect(within(group).getByRole('link', { name: 'Crawl' })).toHaveAttribute('href', '/issues');
     const toggle = within(group).getByRole('button', { name: 'View 3 orphaned pages' });
     expect(toggle).toHaveAttribute('aria-pressed', 'false');
     fireEvent.click(toggle);
     expect(onSelect).toHaveBeenCalledOnce();
   });
 
-  it('puts a comparison window under the value, its absence named like the value', () => {
+  it('puts a comparison window in the figure hint, its absence named like the value', () => {
     render(
-      <StatRow
+      <FigureStrip
         label="Search Console metrics"
         segments={[
           {
@@ -119,10 +149,10 @@ describe('StatRow', () => {
       />,
     );
     const group = screen.getByRole('group', { name: 'Search Console metrics' });
-    const [clicks, ctr] = within(group).getAllByText('Previous 28 days');
-    expect(clicks?.closest('[data-stat-comparison]')).toHaveTextContent('Previous 28 days980');
-    expect(ctr?.closest('[data-stat-comparison]')).toHaveTextContent(
-      'Previous 28 days–Not measured',
+    const [clicks, ctr] = within(group).getAllByText(/^Previous 28 days/);
+    expect(clicks?.closest('[data-figure-comparison]')?.textContent).toBe('Previous 28 days: 980');
+    expect(ctr?.closest('[data-figure-comparison]')?.textContent).toBe(
+      'Previous 28 days: Not measured',
     );
   });
 });
@@ -130,10 +160,10 @@ describe('StatRow', () => {
 describe('DataTable', () => {
   const columns = [
     { key: 'name', label: 'Name' },
-    { key: 'count', label: 'Count', width: 'figure', numeric: true },
+    { key: 'count', label: 'Count', kind: 'number' },
   ] as const;
 
-  it('pads a short page to the full page of rows and keeps the header over an empty state', () => {
+  it('draws only the rows a short page has and gives way to one empty state, head included', () => {
     const { container, rerender } = render(
       <DataTable title="Runs" columns={columns} pageSize={5} rowCount={2}>
         <TableRow>
@@ -146,20 +176,20 @@ describe('DataTable', () => {
         </TableRow>
       </DataTable>,
     );
-    expect(screen.getByRole('heading', { level: 3, name: 'Runs' })).toBeVisible();
-    expect(container.querySelectorAll('tbody tr')).toHaveLength(5);
+    expect(screen.getByRole('heading', { level: 2, name: 'Runs' })).toBeVisible();
+    expect(screen.getByRole('columnheader', { name: 'Count' })).toBeVisible();
+    expect(container.querySelectorAll('tbody tr')).toHaveLength(2);
 
     rerender(
       <DataTable
         title="Runs"
         columns={columns}
         pageSize={5}
-        state={{ kind: 'empty', icon: Inbox, heading: 'No failed runs', headingLevel: 3 }}
+        state={{ kind: 'empty', icon: Inbox, heading: 'No failed runs' }}
       />,
     );
-    expect(screen.getByRole('columnheader', { name: 'Count' })).toBeInTheDocument();
+    expect(screen.queryByRole('columnheader', { name: 'Count' })).toBeNull();
     expect(screen.getByRole('heading', { level: 3, name: 'No failed runs' })).toBeVisible();
-    expect(container.querySelectorAll('tbody tr')).toHaveLength(1);
   });
 
   it('puts an unsortable column caveat behind its header and a note under the table', async () => {
@@ -193,26 +223,14 @@ describe('DataTable', () => {
 
 describe('Meter', () => {
   it('names the bar by its visible label and speaks the shown value, clamped to the maximum', () => {
-    const { rerender } = render(<Meter label="Prompt runs" value={60} max={50} />);
+    const { rerender } = render(<Meter label="Prompt runs" value={120} />);
     const meter = screen.getByRole('meter', { name: 'Prompt runs' });
-    expect(meter).toHaveAttribute('aria-valuenow', '50');
-    expect(meter).toHaveAttribute('aria-valuetext', '60 / 50');
-    expect(screen.getByText('60 / 50')).toBeVisible();
+    expect(meter).toHaveAttribute('aria-valuenow', '100');
+    expect(meter).toHaveAttribute('aria-valuetext', '120 / 100');
+    expect(screen.getByText('120 / 100')).toBeVisible();
 
-    rerender(
-      <Meter
-        label="Prompts tracked"
-        value={124}
-        max={500}
-        valueLabel="124 of 500 prompts"
-        hint="New prompts wait at the limit"
-      />,
-    );
-    expect(screen.getByRole('meter', { name: 'Prompts tracked' })).toHaveAttribute(
-      'aria-valuetext',
-      '124 of 500 prompts',
-    );
-    expect(screen.getByText('New prompts wait at the limit')).toBeVisible();
+    rerender(<Meter label="ChatGPT" value={42} valueLabel="42%" />);
+    expect(screen.getByRole('meter', { name: 'ChatGPT' })).toHaveAttribute('aria-valuetext', '42%');
   });
 
   it('announces an unmeasured value instead of drawing it as zero', () => {
@@ -237,7 +255,6 @@ describe('SortableTableHead', () => {
               onSort={onSort}
               numeric
             />
-            {/* An inactive column has no order, whatever its flag says. */}
             <SortableTableHead label="Page" active={false} descending onSort={vi.fn()} />
           </TableRow>
         </TableHeader>
@@ -329,11 +346,9 @@ describe('FilterBar and FilterTrigger', () => {
         }
       />,
     );
-    // The row draws its slots in document order, whatever order a page passes them in.
     const order = [
       screen.getByRole('radiogroup', { name: 'Pages shown' }),
       screen.getByRole('searchbox', { name: 'Search pages' }),
-      // A lone filter is its own trigger, named by its value.
       screen.getByRole('button', { name: 'Page kind: FAQ' }),
       screen.getByText('12 pages'),
       screen.getByRole('button', { name: 'Export' }),
@@ -345,11 +360,12 @@ describe('FilterBar and FilterTrigger', () => {
       );
     expect(follows).toEqual([true, true, true, true]);
   });
-  it('puts two or more filters behind All filters, counting the changed ones', () => {
-    const filter = (id: string, value: string) =>
+  it('keeps at most four icon filters in the row and the rest in Filters, a lone other one as its own chip', () => {
+    const filter = (id: string, value = 'all', icon?: FilterIcon) =>
       choiceFilter({
         id,
         label: id,
+        icon,
         value,
         defaultValue: 'all',
         groups: [
@@ -362,27 +378,106 @@ describe('FilterBar and FilterTrigger', () => {
         ],
         onChange: () => undefined,
       });
-    render(<FilterBar filters={[filter('Kind', 'one'), filter('Engine', 'all')]} />);
-    expect(screen.getByRole('button', { name: 'All filters (1)' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Kind: One' })).toBeNull();
-  });
-  it('names a trigger by its visible value', () => {
-    render(<FilterTrigger label="Surface" value="ChatGPT" hideLabel active />);
-    expect(screen.getByRole('button', { name: 'Surface: ChatGPT' })).toBeInTheDocument();
-  });
-  it('sizes a trigger to its options without adding them to its text', () => {
-    render(
-      <FilterTrigger
-        label="Surface"
-        value="ChatGPT"
-        hideLabel
-        sizeTo={['All surfaces', 'ChatGPT', 'Google AI Overviews']}
+    const icons = [
+      filter('Period', 'all', 'period'),
+      filter('Engines', 'all', 'engines'),
+      filter('Market', 'all', 'market'),
+      filter('Topic', 'one', 'topic'),
+    ];
+    const { rerender } = render(
+      <FilterBar
+        filters={[filter('Kind', 'one'), ...icons, filter('Prompts', 'all', 'prompts')]}
       />,
     );
-    const trigger = screen.getByRole('button', { name: 'Surface: ChatGPT' });
-    // The longest option is reserved as generated content, never readable text.
-    expect(trigger.textContent).toBe('Surface: ChatGPT');
-    expect(trigger.querySelector('[data-size="Google AI Overviews"]')).not.toBeNull();
+    for (const name of ['Period: All', 'Engines: All', 'Market: All', 'Topic: One'])
+      expect(screen.getByRole('button', { name })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Filters (1)' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Prompts: All' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Remove Kind filter' })).toBeInTheDocument();
+
+    rerender(<FilterBar filters={[...icons, filter('Status')]} />);
+    expect(screen.getByRole('button', { name: 'Status: All' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Filters/ })).toBeNull();
+  });
+  it('clears every set filter at once, and a value chip resets its own', async () => {
+    function Row() {
+      const [period, setPeriod] = useState('30d');
+      const [kind, setKind] = useState<string | null>('faq');
+      const [status, setStatus] = useState<string | null>('open');
+      const single = (id: string, value: string | null, set: (next: string | null) => void) =>
+        singleFilter({
+          id,
+          label: id,
+          allLabel: `All ${id}`,
+          value,
+          options: [
+            { value: 'faq', label: 'FAQ' },
+            { value: 'open', label: 'Open' },
+          ],
+          onChange: set,
+        });
+      return (
+        <>
+          <FilterBar
+            filters={[
+              rangeFilter({
+                value: period,
+                defaultValue: '90d',
+                options: [
+                  { value: '90d', label: 'Last 90 days' },
+                  { value: '30d', label: 'Last 30 days' },
+                ],
+                onChange: setPeriod,
+              }),
+              single('Kind', kind, setKind),
+              single('Status', status, setStatus),
+            ]}
+          />
+          <output data-testid="state">{`${period} ${kind} ${status}`}</output>
+        </>
+      );
+    }
+    const user = userEvent.setup();
+    render(<Row />);
+    await user.click(screen.getByRole('button', { name: 'Remove Kind filter' }));
+    expect(screen.getByTestId('state')).toHaveTextContent('30d null open');
+    await user.click(screen.getByRole('button', { name: 'Clear' }));
+    expect(screen.getByTestId('state')).toHaveTextContent('90d null null');
+    expect(screen.queryByRole('button', { name: 'Clear' })).toBeNull();
+  });
+  it('prints only the icon of an icon filter at its default, and the value once set or on a plain chip', () => {
+    const status = (value: string | null) =>
+      singleFilter({
+        id: 'status',
+        label: 'Status',
+        allLabel: 'All statuses',
+        value,
+        options: [{ value: 'open', label: 'Open' }],
+        onChange: () => undefined,
+      });
+    const period = (value: string) =>
+      rangeFilter({
+        value,
+        defaultValue: '30d',
+        options: [
+          { value: '30d', label: 'Last 30 days' },
+          { value: '7d', label: 'Last 7 days' },
+        ],
+        onChange: () => undefined,
+      });
+    const { rerender } = render(<FilterBar filters={[period('30d'), status(null)]} />);
+    expect(screen.getByRole('button', { name: 'Period: Last 30 days' }).textContent).toBe('');
+    expect(screen.getByText('Last 30 days')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Status: All statuses' })).toHaveTextContent(
+      'All statuses',
+    );
+
+    rerender(<FilterBar filters={[period('7d'), status('open')]} />);
+    expect(screen.getByRole('button', { name: 'Period: Last 7 days' })).toHaveTextContent(
+      'Last 7 days',
+    );
+    expect(screen.getAllByText(/Last 7 days/)).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Status: Open' })).toHaveAttribute('data-active');
   });
 });
 
@@ -395,7 +490,6 @@ describe('Pager', () => {
         {...pageNumberControls(1, 2, onPageChange)}
       />,
     );
-    // The range is a polite status, so a page turn is announced.
     expect(screen.getByRole('status')).toHaveTextContent('1–10 of 12 prompts');
     expect(screen.getByRole('button', { name: 'Previous page' })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: 'Next page' }));
@@ -414,10 +508,10 @@ describe('Pager', () => {
   });
 });
 
-describe('QueryState', () => {
+describe('StateBlock', () => {
   it('states an inline absence as one line with its one action', () => {
     render(
-      <QueryState kind="empty" inline message="No rules yet." action={<Button>Add rule</Button>} />,
+      <StateBlock kind="empty" inline message="No rules yet." action={<Button>Add rule</Button>} />,
     );
     expect(screen.getByText('No rules yet.')).toBeInTheDocument();
     expect(screen.queryByRole('heading')).toBeNull();
@@ -426,41 +520,41 @@ describe('QueryState', () => {
 
   it('announces loading only after the delay, then reports a failed read with its retry', async () => {
     const onRetry = vi.fn();
-    const { rerender } = render(<QueryState kind="loading" label="Loading issues…" />);
+    const { rerender } = render(<StateBlock kind="loading" label="Loading issues…" />);
     expect(screen.queryByRole('status')).toBeNull();
     expect(await screen.findByRole('status', { name: 'Loading issues…' })).toBeInTheDocument();
 
     rerender(
-      <QueryState
+      <StateBlock
         kind="error"
         error={new ApiError('Temporarily unavailable', 503, '')}
-        fallback="Issues could not be loaded."
+        title="Couldn't load the issues"
+        fallback="The request failed or timed out."
         onRetry={onRetry}
       />,
     );
-    expect(screen.getByText('Temporarily unavailable')).toBeVisible();
+    expect(screen.getByText("Couldn't load the issues")).toBeVisible();
+    expect(screen.getByText('The request failed or timed out.')).toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
     expect(onRetry).toHaveBeenCalledOnce();
   });
 
   it('keeps a shown spinner when the next owner of the same wait takes over', async () => {
-    const { rerender } = render(<QueryState key="shell" kind="loading" label="Loading shell…" />);
+    const { rerender } = render(<StateBlock key="shell" kind="loading" label="Loading shell…" />);
     expect(await screen.findByRole('status', { name: 'Loading shell…' })).toBeInTheDocument();
 
-    // A different owner's box (a fresh mount) continues the visible wait at once.
-    rerender(<QueryState key="page" kind="loading" label="Loading page…" />);
+    rerender(<StateBlock key="page" kind="loading" label="Loading page…" />);
     expect(screen.getByRole('status', { name: 'Loading page…' })).toBeInTheDocument();
 
-    // A wait that starts with nothing showing is still held back.
     rerender(<p>Loaded</p>);
-    rerender(<QueryState key="section" kind="loading" label="Loading section…" />);
+    rerender(<StateBlock key="section" kind="loading" label="Loading section…" />);
     expect(screen.queryByRole('status')).toBeNull();
     expect(await screen.findByRole('status', { name: 'Loading section…' })).toBeInTheDocument();
   });
 
   it('states a first-use absence with its heading and one action', () => {
     render(
-      <QueryState
+      <StateBlock
         kind="empty"
         icon={Inbox}
         heading="No issues yet"
@@ -476,12 +570,12 @@ describe('QueryState', () => {
   it('heads an empty state inside a card one rung under the page, unless told otherwise', () => {
     render(
       <>
-        <Card>
-          <QueryState kind="empty" icon={Inbox} heading="No mentions yet" />
-        </Card>
-        <Card>
-          <QueryState kind="empty" icon={Inbox} heading="No sources yet" headingLevel={2} />
-        </Card>
+        <Section>
+          <StateBlock kind="empty" icon={Inbox} heading="No mentions yet" />
+        </Section>
+        <Section>
+          <StateBlock kind="empty" icon={Inbox} heading="No sources yet" headingLevel={2} />
+        </Section>
       </>,
     );
     expect(screen.getByRole('heading', { name: 'No mentions yet' }).tagName).toBe('H3');
@@ -490,7 +584,7 @@ describe('QueryState', () => {
 
   it('says a compact absence in one line with its action and no heading', () => {
     render(
-      <QueryState
+      <StateBlock
         kind="empty"
         inline
         compact
@@ -501,21 +595,6 @@ describe('QueryState', () => {
     expect(screen.getByText('No competitors tracked.')).toBeVisible();
     expect(screen.getByRole('button', { name: 'Add competitor' })).toBeVisible();
     expect(screen.queryByRole('heading')).toBeNull();
-  });
-});
-
-describe('ChartSwatch', () => {
-  it('is decorative so the legend text alone names the series', () => {
-    render(
-      <p>
-        <ChartSwatch tone={2} />
-        Competitors
-      </p>,
-    );
-    expect(screen.getByText('Competitors').firstElementChild).toHaveAttribute(
-      'aria-hidden',
-      'true',
-    );
   });
 });
 

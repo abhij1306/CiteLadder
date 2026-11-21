@@ -4,8 +4,8 @@
  * field lengths are the wire contract's (`@citeladder/contracts/client-errors`).
  */
 export const clientErrors = {
-  /** Larger than any report the contract's field lengths allow, far below the API-wide cap. */
   max_body_bytes: 16384,
+  max_csp_body_bytes: 65536,
   /** The logger whose records carry client failures on the service's log stream. */
   logger: 'api.client_errors',
 } as const;

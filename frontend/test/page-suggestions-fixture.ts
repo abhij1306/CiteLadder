@@ -2,10 +2,6 @@ import type { AgentSuggestion, AgentSuggestionsPage } from '@/lib/api/agent';
 
 import { NOW, OUTPUT, PROJECT, REV1, pageChatPhases, revision } from './agent-chat-fixture';
 
-/**
- * A page chat on revision `number` of the page at https://acme.test/pricing,
- * its fetch done with one failing page check, as the chat read returns it.
- */
 export function pageChat(
   body: string,
   { revisionId = REV1, number = 1, projectId = PROJECT, actionId = null as string | null } = {},
@@ -44,7 +40,6 @@ export function pageChat(
   };
 }
 
-/** A body suggestion on `exact` in `body`, open and ready unless the overrides say otherwise. */
 export function spanSuggestion(
   id: string,
   body: string,
@@ -81,7 +76,6 @@ export function spanSuggestion(
   };
 }
 
-/** A suggestion for an SEO field of the page. */
 export function fieldSuggestion(
   id: string,
   field: 'title' | 'meta_description' | 'json_ld',
@@ -100,7 +94,6 @@ export function fieldSuggestion(
   };
 }
 
-/** The suggestions read of revision `revisionId`, with counts taken from the items. */
 export function suggestionsPage(
   items: readonly AgentSuggestion[],
   revisionId = REV1,

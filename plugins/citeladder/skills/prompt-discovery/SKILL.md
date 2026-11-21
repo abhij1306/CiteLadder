@@ -1,9 +1,9 @@
 ---
 name: prompt-discovery
-description: Generate the buyer prompts an authorized CiteLadder project tracks by following its Prompt Builder's steps (business facts, topics, mix and search data), then hand the suggestions to the user's review in CiteLadder. Requires a connected CiteLadder account approved with Allow changes.
+description: Generate the buyer prompts an authorized CiteLadder project tracks by following its Prompt builder's steps (business facts, topics, mix and search data), then hand the suggestions to the user's review in CiteLadder. Requires a connected CiteLadder account approved with Allow changes.
 ---
 
-Follow CiteLadder's Prompt Builder steps with its tools. CiteLadder writes
+Follow CiteLadder's Prompt builder steps with its tools. CiteLadder writes
 every prompt; you never write prompt wording yourself or add prompts with
 `prepare_add_prompts`. Generated prompts are suggestions: only the user's
 Accept in CiteLadder tracks them.
@@ -17,9 +17,9 @@ Accept in CiteLadder tracks them.
    it, and the places it serves if it is local or regional. Ask whether it is
    right. Never invent a fact.
 3. A correction for this run only goes into `run_context` at step 4. Lasting
-   changes are made in CiteLadder's Prompt Builder; give the user the app link.
+   changes are made in CiteLadder's Prompt builder; give the user the app link.
 4. If no offering is saved, topics and prompts cannot be proposed yet: ask the
-   user to add what they sell in the Prompt Builder, and stop.
+   user to add what they sell in the Prompt builder, and stop.
 5. If the project has several prompt sets, page `read_prompt_portfolio`, ask
    which set by name, and pass its `prompt_set_id` to `generate_prompts`.
 

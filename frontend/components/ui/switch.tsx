@@ -1,15 +1,7 @@
 import { cn } from '@/lib/utils';
 
-/**
- * Switch — an on/off control for a setting that takes effect at once: a
- * 32×20 `radius-full` track, `line-control` off and `ink` on, with a 16px
- * `surface` thumb that slides 12px in 120ms (instant under reduced motion).
- * Focus is the 2px ring around the track.
- *
- * A native `<button role="switch">`: the browser gives Space and Enter,
- * focus and disabled semantics; `aria-checked` carries the state.
- */
 export function Switch({
+  id,
   checked,
   onCheckedChange,
   label,
@@ -17,9 +9,9 @@ export function Switch({
   disabled = false,
   className,
 }: Readonly<{
+  id?: string;
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
-  /** The accessible name. Rendered by the caller if it should also be visible. */
   label: string;
   describedBy?: string;
   disabled?: boolean;
@@ -27,6 +19,7 @@ export function Switch({
 }>) {
   return (
     <button
+      id={id}
       type="button"
       role="switch"
       aria-checked={checked}
@@ -35,16 +28,18 @@ export function Switch({
       disabled={disabled}
       onClick={() => onCheckedChange(!checked)}
       className={cn(
-        'focus-ring relative inline-block h-5 w-8 shrink-0 rounded-full transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] motion-reduce:transition-none disabled:cursor-not-allowed disabled:opacity-45',
-        checked ? 'bg-ink' : 'bg-line-control',
+        'press focus-ring hit-area inline-flex h-5 w-10 shrink-0 items-center rounded-full disabled:cursor-not-allowed disabled:opacity-50',
+        checked
+          ? 'bg-primary not-disabled:hover:bg-primary-hover'
+          : 'bg-control-line not-disabled:hover:bg-rule',
         className,
       )}
     >
       <span
         aria-hidden
         className={cn(
-          'bg-surface shadow-xs absolute top-0.5 left-0.5 size-4 rounded-full transition-transform duration-[var(--motion-fast)] ease-[var(--ease-standard)] motion-reduce:transition-none',
-          checked && 'translate-x-3',
+          'ms-0.5 h-4 w-5.5 rounded-full transition-transform duration-[var(--motion-slide)] ease-[var(--ease-fluid)]',
+          checked ? 'bg-on-primary translate-x-3.5' : 'bg-thumb',
         )}
       />
     </button>

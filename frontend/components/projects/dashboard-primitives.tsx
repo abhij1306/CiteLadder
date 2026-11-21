@@ -1,58 +1,59 @@
 import { AppGrid } from '@/components/ui/app-grid';
-import { Badge } from '@/components/ui/badge';
+import { ChartFrame } from '@/components/ui/chart-frame';
+import { ClampText } from '@/components/ui/clamp-text';
+import { StatusMark } from '@/components/ui/status-mark';
 import { Delta } from '@/components/ui/delta';
-import type { DataTone } from '@/components/ui/data-tone';
 import { Inline, Stack } from '@/components/ui/layout';
 import { MeterRow } from '@/components/ui/meter';
 import type { ReorderItem } from '@/components/ui/reorder-list';
 import { TextLink } from '@/components/ui/text-link';
-import { MissingValue } from '@/components/ui/unavailable-value';
+import { Absence } from '@/components/ui/absence';
 import type { CommandCenter, Opportunity } from '@citeladder/contracts';
-import { readableUrl } from '@/lib/format';
-import { formatWholePercent } from '@/lib/visibility/dashboard';
+import { percentText, pluralCount, readableUrl } from '@/lib/format';
+import { useEngineCatalog } from '@/lib/providers/engines';
 import { severityLabel, severityPriority } from '@/lib/site-health/issues';
 import { textRole } from '@/components/ui/typography';
 
-/** A change against the previous comparable run, as every Command Center delta reads it. */
 export const VS_PREVIOUS_RUN = {
-  context: 'vs previous',
+  spokenContext: 'compared with the previous run',
   missingReason: 'No comparable run',
 } as const;
 
-/**
- * The Command Center's rates arrive already in percent (0–100). They print as
- * whole percents (`formatWholePercent`), the precision AI Visibility uses for
- * the same metrics, so one run never reads 31.3% here and 31% there; a rank
- * prints as AI Visibility prints it (`formatPosition`, "#3").
- */
-export const percentFigure = formatWholePercent;
-export { formatPosition as rankFigure } from '@/lib/visibility/dashboard';
+export const percentFigure = (value: number) => percentText(value / 100);
 
-/**
- * Each engine's brand mention rate in the previous and the current comparable
- * run. Both are shares of answers on the same 0–100 scale, so they are drawn as
- * meters against that scale rather than against the largest bar on screen. The
- * caller owns the empty case.
- */
 export function MovementChart({ movements }: Readonly<{ movements: CommandCenter['movements'] }>) {
+  const engines = useEngineCatalog();
+  const summary = movements
+    .map(
+      (row) =>
+        `${engines.label(row.label)}: ${row.previous === null ? 'no reading' : percentFigure(row.previous)} to ${row.current === null ? 'no reading' : percentFigure(row.current)}`,
+    )
+    .join('; ');
   return (
-    <AppGrid layout="halves">
-      {movements.map((row) => (
-        <Stack key={row.label} gap="compact" className="min-w-0 content-start">
-          <Inline className="justify-between">
-            <span className={textRole('label', 'capitalize')}>{row.label}</span>
-            <Delta value={row.delta} unit=" pp" {...VS_PREVIOUS_RUN} />
-          </Inline>
-          <MovementMeter engine={row.label} period="Previous" value={row.previous} tone="neutral" />
-          <MovementMeter
-            engine={row.label}
-            period="Current"
-            value={row.current}
-            tone={{ series: 1 }}
-          />
-        </Stack>
-      ))}
-    </AppGrid>
+    <ChartFrame summary={`Mention rate by engine, previous to current run. ${summary}.`}>
+      <AppGrid layout="halves">
+        {movements.map((row) => (
+          <Stack key={row.label} gap="compact" className="min-w-0">
+            <Inline className="justify-between">
+              <span className={textRole('label')}>{engines.label(row.label)}</span>
+              <Delta value={row.delta} unit=" pp" {...VS_PREVIOUS_RUN} />
+            </Inline>
+            <MovementMeter
+              engine={engines.label(row.label)}
+              period="Previous"
+              value={row.previous}
+              tone="neutral"
+            />
+            <MovementMeter
+              engine={engines.label(row.label)}
+              period="Current"
+              value={row.current}
+              tone="accent"
+            />
+          </Stack>
+        ))}
+      </AppGrid>
+    </ChartFrame>
   );
 }
 
@@ -65,12 +66,12 @@ function MovementMeter({
   engine: string;
   period: 'Previous' | 'Current';
   value: number | null;
-  tone: DataTone;
+  tone: 'neutral' | 'accent';
 }>) {
   return (
     <MeterRow
       name={period}
-      figure={value === null ? <MissingValue /> : percentFigure(value)}
+      figure={value === null ? <Absence /> : percentFigure(value)}
       value={value}
       label={`${engine} ${period.toLowerCase()} mention rate`}
       tone={tone}
@@ -78,34 +79,50 @@ function MovementMeter({
   );
 }
 
-/** One ranked action, as a row of the shared reorderable list. */
+function actionScope(action: Opportunity): string {
+  const label = action.target_label;
+  const echoes = label?.toLowerCase().startsWith(action.title.toLowerCase());
+  const target = label && !echoes ? readableUrl(label) : null;
+  const evidence = pluralCount(action.evidence_summary.count, 'evidence item');
+  return target ? `${target} · ${evidence}` : evidence;
+}
+
+function ActionPriority({ action }: Readonly<{ action: Opportunity }>) {
+  return (
+    <StatusMark variant="priority" value={severityPriority(action.severity)}>
+      {severityLabel(action.severity)}
+    </StatusMark>
+  );
+}
+
+export function ActionFacts({ action }: Readonly<{ action: Opportunity }>) {
+  return (
+    <Inline>
+      <ActionPriority action={action} />
+      <ClampText className={textRole('caption', 'min-w-0 flex-1')}>{actionScope(action)}</ClampText>
+    </Inline>
+  );
+}
+
 export function actionItem(action: Opportunity): ReorderItem {
   return {
     key: action.id,
     name: action.title,
-    // The severity badge carries the priority; the score is not repeated
-    // (decision D14). The title truncates so the badge stays on its line.
     content: (
-      <Stack gap="tight">
-        <Inline>
-          <TextLink
-            text="itemTitle"
-            className="min-w-0 truncate"
-            title={action.title}
-            href={action.action_id ? `/agent/actions/${action.action_id}` : '/agent/actions'}
-          >
-            {action.title}
-          </TextLink>
-          {/* The one priority mapping the evidence drawer uses. */}
-          <Badge variant="priority" value={severityPriority(action.severity)}>
-            {severityLabel(action.severity)}
-          </Badge>
-        </Inline>
-        <p className="type-caption truncate">
-          {action.target_label ? readableUrl(action.target_label) : 'Project-wide'} ·{' '}
-          {action.evidence_summary.count} persisted evidence item(s)
-        </p>
-      </Stack>
+      <Inline gap="item" className="min-w-0">
+        <TextLink
+          text="body"
+          underline="hover"
+          className="flex min-w-0"
+          href={action.action_id ? `/actions/${action.action_id}` : '/actions'}
+        >
+          <ClampText>{action.title}</ClampText>
+        </TextLink>
+        <ClampText className={textRole('body', 'text-ink-2 min-w-0 flex-1')}>
+          {actionScope(action)}
+        </ClampText>
+        <ActionPriority action={action} />
+      </Inline>
     ),
   };
 }

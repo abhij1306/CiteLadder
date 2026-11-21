@@ -1,43 +1,38 @@
-import { ProjectLink } from '@/components/ui/project-link';
-import { Rocket } from 'lucide-react';
-
-import { LaunchAuditButton } from '@/components/runs/launch-audit-button';
+import { FirstRunAction } from '@/components/runs/launch-audit-button';
 import { Button } from '@/components/ui/button';
-import { QueryState } from '@/components/ui/query-state';
+import { Icon } from '@/components/ui/icon';
+import { ProjectLink } from '@/components/ui/project-link';
+import { StateBlock } from '@/components/ui/state-block';
+import { Activity, Rocket } from '@/lib/icons';
+import { AUDIT_STATES } from '@/lib/runs/status';
+import type { ActiveRun } from '@/lib/visibility/dashboard';
+import { useWorkspaceCapability } from '@/lib/project/project-context';
 
-/**
- * Empty state for a project with no completed runs. The
- * dashboard is a projection over completed audits, so there is nothing to
- * render until one finishes. When a run is already in progress
- * (`hasActiveRun`), the copy and CTA switch from "launch one" to "one is on
- * its way".
- *
- * Copy is one line each: the old version listed what the dashboard would
- * eventually show (score, per-engine comparison, rankings), which the screen
- * makes obvious the moment it has data.
- */
-export function VisibilityEmptyState({
-  hasActiveRun = false,
-}: Readonly<{ hasActiveRun?: boolean }>) {
+export function VisibilityEmptyState({ activeRun }: Readonly<{ activeRun: ActiveRun | null }>) {
+  const canRun = useWorkspaceCapability('run');
+  if (activeRun)
+    return (
+      <StateBlock
+        kind="empty"
+        icon={Activity}
+        heading="A run is in progress"
+        description={AUDIT_STATES[activeRun.status].label}
+        action={
+          <Button asChild>
+            <ProjectLink href={`/runs/${activeRun.id}`}>
+              <Icon icon={Activity} />
+              Watch live progress
+            </ProjectLink>
+          </Button>
+        }
+      />
+    );
   return (
-    <QueryState
+    <StateBlock
       kind="empty"
       icon={Rocket}
-      heading="No completed runs yet"
-      description={
-        hasActiveRun
-          ? 'An audit is running — results appear here when it finishes.'
-          : 'Launch an audit to see how AI answer engines talk about your brand.'
-      }
-      action={
-        hasActiveRun ? (
-          <Button asChild variant="secondary">
-            <ProjectLink href="/runs">View runs</ProjectLink>
-          </Button>
-        ) : (
-          <LaunchAuditButton>Launch your first audit</LaunchAuditButton>
-        )
-      }
+      heading="No visibility data yet"
+      action={canRun ? <FirstRunAction /> : undefined}
     />
   );
 }

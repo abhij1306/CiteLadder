@@ -10,8 +10,6 @@ import { renderWithProviders } from '@/test/render';
 import { usePerformanceSync } from './use-performance-sync';
 
 const { syncNow, getSync } = vi.hoisted(() => ({ syncNow: vi.fn(), getSync: vi.fn() }));
-// The enqueue and the run read stand in for the API; the cache keys and the
-// refresh of every imported read stay real.
 vi.mock('@/lib/api/performance', () => ({
   performanceMutations: { syncNow: () => ({ mutationFn: () => syncNow() }) },
 }));
@@ -29,7 +27,6 @@ vi.mock('@/lib/api/integrations', async (importOriginal) => {
   };
 });
 
-/** The sync control under the project route's gate, for the selected project. */
 function Sync({ projectId }: Readonly<{ projectId: string }>) {
   const project = useMemo(() => makeProject({ id: projectId }), [projectId]);
   return (

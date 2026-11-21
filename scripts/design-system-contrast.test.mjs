@@ -6,43 +6,21 @@ import {
   contrastRoles,
   paletteDeclarations,
   paletteViolations,
+  resolvePalette,
 } from '../frontend/scripts/design-system-contrast.mjs';
 
-/**
- * A complete palette that passes every pair. Every ink the matrix reads is
- * `ink` and every surface `paper`, so a new matrix row needs no fixture edit;
- * the labels on fills and the marks the separation check measures are set
- * explicitly.
- */
-function palette({ ink, paper, positive, negative, series }) {
+function palette({ ink, paper }) {
   const { inks, surfaces } = contrastRoles();
   return {
     ...Object.fromEntries(surfaces.map((token) => [token, paper])),
     ...Object.fromEntries(inks.map((token) => [token, ink])),
-    // Fills carry the other end of the scale.
     '--color-ink-hover': ink,
     '--color-on-ink': paper,
-    '--color-on-accent': paper,
-    '--color-positive': positive,
-    '--color-negative': negative,
-    ...Object.fromEntries(series.map((value, index) => [`--color-data-${index + 1}`, value])),
   };
 }
 
-const LIGHT = palette({
-  ink: '#000000',
-  paper: '#ffffff',
-  positive: '#000000',
-  negative: '#5e5e5e',
-  series: ['#000000', '#595959', '#949494'],
-});
-const DARK = palette({
-  ink: '#ffffff',
-  paper: '#000000',
-  positive: '#ffffff',
-  negative: '#949494',
-  series: ['#ffffff', '#a0a0a0', '#5f5f5f'],
-});
+const LIGHT = palette({ ink: '#000000', paper: '#ffffff' });
+const DARK = palette({ ink: '#ffffff', paper: '#000000' });
 
 const block = (selector, values) =>
   `${selector} { ${Object.entries(values)
@@ -85,7 +63,7 @@ test('an app rebinding fails the theme it reaches', () => {
   const violations = paletteViolations(css({ extra: appLight }));
   assert.ok(
     violations.some((violation) =>
-      violation.includes(': :root --color-ink-secondary on --color-sidebar is 1.'),
+      violation.includes(': :root --color-ink-secondary on --color-chrome is 1.'),
     ),
   );
 });
@@ -114,11 +92,23 @@ test('a translucent soft is composited onto the surface before measuring', () =>
   );
 });
 
-test('a light chart series must hold 3:1 on every ground', () => {
-  const violations = paletteViolations(css({ light: { '--color-data-3': '#eeeeee' } }));
-  assert.ok(violations.some((violation) => violation.includes('--color-data-3 on --color-paper')));
-  assert.ok(
-    violations.some((violation) => violation.includes('--color-data-3 on --color-surface-sunken')),
+test('oklch literals and relative colours resolve to the sRGB they render', () => {
+  const source = [
+    '@theme { --color-ink: oklch(17.8% 0 0); --color-hover: oklch(from var(--color-ink) l c h / 6%); }',
+    '@theme inline { --color-mark: var(--color-accent); }',
+    ':root { --color-accent: oklch(63.4% 0.1973 37.5); --color-rule: oklch(21% 0.01 268 / 11%); }',
+    ":root[data-theme='dark'] { --color-ink: oklch(96.7% 0 0); }",
+  ].join('\n');
+  const light = resolvePalette(source, ':root');
+  assert.deepEqual(
+    ['--color-ink', '--color-hover', '--color-mark', '--color-rule'].map((token) =>
+      light.get(token),
+    ),
+    ['#111111', 'rgb(17 17 17 / 6%)', '#e8501a', 'rgb(22 24 29 / 11%)'],
+  );
+  assert.equal(
+    resolvePalette(source, ":root[data-theme='dark']").get('--color-hover'),
+    'rgb(244 244 244 / 6%)',
   );
 });
 
@@ -128,23 +118,6 @@ test('the shipped palette meets every pair in both themes', () => {
     'utf8',
   );
   assert.deepEqual(paletteViolations(source), []);
-});
-
-test('positive and negative too close in lightness and under red-green loss fail', () => {
-  const violations = paletteViolations(css({ dark: { '--color-negative': '#f4f4f4' } }));
-  assert.ok(
-    violations.some(
-      (violation) =>
-        violation.includes("data-theme='dark'") &&
-        violation.includes('positive and negative --color-positive / --color-negative'),
-    ),
-  );
-  // A hue difference that survives both deficiencies separates marks of
-  // equal lightness: blue against amber.
-  const hued = paletteViolations(
-    css({ light: { '--color-positive': '#3b82f6', '--color-negative': '#b98a00' } }),
-  );
-  assert.ok(!hued.some((violation) => violation.includes('--color-positive / --color-negative')));
 });
 
 test('a stylesheet without a dark mapping fails', () => {

@@ -32,8 +32,8 @@ import {
   US,
   ZA,
 } from 'country-flag-icons/react/3x2';
-import { Globe } from 'lucide-react';
 
+import { Globe } from '@/lib/icons';
 import { Icon } from '@/components/ui/icon';
 import { SearchableSelect, type SearchableSelectOption } from '@/components/ui/searchable-select';
 import type { MarketOption } from '@citeladder/contracts/markets';
@@ -73,7 +73,6 @@ const COUNTRY_FLAGS = {
   ZA,
 } as const;
 
-/** Country/language adapter for the shared searchable combobox. */
 export function MarketSelect({
   options,
   showCountryFlags = false,
@@ -99,7 +98,7 @@ export function MarketSelect({
       renderLeading={showCountryFlags ? (option) => <CountryFlag code={option.value} /> : undefined}
       renderOptionEnd={(option) =>
         option.value.trim().toLowerCase() === option.label.trim().toLowerCase() ? null : (
-          <span className="text-ink-muted max-w-24 truncate tabular-nums">{option.value}</span>
+          <span className="text-ink-2 max-w-24 truncate tabular-nums">{option.value}</span>
         )
       }
     />
@@ -109,11 +108,9 @@ export function MarketSelect({
 function CountryFlag({ code }: Readonly<{ code: string }>) {
   if (code === 'GLOBAL') {
     return (
-      // The flags' 20px slot, holding the product's own outline globe rather
-      // than an emoji that renders differently on every platform.
       <span
         data-country-flag="GLOBAL"
-        className="text-ink-muted flex size-5 shrink-0 items-center justify-center"
+        className="text-ink-2 flex size-5 shrink-0 items-center justify-center"
         aria-hidden
       >
         <Icon icon={Globe} />
@@ -124,7 +121,7 @@ function CountryFlag({ code }: Readonly<{ code: string }>) {
   return Flag ? (
     <Flag
       data-country-flag={code}
-      className="h-3.5 w-5 shrink-0 overflow-hidden rounded-xs"
+      className="rounded-mark h-3.5 w-5 shrink-0 overflow-hidden"
       aria-hidden
     />
   ) : null;

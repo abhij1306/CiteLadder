@@ -49,7 +49,6 @@ describe('Overview library widgets', () => {
   });
 
   it('says there is no run yet instead of loading perception forever', () => {
-    // The latest projection is `null` when the project has no measured run.
     reads.visibility = { data: null, isError: false };
     renderWithProviders(<PerceptionWidget project={project} />);
     const region = screen.getByRole('region', { name: 'Perception' });
@@ -98,9 +97,9 @@ describe('Overview library widgets', () => {
 
   it.each([
     ['no_baseline', 0, 'No earlier run to compare with yet.'],
-    ['no_baseline', 2, 'No earlier run used the same settings and scoring to compare with.'],
-    ['changed_context', 0, 'The earlier run used different settings, so sources are not compared.'],
-    ['matched_subset', 0, 'The earlier run used different settings, so sources are not compared.'],
+    ['no_baseline', 2, 'The 2 earlier runs used different settings or scoring.'],
+    ['changed_context', 0, 'The earlier run used different settings.'],
+    ['matched_subset', 0, 'Only some answers match the earlier run, so this is not compared.'],
     [
       'partial_coverage',
       0,
@@ -161,7 +160,6 @@ describe('Overview library widgets', () => {
       data: {
         dimension: 'domain',
         comparison_status: 'comparable',
-        // Shares over different totals give raw float deltas.
         risers: [
           {
             key: 'review.example',
@@ -194,8 +192,8 @@ describe('Overview library widgets', () => {
     };
     renderWithProviders(<ShareOfVoiceWidget project={project} />);
     const region = screen.getByRole('region', { name: 'Share of voice' });
-    expect(within(region).getByText('42%')).toBeVisible();
-    expect(within(region).getByText('30%')).toBeVisible();
+    expect(within(region).getByText('42.0%')).toBeVisible();
+    expect(within(region).getByText('30.0%')).toBeVisible();
     expect(within(region).getAllByRole('listitem', { hidden: true })).toHaveLength(5);
   });
 
@@ -224,10 +222,6 @@ describe('Overview library widgets', () => {
       name: 'Retrieved versus cited',
     });
     expect(within(region).getByText('4 read · 1 cited')).toBeVisible();
-    expect(
-      within(region).getByText(
-        'Your pages engines read but did not cite, across 12 answers that show what they read.',
-      ),
-    ).toBeVisible();
+    expect(within(region).getByText('12 answers')).toBeVisible();
   });
 });

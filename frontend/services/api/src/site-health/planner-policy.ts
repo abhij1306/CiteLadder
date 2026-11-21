@@ -1,4 +1,3 @@
-/** Bounded crawl request normalization and the policy frozen on each crawl. */
 import { getDomain } from 'tldts';
 import { z } from 'zod';
 import { asApiErrorCode } from '@citeladder/contracts/error-codes';
@@ -27,7 +26,6 @@ export function crawlError(
 export const createCrawlRequest = siteCrawlCreateRequestSchema;
 type CreateCrawlRequest = z.infer<typeof createCrawlRequest>;
 
-/** Who confirmed being authorized to crawl the site while ignoring robots.txt, and when. */
 export const robotsDecisionSchema = z.object({
   user_id: z.uuid(),
   email: z.string(),
@@ -42,10 +40,8 @@ export type RobotsDecision = z.infer<typeof robotsDecisionSchema>;
  */
 export type CrawlAdmission = CreateCrawlRequest & { robots_decision?: RobotsDecision | null };
 
-/** The crawl's robots handling; the page limit is the configured automatic one (SH-B13). */
 export function controls(request: CrawlAdmission) {
   const robots = request.robots ?? 'respect';
-  // Ignoring robots.txt is recorded against the person who confirmed authorization.
   const decision = robots === 'ignore' ? (request.robots_decision ?? null) : null;
   if (robots === 'ignore' && !decision)
     crawlError('ignoring robots.txt needs a confirmed, signed-in person');
@@ -90,7 +86,6 @@ export function frozenConfiguration(
     page_kind_classifier_version: policy.site_health.page_analysis.classification.version,
     page_profile_rule_version: policy.site_health.versions.rules,
     requested_page_limit: selected.limit,
-    // Read per fetch by the site crawl's discover and analyze tasks.
     robots: selected.robots,
     robots_decision: selected.robotsDecision,
     extractor_version: policy.site_health.versions.extractor,

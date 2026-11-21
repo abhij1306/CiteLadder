@@ -4,11 +4,9 @@ export const CRAWL = '44444444-4444-4444-8444-444444444444';
 export const URL_ID = 'cccccccc-1111-4111-8111-111111111111';
 export const ISSUE_H = 'aaaaaaaa-1111-4111-8111-111111111111';
 export const ISSUE_L = 'bbbbbbbb-1111-4111-8111-111111111111';
-/** The crawl's Issues groups the two issues belong to. */
 export const GROUP_H = 'aaaaaaaa-2222-4111-8111-111111111111';
 const GROUP_L = 'bbbbbbbb-2222-4111-8111-111111111111';
 
-/** One audited product page; each test overrides only what it is about. */
 export function pageDetail(overrides: Partial<PageDetail> = {}): PageDetail {
   return {
     site_url_id: URL_ID,
@@ -32,11 +30,7 @@ export function pageDetail(overrides: Partial<PageDetail> = {}): PageDetail {
     issue_count: 2,
     last_audited: '2026-07-16T00:00:00Z',
     page_kind: 'product',
-    // A product page that also carries an FAQ: exactly the hybrid a single
-    // exclusive page_kind could not express.
     page_traits: ['has_faq', 'has_variants'],
-    // Classifier evidence (v2 P1) — a schema-conflict scenario: the path
-    // pattern chose Product while the markup declares Article.
     page_kind_evidence: {
       classifier_version: 'sh-classifier-1',
       classified_by: 'path_pattern',

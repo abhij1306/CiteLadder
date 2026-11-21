@@ -10,9 +10,12 @@ import { mutationOptions, queryOptions, skipToken, type QueryClient } from '@tan
 import { PROMPT_GENERATION_REQUEST_TIMEOUT_MS } from '@/lib/config/operational';
 
 import { apiClient, type ApiRequestOptions } from './client';
+import { mainPromptSet } from '@/lib/prompts/prompt-sets';
+
 import { queryKeys } from './query-keys';
 import type { ProjectScope } from './query-keys/scope';
 import {
+  promptBulkResultSchema,
   promptCandidateReviewResponseSchema,
   promptCandidateSchema,
   promptGenerateResponseSchema,
@@ -21,6 +24,9 @@ import {
   promptSetSchema,
 } from '@citeladder/contracts/project';
 import type {
+  PromptBulkDeleteRequest,
+  PromptBulkStatusRequest,
+  PromptBulkTopicRequest,
   PromptCandidateReviewRequest,
   PromptCreateRequest,
   PromptGenerateRequest,
@@ -36,12 +42,12 @@ import type {
   PromptGenerateResponse,
   PromptSet,
   PromptSetList,
+  PromptStatus,
 } from '@citeladder/contracts';
 
 const promptCandidateListSchema = z.array(promptCandidateSchema);
 
 export const promptsApi = {
-  /** The project's sets and the server-enforced bounds of the forms they open. */
   listPromptSets: async (projectId: string, options?: ApiRequestOptions) => {
     const res = await apiClient.get<PromptSetList>(
       `/prompt-sets?project_id=${encodeURIComponent(projectId)}`,
@@ -71,11 +77,42 @@ export const promptsApi = {
   },
   deletePrompt: (promptId: string, options?: ApiRequestOptions) =>
     apiClient.delete<void>(`/prompts/${promptId}`, options),
-  /**
-   * Persist browser-parsed rows through `/import`: a JSON body of
-   * `{ prompts: [...] }` (rows already parsed and previewed in the browser),
-   * bulk-created with `origin='imported'`.
-   */
+  bulkStatus: async (
+    promptSetId: string,
+    input: PromptBulkStatusRequest,
+    options?: ApiRequestOptions,
+  ) => {
+    const res = await apiClient.post<PromptSet>(
+      `/prompt-sets/${promptSetId}/prompts/bulk-status`,
+      input,
+      options,
+    );
+    return strictValidate(promptSetSchema, res, 'prompts.bulkStatus');
+  },
+  bulkTopic: async (
+    projectId: string,
+    input: PromptBulkTopicRequest,
+    options?: ApiRequestOptions,
+  ) => {
+    const res = await apiClient.post<unknown>(
+      `/projects/${projectId}/prompts/bulk-topic`,
+      input,
+      options,
+    );
+    return strictValidate(promptBulkResultSchema, res, 'prompts.bulkTopic');
+  },
+  bulkDelete: async (
+    projectId: string,
+    input: PromptBulkDeleteRequest,
+    options?: ApiRequestOptions,
+  ) => {
+    const res = await apiClient.post<unknown>(
+      `/projects/${projectId}/prompts/bulk-delete`,
+      input,
+      options,
+    );
+    return strictValidate(promptBulkResultSchema, res, 'prompts.bulkDelete');
+  },
   importRows: async (
     promptSetId: string,
     rows: PromptImportRowRequest[],
@@ -88,13 +125,6 @@ export const promptsApi = {
     );
     return strictValidate(promptSetSchema, res, 'prompts.importRows');
   },
-  /**
-   * AI prompt generation via the app-level default agent. Validated
-   * suggestions are staged as candidates for review; nothing is tracked until
-   * accepted. Errors: 409 key reused for another request, 422 invalid, 502
-   * agent/output failure, 503 when no default agent is configured. Pass an
-   * `idempotencyKey` so a retry replays a run the server already staged.
-   */
   generate: async (
     promptSetId: string,
     input: PromptGenerateRequest,
@@ -107,7 +137,6 @@ export const promptsApi = {
     );
     return strictValidate(promptGenerateResponseSchema, res, 'prompts.generate');
   },
-  /** Pending, unexpired generated candidates awaiting review. */
   listCandidates: async (promptSetId: string, options?: ApiRequestOptions) => {
     const res = await apiClient.get<PromptCandidate[]>(
       `/prompt-sets/${promptSetId}/candidates`,
@@ -115,11 +144,6 @@ export const promptsApi = {
     );
     return strictValidate(promptCandidateListSchema, res, 'prompts.listCandidates');
   },
-  /**
-   * Accept candidates as active prompts (403 when over prompt capacity) or
-   * reject them (deleted). Already-reviewed or expired ids are counted as
-   * unavailable, so a repeated submit is harmless.
-   */
   reviewCandidates: async (
     promptSetId: string,
     input: PromptCandidateReviewRequest,
@@ -137,14 +161,12 @@ export const promptsApi = {
 const scoped = (scope: ProjectScope) => ({ workspaceId: scope.workspaceId });
 
 export const promptsQueries = {
-  /** The project's prompt sets: the Prompts screen, its create guard and the launch dialog. */
   sets: (scope: ProjectScope) =>
     queryOptions({
       queryKey: queryKeys.prompts.sets(scope),
       queryFn: ({ signal }) =>
         promptsApi.listPromptSets(scope.projectId, { signal, ...scoped(scope) }),
     }),
-  /** A set's pending generated candidates; skipped until the set exists. */
   candidates: (scope: ProjectScope, promptSetId: string | null) =>
     queryOptions({
       queryKey: queryKeys.prompts.candidates(scope, promptSetId),
@@ -154,12 +176,6 @@ export const promptsQueries = {
     }),
 };
 
-/**
- * Every read a prompt-library write changes: the project's prompt sets and
- * candidates, its topics and the seed queries bound to them (generation and
- * import create topics), and the project list, whose embedded prompt sets
- * mark onboarding's "Add prompts" step done.
- */
 export async function refreshPromptLibrary(client: QueryClient, projectId: string) {
   await Promise.all([
     client.invalidateQueries({ queryKey: queryKeys.prompts.project(projectId) }),
@@ -168,7 +184,11 @@ export async function refreshPromptLibrary(client: QueryClient, projectId: strin
   ]);
 }
 
-/** Resolves the set a write lands in, creating the project's default set when it has none. */
+export type PromptBulkChange =
+  | { kind: 'status'; status: PromptStatus }
+  | { kind: 'topic'; topicId: string | null }
+  | { kind: 'delete' };
+
 type SetResolver = () => Promise<PromptSet>;
 const refreshed = (scope: ProjectScope) => ({
   onSuccess: (
@@ -179,14 +199,7 @@ const refreshed = (scope: ProjectScope) => ({
   ) => refreshPromptLibrary(client, scope.projectId),
 });
 
-/** Prompt-library writes; each success refreshes every read it changes. */
 export const promptsMutations = {
-  /**
-   * The project's prompt set, created as the default set when the project has
-   * none. The list is re-read first (joining a read already in flight), so an
-   * empty cache is never taken for an empty project; a created set is written
-   * into the list at once.
-   */
   ensureSet: (scope: ProjectScope) =>
     mutationOptions({
       scope: { id: `ensure-prompt-set:${scope.workspaceId}:${scope.projectId}` },
@@ -195,8 +208,8 @@ export const promptsMutations = {
           ...promptsQueries.sets(scope),
           staleTime: 0,
         });
-        const [first] = available.prompt_sets;
-        if (first) return first;
+        const main = mainPromptSet(available.prompt_sets);
+        if (main) return main;
         return promptsApi.createPromptSet(
           { project_id: scope.projectId, name: 'Default prompt set' },
           scoped(scope),
@@ -204,7 +217,9 @@ export const promptsMutations = {
       },
       onSuccess: async (created, _vars, _result, { client }) => {
         client.setQueryData<PromptSetList>(queryKeys.prompts.sets(scope), (prev) =>
-          prev && !prev.prompt_sets.length ? { ...prev, prompt_sets: [created] } : prev,
+          prev && !prev.prompt_sets.some((set) => set.id === created.id)
+            ? { ...prev, prompt_sets: [created, ...prev.prompt_sets] }
+            : prev,
         );
         await client.invalidateQueries({ queryKey: queryKeys.prompts.project(scope.projectId) });
       },
@@ -221,10 +236,91 @@ export const promptsMutations = {
         promptsApi.updatePrompt(promptId, input, scoped(scope)),
       ...refreshed(scope),
     }),
+  setEnabled: (scope: ProjectScope) => {
+    const queryKey = queryKeys.prompts.sets(scope);
+    return mutationOptions({
+      mutationFn: ({ promptId, enabled }: { promptId: string; enabled: boolean }) =>
+        promptsApi.updatePrompt(promptId, { enabled }, scoped(scope)),
+      onMutate: async ({ promptId, enabled }, { client }) => {
+        await client.cancelQueries({ queryKey });
+        const previous = client.getQueryData<PromptSetList>(queryKey);
+        client.setQueryData<PromptSetList>(queryKey, (current) =>
+          current
+            ? {
+                ...current,
+                prompt_sets: current.prompt_sets.map((set) => ({
+                  ...set,
+                  prompts: set.prompts.map((prompt) =>
+                    prompt.id === promptId ? { ...prompt, enabled } : prompt,
+                  ),
+                })),
+              }
+            : current,
+        );
+        return { previous };
+      },
+      onError: (_error, _vars, result, { client }) => {
+        if (result?.previous) client.setQueryData(queryKey, result.previous);
+      },
+      onSettled: (_data, _error, _vars, _result, { client }) =>
+        refreshPromptLibrary(client, scope.projectId),
+    });
+  },
   remove: (scope: ProjectScope) =>
     mutationOptions({
       mutationFn: (promptId: string) => promptsApi.deletePrompt(promptId, scoped(scope)),
       ...refreshed(scope),
+    }),
+  bulk: (scope: ProjectScope) =>
+    mutationOptions({
+      mutationFn: async ({
+        change,
+        prompts,
+      }: {
+        change: PromptBulkChange;
+        prompts: readonly Pick<Prompt, 'id' | 'prompt_set_id'>[];
+      }): Promise<number> => {
+        const prompt_ids = prompts.map((prompt) => prompt.id);
+        switch (change.kind) {
+          case 'status': {
+            const bySet = new Map<string, string[]>();
+            for (const prompt of prompts)
+              bySet.set(prompt.prompt_set_id, [
+                ...(bySet.get(prompt.prompt_set_id) ?? []),
+                prompt.id,
+              ]);
+            const settled = await Promise.allSettled(
+              [...bySet].map(([setId, ids]) =>
+                promptsApi.bulkStatus(
+                  setId,
+                  { prompt_ids: ids, status: change.status },
+                  scoped(scope),
+                ),
+              ),
+            );
+            const failed = settled.find((result) => result.status === 'rejected');
+            if (failed) throw failed.reason;
+            return prompt_ids.length;
+          }
+          case 'topic':
+            return (
+              await promptsApi.bulkTopic(
+                scope.projectId,
+                { prompt_ids, topic_id: change.topicId },
+                scoped(scope),
+              )
+            ).count;
+          case 'delete':
+            return (await promptsApi.bulkDelete(scope.projectId, { prompt_ids }, scoped(scope)))
+              .count;
+          default: {
+            const unhandled: never = change;
+            return unhandled;
+          }
+        }
+      },
+      onSettled: (_data, _error, _vars, _result, { client }) =>
+        refreshPromptLibrary(client, scope.projectId),
     }),
   import: (scope: ProjectScope, resolveSet: SetResolver) =>
     mutationOptions({
@@ -232,13 +328,9 @@ export const promptsMutations = {
         promptsApi.importRows((await resolveSet()).id, rows, scoped(scope)),
       ...refreshed(scope),
     }),
-  /**
-   * A generation run. The caller owns the idempotency key so a retry of the
-   * same request replays the staged run. A failed response can still follow a
-   * completed run, so the library is re-read either way.
-   */
   generate: (scope: ProjectScope, resolveSet: SetResolver) =>
     mutationOptions({
+      mutationKey: queryKeys.prompts.generate(scope),
       mutationFn: async ({
         input,
         idempotencyKey,
@@ -253,7 +345,6 @@ export const promptsMutations = {
       onSettled: (_data, _error, _vars, _result, { client }) =>
         refreshPromptLibrary(client, scope.projectId),
     }),
-  /** Accept or reject candidates; accepting adds tracked prompts. */
   reviewCandidates: (scope: ProjectScope) =>
     mutationOptions({
       mutationFn: ({

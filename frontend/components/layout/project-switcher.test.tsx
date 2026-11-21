@@ -17,8 +17,8 @@ const WORKSPACE = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const ACME = makeProject({ id: '11111111-1111-4111-8111-111111111111', name: 'Acme' });
 const GLOBEX = makeProject({
   id: '22222222-2222-4222-8222-222222222222',
-  name: 'Globex',
-  brand_name: 'Globex',
+  name: 'globex',
+  brand_name: 'GlobeX',
   website_url: 'https://globex.example',
 });
 
@@ -71,7 +71,6 @@ beforeEach(() => {
         },
       ]),
     ),
-    // The list carries the switcher's fields only; each view is its own read.
     http.get('/api/v1/projects', () =>
       HttpResponse.json(
         [ACME, GLOBEX].map(({ id, name, brand_name, website_url }) => ({
@@ -124,15 +123,17 @@ it('asks for a project’s view while its row is highlighted, so choosing it rea
 
   screen.getByRole('button', { name: 'Acme' }).focus();
   await user.keyboard('{Enter}');
-  expect(await screen.findByRole('menuitem', { name: 'Globex' })).toBeInTheDocument();
+  expect(await screen.findByRole('menuitem', { name: 'GlobeX' })).toBeInTheDocument();
   await user.keyboard('{ArrowDown}');
-  await waitFor(() => expect(screen.getByRole('menuitem', { name: 'Globex' })).toHaveFocus());
+  await waitFor(() => expect(screen.getByRole('menuitem', { name: 'GlobeX' })).toHaveFocus());
   await waitFor(() => expect(paths).toContain(globexView));
 
   await user.keyboard('{Enter}');
 
-  expect(await screen.findByRole('heading', { name: 'Opened Globex' })).toBeInTheDocument();
+  expect(await screen.findByRole('heading', { name: 'Opened globex' })).toBeInTheDocument();
   expect(router.state.location.search).toBe(`?project=${GLOBEX.id}`);
   expect(paths.filter((path) => path === globexView)).toEqual([globexView]);
+  expect(screen.getByRole('button', { name: 'GlobeX' }).textContent).toBe('GGlobeX');
+  expect(screen.queryByText('globex.example')).toBeNull();
   router.dispose();
 });

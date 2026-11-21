@@ -1,22 +1,12 @@
-/**
- * One Site Health rule across a frozen cohort of pages (an issue family),
- * read in a crawl comparable with the one the cohort came from.
- *
- * Every cohort page passing (or no longer applying, counted apart) verifies
- * the check. Some cleared and some failing is `partially_resolved`, none
- * cleared is `still_failing`; both name the pages still failing. A crawl with a different analyzer or rule catalog, or
- * one that read no cohort page (or only passing ones, leaving the rest
- * unread), is inconclusive and says why. A family larger than its cohort
- * counts the pages beyond it as uncovered and is never verified (SH-B2): a
- * cohort that clears reads `cohort_sampled`.
- */
 import {
   siteIssueFamilyEvidenceSchema,
   type IssueFamilyCohort,
 } from '@citeladder/contracts/opportunity-evidence';
+import { siteLevelFinding, siteLevelRuleSchema } from '@citeladder/contracts/site-health';
 import { sql } from 'kysely';
 
 import { policy } from '../../config.ts';
+import { evidencePages } from '../refresh-site-evidence.ts';
 import { parseUuid, parseUuids } from '../../http/uuid.ts';
 import { ruleTitle } from '../../site-health/reads/rules.ts';
 import { compareText } from '../../text-order.ts';
@@ -24,19 +14,11 @@ import { outcome, type CheckOutcome } from '../verification-decisions.ts';
 import type { CheckModule, MemberFacts } from './kind.ts';
 import { latestAudits, once, type ReadContext } from './read-context.ts';
 
-/**
- * A page whose rule now passes, or no longer applies, has the defect cleared;
- * the reading counts the two apart.
- */
 const PASSING = 'satisfied';
 const NOT_APPLICABLE = 'not_applicable';
 const FAILING = new Set(['missing', 'partial']);
 const ANSWERED = new Set([PASSING, NOT_APPLICABLE, ...FAILING]);
 
-/**
- * An issue-family finding's cohort as its evidence stores it; null for any
- * other finding or unreadable evidence.
- */
 export function familyCohort(
   member: Pick<MemberFacts, 'rule_id' | 'evidence'>,
 ): IssueFamilyCohort | null {
@@ -70,12 +52,6 @@ const comparable = (left: CrawlVersions, right: CrawlVersions) =>
   left.analyzer_version === right.analyzer_version &&
   left.rule_catalog_version === right.rule_catalog_version;
 
-/**
- * Each cohort page's reading of the rule as this crawl shows it: its latest
- * finalized audit (`latestAudits`, SH-B9), fetched after go-live, and that
- * analysis's evaluation of the rule. A page rerun reads through the site crawl
- * it lands in, so re-auditing the last failing page can verify the family.
- */
 async function cohortReadings(
   ctx: ReadContext,
   crawlId: string,
@@ -105,6 +81,81 @@ async function cohortReadings(
   return rows;
 }
 
+async function readSiteLevel(
+  ctx: ReadContext,
+  crawlId: string,
+  check: { rule_id: string; site_url_ids: string[] },
+): Promise<CheckOutcome> {
+  const d = ctx.declaration;
+  const crawl = await ctx.scope
+    .selectFrom(ctx.db, 'site_crawls')
+    .select(
+      sql<boolean>`coalesce(started_at, created_at) > ${d.declared_implemented_at}::timestamptz`.as(
+        'after',
+      ),
+    )
+    .where('project_id', '=', d.project_id)
+    .where('id', '=', crawlId)
+    .executeTakeFirst();
+  const empty = { failing: [], passing: 0, not_applicable: 0, uncovered: 0 };
+  const unread = {
+    ...outcome(ctx.reading, 'unavailable', 'cohort_not_analyzed'),
+    pages: { ...empty, unread: check.site_url_ids.length },
+  };
+  if (!crawl?.after) return unread;
+  const evaluations = await ctx.db
+    .selectFrom('site_rule_evaluations as e')
+    .innerJoin('site_page_analyses as a', (join) =>
+      join.onRef('a.workspace_id', '=', 'e.workspace_id').onRef('a.id', '=', 'e.analysis_id'),
+    )
+    .select(['e.id', 'e.outcome'])
+    .where('e.workspace_id', '=', d.workspace_id)
+    .where('a.project_id', '=', d.project_id)
+    .where('a.crawl_id', '=', crawlId)
+    .where('e.rule_id', '=', check.rule_id)
+    .execute();
+  const answered = evaluations.filter((row) => ANSWERED.has(row.outcome));
+  if (!answered.length) return unread;
+  for (const row of answered) ctx.result.rule_evaluation_ids.add(row.id);
+  const found = await ctx.scope
+    .selectFrom(ctx.db, 'site_issues')
+    .select('evidence')
+    .where('project_id', '=', d.project_id)
+    .where('crawl_id', '=', crawlId)
+    .where('rule_id', '=', check.rule_id)
+    .where('is_current', '=', true)
+    .execute();
+  if (!found.length)
+    return {
+      ...outcome(ctx.reading, 'met'),
+      pages: { ...empty, passing: check.site_url_ids.length, unread: 0 },
+    };
+  const named = new Set(
+    found.flatMap((row) => {
+      const finding = siteLevelFinding(check.rule_id, row.evidence);
+      return finding ? evidencePages(finding).map((page) => page.site_url_id) : [];
+    }),
+  );
+  const still = named.size ? check.site_url_ids.filter((id) => named.has(id)) : check.site_url_ids;
+  const urls = await cohortUrls(ctx, still);
+  const passing = check.site_url_ids.length - still.length;
+  return {
+    ...outcome(ctx.reading, 'unmet', passing ? 'partially_resolved' : 'still_failing'),
+    pages: { ...empty, failing: urls, passing, unread: 0 },
+  };
+}
+
+async function cohortUrls(ctx: ReadContext, ids: readonly string[]) {
+  if (!ids.length) return [];
+  const rows = await ctx.scope
+    .selectFrom(ctx.db, 'site_urls')
+    .select(['id as site_url_id', 'normalized_url as url'])
+    .where('project_id', '=', ctx.declaration.project_id)
+    .where('id', 'in', [...ids])
+    .execute();
+  return rows.sort((left, right) => compareText(left.url, right.url));
+}
+
 async function readCohort(
   ctx: ReadContext,
   crawlId: string,
@@ -116,6 +167,8 @@ async function readCohort(
   if (!baseline) return outcome(ctx.reading, 'unavailable', 'baseline_crawl_unavailable');
   if (!current || !comparable(baseline, current))
     return outcome(ctx.reading, 'unavailable', 'non_comparable_crawl');
+  if (siteLevelRuleSchema.safeParse(check.rule_id).success)
+    return readSiteLevel(ctx, crawlId, check);
   const readings = await cohortReadings(ctx, crawlId, check.rule_id, check.site_url_ids);
   const answered = readings.filter((row) => row.outcome !== null && ANSWERED.has(row.outcome));
   for (const row of answered) {
@@ -130,7 +183,6 @@ async function readCohort(
   const notApplicable = answered.filter((row) => row.outcome === NOT_APPLICABLE).length;
   const cleared = passing + notApplicable;
   const unread = check.site_url_ids.length - answered.length;
-  // The family's pages beyond the frozen cohort: never read, so never verified.
   const uncovered = Math.max(0, check.page_count - check.site_url_ids.length);
   const pages = { failing, passing, not_applicable: notApplicable, unread, uncovered };
   if (failing.length)

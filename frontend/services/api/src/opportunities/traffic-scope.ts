@@ -1,9 +1,3 @@
-/**
- * One page's or query's Search Console rate in a traffic snapshot, shared by
- * the baseline a declaration freezes and the reading that verifies it, so the
- * two always mean the same thing. Sync windows differ in length, so a window
- * is read as a daily rate.
- */
 import { sql } from 'kysely';
 import type { Database } from '../db/database.ts';
 import { record } from '../db/json.ts';
@@ -11,10 +5,8 @@ import { WorkspaceScope } from '../db/workspace-scope.ts';
 
 export type TrafficScope = 'page' | 'query';
 
-/** A snapshot's inclusive window length in days. */
 export const windowDays = sql<number>`(window_end::date - window_start::date + 1)`;
 
-/** `metric` per day for the page or query, with its stats row; null rate when unreported. */
 export async function scopedDailyRate(
   db: Database,
   owner: { workspaceId: string; projectId: string },

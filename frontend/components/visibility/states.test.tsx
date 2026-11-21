@@ -1,55 +1,71 @@
-import { screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vite-plus/test';
+import { screen, waitFor } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
+import { promptsApi } from '@/lib/api/prompts';
 import type { ActiveRun } from '@/lib/visibility/dashboard';
-import { renderWithProviders as render } from '@/test/render';
+import { makeProject } from '@/test/fixtures/project';
+import { makePrompt, makeSet, makeSetList } from '@/test/fixtures/prompts';
+import { renderWithProviders as render, selectionAs } from '@/test/render';
 
 import { ActiveRunBanner } from './active-run-banner';
 import { VisibilityEmptyState } from './empty-state';
 
-vi.mock('@/components/runs/launch-audit-button', () => ({
-  LaunchAuditButton: ({ children }: { children: React.ReactNode }) => (
-    <button type="button">{children}</button>
-  ),
-}));
+const run: ActiveRun = {
+  id: '11111111-1111-4111-8111-111111111111',
+  status: 'running',
+  createdAt: '2026-08-01T00:00:00Z',
+};
 
-/**
- * The three "there is nothing to show yet" surfaces of the Visibility
- * workspace.
- *
- * The distinction that matters: "you have never run an audit" and "your audit
- * is still running" are different situations with different correct actions.
- * Showing the launch CTA to someone whose run is already in flight invites a
- * duplicate, paid run; showing a bare empty state hides the fact that results
- * are on the way.
- */
+afterEach(() => vi.restoreAllMocks());
+
 describe('VisibilityEmptyState', () => {
-  it('invites a first audit when nothing is running', () => {
-    render(<VisibilityEmptyState />);
+  it.each([
+    ['Add prompts while no prompt is active', 'archived', 'link', 'Add prompts'],
+    ['Launch run once a prompt is active', 'active', 'button', 'Launch run'],
+  ] as const)('carries %s', async (_label, status, role, name) => {
+    vi.spyOn(promptsApi, 'listPromptSets').mockResolvedValue(
+      makeSetList([makeSet([makePrompt({ status })])]),
+    );
+    const project = makeProject();
+    render(<VisibilityEmptyState activeRun={null} />, {
+      projectSelection: {
+        projects: [project],
+        activeProject: project,
+        activeProjectId: project.id,
+        status: 'ready',
+      },
+    });
 
-    expect(screen.getByText('No completed runs yet')).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Launch your first audit' })).toBeVisible();
-    expect(screen.queryByRole('link', { name: 'View runs' })).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'No visibility data yet' })).toBeVisible();
+    await waitFor(() =>
+      expect(screen.getByRole(role, { name })).not.toHaveAttribute('aria-disabled'),
+    );
+    expect(screen.queryByRole('link', { name: /Watch live progress/ })).not.toBeInTheDocument();
   });
 
-  it('routes to Runs instead of inviting a duplicate when one is already running', () => {
-    render(<VisibilityEmptyState hasActiveRun />);
+  it('does not offer a viewer a step their role may not take', () => {
+    render(<VisibilityEmptyState activeRun={null} />, {
+      projectSelection: selectionAs('viewer'),
+    });
 
-    // Offering "launch" here would invite a second paid run for results that
-    // are already on the way.
+    expect(screen.getByRole('heading', { name: 'No visibility data yet' })).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Launch run' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Add prompts' })).not.toBeInTheDocument();
+  });
+
+  it('links to the running run instead of inviting a duplicate', () => {
+    render(<VisibilityEmptyState activeRun={run} />);
+
     expect(screen.queryByRole('button', { name: /Launch/ })).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'View runs' })).toHaveAttribute('href', '/runs');
-    expect(screen.getByText(/results appear here when it finishes/i)).toBeVisible();
+    expect(screen.getByRole('link', { name: 'Watch live progress' })).toHaveAttribute(
+      'href',
+      `/runs/${run.id}`,
+    );
+    expect(screen.getByText('Running')).toBeVisible();
   });
 });
 
 describe('ActiveRunBanner', () => {
-  const run: ActiveRun = {
-    id: '11111111-1111-4111-8111-111111111111',
-    status: 'running',
-    createdAt: '2026-08-01T00:00:00Z',
-  };
-
   it('names the run’s current status', () => {
     render(<ActiveRunBanner run={run} />);
 
@@ -57,8 +73,6 @@ describe('ActiveRunBanner', () => {
   });
 
   it('links to that exact run rather than the runs list', () => {
-    // An active run has no metric snapshot, so it cannot appear in the run
-    // selector; this link is the only way to reach it from here.
     render(<ActiveRunBanner run={run} />);
 
     expect(screen.getByRole('link', { name: /Watch live progress/ })).toHaveAttribute(

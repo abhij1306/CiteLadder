@@ -47,9 +47,7 @@ export function extractSourcePage(body: Buffer, charset?: string) {
     if (!attribute(node, 'type').toLowerCase().includes('ld+json')) continue;
     try {
       schemaTypes(JSON.parse(visibleText(node, false)), types);
-    } catch {
-      /* One malformed block cannot discard other evidence. */
-    }
+    } catch {}
   }
   const outbound_domains = [
     ...new Set(

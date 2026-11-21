@@ -2,11 +2,6 @@ import { http, HttpResponse, type JsonBodyType } from 'msw';
 
 import type { OverviewWidgetKey } from '@citeladder/contracts/overview';
 
-/**
- * An Overview whose command center never answers and whose saved layout shows
- * `widgets`. Every request is recorded in `asked`, so a test can show which
- * reads started while the command center was still pending.
- */
 export function pendingOverviewHandlers(
   projectId: string,
   widgets: readonly OverviewWidgetKey[],
@@ -30,7 +25,6 @@ export function pendingOverviewHandlers(
   ];
 }
 
-/** A GET under the project that records `label` (plus its query string) and answers `body`. */
 export function recordedProjectRead(
   projectId: string,
   path: string,

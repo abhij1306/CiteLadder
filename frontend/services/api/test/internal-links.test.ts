@@ -86,7 +86,6 @@ describe('internal link candidates', () => {
   });
 
   it('gives every source page its own destination budget', () => {
-    // Each word is on five pages, so every page shares a two-word phrase with six neighbours.
     const words =
       'alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november oscar papa'.split(
         ' ',

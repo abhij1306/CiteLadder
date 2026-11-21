@@ -1,4 +1,3 @@
-/** Exact persisted readiness evidence used by explicit Agent handoffs. */
 import { policy } from '../../config.ts';
 import type { Database } from '../../db/database.ts';
 import { record, strings } from '../../db/json.ts';

@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 
 import { ApiError } from '@/lib/api/errors';
 import { queryKeys } from '@/lib/api/query-keys';
-import { renderWithProviders } from '@/test/render';
+import { renderWithProviders, selectionAs } from '@/test/render';
 
 import { useCatalogHeader } from './catalog-header';
 
@@ -18,9 +18,6 @@ vi.mock('@/lib/api/site-health', async () => {
   return { ...actual, siteHealthApi: { ...actual.siteHealthApi, createCrawl: vi.fn() } };
 });
 
-// The header reads the dashboard through the shared query factory, so the
-// factory is the seam — replacing `siteHealthApi` alone leaves the factory's
-// own captured reference in place.
 vi.mock('@/lib/api/site-health-queries', async () => {
   const actual = await vi.importActual<typeof import('@/lib/api/site-health-queries')>(
     '@/lib/api/site-health-queries',
@@ -60,7 +57,6 @@ const catalogQuery = (overrides: Record<string, unknown> = {}) =>
     isError: false,
     refetch: vi.fn(),
     data: {
-      // The list is bounded; the count is every product.
       products: [{ id: 'p1' }, { id: 'p2' }],
       product_total: 7,
       categories: [{ id: 'c1' }],
@@ -69,22 +65,14 @@ const catalogQuery = (overrides: Record<string, unknown> = {}) =>
     ...overrides,
   }) as never;
 
-/** The value a stat label names: the definition after its term. */
 const statValue = (label: string) => screen.getByText(label).closest('dt')?.nextElementSibling;
 
-/**
- * The header is a hook now — its two halves go to different bands of the page
- * grammar — so the test mounts a host that renders both, exactly as a screen
- * does, and keeps asserting on what the reader sees.
- */
 function CatalogHeaderHost({
   projection,
   ...props
 }: Omit<Parameters<typeof useCatalogHeader>[0], 'projection'> & {
   projection?: Parameters<typeof useCatalogHeader>[0]['projection'];
 }) {
-  // The screen passes the newest projection known; with no poll newer than
-  // the catalog, that is the catalog's own.
   const header = useCatalogHeader({
     ...props,
     projection: projection ?? props.query.data?.projection,
@@ -119,8 +107,6 @@ describe('CatalogHeader', () => {
   });
 
   it('reports the polled projection in flight, then failures, and nothing once clean', async () => {
-    // The cached catalog was read with three in flight; the header follows
-    // the newer projection poll rather than the catalog's own copy.
     const query = catalogQuery({
       data: {
         products: [],
@@ -150,20 +136,16 @@ describe('CatalogHeader', () => {
     rerender(host(0, 0));
     expect(screen.queryByText('Projection')).not.toBeInTheDocument();
 
-    // A business that does not sell a catalog, and one whose model is not yet
-    // confirmed, each say so rather than reading as a clean projection.
     rerender(host(0, 0, 'not_applicable'));
     expect(statValue('Projection')).toHaveTextContent('Not applicable');
+    expect(screen.queryByText('Business model unconfirmed')).not.toBeInTheDocument();
 
     rerender(host(0, 0, 'unknown'));
-    expect(statValue('Projection')).toHaveTextContent('Business model unconfirmed');
+    expect(screen.queryByText('Projection')).not.toBeInTheDocument();
+    expect(screen.getByText('Business model unconfirmed')).toBeInTheDocument();
   });
 
   it('never prints a progress fraction that reads backwards', async () => {
-    // The crawl counters can disagree mid-flight (and did: a sitemap-driven
-    // crawl reported a one-page "total" for fifty admitted URLs, which the
-    // header rendered as "49/1"). Analyzed pages are proof the inventory is at
-    // least that large, so the denominator can never fall below them.
     getDashboard.mockResolvedValue(crawl({ total_url_count: 1, visible_url_count: 1 }));
     renderWithProviders(
       <CatalogHeaderHost
@@ -209,8 +191,6 @@ describe('CatalogHeader', () => {
     await waitFor(() => expect(screen.getByText('50/50')).toBeInTheDocument());
     await waitFor(() => expect(readCatalog).toHaveBeenCalledTimes(2));
 
-    // Away from Products the dashboard moves on while the catalog stays fresh
-    // in the cache; coming back re-reads the catalog for the newer count.
     rerender(<LiveHost mounted={false} />);
     getDashboard.mockResolvedValue(crawl({ analyzed_count: 51 }));
     queryClient.setQueryData(DASHBOARD_KEY, crawl({ analyzed_count: 51 }));
@@ -230,10 +210,45 @@ describe('CatalogHeader', () => {
     );
 
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Run Site Health crawl' })).toBeInTheDocument(),
+      expect(screen.getByRole('button', { name: 'Run Site health crawl' })).toBeInTheDocument(),
     );
-    expect(screen.getByText('No crawl yet')).toBeInTheDocument();
-    expect(statValue('Pages analyzed')).toHaveTextContent('Not measured');
+    expect(statValue('Site health')).toHaveTextContent('Not run yet');
+    expect(statValue('Pages analyzed')).toHaveTextContent('Not run yet');
+  });
+
+  it('gives an empty catalog its actions once, in the state block, and only to a role that runs', async () => {
+    getDashboard.mockResolvedValue({ crawl: null });
+    function EmptyHost() {
+      const { empty } = useCatalogHeader({
+        workspaceId: WORKSPACE_ID,
+        projectId: PROJECT_ID,
+        query: catalogQuery(),
+        projection: { applicability: 'unknown', in_flight: 0, failed: 0 } as never,
+      });
+      return (
+        <>
+          <header>{empty.dialog}</header>
+          <section aria-label="Empty">{empty.actions}</section>
+          {empty.businessModelUnconfirmed ? <p>unconfirmed</p> : null}
+        </>
+      );
+    }
+    const { unmount } = renderWithProviders(<EmptyHost />, {
+      projectSelection: selectionAs('member'),
+    });
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Run Site health crawl' })).toBeEnabled(),
+    );
+    expect(screen.getAllByRole('button').map((button) => button.textContent)).toEqual([
+      'Add products',
+      'Run Site health crawl',
+    ]);
+    expect(screen.getByText('unconfirmed')).toBeInTheDocument();
+    unmount();
+
+    renderWithProviders(<EmptyHost />, { projectSelection: selectionAs('viewer') });
+    expect(await screen.findByText('unconfirmed')).toBeInTheDocument();
+    expect(screen.queryAllByRole('button')).toEqual([]);
   });
 
   it('never reads a failed Site Health read as no crawl, and Refresh reads it again', async () => {
@@ -248,10 +263,11 @@ describe('CatalogHeader', () => {
       />,
     );
 
-    await waitFor(() => expect(statValue('Site Health')).toHaveTextContent("Couldn't load"));
-    expect(statValue('Pages analyzed')).toHaveTextContent("Couldn't load");
-    expect(screen.queryByText('No crawl yet')).not.toBeInTheDocument();
-    const refresh = screen.getByRole('button', { name: 'Refresh from Site Health' });
+    await waitFor(() => expect(statValue('Site health')).toHaveTextContent('Unavailable'));
+    expect(statValue('Pages analyzed')).toHaveTextContent('Unavailable');
+    expect(screen.queryByText('Not run yet')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Refresh again' })).toBeInTheDocument();
+    const refresh = screen.getByRole('button', { name: 'Refresh from Site health' });
 
     getDashboard.mockResolvedValue(crawl());
     await user.click(refresh);
@@ -268,13 +284,29 @@ describe('CatalogHeader', () => {
         query={catalogQuery()}
       />,
     );
-    expect(await screen.findByText('No crawl yet')).toBeInTheDocument();
+    await waitFor(() => expect(statValue('Site health')).toHaveTextContent('Not run yet'));
 
     getDashboard.mockRejectedValue(new ApiError('Bad request', 400, ''));
     await act(() => queryClient.invalidateQueries({ queryKey: DASHBOARD_KEY }));
 
-    await waitFor(() => expect(statValue('Site Health')).toHaveTextContent("Couldn't load"));
-    expect(screen.queryByText('No crawl yet')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Refresh from Site Health' })).toBeInTheDocument();
+    await waitFor(() => expect(statValue('Site health')).toHaveTextContent('Unavailable'));
+    expect(screen.queryByText('Not run yet')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Refresh from Site health' })).toBeInTheDocument();
+  });
+
+  it('leaves a failed read to the table when the table already reports one', async () => {
+    getDashboard.mockRejectedValue(new ApiError('Internal error', 500, ''));
+    renderWithProviders(
+      <CatalogHeaderHost
+        workspaceId={WORKSPACE_ID}
+        projectId={PROJECT_ID}
+        query={catalogQuery({ isError: true, data: undefined })}
+        tableReadFailed
+      />,
+    );
+
+    await waitFor(() => expect(statValue('Site health')).toHaveTextContent('Unavailable'));
+    expect(statValue('Products')).toHaveTextContent('Unavailable');
+    expect(screen.queryByRole('button', { name: 'Refresh again' })).toBeNull();
   });
 });

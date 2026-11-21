@@ -40,7 +40,6 @@ function row(
   };
 }
 
-/** Branded rows give every required day coverage without joining a trend group. */
 const coverage = Array.from({ length: p.DEMAND_TREND_REQUIRED_DAYS }, (_, day) =>
   row('brand', addDays(windowEnd, -day), 1, 'branded'),
 );
@@ -52,15 +51,12 @@ describe('query trend detection', () => {
         ...coverage,
         row('rising widgets', priorDay, 20),
         { ...row('rising widgets', recentDay, 60), position: 9 },
-        // Older evidence is outside both windows, so it is not the candidate's source.
         { ...row('rising widgets', beforeWindows, 5), position: 50 },
         row('falling widgets', priorDay, 60),
         row('falling widgets', recentDay, 20),
-        // Impressions before the prior window must not turn a flat query into a decline.
         row('steady widgets', beforeWindows, 1000),
         row('steady widgets', priorDay, 40),
         row('steady widgets', recentDay, 40),
-        // A window below the minimum is not evidence of emergence.
         row('thin widgets', priorDay, p.DEMAND_TREND_MIN_WINDOW_IMPRESSIONS - 1),
         row('thin widgets', recentDay, 80),
       ],
@@ -89,7 +85,6 @@ describe('query trend detection', () => {
       },
     ]);
     const rising = result.candidates.find((c) => c.topic_cluster === 'rising widgets')!;
-    // Weighted over the two comparison windows: (20 × 5 + 60 × 9) / 80.
     expect(rising.metrics.position).toBe(8);
     expect(rising.evidence.source_metric_row_ids).toEqual([
       `rising widgets-${priorDay}`,
@@ -178,7 +173,6 @@ describe('search signal detection', () => {
     expect(targets).not.toContain('acme pricing');
     expect(targets).not.toContain('acme');
     expect(targets[0]).toBe('https://example.com/widgets');
-    // The lowest-impression generic query is the one the cap drops.
     expect(targets).not.toContain('widget 0');
     expect(targets).toContain(`widget ${cap - 1}`);
   });

@@ -1,28 +1,30 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
-import { Badge, type BadgeTone } from '@/components/ui/badge';
-import { Callout } from '@/components/ui/callout';
+import { StatusMark, type StatusTone } from '@/components/ui/status-mark';
 import { CopyButton } from '@/components/ui/copy-button';
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
 import { Drawer } from '@/components/ui/drawer';
 import { Dot } from '@/components/ui/icon';
 import { Inline, Stack } from '@/components/ui/layout';
 import { Pressable } from '@/components/ui/pressable';
-import { QueryState } from '@/components/ui/query-state';
 import { TextLink } from '@/components/ui/text-link';
-import { UnavailableValue } from '@/components/ui/unavailable-value';
-import { ClampText, TableCell, TableRow } from '@/components/ui/table';
+import { Absence } from '@/components/ui/absence';
+import { ClampText } from '@/components/ui/clamp-text';
+import { TableCell, TableRow } from '@/components/ui/table';
 import { siteHealthQueries } from '@/lib/api/site-health-queries';
 import type { ReadinessCheck, ReadinessDimension } from '@citeladder/contracts';
 import { scoreBand } from '@/lib/score-band';
-import { formatScore, PLACEHOLDER } from '@/lib/site-health/status';
+import { formatScore } from '@/lib/site-health/status';
 import { textRole } from '@/components/ui/typography';
 import {
   EditorialSectionHeader,
   ledgerClasses,
   ledgerItemClasses,
 } from '@/components/ui/workspace';
+import { Notice, readErrorProps } from '@/components/ui/notice';
+import { StateBlock } from '@/components/ui/state-block';
+import { type DataAvailabilityState, formatCount, formatPercent, pluralCount } from '@/lib/format';
 
 function pageLabel(url: string) {
   try {
@@ -33,40 +35,19 @@ function pageLabel(url: string) {
   }
 }
 
-function formatCoverage(coverage: number | null): string {
-  return coverage === null ? PLACEHOLDER : `${Math.round(coverage * 100)}%`;
-}
+type DimensionBand = 'Critical' | 'Needs work' | 'Nearly there' | 'Passing' | 'Excluded';
 
 type DimensionState =
-  | 'Critical'
-  | 'Needs work'
-  | 'Nearly there'
-  | 'Passing'
-  | 'Not measured'
-  | 'Not applicable'
-  | 'Excluded';
+  | DimensionBand
+  | Extract<DataAvailabilityState, 'not_applicable' | 'not_measured'>;
 
-/**
- * Say how the pillar SCORED, not whether any single check failed.
- *
- * The old rule flipped a pillar to red "Needs work" on one missing check
- * anywhere in the crawl, which put a 98-scoring Structure pillar in the same
- * state as a 0-scoring Evidence one and gave the reader nothing to prioritise
- * by. Bands come off the score the table already shows, so the badge and the
- * number can never contradict each other.
- */
 function dimensionState(dimension: ReadinessDimension): DimensionState {
-  if (dimension.dimension_applicability === 'not_applicable') return 'Not applicable';
+  if (dimension.dimension_applicability === 'not_applicable') return 'not_applicable';
   if (dimension.dimension_measurement_state === 'excluded') return 'Excluded';
-  if (dimension.score === null) return 'Not measured';
-  // Round prioritization bands for display. Passing below still requires an
-  // actual perfect score over a complete measurement.
+  if (dimension.score === null) return 'not_measured';
   const band = scoreBand(Math.round(dimension.score));
   if (band === 'low') return 'Critical';
   if (band === 'mid') return 'Needs work';
-  // A perfect score over an INCOMPLETE set is not a pass. Unresolved checks
-  // cap the badge one band below, so "Passing" only ever means every
-  // applicable check resolved and every one of them passed.
   const unresolved =
     dimension.dimension_measurement_state !== 'measured' ||
     dimension.unresolved_count > 0 ||
@@ -77,29 +58,40 @@ function dimensionState(dimension: ReadinessDimension): DimensionState {
   return 'Passing';
 }
 
-/**
- * Each band its own tone, so "Nearly there" never reads as "Needs work". A
- * pillar with no score has no band: it takes the neutral badge.
- */
-const DIMENSION_TONES: Record<DimensionState, BadgeTone> = {
+function bandReason(dimension: ReadinessDimension): string | null {
+  if (dimension.score === null || Math.round(dimension.score) < 100) return null;
+  if (dimensionState(dimension) !== 'Nearly there') return null;
+  if (dimension.unresolved_count > 0) {
+    return `${pluralCount(dimension.unresolved_count, 'check')} unresolved`;
+  }
+  const incomplete = dimension.checks.filter(
+    (check) => check.error_count > 0 || check.unknown_count > 0,
+  ).length;
+  if (incomplete > 0) return `${pluralCount(incomplete, 'check')} incomplete`;
+  const partial = dimension.checks.filter(
+    (check) => check.partial_count > 0 || check.missing_count > 0,
+  ).length;
+  if (partial > 0) return `${pluralCount(partial, 'check')} not fully met`;
+  if (dimension.dimension_measurement_state === 'limited_evidence') return 'Limited evidence';
+  return 'Not every check resolved';
+}
+
+const DIMENSION_TONES: Record<DimensionBand, StatusTone> = {
   Critical: 'negative',
   'Needs work': 'warning',
   'Nearly there': 'info',
   Passing: 'positive',
-  'Not measured': 'neutral',
-  'Not applicable': 'neutral',
   Excluded: 'neutral',
 };
 
-type CheckState = 'Incomplete' | 'Needs work' | 'Passing' | 'Did not apply' | 'Not measured';
+type CheckState = 'Incomplete' | 'Needs work' | 'Passing' | 'Did not apply' | 'Not checked';
 
-/** A check's state in the same tones as the pillar bands it rolls up into. */
-const CHECK_TONES: Record<CheckState, BadgeTone> = {
+const CHECK_TONES: Record<CheckState, StatusTone> = {
   Incomplete: 'info',
   'Needs work': 'warning',
   Passing: 'positive',
   'Did not apply': 'neutral',
-  'Not measured': 'neutral',
+  'Not checked': 'neutral',
 };
 
 export function AeoReadinessPanel({
@@ -115,24 +107,26 @@ export function AeoReadinessPanel({
   const [detailKey, setDetailKey] = useState<string | null>(null);
 
   if (readiness.isLoading) {
-    return <QueryState kind="loading" label="Loading AEO Readiness…" />;
+    return (
+      <StateBlock
+        kind="loading"
+        label="Loading AEO readiness"
+        shape={{ kind: 'table', columns: 4 }}
+      />
+    );
   }
   if (readiness.isError)
     return (
-      <QueryState
+      <StateBlock
         kind="error"
-        error={readiness.error}
-        fallback="Could not load AEO Readiness."
-        onRetry={() => void readiness.refetch()}
-        pending={readiness.isFetching}
+        {...readErrorProps(readiness)}
+        fallback="Retry in a moment."
+        title="Couldn't load AEO readiness"
       />
     );
   if (!readiness.data || readiness.data.crawl_id === null) {
     return (
-      <Callout tone="info">
-        {readiness.data?.limitations[0] ??
-          'AEO Readiness appears once a crawl has finished analyzing pages.'}
-      </Callout>
+      <Notice tone="info">{readiness.data?.limitations[0] ?? 'No analyzed crawl yet.'}</Notice>
     );
   }
 
@@ -141,7 +135,7 @@ export function AeoReadinessPanel({
   return (
     <Stack gap="workspace" className="min-w-0" data-testid="aeo-readiness">
       {data.limitations.length > 0 ? (
-        <Callout tone="info">{data.limitations.join(' ')}</Callout>
+        <Notice tone="info">{data.limitations.join(' ')}</Notice>
       ) : null}
       <ReadinessLedger dimensions={data.dimensions} onOpen={setDetailKey} />
       <DimensionDrawer dimension={selected} crawlId={crawlId} onClose={() => setDetailKey(null)} />
@@ -154,13 +148,12 @@ function ReadinessLedger({
   onOpen,
 }: Readonly<{ dimensions: ReadinessDimension[]; onOpen: (key: string) => void }>) {
   return (
-    <DataTable title="Readiness dimensions" columns={READINESS_COLUMNS} minWidth="md">
+    <DataTable title="Readiness dimensions" columns={READINESS_COLUMNS}>
       {dimensions.map((dimension) => {
         const state = dimensionState(dimension);
+        const reason = bandReason(dimension);
         const open = () => onOpen(dimension.key);
         return (
-          // The row is the drawer's trigger; its name cell is the button a
-          // keyboard and a screen reader reach, named by the pillar.
           <TableRow key={dimension.key} onClick={open} className="cursor-pointer">
             <TableCell>
               <Pressable
@@ -175,23 +168,25 @@ function ReadinessLedger({
                 <ClampText lines={1} className={textRole('emphasis')}>
                   {dimension.label}
                 </ClampText>
-                <ClampText lines={1} className="type-caption">
-                  {dimension.description}
-                </ClampText>
               </Pressable>
             </TableCell>
-            {/* The number only (decision D8); the State column says why a
-                dimension has none. */}
             <TableCell numeric>{formatScore(dimension.score)}</TableCell>
             <TableCell numeric>
               {dimension.coverage === null ? (
-                <UnavailableValue state="not_measured" />
+                <Absence state="not_measured" />
               ) : (
-                formatCoverage(dimension.coverage)
+                formatPercent(dimension.coverage)
               )}
             </TableCell>
             <TableCell>
-              <Badge tone={DIMENSION_TONES[state]}>{state}</Badge>
+              <Inline>
+                {state === 'not_applicable' || state === 'not_measured' ? (
+                  <Absence state={state} />
+                ) : (
+                  <StatusMark tone={DIMENSION_TONES[state]}>{state}</StatusMark>
+                )}
+                {reason ? <ClampText className="type-caption">{reason}</ClampText> : null}
+              </Inline>
             </TableCell>
           </TableRow>
         );
@@ -201,10 +196,10 @@ function ReadinessLedger({
 }
 
 const READINESS_COLUMNS: readonly DataTableColumn[] = [
-  { key: 'dimension', label: 'Dimension' },
-  { key: 'score', label: 'Score', width: 'figure', numeric: true },
-  { key: 'coverage', label: 'Coverage', width: 'figure', numeric: true },
-  { key: 'state', label: 'State', width: 'status' },
+  { key: 'dimension', label: 'Dimension', kind: 'identity' },
+  { key: 'score', label: 'Score', kind: 'number' },
+  { key: 'coverage', label: 'Coverage', kind: 'number' },
+  { key: 'state', label: 'State', kind: 'status', width: 'flex' },
 ];
 
 function DimensionDrawer({
@@ -221,7 +216,6 @@ function DimensionDrawer({
       open={Boolean(dimension)}
       onOpenChange={(open) => (open ? undefined : onClose())}
       title={dimension ? `${dimension.label} evidence` : ''}
-      description={dimension?.description ?? ''}
       closeLabel="Close evidence"
     >
       {dimension ? (
@@ -239,7 +233,7 @@ function CheckLedger({ checks }: Readonly<{ checks: ReadinessCheck[] }>) {
     <Stack as="section" gap="item">
       <EditorialSectionHeader title="Checks" />
       {checks.length === 0 ? (
-        <QueryState kind="empty" inline message="No determinate checks were recorded." />
+        <StateBlock kind="empty" inline message="No determinate checks were recorded." />
       ) : (
         <ul className={ledgerClasses()}>
           {checks.map((check) => (
@@ -256,11 +250,11 @@ function CheckRow({ check }: Readonly<{ check: ReadinessCheck }>) {
   return (
     <Stack as="li" gap="tight" className={ledgerItemClasses()}>
       <Inline className="flex-wrap justify-between">
-        <span className={textRole('itemTitle')}>{check.title}</span>
-        <Badge tone={CHECK_TONES[state]}>{state}</Badge>
+        <span className={textRole('body')}>{check.title}</span>
+        <StatusMark tone={CHECK_TONES[state]}>{state}</StatusMark>
       </Inline>
-      <p className={textRole('body', check.remediation ? 'text-ink' : undefined)}>
-        {check.remediation || 'No remediation guidance is recorded for this check.'}
+      <p className={textRole('body', check.remediation ? 'text-ink' : 'text-ink-2')}>
+        {check.remediation || '—'}
       </p>
       <p className="type-caption tabular-nums">
         {check.satisfied_count} satisfied · {check.partial_count} partial · {check.missing_count}{' '}
@@ -275,15 +269,12 @@ function checkState(check: ReadinessCheck): CheckState {
   if (check.missing_count > 0 || check.partial_count > 0) return 'Needs work';
   if (check.satisfied_count > 0) return 'Passing';
   if (check.not_applicable_count > 0) return 'Did not apply';
-  return 'Not measured';
+  return 'Not checked';
 }
 
-/** Says whether the list is the whole set or only its worst rows. */
-function failingPagesCaption(shown: number, total: number): string {
-  if (total === 0) return 'No failing pages were recorded.';
-  if (shown < total) return `Showing the ${shown} most affected of ${total} pages, worst first.`;
-  const noun = total === 1 ? 'page' : 'pages';
-  return `${total} ${noun} failed at least one check, worst first.`;
+function failingPagesCaption(shown: number, total: number): string | undefined {
+  if (total === 0) return '—';
+  return shown < total ? `Worst ${formatCount(shown)} of ${formatCount(total)}` : undefined;
 }
 
 function FailingPages({
@@ -302,7 +293,7 @@ function FailingPages({
         {dimension.evidence_pages.map((page) => (
           <Stack as="li" gap="item" key={page.site_url_id} className={ledgerItemClasses()}>
             <TextLink
-              text="itemTitle"
+              text="body"
               className="truncate"
               href={`/site/crawls/${crawlId}/pages/${page.site_url_id}`}
             >
@@ -326,7 +317,6 @@ function FailingPages({
   );
 }
 
-/** The next action for one failing page: the prompt for its failing checks. */
 function PageActions({
   page,
   dimensionLabel,
@@ -334,7 +324,6 @@ function PageActions({
   page: ReadinessDimension['evidence_pages'][number];
   dimensionLabel: string;
 }>) {
-  // Every failing check gets the prompt a developer or assistant can act on.
   const promptChecks = page.failed_checks;
   return (
     <Inline gap="compact" className="flex-wrap">
@@ -350,7 +339,6 @@ function PageActions({
   );
 }
 
-/** The failing checks for one page, in a form a developer or agent can act on. */
 function fixPrompt(
   dimensionLabel: string,
   url: string,

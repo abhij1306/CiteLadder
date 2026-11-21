@@ -8,7 +8,6 @@ class PreviewRollback<T> extends Error {
   }
 }
 
-/** Exercise the real mutation and roll back its evidence in preview mode. */
 export async function operatorTransaction<T>(
   db: Database,
   apply: boolean,

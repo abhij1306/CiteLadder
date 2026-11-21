@@ -48,13 +48,11 @@ async function loadActiveConnection(db: Database, route: RouteSnapshot, task: Au
     .executeTakeFirst();
   const paused =
     connection?.paused_at != null && (!connection.pause_until || connection.pause_until > at);
-  // A refused provider account stops its queued work before any provider call.
   if (paused && connection.pause_reason === searchPolicy.constants.pause_reason_account)
     throw new ProviderError(searchPolicy.constants.error_account_unavailable);
   if (!connection?.active || connection.last_test_status !== 'ok' || paused) throw unavailable();
   return connection;
 }
-/** The execution secret exists only in this detached context, never in snapshots or logs. */
 export async function loadExecutionContext(
   db: Database,
   claimed: AuditTask,
@@ -87,7 +85,6 @@ export async function loadExecutionContext(
     const endpoint = approvedEndpoint(route.transport_provider, route.base_url, runtime.providers);
     const config = readFrozenConfiguration(audit.configuration),
       measurement = config.measurement_policy;
-    // The run cap bounds every execution; an audit without one cannot run.
     if (config.max_run_seconds === undefined) throw new ProviderError('parse_error');
     const maxRunSeconds = config.max_run_seconds;
     const capacity: CapacityRequest = {
@@ -118,7 +115,6 @@ export async function loadExecutionContext(
   });
 }
 export type ExecutionContext = NonNullable<Awaited<ReturnType<typeof loadExecutionContext>>>;
-/** An authenticated provider failure pauses this concrete revision; a concurrent rotation wins. */
 export function pauseExecutionCredential(
   db: Database,
   context: ExecutionContext,
@@ -132,11 +128,6 @@ export function pauseExecutionCredential(
   });
 }
 
-/**
- * A provider account that refuses every request (paused, unfunded) pauses this
- * revision briefly, so the rest of the queue fails fast and a restored account
- * resumes on its own.
- */
 export function pauseUnavailableAccount(
   db: Database,
   context: ExecutionContext,

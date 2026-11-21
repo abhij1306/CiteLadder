@@ -5,21 +5,16 @@ import { visibilityQueries } from '@/lib/api/visibility-queries';
 import { PERCEPTION_PENDING_POLL_MS } from '@/lib/config/operational';
 import type { SourceFilters } from '@/components/visibility/source-rows';
 import {
+  periodSelectionParams,
   selectionEnabled,
-  selectionParams,
   type SourceQueries,
 } from '@/lib/visibility/use-source-analysis';
 
-/**
- * The Perception tab's read: the same run / engine / prompt-type selection as
- * Sources. It rechecks while answers are still being classified, and a range
- * with no runs reads nothing rather than keeping the previous selection.
- */
 export function usePerception(
   filters: Pick<SourceFilters, 'engine' | 'cohort'>,
   queries: SourceQueries,
 ) {
-  const params = selectionParams(filters, queries);
+  const params = periodSelectionParams(filters, queries);
   const enabled = selectionEnabled(queries);
   const query = useQuery({
     ...visibilityQueries.perception(

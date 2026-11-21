@@ -1,7 +1,3 @@
-/**
- * The runner's drain lock at the real PostgreSQL boundary: one drain per
- * database at a time, held on its own session outside the execution pool.
- */
 import { sql } from 'kysely';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -30,16 +26,13 @@ describe('exclusive drain on PostgreSQL', () => {
     try {
       await started.promise;
       const blocked = vi.fn(async () => 1);
-      // A concurrent execution gives up without draining while the lock is held.
       expect(await exclusiveDrain(config, live(), 300)(blocked)).toBe(0);
       expect(blocked).not.toHaveBeenCalled();
-      // A waiting execution proceeds as soon as the active drain releases.
       const waiting = exclusiveDrain(config, live(), 5_000)(async () => 2);
       holding.resolve();
       expect(await active).toBe(3);
       expect(await waiting).toBe(2);
     } finally {
-      // A failed assertion must not leave the lock session open.
       holding.resolve();
       await active.catch(() => undefined);
     }
@@ -61,7 +54,6 @@ describe('exclusive drain on PostgreSQL', () => {
         live(),
         0,
       )(async () => {
-        // A database restart drops the session that holds the drain lock.
         const [session] = (await holder.execute(db)).rows;
         await sql`select pg_terminate_backend(${session!.pid})`.execute(db);
         await vi.waitFor(async () => expect((await holder.execute(db)).rows).toEqual([]));

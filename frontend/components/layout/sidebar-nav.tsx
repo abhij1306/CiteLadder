@@ -1,69 +1,96 @@
 import { useLocation, useSearchParams } from 'react-router-dom';
-import { lazy, Suspense } from 'react';
 
-import { SidebarNavGroup } from '@/components/ui/app-shell';
-import { navigationMode } from '@/lib/navigation/app-routes';
-import { useRouteIntent } from '@/lib/navigation/use-route-intent';
+import { SidebarNavGroup, SidebarScrollList } from '@/components/ui/sidebar';
 import { scopedNavigationDestination } from '@/lib/navigation/project-destination';
+import { setGroupFolded, useGroupFolded } from '@/lib/navigation/sidebar-folds';
+import { useRouteIntent } from '@/lib/navigation/use-route-intent';
 import { useProjectContext } from '@/lib/project/project-context';
 
 import { NavLink } from './nav-link';
-import { isNavItemActive, NAV_GROUPS, SETUP_NAV_ITEMS, type NavItem } from './nav-items';
+import {
+  DASHBOARD_GROUPS,
+  FOOT_NAV_ITEMS,
+  isNavItemActive,
+  type NavGroup,
+  type NavItem,
+} from './nav-items';
+import { RailGroupMenu, RailLink } from './sidebar-rail';
 
-// Agent mode reads chats and Actions; its API modules stay out of the chunk
-// the shell needs before it can paint.
-const AgentNav = lazy(() =>
-  import('@/components/agent/agent-nav').then(({ AgentNav }) => ({ default: AgentNav })),
-);
-
-/** One group's destinations, scoped to the active project or workspace. */
-export function StationLinks({ items }: Readonly<{ items: readonly NavItem[] }>) {
-  const pathname = useLocation().pathname ?? '';
+export function useDestinations() {
+  const { pathname = '', search = '' } = useLocation();
   const searchParams = useSearchParams()[0];
   const { activeProjectId, activeWorkspaceId } = useProjectContext();
+  const isActive = (item: Pick<NavItem, 'href'>) => isNavItemActive(pathname, searchParams, item);
+  const href = (item: NavItem) =>
+    scopedNavigationDestination(item.href, item.scope, activeProjectId, activeWorkspaceId);
+  return { isActive, href, location: `${pathname}${search}` };
+}
+
+export function DestinationRows({ items }: Readonly<{ items: readonly NavItem[] }>) {
+  const { isActive, href } = useDestinations();
   const onIntent = useRouteIntent();
   return items.map((item) => (
     <li key={item.href}>
-      <NavLink
-        item={{
-          ...item,
-          href: scopedNavigationDestination(
-            item.href,
-            item.scope,
-            activeProjectId,
-            activeWorkspaceId,
-          ),
-        }}
-        active={isNavItemActive(pathname, searchParams, item)}
-        onIntent={onIntent}
+      <NavLink item={{ ...item, href: href(item) }} active={isActive(item)} onIntent={onIntent} />
+    </li>
+  ));
+}
+
+function FoldingGroup({ group }: Readonly<{ group: NavGroup }>) {
+  const folded = useGroupFolded(group.group);
+  const { isActive } = useDestinations();
+  const rows = folded ? group.items.filter(isActive) : group.items;
+  return (
+    <SidebarNavGroup
+      title={group.title}
+      expanded={!folded}
+      onToggle={() => setGroupFolded(group.group, !folded)}
+    >
+      <DestinationRows items={rows} />
+    </SidebarNavGroup>
+  );
+}
+
+export function DashboardNav() {
+  const { location } = useDestinations();
+  return (
+    <SidebarScrollList label="Dashboard" revealKey={location}>
+      {DASHBOARD_GROUPS.map((group) => (
+        <FoldingGroup key={group.group} group={group} />
+      ))}
+    </SidebarScrollList>
+  );
+}
+
+export function DashboardRail() {
+  const { isActive, href } = useDestinations();
+  return DASHBOARD_GROUPS.map((group) => (
+    <li key={group.group}>
+      <RailGroupMenu
+        label={group.title}
+        icon={group.icon}
+        current={group.items.some(isActive)}
+        items={group.items.map((item) => ({ ...item, href: href(item), active: isActive(item) }))}
       />
     </li>
   ));
 }
 
-/**
- * The sidebar's destinations: Dashboard's groups in the order of the product
- * loop, or Agent mode's (the mode comes from the route).
- */
-export function SidebarNav() {
-  const pathname = useLocation().pathname ?? '';
-  if (navigationMode(pathname) === 'agent') {
-    return (
-      <Suspense fallback={null}>
-        <AgentNav />
-      </Suspense>
-    );
-  }
+export function SidebarFootNav({ rail }: Readonly<{ rail: boolean }>) {
+  const { isActive, href } = useDestinations();
   return (
-    <nav aria-label="Primary" className="contents">
-      {NAV_GROUPS.map((group) => (
-        <SidebarNavGroup key={group.title ?? 'overview'} title={group.title}>
-          <StationLinks items={group.items} />
-        </SidebarNavGroup>
-      ))}
-      <SidebarNavGroup>
-        <StationLinks items={SETUP_NAV_ITEMS} />
-      </SidebarNavGroup>
+    <nav aria-label="Workspace">
+      <ul className={rail ? 'flex flex-col items-center' : 'flex flex-col gap-0.5'}>
+        {rail ? (
+          FOOT_NAV_ITEMS.map((item) => (
+            <li key={item.href}>
+              <RailLink item={{ ...item, href: href(item) }} active={isActive(item)} />
+            </li>
+          ))
+        ) : (
+          <DestinationRows items={FOOT_NAV_ITEMS} />
+        )}
+      </ul>
     </nav>
   );
 }

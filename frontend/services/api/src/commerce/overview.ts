@@ -1,24 +1,3 @@
-/**
- * The Shopping overview read (commerce improvement PR 5): one window's brand
- * and product rankings, the catalog's most and least visible products, the
- * merchants answers send shoppers to and the fan-out queries of answers that
- * held a product, over the same answers and slots as the Products table
- * (`scopedSlots`).
- *
- * A brand folds its products' slots to one per execution, at the best rank
- * (a ranked slot beats an unranked one, a carousel card's rank a text-list
- * rank), so its visibility, win rate and position read like a product's. Its
- * Share of Shelf is its product slots ÷ every product slot in scope. Holders
- * with no brand are unknown, not a brand, and stay out of the brand ranking
- * (their slots still count in the denominator).
- *
- * With a category, every list narrows to the category's holders and the
- * category's latest Commerce audit snapshot is read beside them: the
- * category-target metrics keep their definitions (`shelfMetrics`).
- *
- * It reads only persisted rows: no provider, model or repair, and every table
- * is filtered to the authorized workspace and project.
- */
 import { commerceShoppingOverviewSchema } from '@citeladder/contracts/commerce-suite';
 import { sql } from 'kysely';
 import { z } from 'zod';
@@ -64,7 +43,6 @@ const rowSchema = z.object({
 
 type Counts = { appearances: number; ordered: number; wins: number; position: number | null };
 
-/** The rates of one holder's counts; unavailable (null) without a denominator. */
 function metrics(row: Counts, executions: number) {
   return {
     visibility: executions ? row.appearances / executions : null,
@@ -75,7 +53,6 @@ function metrics(row: Counts, executions: number) {
   };
 }
 
-/** The category's latest Commerce audit snapshot; a category outside the project is not found. */
 async function categoryShelf(db: Database, scope: CommerceScope, categoryId: string) {
   const category = await db
     .selectFrom('commerce_categories')
@@ -143,8 +120,9 @@ export async function shoppingOverview(db: Database, scope: CommerceScope, query
       FROM holders h LEFT JOIN held x ON x.holder_id = h.holder_id
       GROUP BY h.holder_id, h.kind, h.name, h.brand
     ),
+    -- A product no answer named is not visible at all; it ranks only among the least.
     most_visible AS (
-      SELECT * FROM product_metrics WHERE kind = 'owned'
+      SELECT * FROM product_metrics WHERE kind = 'owned' AND appearances > 0
       ORDER BY appearances DESC, name_key, holder_id LIMIT ${limits.extremes_limit}
     ),
     least_visible AS (
@@ -163,14 +141,16 @@ export async function shoppingOverview(db: Database, scope: CommerceScope, query
              bool_or(kind = 'owned') AS owned
       FROM holders WHERE btrim(brand) <> '' GROUP BY 1
     ),
+    brand_slots AS (SELECT brand_key, count(*)::int AS n FROM held GROUP BY brand_key),
     brand_metrics AS (
       SELECT n.brand_key, n.brand, n.owned,
              count(b.task_id)::int AS appearances, count(b.best_rank)::int AS ordered,
              count(*) FILTER (WHERE b.best_rank = 1)::int AS wins,
              avg(b.best_rank)::float8 AS position,
-             (SELECT count(*) FROM held x WHERE x.brand_key = n.brand_key)::int AS slots
+             coalesce(bs.n, 0) AS slots
       FROM brand_names n LEFT JOIN brand_best b ON b.brand_key = n.brand_key
-      GROUP BY n.brand_key, n.brand, n.owned
+      LEFT JOIN brand_slots bs ON bs.brand_key = n.brand_key
+      GROUP BY n.brand_key, n.brand, n.owned, bs.n
     ),
     merchants AS (
       SELECT o.merchant_domain AS domain, count(DISTINCT o.task_id)::int AS answers,

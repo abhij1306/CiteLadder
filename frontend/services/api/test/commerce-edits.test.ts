@@ -45,7 +45,6 @@ async function call<T>(
   return { status: response.status, body: (await response.json()) as T };
 }
 
-/** Stage a CSV and apply it with every proposed category, as a person does. */
 async function importCsv(content: string, tenant?: Tenant) {
   const staged = await call<CatalogImportStage>('/catalog/imports', {
     method: 'POST',
@@ -101,7 +100,6 @@ describe('product edits', () => {
     expect(edited.status).toBe(200);
     expect(edited.body).toMatchObject({ id, name: 'Edited' });
 
-    // The row repeats every value it imported before, and adds a GTIN.
     const repeat = await importCsv(
       'link,title,price,sku,category,brand,gtin\nhttps://shop.example/products/one,"One, large",19.25,A1,Tools,Acme,0123456789012\n',
     );
@@ -109,8 +107,6 @@ describe('product edits', () => {
     expect(await stored(id)).toMatchObject({ name: 'Edited', price: '21.00', brand: 'Acme' });
     expect(await categoryNames(id)).toEqual(['Gear']);
 
-    // A new imported name or category set changes that field; the untouched
-    // price keeps its edit.
     await importCsv('sku,title,brand,price,category\nA1,Renamed,Acme,19.25,Outdoor\n');
     expect(await stored(id)).toMatchObject({ name: 'Renamed', price: '21.00' });
     expect(await categoryNames(id)).toEqual(['Outdoor']);
@@ -158,7 +154,6 @@ describe('product edits', () => {
     expect((await refreshes()).map((row) => row.payload)).toEqual([
       { trigger_kind: 'commerce_catalog_import', trigger_id: imported.body.import_id },
     ]);
-    // Once that refresh has been claimed, the edit's request queues its own.
     await db
       .deleteFrom('analytics_tasks')
       .where('workspace_id', '=', t.workspaceId)
@@ -181,7 +176,6 @@ describe('product edits', () => {
     const id = first.body.row_outcomes[0]!.product_id!;
     expect((await edit(id, { canonical_url: 'https://shop.example/new' })).status).toBe(200);
 
-    // The same row in a new file (an identical file is the same import).
     const repeat = await importCsv('title,brand,link\nOld,Acme,https://shop.example/old\n');
     expect(repeat.body.row_outcomes).toEqual([
       { row_number: 2, status: 'unchanged', product_id: id, error_code: '', detail: '' },
@@ -236,7 +230,6 @@ describe('archive and restore', () => {
     expect(page.status).toBe(200);
     expect(page.body.product.catalog?.lifecycle_state).toBe('archived');
 
-    // New answers match only the active catalog.
     const matched = async () => {
       const revision = await db
         .selectFrom('commerce_catalog_revisions')
@@ -248,13 +241,11 @@ describe('archive and restore', () => {
       return [revision.source_kind, identity.products.map((row) => row.name).sort()];
     };
     expect(await matched()).toEqual(['edit', ['Birch']]);
-    // Nor does it take new competitors until restored.
     const discover = await call('/competitors/discover', {
       method: 'POST',
       body: { targets: [{ kind: 'product', id: ash }] },
     });
     expect(discover.status).toBe(404);
-    // Nor do the commerce Actions read it as a catalog product.
     const actionRow = async () =>
       (
         await productRow(

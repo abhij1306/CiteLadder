@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vite-plus/test';
 import { mswServer } from '@/test/msw-server';
-import { openFilterRow } from '@/test/all-filters';
+import { chooseFilterOption, openFilterOptions, openFilterRow } from '@/test/all-filters';
 import { renderWithProviders } from '@/test/render';
 import { makeProject } from '@/test/fixtures/project';
 import { AiTrafficScreen } from './ai-traffic-screen';
@@ -45,7 +45,6 @@ const referrals = {
   analyzer_version: '1',
   formula_version: '1',
 };
-/** A source-list response: the GCP connector configured and sources without pull details. */
 const sourceBody = (availability: string, items: Record<string, unknown>[] = []) => ({
   availability,
   gcp_pull: {
@@ -56,6 +55,37 @@ const sourceBody = (availability: string, items: Record<string, unknown>[] = [])
   },
   items: items.map((item) => ({ pull: null, ...item })),
 });
+async function openEmptySetup() {
+  const user = userEvent.setup();
+  renderWithProviders(<CrawlLogConnections />);
+  await screen.findByRole('heading', { name: 'No crawl logs connected' });
+  await user.click(screen.getByRole('button', { name: 'Connect crawl logs' }));
+  return user;
+}
+const STALLED_SOURCE = {
+  id: '99999999-9999-4999-8999-999999999999',
+  kind: 'webhook',
+  setup: 'custom',
+  preset: 'custom_ndjson',
+  buffer_interval_seconds: null,
+  format: 'ndjson',
+  collection_point: 'application',
+  sampling: { kind: 'none' },
+  origin: 'https://example.test',
+  host: 'example.test',
+  status: 'active',
+  state: 'stalled',
+  stall_reason: 'oversize',
+  stalled_at: '2026-10-10T00:00:00.000Z',
+  token_prefix: 'clw_abcdefgh',
+  connection: 'connected',
+  last_accepted_batch: '2026-10-09T00:00:00.000Z',
+  last_processed_at: null,
+  rejected_lines: 0,
+  overlapping_lines: 0,
+  unsupported_uploads: 0,
+  unsupported_batches: 0,
+};
 beforeAll(() => mswServer.listen({ onUnhandledFrame: 'error' }));
 afterEach(() => {
   mswServer.resetHandlers();
@@ -74,34 +104,7 @@ describe('AI Traffic state and navigation', () => {
   it('shows why a live source is stalled on its row', async () => {
     mswServer.use(
       http.get(root + '/crawl-logs/sources', () =>
-        HttpResponse.json(
-          sourceBody('available', [
-            {
-              id: '99999999-9999-4999-8999-999999999999',
-              kind: 'webhook',
-              setup: 'custom',
-              preset: 'custom_ndjson',
-              buffer_interval_seconds: null,
-              format: 'ndjson',
-              collection_point: 'application',
-              sampling: { kind: 'none' },
-              origin: 'https://example.test',
-              host: 'example.test',
-              status: 'active',
-              state: 'stalled',
-              stall_reason: 'oversize',
-              stalled_at: '2026-10-10T00:00:00.000Z',
-              token_prefix: 'clw_abcdefgh',
-              connection: 'connected',
-              last_accepted_batch: '2026-10-09T00:00:00.000Z',
-              last_processed_at: null,
-              rejected_lines: 0,
-              overlapping_lines: 0,
-              unsupported_uploads: 0,
-              unsupported_batches: 0,
-            },
-          ]),
-        ),
+        HttpResponse.json(sourceBody('available', [STALLED_SOURCE])),
       ),
     );
     renderWithProviders(<CrawlLogConnections />);
@@ -118,7 +121,6 @@ describe('AI Traffic state and navigation', () => {
     renderWithProviders(<CrawlLogConnections />);
     await user.click(screen.getByRole('button', { name: 'Connect crawl logs' }));
     const dialog = screen.getByRole('dialog');
-    // The production query policy exhausts its automatic 5xx retries first.
     const retry = await within(dialog).findByRole('button', { name: /retry/i }, { timeout: 5000 });
     expect(within(dialog).queryByRole('radiogroup')).not.toBeInTheDocument();
     mswServer.use(
@@ -177,11 +179,9 @@ describe('AI Traffic state and navigation', () => {
         return HttpResponse.json({ id, token: null });
       }),
     );
-    const user = userEvent.setup();
-    renderWithProviders(<CrawlLogConnections />);
-    await user.click(screen.getByRole('button', { name: 'Connect crawl logs' }));
+    const user = await openEmptySetup();
     await user.click(await screen.findByRole('radio', { name: /Upload file/ }));
-    expect(screen.getByText(/First, create an upload source/)).toBeVisible();
+    expect(screen.getByText('Create an upload source first.')).toBeVisible();
     expect(screen.queryByRole('combobox', { name: 'Upload source' })).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Create source' }));
     expect(await screen.findByRole('combobox', { name: 'Upload source' })).toHaveTextContent(
@@ -191,13 +191,8 @@ describe('AI Traffic state and navigation', () => {
     expect(screen.getByRole('button', { name: 'Upload recognized requests' })).toBeEnabled();
   });
   it.each([
-    [null, 'complete', true, 'No patterns were observed in this window.'],
-    [
-      null,
-      'partial',
-      false,
-      'No patterns were observed in the data covered so far; coverage is incomplete.',
-    ],
+    [null, 'complete', true, 'No patterns'],
+    [null, 'partial', false, 'No patterns'],
     ['Coverage is incomplete.', 'partial', false, 'Coverage is incomplete.'],
   ])(
     'keeps the insights card in place when nothing was observed (%s, %s crawl)',
@@ -217,12 +212,8 @@ describe('AI Traffic state and navigation', () => {
       renderWithProviders(
         <InsightStrip projectId={project.id} workspaceId={project.workspace_id} range="30d" />,
       );
-      await waitFor(() =>
-        expect(screen.queryByText('Loading persisted insights…')).not.toBeInTheDocument(),
-      );
-      // The card holds its slot either way, so the Overview below never jumps up.
+      expect(await screen.findByText(shown)).toBeVisible();
       expect(screen.getByText('Observed patterns')).toBeVisible();
-      expect(screen.getByText(shown)).toBeVisible();
     },
   );
   it('creates an Amazon CloudFront source with its buffer interval and shows the Firehose endpoint', async () => {
@@ -235,9 +226,7 @@ describe('AI Traffic state and navigation', () => {
         return HttpResponse.json({ id, token: 'clw_test_token' });
       }),
     );
-    const user = userEvent.setup();
-    renderWithProviders(<CrawlLogConnections />);
-    await user.click(screen.getByRole('button', { name: 'Connect crawl logs' }));
+    const user = await openEmptySetup();
     const dialog = await screen.findByRole('dialog', { name: 'Connect crawl logs' });
     await user.click(within(dialog).getByRole('radio', { name: /Amazon CloudFront/ }));
     expect(
@@ -310,9 +299,7 @@ describe('AI Traffic state and navigation', () => {
         return HttpResponse.json({ id, verified: true, failure: null });
       }),
     );
-    const user = userEvent.setup();
-    renderWithProviders(<CrawlLogConnections />);
-    await user.click(screen.getByRole('button', { name: 'Connect crawl logs' }));
+    const user = await openEmptySetup();
     const dialog = await screen.findByRole('dialog', { name: 'Connect crawl logs' });
     await user.click(within(dialog).getByRole('radio', { name: /Google Cloud/ }));
     await user.type(
@@ -352,9 +339,7 @@ describe('AI Traffic state and navigation', () => {
         }),
       ),
     );
-    const user = userEvent.setup();
-    renderWithProviders(<CrawlLogConnections />);
-    await user.click(screen.getByRole('button', { name: 'Connect crawl logs' }));
+    await openEmptySetup();
     const dialog = await screen.findByRole('dialog', { name: 'Connect crawl logs' });
     const option = await within(dialog).findByRole('radio', { name: /Google Cloud/ });
     expect(option).toBeDisabled();
@@ -441,9 +426,7 @@ describe('AI Traffic state and navigation', () => {
         });
       }),
     );
-    const user = userEvent.setup();
-    renderWithProviders(<CrawlLogConnections />);
-    await user.click(screen.getByRole('button', { name: 'Connect crawl logs' }));
+    const user = await openEmptySetup();
     const dialog = await screen.findByRole('dialog', { name: 'Connect crawl logs' });
     const create = within(dialog).getByRole('button', { name: 'Create source' });
     await waitFor(() => expect(create).toBeEnabled());
@@ -493,6 +476,36 @@ describe('AI Traffic state and navigation', () => {
       pattern: 'key_event_concentration',
     });
   });
+  it('shows one setup state, without filters, on every view while nothing is connected', async () => {
+    mswServer.use(
+      http.get('/api/v1/integrations', () => HttpResponse.json([])),
+      http.get(root + '/crawl-logs/sources', () => HttpResponse.json(sourceBody('available'))),
+      http.get(root + '/ai-traffic/overview', () =>
+        HttpResponse.json({
+          crawl: { ...crawl, connection: 'not_connected' },
+          referrals,
+          citations: {
+            unit: 'tracked_citations',
+            state: 'not_available',
+            reason: 'no_completed_run',
+            count: null,
+            label: 'Tracked answers',
+          },
+        }),
+      ),
+    );
+    renderWithProviders(<AiTrafficScreen />, { projectSelection: { activeProject: project } });
+    expect(await screen.findByRole('heading', { name: 'Connect a traffic source' })).toBeVisible();
+    expect(screen.getByRole('link', { name: 'Connect Google Analytics 4' })).toBeVisible();
+    expect(screen.queryByRole('group', { name: 'AI traffic key figures' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Period:/ })).not.toBeInTheDocument();
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('tab', { name: 'Activity' }));
+    expect(await screen.findByRole('heading', { name: 'Connect a traffic source' })).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Export CSV' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Period:/ })).not.toBeInTheDocument();
+  });
   it('persists tab selection, renders accessible activity and exports the selected filters', async () => {
     let exportStatus: string | null = null;
     const exportedPages = { value: null as URLSearchParams | null };
@@ -523,14 +536,16 @@ describe('AI Traffic state and navigation', () => {
           referrals,
           citations: {
             unit: 'tracked_citations',
-            state: 'not_available',
-            reason: 'no_completed_run',
-            count: null,
+            state: 'measured',
+            count: 0,
             label: 'Tracked answers',
+            sources: [{ audit_id: '99999999-9999-4999-8999-999999999999', analyzer_version: '1' }],
           },
         }),
       ),
-      http.get(root + '/crawl-logs/sources', () => HttpResponse.json(sourceBody('available'))),
+      http.get(root + '/crawl-logs/sources', () =>
+        HttpResponse.json(sourceBody('available', [STALLED_SOURCE])),
+      ),
       http.get(root + '/ai-traffic/coverage', () =>
         HttpResponse.json({ sources: [], items: [], next_cursor: null }),
       ),
@@ -591,7 +606,12 @@ describe('AI Traffic state and navigation', () => {
       ),
       http.get(root + '/ai-traffic/pages/' + page.url_hash, () =>
         HttpResponse.json({
-          page,
+          page: {
+            ...page,
+            crawl: { state: 'flagged', value: 3, coverage: 'partial', reason: null },
+            referrals: { ...page.referrals, reason: 'projection_pending' },
+            key_events: 2,
+          },
           window_start: '2026-10-01',
           window_end: '2026-10-04',
           crawls: [],
@@ -613,54 +633,54 @@ describe('AI Traffic state and navigation', () => {
     const user = userEvent.setup();
     await user.click(screen.getByRole('tab', { name: 'Activity' }));
     expect(new URLSearchParams(window.location.search).get('tab')).toBe('activity');
-    // No retained rows: the table keeps its headers and footprint and says why
-    // inside its body.
-    const activityTable = await screen.findByRole('table', {
+    const activityTable = await screen.findByRole('region', {
       name: 'Retained automated request activity',
     });
     expect(
       await within(activityTable).findByRole('heading', { name: 'No matching requests' }),
     ).toBeVisible();
-    await user.click(screen.getByRole('button', { name: /^All filters/ }));
-    await user.click(screen.getByRole('menuitem', { name: /^Status code/ }));
+    expect(screen.getByRole('button', { name: /^Period:/ })).toBeVisible();
+    await openFilterOptions(user, 'Status code');
     const statusField = await screen.findByRole('spinbutton', { name: 'Response status' });
-    // A partly typed code narrows nothing, so the menu does not report it.
+    const statusRow = () => screen.getByRole('menuitem', { name: /^Status code:/ });
     fireEvent.change(statusField, { target: { value: '40' } });
-    expect(screen.getByRole('menuitem', { name: /^Status code/ })).toHaveTextContent('Any status');
+    expect(statusRow()).toHaveAccessibleName('Status code: Any status');
     fireEvent.change(statusField, { target: { value: '404' } });
-    expect(screen.getByRole('menuitem', { name: /^Status code/ })).toHaveTextContent('404');
-    await user.keyboard('{Escape}{Escape}');
-    expect(await screen.findByRole('button', { name: 'All filters (1)' })).toBeVisible();
+    expect(statusRow()).toHaveAccessibleName('Status code: 404');
+    await user.keyboard('{Escape}');
+    expect(await screen.findByRole('button', { name: 'Filters (1)' })).toHaveAttribute(
+      'data-active',
+    );
     await user.click(screen.getByRole('button', { name: 'Export CSV' }));
     await waitFor(() => expect(exportStatus).toBe('404'));
+    await user.click(await within(activityTable).findByRole('button', { name: 'Clear filters' }));
+    await waitFor(() =>
+      expect(new URLSearchParams(window.location.search).get('status')).toBeNull(),
+    );
     await user.click(screen.getByRole('tab', { name: 'Referrals' }));
     expect(await openFilterRow(user, 'Chart interval', 'Week')).toBeVisible();
     await user.keyboard('{Escape}');
     await user.click(screen.getByRole('tab', { name: 'Pages' }));
-    await screen.findByRole('table', { name: 'Path-level AI Traffic with separate signal units' });
-    await user.click(screen.getByRole('button', { name: /^All filters/ }));
-    await user.click(screen.getByRole('menuitem', { name: /^Resource class/ }));
-    const pageOption = await screen.findByRole('menuitemradio', { name: 'Page' });
-    pageOption.focus();
-    await user.keyboard('{Enter}');
+    await screen.findByRole('table', { name: 'Path-level AI traffic with separate signal units' });
+    await chooseFilterOption(user, 'Resource class', 'Page');
     await waitFor(() =>
       expect(new URLSearchParams(window.location.search).get('resource')).toBe('page'),
     );
-    await user.click(await screen.findByRole('button', { name: /^All filters/ }));
-    await user.click(screen.getByRole('menuitem', { name: /^Folder/ }));
+    await openFilterOptions(user, 'Folder');
     fireEvent.change(await screen.findByRole('textbox', { name: 'Folder' }), {
       target: { value: '/page' },
     });
-    await user.keyboard('{Escape}{Escape}');
-    expect(await screen.findByRole('button', { name: 'All filters (2)' })).toBeVisible();
-    // Pages sort from their column headers, like every other table.
-    await user.click(screen.getByRole('button', { name: /^AI referral sessions/ }));
+    await user.keyboard('{Escape}');
+    expect(await screen.findByRole('button', { name: 'Filters (2)' })).toHaveAttribute(
+      'data-active',
+    );
+    await user.click(screen.getByRole('button', { name: /^Requests/ }));
     await user.click(screen.getByRole('button', { name: 'Export CSV' }));
     await waitFor(() => expect(exportedPages.value?.get('folder')).toBe('/page'));
     expect(exportedPages.value?.get('resource_class')).toBe('page');
-    expect(exportedPages.value?.get('sort')).toBe('sessions_desc');
+    expect(exportedPages.value?.get('sort')).toBe('requests_desc');
     await user.click(
-      screen.getByRole('button', { name: 'View AI Traffic for https://example.test/page' }),
+      screen.getByRole('button', { name: 'View AI traffic for https://example.test/page' }),
     );
     const panel = await screen.findByRole('dialog', { name: '/page' });
     expect(
@@ -669,12 +689,15 @@ describe('AI Traffic state and navigation', () => {
         window.location.origin,
       ).searchParams.get('project'),
     ).toBe(project.id);
-    expect(within(panel).getByText(/0 requests · Measured zero/)).toBeVisible();
-    expect(within(panel).getByText(/Unavailable AI referral sessions · Flagged/)).toBeVisible();
-    expect(within(panel).getByText(/Unavailable tracked citations · Not connected/)).toBeVisible();
+    const record = (name: string) =>
+      within(panel).queryByText(name, { selector: 'dt' })?.nextElementSibling?.textContent;
+    expect(within(panel).getByText(/^Sources:/)).toHaveTextContent(
+      'Sources: Crawlers · Referrals · Visibility · Site health',
+    );
+    expect(record('Crawler requests')).toBeUndefined();
     expect(
-      within(panel).getByText(/open Site Health findings · Unavailable · Coverage is incomplete/),
-    ).toBeVisible();
+      within(panel).getByRole('heading', { name: 'First and last observations' }).parentElement,
+    ).toHaveTextContent('First and last observations—None');
     mswServer.use(
       http.get(
         root + '/ai-traffic/pages/' + page.url_hash,
@@ -683,7 +706,7 @@ describe('AI Traffic state and navigation', () => {
     );
     await view.queryClient.refetchQueries({ predicate: (q) => q.queryKey.includes('url') });
     await waitFor(() =>
-      expect(within(panel).queryByText(/0 requests · Measured zero/)).not.toBeInTheDocument(),
+      expect(within(panel).queryByText('First and last observations')).not.toBeInTheDocument(),
     );
   }, 20_000);
   it('leads with Referrals and drops crawl-only views when crawl logs are unavailable', async () => {
@@ -718,7 +741,6 @@ describe('AI Traffic state and navigation', () => {
         }),
       ),
     );
-    // A shared link to a crawl-only view still lands somewhere useful, keeping its range.
     window.history.replaceState(null, '', '/ai-traffic?tab=activity&range=90d');
     renderWithProviders(<AiTrafficScreen />, { projectSelection: { activeProject: project } });
     expect(await screen.findByText(/covers last 90 days/)).toBeVisible();
@@ -729,9 +751,11 @@ describe('AI Traffic state and navigation', () => {
     await waitFor(() => expect(dashboards.at(-1)?.get('range')).toBe('90d'));
     const user = userEvent.setup();
     await user.click(screen.getByRole('tab', { name: 'Overview' }));
-    expect(await screen.findByText(/not available for this workspace yet/)).toBeVisible();
+    expect(
+      await screen.findByRole('button', { name: 'About Crawler requests' }),
+    ).toHaveAccessibleDescription(/not available for this workspace yet/);
     expect(screen.queryByRole('button', { name: 'Connect crawl logs' })).not.toBeInTheDocument();
-    expect(await openFilterRow(user, 'Reporting range', 'Last 90 days')).toBeVisible();
+    expect(await openFilterRow(user, 'Period', 'Last 90 days')).toBeVisible();
     expect(screen.queryByRole('menuitem', { name: /^Verification/ })).not.toBeInTheDocument();
   });
 });

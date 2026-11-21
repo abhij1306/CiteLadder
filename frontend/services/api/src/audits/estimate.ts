@@ -20,11 +20,6 @@ function aggregateCostStatus(statuses: ReadonlySet<string>) {
   if (statuses.has('complete')) return 'complete';
   return statuses.has('unknown') ? 'unknown' : 'partial';
 }
-/**
- * Provider-free preview reads accepted prompt source and versioned rates; no
- * credential or health lookup. A launch runs one audit per market, so each
- * engine's executions scale with the selected markets it can measure.
- */
 export async function estimateAudit(
   db: Database,
   workspaceId: string,
@@ -83,7 +78,6 @@ export async function estimateAudit(
         execution_count: executions,
         pricing_version: costPolicy.pricing_version,
       };
-      // An observed surface has no tokens or search calls to estimate.
       if (surfaceKindOf(engine) !== 'llm')
         return {
           ...common,

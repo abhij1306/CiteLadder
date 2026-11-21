@@ -1,4 +1,3 @@
-/** Prompt-library rows as the shared `@citeladder/contracts/project` views. */
 import {
   promptCandidateSchema,
   promptCohortSchema,
@@ -32,6 +31,8 @@ const promptOrigin = promptSchema.shape.origin;
 const topicOrigin = topicSchema.shape.origin;
 const [QUALITY_OFF, QUALITY_UNAVAILABLE] = policy.prompts.candidate.quality_gates_reported;
 
+export const COMMERCE_SET_NAME = 'Commerce Buyer Prompts';
+
 export function promptView(row: PromptRow): PromptView {
   return {
     id: row.id,
@@ -58,6 +59,7 @@ export function promptSetView(row: PromptSetRow, prompts: readonly PromptRow[]):
     id: row.id,
     project_id: row.project_id,
     name: row.name,
+    kind: row.name === COMMERCE_SET_NAME ? 'commerce' : 'brand',
     description: row.description,
     prompts: prompts.map(promptView),
     prompt_count: prompts.length,
@@ -80,7 +82,6 @@ export function topicView(row: TopicRow, activeCount: number): TopicView {
   };
 }
 
-/** `judged`, the run's reported gate (`off`/`unavailable`), or `not_judged`. */
 function qualityStatus(decision: Record<string, unknown> | null, runGate: string | null) {
   if (decision !== null && Object.keys(decision).length > 0) return 'judged' as const;
   if (runGate === QUALITY_OFF) return 'off' as const;
@@ -89,7 +90,6 @@ function qualityStatus(decision: Record<string, unknown> | null, runGate: string
 }
 
 export function candidateView(row: CandidateRow, runGate: string | null): CandidateView {
-  // No decision is a valid state (not judged); a non-object one is corrupt.
   const decision =
     row.jev_decision === null
       ? null

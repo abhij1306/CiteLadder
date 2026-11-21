@@ -1,4 +1,3 @@
-/** Site Health reads over persisted snapshots, crawl pages, links and robots facts. */
 import type { McpSitePages, McpSiteSnapshot } from '@citeladder/contracts/mcp-app';
 import { robotsFactsSchema } from '@citeladder/contracts/site-health';
 import { sql } from 'kysely';
@@ -38,9 +37,6 @@ export async function siteSnapshot(
   { db, scope, origin }: ProjectRead,
   args: { snapshot_id?: string | null },
 ): Promise<Evidence> {
-  // The id may name the snapshot or the crawl it was built from: an issue in
-  // the Agent's context carries only its crawl id. Without one, the current
-  // crawl's snapshot answers, never a one-page rerun's.
   const selected = args.snapshot_id;
   const query = selected
     ? new WorkspaceScope(scope.workspaceId)
@@ -85,11 +81,6 @@ export async function siteSnapshot(
   } satisfies McpSiteSnapshot & Evidence;
 }
 
-/**
- * The selected crawl, or the current one (SH-B1), so neither a crawl still
- * running mid-turn nor a one-page rerun answers a default read; an explicit
- * crawl from elsewhere is refused.
- */
 async function selectCrawl({ db, scope }: ProjectRead, crawlId: string | null | undefined) {
   if (!crawlId)
     return (await currentSiteCrawl(db, scope.workspaceId, scope.projectId)) ?? undefined;
@@ -124,7 +115,6 @@ export async function crawlability(
   };
 }
 
-/** A sampled link neighbor as the model reads it: the page, not its internal id. */
 const neighborSchema = z.object({
   url: z.string(),
   anchor_count: z.number().nullish(),
@@ -138,11 +128,6 @@ const neighbors = (value: unknown) =>
     return parsed.success ? [{ ...parsed.data, url: withoutQuery(parsed.data.url) }] : [];
   });
 
-/**
- * Anchor diagnostics as the model reads them: destinations (and an anchor text
- * that is itself a URL) without query or fragment, query variants of one
- * destination folded; `destination_count` stays the persisted count.
- */
 function anchorDiagnostics(value: unknown) {
   return neighborList.parse(value).map((item) => {
     const diagnostic = record(item);
@@ -159,7 +144,6 @@ function anchorDiagnostics(value: unknown) {
   });
 }
 
-/** Anchor diagnostics as counts by kind: the compact form for several named pages. */
 function diagnosticCounts(value: unknown): Record<string, number> {
   const counts: Record<string, number> = {};
   for (const item of neighborList.parse(value)) {
@@ -183,7 +167,6 @@ export async function siteLinks(
       .selectFrom(read.db, 'site_page_link_metrics')
       .where('site_page_link_metrics.project_id', '=', read.scope.projectId)
       .where('site_page_link_metrics.crawl_id', '=', crawl.id)
-      // The crawl's current metrics only, as the page read selects them.
       .where('site_page_link_metrics.extractor_version', '=', crawl.extractor_version)
       .where('site_page_link_metrics.formula_version', '=', FORMULA_VERSION);
     return pages.length ? query.where('site_page_link_metrics.site_url_id', 'in', pages) : query;
@@ -212,8 +195,6 @@ export async function siteLinks(
   ]);
   const selected = rows.slice(0, count);
   const found = new Set(present.map((row) => row.site_url_id));
-  // Named pages are read together, so each row's samples are cut to fit them
-  // all in one result rather than the result dropping pages.
   const sample = pages.length ? mcpPolicy.named_link_page_neighbors : undefined;
   const items = selected.map((row) => ({
     site_url_id: row.site_url_id,
@@ -236,8 +217,6 @@ export async function siteLinks(
     crawl_id: crawl.id,
     versions: { extractor: crawl.extractor_version, formula: FORMULA_VERSION },
     items,
-    // A requested page without link metrics in this crawl is named, never
-    // dropped silently, on every page of the result.
     ...(pages.length ? { missing_site_url_ids: pages.filter((id) => !found.has(id)) } : {}),
     pagination: pagination(
       items,
@@ -259,19 +238,12 @@ export function withoutQuery(url: string) {
   const end = url.search(/[?#]/u);
   return end < 0 ? url : url.slice(0, end);
 }
-/** The string URLs among `values` without query or fragment, query variants folded, in order. */
 const distinctWithoutQuery = (values: readonly unknown[]) => [
   ...new Set(values.filter((url): url is string => typeof url === 'string').map(withoutQuery)),
 ];
 const looksLikeUrl = (value: string) => /^https?:\/\//iu.test(value);
-/** `text` without query or fragment when it is an absolute http(s) URL; other text keeps any `?`. */
 export const textWithoutUrlQuery = (text: string) =>
   looksLikeUrl(text) ? withoutQuery(text) : text;
-/**
- * `value` with every absolute http(s) URL string inside it, at any depth,
- * stripped of its query and fragment: a fetched record's crawl facts and
- * evidence carry page and link URLs in many shapes.
- */
 export function withoutQueryDeep(value: unknown): unknown {
   if (typeof value === 'string') return textWithoutUrlQuery(value);
   if (Array.isArray(value)) return value.map(withoutQueryDeep);
@@ -283,7 +255,6 @@ export function withoutQueryDeep(value: unknown): unknown {
 }
 const SUMMARY_TEXT_CHARS = 160;
 
-/** Where one failing target ended: a loop, its landing URL, its status, else a plain failure. */
 function targetOutcome(target: Record<string, unknown>) {
   if (target.reason === 'redirect_limit') return 'redirect loop';
   if (typeof target.final_url === 'string') return withoutQuery(target.final_url);
@@ -291,7 +262,6 @@ function targetOutcome(target: Record<string, unknown>) {
   return 'failed';
 }
 
-/** Distinct failing targets, query-string variants of one link folded together. */
 function failingTargetsSummary(evidence: Record<string, unknown>, targets: readonly unknown[]) {
   const distinct = new Set<string>();
   for (const target of targets.map(record)) {
@@ -301,7 +271,6 @@ function failingTargetsSummary(evidence: Record<string, unknown>, targets: reado
   const lines = [...distinct];
   return {
     failing_targets: lines.slice(0, mcpPolicy.rule_evidence_items),
-    // Distinct within the persisted (bounded) sample; failure_count is the check's own total.
     distinct_failing_target_count: lines.length,
     ...(typeof evidence.failure_count === 'number'
       ? { failure_count: evidence.failure_count }
@@ -309,11 +278,6 @@ function failingTargetsSummary(evidence: Record<string, unknown>, targets: reado
   };
 }
 
-/**
- * A site-level architecture finding sits on the homepage and names its pages,
- * query-string variants of one page folded into one entry; the count stays the
- * check's own total of pages.
- */
 function affectedPagesSummary(evidence: Record<string, unknown>, pages: readonly unknown[]) {
   const urls = distinctWithoutQuery(pages.map((page) => record(page).url));
   return {
@@ -322,7 +286,6 @@ function affectedPagesSummary(evidence: Record<string, unknown>, pages: readonly
   };
 }
 
-/** The evidence's scalar facts, ids left out, URLs without query and text capped. */
 function scalarFacts(evidence: Record<string, unknown>) {
   const facts: Record<string, string | number | boolean> = {};
   for (const [key, item] of Object.entries(evidence)) {
@@ -334,11 +297,6 @@ function scalarFacts(evidence: Record<string, unknown>) {
   return facts;
 }
 
-/**
- * One page's evidence for a rule, compact: its distinct failing targets
- * (query-string variants of one link folded together) up to a cap with the
- * total, else its scalar facts. Record ids never reach the model.
- */
 function ruleEvidenceSummary(value: unknown): Record<string, string | number | boolean | string[]> {
   const evidence = record(value);
   if (Array.isArray(evidence.failing_targets))
@@ -347,11 +305,6 @@ function ruleEvidenceSummary(value: unknown): Record<string, string | number | b
   return scalarFacts(evidence);
 }
 
-/**
- * A page URL as the crawl's URLs are matched, the way the Agent's context
- * matches its target page, without query or fragment: a user's
- * `https://www.site.com/a/` and a crawled `https://site.com/a` are one page.
- */
 function matchableUrl(value: string) {
   return comparableUrl(withoutQuery(value));
 }
@@ -362,11 +315,6 @@ function urlFilter(value: string | null | undefined) {
   return url;
 }
 
-/**
- * The issue family's one reference snippet in the crawl's persisted catalog
- * (`site-health/issue-catalog.ts`): redacted markup of the failing element and
- * its label context on the first affected page, or null when none was kept.
- */
 export async function familySnippet(
   { db, scope }: Pick<ProjectRead, 'db' | 'scope'>,
   crawlId: string,
@@ -420,7 +368,6 @@ export async function sitePages(
     url?: string | null;
   },
 ): Promise<Evidence> {
-  // The rule a page filter names must be a catalog rule, so a typo is not "no pages".
   if (args.rule_id && !isKnownRule(args.rule_id))
     throw new McpInputError(
       `Unknown rule_id '${args.rule_id}'. Use a rule_id exactly as read_site_health top_issues or an issue group returned it.`,
@@ -461,7 +408,6 @@ export async function sitePages(
       : Promise.resolve(new Map<string, unknown>()),
     args.rule_id ? familySnippet(read, crawl.id, args.rule_id) : Promise.resolve(null),
   ]);
-  // Compact rows: the next read's ids, the page, its states and failing rules.
   const items = selected.map((row) => ({
     site_url_id: row.site_url_id,
     url: withoutQuery(row.display_url),
@@ -471,7 +417,6 @@ export async function sitePages(
     ...(row.error_code ? { error_code: row.error_code } : {}),
     web_fundamentals_score: row.web_fundamentals_score,
     aeo_readiness_score: row.aeo_readiness_score,
-    // A score without a measured state is no score, never zero.
     ...(row.web_fundamentals_state === 'measured'
       ? {}
       : { web_fundamentals_state: row.web_fundamentals_state }),
@@ -480,8 +425,6 @@ export async function sitePages(
       : { aeo_measurement_state: row.aeo_measurement_state }),
     issue_count: row.issue_count,
     issue_rules: (row.analysis_id && rules.get(row.analysis_id)) || {},
-    // What the named rule found on THIS page: pages failing one rule rarely
-    // share one cause, so the fix is read per page, not guessed site-wide.
     ...(args.rule_id && row.analysis_id && evidence.has(row.analysis_id)
       ? { rule_evidence: ruleEvidenceSummary(evidence.get(row.analysis_id)) }
       : {}),
@@ -507,7 +450,6 @@ export async function sitePages(
       root_errors: root.errors,
     },
     items,
-    // The issue family's one redacted markup sample, for an exact fix.
     ...(snippet ? { reference_snippet: snippet } : {}),
     pagination: pagination(
       items,
@@ -522,7 +464,6 @@ export async function sitePages(
   } satisfies McpSitePages & Evidence;
 }
 
-/** The crawl's pages at their latest audit (`latestPagesQuery`, SH-B9) and their fetched facts. */
 function crawledPages({ db }: ProjectRead, crawl: ViewCrawl) {
   return latestPagesQuery(db, crawl).select([
     'a.id as analysis_id',
@@ -543,11 +484,6 @@ const textValue = (value: unknown) => (typeof value === 'string' ? value : '');
 const textList = (value: unknown) =>
   Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
 
-/**
- * A crawled page's copy, read first: title, meta description, headings, then
- * the body text in the characters left, cut whole-character with the count it
- * dropped. Crawled text is what the page showed when fetched: untrusted data.
- */
 function pageCopy(page: CrawledPage) {
   const facts = record(page.normalized_facts),
     headings = record(facts.headings),
@@ -561,8 +497,6 @@ function pageCopy(page: CrawledPage) {
     meta_description: textValue(facts.meta_description),
     headings: { h1: level('h1_texts'), h2: level('h2_texts'), h3: level('h3_texts') },
   };
-  // Sized as serialized, the way a tool result is bounded: escapes and
-  // surrogate pairs count at their encoded length.
   const room = mcpPolicy.page_text_max_chars - JSON.stringify(copy).length;
   const text = Array.from(textValue(body.text));
   let size = 0,
@@ -577,17 +511,11 @@ function pageCopy(page: CrawledPage) {
     ...copy,
     text: text.slice(0, kept).join(''),
     text_chars_omitted: text.length - kept,
-    // The crawler's own cap: the stored text already stopped short of the page.
     crawl_text_truncated: body.truncated === true,
     word_count: typeof body.word_count === 'number' ? body.word_count : null,
   };
 }
 
-/**
- * One crawled page's text by URL or page id, from the selected or latest crawl.
- * It never fetches the live page; a URL the crawl did not reach is
- * `unavailable` with the nearest crawled URLs to try instead.
- */
 export async function pageText(
   read: ProjectRead,
   args: { crawl_id?: string | null; url?: string | null; site_url_id?: string | null },
@@ -606,7 +534,6 @@ export async function pageText(
         eb(sql`lower(f.final_url)`, 'like', containsPattern(url)),
       ]),
     );
-  // Shortest first: the exact page sorts before longer URLs that contain it.
   const candidates = await query
     .orderBy(sql`length(u.normalized_url)`)
     .orderBy('u.normalized_url')
@@ -625,7 +552,6 @@ export async function pageText(
     return {
       ...unavailable('page_not_crawled'),
       ...identity,
-      // Near matches let the caller pick the page the crawl did reach.
       crawled_urls: candidates
         .slice(0, mcpPolicy.page_text_url_suggestions)
         .map((row) => withoutQuery(row.url)),

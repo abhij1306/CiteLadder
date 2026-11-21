@@ -1,18 +1,18 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 
-import type { Step } from '@/components/ui/step-list';
+import type { TrailStep } from '@/components/ui/rung-trail';
 
 import { useStaggeredSteps } from './use-staggered-steps';
 
-const PERSISTED: Step[] = [
+const PERSISTED: TrailStep[] = [
   { id: 'open', label: 'Opened your website', detail: '3 pages read', status: 'done' },
   { id: 'read', label: 'Reading what you offer', status: 'done' },
   { id: 'find', label: 'Found comparable brands', detail: '2 brands found', status: 'done' },
   { id: 'prepare', label: 'Preparing your review', status: 'running' },
 ];
 
-function statuses(steps: readonly Step[]) {
+function statuses(steps: readonly TrailStep[]) {
   return steps.map((step) => step.status);
 }
 
@@ -64,7 +64,7 @@ describe('useStaggeredSteps', () => {
   });
 
   it('never hides a failed step behind the reveal', () => {
-    const steps: Step[] = [
+    const steps: TrailStep[] = [
       { id: 'open', label: 'Opened your website', status: 'done' },
       {
         id: 'read',
@@ -79,7 +79,7 @@ describe('useStaggeredSteps', () => {
   });
 
   it('counts completed steps when nothing is in progress', () => {
-    const steps: Step[] = [
+    const steps: TrailStep[] = [
       { id: 'save', label: 'Saving your project', status: 'done' },
       { id: 'open', label: 'Opening your workspace', status: 'done' },
     ];

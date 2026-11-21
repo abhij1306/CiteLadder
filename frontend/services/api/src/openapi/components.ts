@@ -1,9 +1,3 @@
-/**
- * Shared OpenAPI components: every named schema an operation reaches is
- * emitted once under `components.schemas` and referenced with `$ref`. zod's
- * registry conversion writes the references; operation schemas that have no
- * name of their own stay inline.
- */
 import { z } from 'zod';
 
 import type { JsonSchema, SchemaEmitter } from './document.ts';
@@ -12,10 +6,8 @@ type Io = 'input' | 'output';
 type Root = { schema: z.ZodType; io: Io };
 
 const COMPONENT_REF = '#/components/schemas/';
-/** Registry ids of unnamed operation schemas; they never reach the document. */
 const OPERATION_ID = '~operation';
 
-/** The schemas `roots` reach in one view, in traversal order. */
 function reachable(roots: readonly z.ZodType[], io: Io): Set<z.core.$ZodType> {
   const reached = new Set<z.core.$ZodType>();
   for (const schema of roots)
@@ -28,7 +20,6 @@ function reachable(roots: readonly z.ZodType[], io: Io): Set<z.core.$ZodType> {
   return reached;
 }
 
-/** A schema whose request and response views differ gets a distinct request name. */
 function viewName(schema: z.core.$ZodType, name: string, io: Io): string {
   if (io === 'output') return name;
   const same =
@@ -70,10 +61,6 @@ function emitView(
   return emitted;
 }
 
-/**
- * Emits `roots` with the schemas `names` names as shared components. Returns
- * the per-operation emitter and the components, sorted by name.
- */
 export function componentSchemas(
   roots: readonly Root[],
   names: ReadonlyMap<z.core.$ZodType, string>,

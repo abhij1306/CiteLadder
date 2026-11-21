@@ -1,9 +1,3 @@
-/**
- * The `site-health` family: persisted crawl, page, issue, event and snapshot
- * reads, and their exports. Every lookup is filtered by the active workspace,
- * so a foreign id is a 404; nothing here fetches, scores or repairs state.
- * The TypeScript `site-health-crawls` family owns creation and crawl controls.
- */
 import {
   aeoReadinessSchema,
   architectureSchema,
@@ -39,6 +33,7 @@ import {
   currentSiteCrawl,
   isTerminal,
   loadCrawl,
+  loadProjectedCrawl,
   rootFailure,
 } from '../site-health/reads/crawl.ts';
 import { crawlProjection } from '../site-health/reads/crawl-projection.ts';
@@ -50,7 +45,8 @@ import {
   tableExport,
   type TableView,
 } from '../site-health/reads/exports.ts';
-import { issueDetail, issueHistory, issues } from '../site-health/reads/issues.ts';
+import { issueHistory } from '../site-health/reads/issue-history.ts';
+import { issueDetail, issues } from '../site-health/reads/issues.ts';
 import { PAGE_SORTS } from '../site-health/reads/page-rows.ts';
 import { inventory, pageDetail, pages } from '../site-health/reads/pages.ts';
 import {
@@ -64,7 +60,6 @@ import { robotsHistory } from '../site-health/reads/robots-history.ts';
 import { defineGetRoute } from './define.ts';
 
 const family = 'site-health';
-/** Project routes read the path project inside the active workspace (else 404). */
 const projectFamily = { family, authorize: 'active-project' } as const;
 const crawlRoot = '/api/v1/site-crawls/{crawl_id}';
 const projectRoot = '/api/v1/projects/{project_id}/site-health';
@@ -98,16 +93,12 @@ const issuesQuery = {
   severity: text,
   category: text,
   dimension: text,
-  // The Issues tab: categories map to one section, the rest follow their dimension.
   section: { scalar: { kind: 'literal', values: issueSectionSchema.options } },
   sort: { scalar: { kind: 'literal', values: issueSortSchema.options }, default: 'severity' },
   rule: text,
   site_url_id: optionalUuid,
   page_kind: text,
-  finding_class: {
-    scalar: { kind: 'literal', values: ['defect', 'advisory'] },
-    default: 'defect',
-  },
+  finding_class: { scalar: { kind: 'literal', values: ['defect', 'advisory'] } },
 } as const;
 const download = z.unknown();
 const changeLimit = policy.site_health.change_intel;
@@ -146,21 +137,19 @@ const readIssues = (db: Database, workspaceId: string, crawlId: string, query: I
         rule: query.rule || null,
         siteUrlId: query.site_url_id,
         pageKind: query.page_kind || null,
-        findingClass: query.finding_class,
+        findingClass: query.finding_class ?? null,
       },
       query,
       { section: query.section ?? null, sort: query.sort },
     ),
   );
 
-/** The project's current crawl (SH-B1), or 404 before it has one. */
 async function requireCurrentCrawl(db: Database, workspaceId: string, projectId: string) {
   const crawl = await currentSiteCrawl(db, workspaceId, projectId);
   if (crawl === null) throw notFound('Crawl');
   return crawl;
 }
 
-/** A cursor from another scope, filter set or tampering is a 400. */
 async function withCursor<T>(read: Promise<T>): Promise<T> {
   try {
     return await read;
@@ -229,7 +218,7 @@ export const siteHealthRoutes = [
     params: { path: crawlPath, query: {} },
     response: siteCrawlSchema,
     async handle({ c, db }, { path }) {
-      const crawl = await loadCrawl(db, c.get('workspace').workspaceId, path.crawl_id);
+      const crawl = await loadProjectedCrawl(db, c.get('workspace').workspaceId, path.crawl_id);
       const root = await rootFailure(db, crawl);
       return siteCrawlSchema.parse(
         await crawlProjection(db, crawl, { failureSummary: root.summary }),
@@ -336,7 +325,6 @@ export const siteHealthRoutes = [
     raw: true,
     async handle({ c, db, config }, { path, query }) {
       const workspaceId = c.get('workspace').workspaceId;
-      // Resume after the client's last event, from the SSE header or the query.
       const after = resumeCursor({
         header: c.req.header('last-event-id'),
         query: query.last_event_id,
@@ -368,9 +356,6 @@ export const siteHealthRoutes = [
     handle: ({ c, db }, { path, query }) =>
       dashboard(db, c.get('workspace').workspaceId, path.project_id, query.crawl_id),
   }),
-  // The current crawl's pages and issues, for a reader that does not know the
-  // crawl yet: the route prefetchers start them beside the dashboard rather
-  // than after it.
   defineGetRoute({
     ...projectFamily,
     path: `${projectRoot}/pages`,
@@ -394,7 +379,6 @@ export const siteHealthRoutes = [
     response: latestCrawlIssuesPageSchema,
     async handle({ c, db }, { path, query }) {
       const workspaceId = c.get('workspace').workspaceId;
-      // The current crawl is terminal, so its issues are published and revalidatable.
       const crawl = await requireCurrentCrawl(db, workspaceId, path.project_id);
       const page = { ...(await readIssues(db, workspaceId, crawl.id, query)), crawl_id: crawl.id };
       return revalidatable(c, page);
@@ -405,7 +389,6 @@ export const siteHealthRoutes = [
     path: `${projectRoot}/overview`,
     params: { path: projectPath, query: { crawl_id: optionalUuid } },
     response: siteHealthOverviewSchema,
-    // Served only from a persisted snapshot (404 otherwise).
     handle: async ({ c, db }, { path, query }) =>
       revalidatable(
         c,
@@ -424,7 +407,6 @@ export const siteHealthRoutes = [
         path.project_id,
         query.crawl_id,
       );
-      // Until a snapshot carries the diagnostic, the next analysis replaces this answer.
       return readiness.state === 'not_measured' ? readiness : revalidatable(c, readiness);
     },
   }),

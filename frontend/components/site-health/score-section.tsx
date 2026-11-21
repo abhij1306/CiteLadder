@@ -1,6 +1,5 @@
 import type { SiteCrawl, SiteHealthDashboard } from '@citeladder/contracts';
-import { UnavailableValue } from '@/components/ui/unavailable-value';
-import { ICONS } from '@/lib/icons';
+import { Absence } from '@/components/ui/absence';
 import { AuditScores } from './overview-metrics';
 
 export function ScoreSection({
@@ -14,33 +13,41 @@ export function ScoreSection({
       testId="score-section"
       metrics={[
         {
-          title: 'Web Fundamentals',
+          title: 'Web fundamentals',
           value: summary?.web_fundamentals_score ?? null,
           unavailable: unavailable(summary?.web_fundamentals_state),
-          icon: ICONS.siteHealth,
           href: '/issues?section=technical',
         },
         {
-          title: 'AEO Readiness',
+          title: 'AEO readiness',
           value: summary?.aeo_readiness_score ?? null,
           unavailable: unavailable(summary?.aeo_measurement_state),
-          icon: ICONS.visibility,
           href: '/issues?section=aeo',
         },
         {
-          title: 'AEO Checklist Completion',
+          title: 'AEO checklist completion',
           value: coverage == null ? null : coverage * 100,
           valueUnit: 'percent',
           unavailable: unavailable(summary?.aeo_measurement_state),
-          icon: ICONS.reports,
           href: '/site?tab=aeo-readiness',
+        },
+        {
+          title: 'Pages discovered',
+          value: crawl?.visible_url_count ?? null,
+          valueUnit: 'count',
+        },
+        {
+          title: 'Pages analyzed',
+          value: crawl ? crawl.counters.analyzed || crawl.analyzed_count : null,
+          valueUnit: 'count',
         },
       ]}
     />
   );
 }
 function unavailable(state?: string) {
-  if (state === 'limited_evidence') return <span className="type-caption">Limited evidence</span>;
-  if (state === 'excluded') return <span className="type-caption">Excluded</span>;
-  return <UnavailableValue state="not_measured" />;
+  if (state === 'limited_evidence')
+    return <Absence state="not_measured" label="Limited evidence" />;
+  if (state === 'excluded') return <Absence state="not_applicable" label="Excluded" />;
+  return <Absence state="not_measured" />;
 }

@@ -18,13 +18,10 @@ import type { PromptImportRowRequest } from '@citeladder/contracts/prompt-reques
 import { buyerStageSchema, promptIntentSchema } from '@citeladder/contracts/project';
 import type { BuyerStage, PromptFormLimits, PromptIntent } from '@citeladder/contracts';
 
-/** The import bounds the API enforces, from the prompt-set list. */
 export type PromptCsvLimits = Pick<PromptFormLimits, 'import_rows_max' | 'persona_max_chars'>;
 
-/** The import's column contract, in the order the sample file uses. */
 export const PROMPT_CSV_COLUMNS = ['topic', 'prompt'] as const;
 
-/** Sample rows for the downloadable template, one cell per contract column. */
 export const PROMPT_CSV_SAMPLE_ROWS: readonly (readonly [string, string])[] = [
   ['Running shoes', 'What are the best running shoes for flat feet?'],
   ['Running shoes', 'Which running shoe brands last the longest?'],
@@ -34,7 +31,6 @@ export const PROMPT_CSV_SAMPLE_ROWS: readonly (readonly [string, string])[] = [
 
 type PromptCsvColumn = (typeof PROMPT_CSV_COLUMNS)[number];
 
-// Header aliases per column; each contract column's own name comes first.
 const COLUMN_KEYS: Record<PromptCsvColumn, ReadonlySet<string>> = {
   topic: new Set(['topic', 'category']),
   prompt: new Set(['prompt', 'text', 'query', 'question']),
@@ -46,7 +42,6 @@ const PERSONA_KEYS = new Set(['persona', 'audience']);
 const COHORT_KEYS = new Set(['cohort']);
 const ENABLED_KEYS = new Set(['enabled', 'is_enabled', 'active']);
 
-/** API prompt-library bounds, counted in code points. */
 const PROMPT_MAX_CHARS = 300;
 const TOPIC_MAX_CHARS = 255;
 const THEME_MAX_CHARS = 255;
@@ -56,22 +51,15 @@ const codePoints = (value: string) => Array.from(value);
 const TRUE_VALUES = new Set(['1', 'true', 'yes', 'y', 't']);
 const FALSE_VALUES = new Set(['0', 'false', 'no', 'n', 'f']);
 
-const VALID_INTENTS = new Set<string>(promptIntentSchema.options);
-const VALID_STAGES = new Set<string>(buyerStageSchema.options);
-
 type ParsedPromptRow = {
-  /** 1-based source row number (excludes the header) for user feedback. */
   line: number;
   input: PromptImportRowRequest;
-  /** Fatal issues (row is not importable, e.g. empty prompt). */
   errors: string[];
 };
 
 export type ParsedCsv = {
   rows: ParsedPromptRow[];
-  /** True when the file had a recognizable header row. */
   hasHeader: boolean;
-  /** File-level errors (empty file, no data rows). */
   errors: string[];
 };
 
@@ -117,7 +105,6 @@ function consumePlainCharacter(state: CsvState, text: string, index: number): nu
   return index;
 }
 
-/** Tokenize CSV text into a matrix of string cells (RFC-4180-ish). */
 export function tokenizeCsv(raw: string): string[][] {
   const text = raw.codePointAt(0) === 0xfeff ? raw.slice(1) : raw;
   const state: CsvState = { rows: [], field: '', row: [], inQuotes: false };
@@ -143,19 +130,18 @@ function asBool(value: string | undefined, fallback: boolean): boolean {
   return fallback;
 }
 
-/** An unknown intent is internal vocabulary gone stale: it defaults silently. */
 function normalizeIntent(value: string | undefined): PromptIntent {
   const normalized = (value ?? '').trim().toLowerCase();
-  return VALID_INTENTS.has(normalized) ? (normalized as PromptIntent) : '';
+  const parsed = promptIntentSchema.safeParse(normalized);
+  return parsed.success ? parsed.data : '';
 }
 
-/** An unknown buyer stage is left unset, like an unknown intent. */
 function normalizeStage(value: string | undefined): BuyerStage {
   const normalized = (value ?? '').trim().toLowerCase();
-  return VALID_STAGES.has(normalized) ? (normalized as BuyerStage) : '';
+  const parsed = buyerStageSchema.safeParse(normalized);
+  return parsed.success ? parsed.data : '';
 }
 
-/** An explicit cohort is kept; a blank or missing one is left to the backend. */
 function cohortOf(value: string | undefined): Pick<PromptImportRowRequest, 'cohort'> {
   const normalized = (value ?? '').trim().toLowerCase();
   if (normalized === 'comparison') return { cohort: 'comparison' };
@@ -186,11 +172,9 @@ function detectColumns(headerCells: string[]): ColumnMap | null {
     cohort: find(COHORT_KEYS),
     enabled: find(ENABLED_KEYS),
   };
-  // A header row is recognized only if it names at least the prompt column.
   return map.text >= 0 ? map : null;
 }
 
-/** Without a header, the first column is the prompt text (as on the server). */
 const HEADERLESS_COLUMNS: ColumnMap = {
   text: 0,
   topic: -1,
@@ -230,8 +214,6 @@ function parseRow(
       persona: codePoints((cell(map.persona) ?? '').trim())
         .slice(0, personaMaxChars)
         .join(''),
-      // No cohort column leaves filing to the backend, which files a prompt
-      // naming the brand as branded.
       ...cohortOf(cell(map.cohort)),
       enabled: asBool(cell(map.enabled), true),
     },
@@ -239,12 +221,6 @@ function parseRow(
   };
 }
 
-/**
- * Parse CSV text into previewable prompt rows. With a header row, columns are
- * matched by name (any order); without one, the first column is the prompt.
- * `limits` are the API's import bounds, so the preview never reads as ready
- * for an upload the server would reject.
- */
 export function parsePromptCsv(raw: string, limits: PromptCsvLimits): ParsedCsv {
   const matrix = tokenizeCsv(raw);
   const [firstRow] = matrix;
@@ -261,7 +237,6 @@ export function parsePromptCsv(raw: string, limits: PromptCsvLimits): ParsedCsv 
 
   const errors: string[] = [];
   if (rows.length === 0) errors.push('No data rows were found.');
-  // The API rejects an oversized upload whole; say so before the preview reads as ready.
   if (rows.length > limits.import_rows_max)
     errors.push(
       `The file has ${rows.length} rows; import up to ${limits.import_rows_max} at a time by splitting it.`,
@@ -270,7 +245,6 @@ export function parsePromptCsv(raw: string, limits: PromptCsvLimits): ParsedCsv 
   return { rows, hasHeader, errors };
 }
 
-/** The importable subset (rows without fatal errors). */
 export function validRows(parsed: ParsedCsv): PromptImportRowRequest[] {
   return parsed.rows.flatMap((row) => (row.errors.length === 0 ? [row.input] : []));
 }

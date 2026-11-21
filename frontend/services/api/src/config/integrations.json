@@ -27,7 +27,12 @@
     },
     "INTEGRATION_OAUTH_CALLBACK_PATH": "/api/v1/integrations/oauth/{provider}/callback",
     "INTEGRATION_OAUTH_LANDING_PATH": "/settings?tab=integrations",
-    "INTEGRATION_OAUTH_RETURN_PATHS": ["/performance", "/demand", "/ai-traffic", "/settings"],
+    "INTEGRATION_OAUTH_RETURN_PATHS": [
+      "/performance",
+      "/search-intelligence",
+      "/ai-traffic",
+      "/settings"
+    ],
     "INTEGRATION_OAUTH_TRANSACTION_COOKIE": "citeladder_integration_oauth",
     "INTEGRATION_OAUTH_TRANSACTION_COOKIE_PATH": "/api/v1/integrations/oauth",
     "GSC_API_BASE_URL": "https://www.googleapis.com",

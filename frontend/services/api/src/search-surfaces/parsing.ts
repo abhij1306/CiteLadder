@@ -82,16 +82,23 @@ function observedAt(page: Record<string, unknown>, task: Record<string, unknown>
   }
   return null;
 }
+const OVERVIEW_ELEMENT_TYPES: ReadonlySet<string> = new Set([
+  'ai_overview_element',
+  'ai_overview_expanded_element',
+  'ai_overview_table_element',
+  'ai_overview_video_element',
+]);
+const withComponents = (element: Record<string, unknown>) => [
+  element,
+  ...objects(element.components),
+];
 function elements(block: Record<string, unknown>): [number, Record<string, unknown>][] {
   if (block.items != null && !Array.isArray(block.items))
     throw new Error('Invalid overview elements');
   const result: [number, Record<string, unknown>][] = [];
   function descend(value: unknown, index: number, depth: number) {
     const node = record(value);
-    if (
-      depth > 128 ||
-      !['ai_overview_element', 'ai_overview_expanded_element'].includes(scalarText(node.type))
-    )
+    if (depth > 128 || !OVERVIEW_ELEMENT_TYPES.has(scalarText(node.type)))
       throw new Error('Unknown overview element');
     result.push([index, node]);
     for (const child of objects(node.items)) descend(child, index, depth + 1);
@@ -104,9 +111,14 @@ function fragments(element: Record<string, unknown>) {
   const values = [
     text(element.title),
     text(element.text),
+    text(element.snippet),
     ...list(table.table_header).map(text),
     ...list(table.table_content).map((row) => list(row).map(text).filter(Boolean).join(' ')),
     ...list(element.items).map(text),
+    ...objects(element.components).flatMap((part) => [
+      text(part.title),
+      text(part.text) || text(part.markdown),
+    ]),
   ].filter(Boolean);
   return values.length ? values : [text(element.markdown)].filter(Boolean);
 }
@@ -115,7 +127,6 @@ type OverviewTask = {
   status: number;
   page: Record<string, unknown>;
 };
-/** The one task answering `expectedId` with a usable page, or the result that ends parsing. */
 function resolveOverviewTask(
   envelope: Record<string, unknown>,
   expectedId: string,
@@ -149,20 +160,18 @@ function resolveOverviewTask(
     return { early: emptyOverview(s.outcome_parser_error, task) };
   return { task, status, page };
 }
-/** Visible text fragments and links of the walked elements, each kept once in first-seen order. */
 function overviewContent(walked: [number, Record<string, unknown>][]) {
   const seenText = new Set<string>(),
     parts: string[] = [];
   const links = new Map<string, SurfaceLink>();
   for (const [index, element] of walked) {
     for (const fragment of fragments(element)) {
-      // Casefold and whitespace only; punctuation distinguishes visible fragments.
       const key = casefold(fragment.split(/\s+/u).filter(Boolean).join(' '));
       if (!key || seenText.has(key)) continue;
       seenText.add(key);
       parts.push(fragment.trim());
     }
-    for (const link of objects(element.links)) {
+    for (const link of withComponents(element).flatMap((part) => objects(part.links))) {
       const url = scalarText(link.url).trim();
       if (url && !links.has(url))
         links.set(url, {
@@ -175,9 +184,13 @@ function overviewContent(walked: [number, Record<string, unknown>][]) {
   }
   return { parts, links };
 }
-function overviewReferences(block: Record<string, unknown>) {
+function overviewReferences(
+  block: Record<string, unknown>,
+  walked: [number, Record<string, unknown>][],
+) {
   const references = new Map<string, SurfaceReference>();
-  for (const ref of objects(block.references)) {
+  const owners = [block, ...walked.flatMap(([, element]) => withComponents(element))];
+  for (const ref of owners.flatMap((owner) => objects(owner.references))) {
     const url = scalarText(ref.url).trim(),
       host = domain(scalarText(ref.domain) || url);
     if (url && !references.has(url))
@@ -190,7 +203,6 @@ function overviewReferences(block: Record<string, unknown>) {
   }
   return references;
 }
-/** Envelope and exact task identity precede every presence decision; cards never enter visible text. */
 export function parseOverview(
   payload: unknown,
   expectedId: string,
@@ -215,7 +227,7 @@ export function parseOverview(
   try {
     const walked = elements(block),
       { parts, links } = overviewContent(walked);
-    const references = overviewReferences(block);
+    const references = overviewReferences(block, walked);
     return {
       ...base,
       answer_text: parts.join('\n\n'),
@@ -260,7 +272,6 @@ export function overviewAnswer(result: OverviewResult): ExecutionResult {
       end_index: null,
       cited_text: '',
     })),
-    // An AI Overview shows its references only; what it read is not exposed.
     retrieved_sources: null,
     finish_reason: 'unknown',
     raw_finish_reason: '',
@@ -279,7 +290,6 @@ export function overviewAnswer(result: OverviewResult): ExecutionResult {
 }
 const AD_ITEM_TYPE = 'chat_gpt_ad';
 const isAd = (node: Record<string, unknown>) => node.type === AD_ITEM_TYPE;
-/** Organic sources only: a paid placement is never a citation, whatever it carries. */
 function scraperSources(node: Record<string, unknown>, depth = 0): Record<string, unknown>[] {
   if (depth > 128) throw new ProviderError('parse_error');
   if (isAd(node)) return [];
@@ -288,10 +298,6 @@ function scraperSources(node: Record<string, unknown>, depth = 0): Record<string
     ...objects(node.items).flatMap((child) => scraperSources(child, depth + 1)),
   ];
 }
-/**
- * The scraper's search results are what the engine read. A page without the
- * field exposes no retrieval, which is unknown rather than an empty read.
- */
 function scraperRetrieved(results: unknown): RetrievedSource[] | null {
   if (!Array.isArray(results)) return null;
   const sources: RetrievedSource[] = [],
@@ -332,14 +338,11 @@ export type AdItem = {
   rank_absolute: number;
   rank_group: number | null;
   advertiser_name: string;
-  /** Registrable domain of the advertiser URL, else the ad's own domain or landing URL. */
   advertiser_domain: string;
   landing_url_raw: string;
-  /** The landing URL without its query string or fragment. */
   landing_url_canonical: string;
   title: string;
   snippet: string;
-  /** Stored as evidence only; the product never renders it. */
   image_url: string | null;
 };
 function webUrl(value: string): URL | null {
@@ -371,11 +374,6 @@ function adItem(node: Record<string, unknown>): AdItem | null {
     image_url: item.image_url || null,
   };
 }
-/**
- * The ads in a stored ChatGPT Search Task GET envelope, one per rank;
- * malformed or repeated-rank items are skipped and counted. Null when the
- * envelope has no single result page, so no ads observation can be claimed.
- */
 export function parseAds(envelope: unknown): { ads: AdItem[]; skipped: number } | null {
   const task = onlyOf(objects(record(envelope).tasks));
   const page = task ? onlyOf(objects(task.result)) : undefined;
@@ -396,13 +394,8 @@ export function parseAds(envelope: unknown): { ads: AdItem[]; skipped: number } 
 }
 const PRODUCTS_ITEM_TYPE = 'chat_gpt_products';
 const PRODUCT_CARD_TYPE = 'chat_gpt_products_element';
-/** An optional card field of an unexpected shape reads as absent rather than dropping the card. */
 const lenient = <T>(read: (value: unknown) => T) => z.unknown().optional().transform(read);
 const lenientText = lenient(text);
-/**
- * ChatGPT fills card fields unevenly; only the title is required. The card's
- * `rating` is never read (owner decision CM4).
- */
 const productCardSchema = z.object({
   type: z.literal(PRODUCT_CARD_TYPE),
   title: z.string().trim().min(1),
@@ -417,23 +410,16 @@ const productCardSchema = z.object({
   product_id: lenientText,
   images: lenient(list),
 });
-/** One organic product card of a ChatGPT shopping carousel. */
 export type ShoppingResult = {
-  /** One-based position of the card within its carousel block. */
   position: number;
   title: string;
   tag: string | null;
   price: number | null;
-  /** ISO 4217 code, else empty. */
   currency: string;
   merchant_name: string | null;
-  /** The card's link as given, or empty when it carries no web URL. */
   url: string;
-  /** Hostname of the card's link, else the card's own domain, lowercased. */
   domain: string;
-  /** ChatGPT's own product key. */
   external_product_id: string | null;
-  /** First image URL; stored as evidence only. */
   image_url: string | null;
 };
 function shoppingResult(node: unknown, position: number): ShoppingResult | null {
@@ -459,20 +445,12 @@ function shoppingResult(node: unknown, position: number): ShoppingResult | null 
   };
 }
 function productBlocks(node: Record<string, unknown>, depth = 0): Record<string, unknown>[] {
-  // Cards are read inside the derive transaction; a pathological tree yields none, not a failure.
   if (depth > 128) return [];
   return objects(node.items).flatMap((child) => {
     if (isAd(child)) return [];
     return child.type === PRODUCTS_ITEM_TYPE ? [child] : productBlocks(child, depth + 1);
   });
 }
-/**
- * The organic product cards of every ChatGPT shopping carousel in a stored
- * LLM-scraper Task GET envelope, in answer order. Sponsored items keep the
- * ads path, never appear here and hold no organic position; an untitled or
- * malformed organic card is skipped but keeps its position. Empty when the
- * envelope has no single result page.
- */
 export function parseShoppingResults(envelope: unknown): ShoppingResult[] {
   const task = onlyOf(objects(record(envelope).tasks));
   const page = task ? onlyOf(objects(task.result)) : undefined;

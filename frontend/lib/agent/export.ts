@@ -1,7 +1,6 @@
 import { saveBlob } from '@/lib/download';
 import { markdownHtml, markdownPlainText } from '@/lib/markdown/html';
 
-/** A filesystem-safe name derived from the output title. */
 function exportFilename(title: string, extension: 'md' | 'html'): string {
   const slug = title
     .toLowerCase()
@@ -11,7 +10,6 @@ function exportFilename(title: string, extension: 'md' | 'html'): string {
   return `${slug || 'agent-output'}.${extension}`;
 }
 
-/** The revision exactly as shown: its title as the heading, then its body. */
 export function outputMarkdown(title: string, body: string): string {
   return `# ${title}\n\n${body.trimEnd()}\n`;
 }
@@ -23,11 +21,6 @@ export function downloadOutputMarkdown(title: string, body: string): void {
   );
 }
 
-/**
- * A page document's exports (phase 2, PR 3). The body is the page's content
- * as edited, its own headings included; the title is the page's title tag,
- * so it names the file and the HTML document but is not repeated as a heading.
- */
 export type PageExportFormat = 'markdown' | 'html' | 'text';
 
 const ESCAPED: Readonly<Record<string, string>> = {
@@ -39,14 +32,12 @@ const ESCAPED: Readonly<Record<string, string>> = {
 
 const escapeHtml = (text: string) => text.replaceAll(/[&<>"]/g, (char) => ESCAPED[char] ?? char);
 
-/** The page body in one export format. */
 export function pageExport(body: string, format: PageExportFormat): string {
   if (format === 'html') return markdownHtml(body);
   if (format === 'text') return `${markdownPlainText(body)}\n`;
   return `${body.trimEnd()}\n`;
 }
 
-/** A standalone HTML file: the title in the head, the page's HTML as the body. */
 function pageHtmlDocument(title: string, body: string): string {
   return [
     '<!doctype html>',

@@ -51,7 +51,6 @@ export const emptyPackage = {
   summary: { omissions: [{ reason: 'no_persisted_evidence', count: 1 }] },
   sections: {},
 };
-/** One scripted model response: the content blocks a provider would return. */
 export type Response = ConversationBlock[];
 export const text = (value: string): ConversationBlock => ({ type: 'text', text: value });
 export const toolUse = (
@@ -73,7 +72,6 @@ export const edit = (
   edits: { old_string: string; new_string: string }[],
   extra: Record<string, Json> = {},
 ): Response => [toolUse('edit_document', { edits, ...extra })];
-/** A request for a dispatch that never reaches a model. */
 export const request: ModelRequest = {
   system: 'test',
   tools: [],
@@ -104,7 +102,6 @@ export function result(blocks: Response, overrides: Partial<ModelResult> = {}): 
     ...overrides,
   };
 }
-/** A model that returns `responses` in order, then plain replies; it streams as a provider does. */
 export function scripted(
   responses: (Response | ModelResult)[],
   onCall?: (request: ModelRequest, ordinal: number) => Promise<void>,
@@ -161,7 +158,7 @@ export class AgentFixtures extends VisibilityFixtures {
       {
         name: 'read_evidence',
         description: 'Read persisted fixture evidence.',
-        arguments: z.strictObject({}),
+        arguments: z.strictObject({ query: z.string().optional() }),
         read: (received) => {
           if (received.projectId !== scope.projectId)
             return Promise.reject(new Error('Wrong server-pinned project'));
@@ -194,7 +191,7 @@ export class AgentFixtures extends VisibilityFixtures {
   }
   async claimed(
     scope: Scope,
-    options: { skillId?: string; message?: string; chatId?: string } = {},
+    options: { skillId?: string; message?: string; chatId?: string; mentionIds?: string[] } = {},
   ) {
     const run = await this.store().enqueue(scope, {
       message: options.message ?? 'Please help.',

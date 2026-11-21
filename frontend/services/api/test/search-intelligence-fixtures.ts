@@ -1,10 +1,8 @@
-/** Search Intelligence rows a dataset hangs from: a tested connection and a confirmed run. */
 import { randomUUID } from 'node:crypto';
 
 import { policy } from '../src/config.ts';
 import type { Database } from '../src/db/database.ts';
 
-/** A succeeded, confirmed acquisition run for the tenant's project; returns its id. */
 export async function searchIntelligenceRun(
   db: Database,
   tenant: { workspaceId: string; projectId: string; userId: string },

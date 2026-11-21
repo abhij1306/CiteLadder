@@ -52,7 +52,6 @@ export function botIpRangeRefresh(fetcher: WebsiteFetcher = fetchWebsite): Execu
       cidrs.forEach((c) => ipaddr.parseCIDR(c));
       status = 'succeeded';
     } catch (error) {
-      // A failed refresh persists a `failed` snapshot with no ranges.
       cidrs = [];
       logger.warning('bot_ip_range_refresh_failed', {
         bot_id: bot.bot_id,
@@ -142,9 +141,7 @@ export const crawlLogUploadAbandonSweep: Executor = async (task, { db, checkCanc
     if (!(await abandonUploads(db, task.workspace_id))) return;
   }
 };
-/** The UTC day whose insight sweep finished in this process; later ticks skip the query. */
 let insightsSweptDay: string | null = null;
-/** Insight windows end on a closed day, so each GA4-mapped project refreshes once a day. */
 async function refreshDailyInsights(db: Database, now: Date, canAdmit: () => boolean) {
   const day = now.toISOString().slice(0, 10);
   if (insightsSweptDay === day) return true;
@@ -159,9 +156,9 @@ async function refreshDailyInsights(db: Database, now: Date, canAdmit: () => boo
     limit ${crawlLogs.sweep_batch_size}`.execute(db);
   for (const scope of due.rows) {
     if (!canAdmit()) return false;
-    await db
+    await db // NOSONAR -- One project at a time keeps each enqueue inside the tick's admission budget.
       .transaction()
-      .execute((trx) => enqueueCoalesced(trx, { ...insightsRefresh, ...scope, now })); // NOSONAR -- One project at a time keeps each enqueue inside the tick's admission budget.
+      .execute((trx) => enqueueCoalesced(trx, { ...insightsRefresh, ...scope, now }));
   }
   if (due.rows.length < crawlLogs.sweep_batch_size) insightsSweptDay = day;
   return true;
@@ -203,7 +200,6 @@ export async function crawlLogTick(
   for (const workspace of workspaces)
     if (!(await maintainWorkspace(db, workspace.workspace_id, now, canAdmit))) return;
 }
-/** One workspace's daily crawl-log upkeep; false once the tick's budget is spent. */
 async function maintainWorkspace(
   db: Database,
   workspaceId: string,

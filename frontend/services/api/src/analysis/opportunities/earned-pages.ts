@@ -7,11 +7,6 @@ import { pageCompetitorPresenceFactor, pageRecurrenceFactor } from './scoring.ts
 import { compareText } from '../../text-order.ts';
 const p = policy.opportunity.earned_actions;
 
-/**
- * Every page the URLs table shows as a Gap earns the Action (AS4): its latest
- * successful reading is a listing gap. Its format, how often it is cited and
- * how much of it was read only rank it, through the priority factors.
- */
 function qualifies(page: SourcePageEvidence): boolean {
   return page.snapshot_id !== null && isListingGap(page, page.entities);
 }

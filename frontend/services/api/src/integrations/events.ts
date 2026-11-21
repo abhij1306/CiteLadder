@@ -1,8 +1,3 @@
-/**
- * The one writer of `integration_events`: the audit trail of grant and sync
- * lifecycle changes. Callers pass the transaction that made the change, so an
- * event commits with the state it describes.
- */
 import { randomUUID } from 'node:crypto';
 import type { Database } from '../db/database.ts';
 
@@ -49,7 +44,6 @@ export async function recordIntegrationEvents(
     .execute();
 }
 
-/** A property mapping as its retirement records it. */
 type RetiredMapping = {
   id: string;
   connection_id: string;
@@ -58,10 +52,6 @@ type RetiredMapping = {
   property_ref: string;
 };
 
-/**
- * Record each mapping a write retired, in the transaction that retired it:
- * a removal, or a replacement by another property for the same project.
- */
 export async function recordRetiredMappings(
   db: Database,
   workspaceId: string,

@@ -1,4 +1,3 @@
-/** Site Health's sole expired-lease writer; the worker reconciles crawls whose tasks it fails. */
 import { sql } from 'kysely';
 import type { Database } from '../db/database.ts';
 import { getLogger } from '../logging.ts';

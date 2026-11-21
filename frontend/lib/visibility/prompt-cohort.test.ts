@@ -12,7 +12,6 @@ describe('cohortUrlCodec', () => {
     const codec = cohortUrlCodec(PROJECT);
     expect(codec.parse(null)).toBe('core');
     writeStoredCohort(PROJECT, 'comparison');
-    // Parsed again after the choice changed, as when a link drops the param.
     expect(codec.parse(null)).toBe('comparison');
     expect(codec.parse('bogus')).toBe('comparison');
     expect(cohortUrlCodec(OTHER).parse(null)).toBe('core');

@@ -61,7 +61,6 @@ async function project() {
 
 type Project = Awaited<ReturnType<typeof project>>;
 
-/** One published dataset with its rows, as acquisition leaves it. */
 async function dataset(
   p: Project,
   kind: string,
@@ -147,7 +146,6 @@ describe('keyword gaps become Actions', () => {
       { keyword: 'rival shoes' },
       { keyword: 'trail boots', volume: null },
     ]);
-    // The Agent planned the page first; evidence must converge on it, not open a second Action.
     const planned = await db.transaction().execute(async (trx) => {
       await attachOrCreateAction(trx, scopeOf(p), 'planned_page', 'Running shoes', p.userId);
       return trx
@@ -164,11 +162,9 @@ describe('keyword gaps become Actions', () => {
     expect(snapshot.limitations.join(' ')).toContain('1 unknown volume');
     expect(snapshot.limitations.join(' ')).toContain('1 competitor named');
 
-    // Unchanged datasets are the same identity: the refresh writes nothing new.
     const again = await recomputeOpportunities(db, scopeOf(p), { skipIfCurrent: true });
     expect(again.id).toBe(snapshot.id);
 
-    // The missing-keyword row links to its Action; the read computes nothing.
     const page = await datasetPage(
       db,
       { workspace: new WorkspaceScope(p.workspaceId), projectId: p.projectId },
@@ -238,13 +234,11 @@ describe('keyword gaps become Actions', () => {
         .executeTakeFirstOrThrow();
       return { kind: latest.observation_kind, check: storedOutcomes(latest.result).get(0) };
     };
-    // Published after go-live, but DataForSEO checked the search before it: no answer.
     const stale = await read(new Date(Date.now() - 2 * day), new Date(Date.now() - 6 * day));
     expect(stale.check).toMatchObject({
       state: 'unavailable',
       reason: 'provider_serp_predates_change',
     });
-    // The later dataset spells the same search differently; it still answers the check.
     const fresh = await read(
       new Date(Date.now() - day),
       new Date(Date.now() - day),
@@ -262,7 +256,6 @@ describe('keyword gaps become Actions', () => {
       new Date(Date.now() - 5 * day),
     );
     const first = await recomputeOpportunities(db, scopeOf(p));
-    // An override changes what the brand gate decides, so the source is no longer current.
     await db
       .insertInto('branded_query_overrides')
       .values({
@@ -281,8 +274,6 @@ describe('keyword gaps become Actions', () => {
     expect((await gapFindings(p)).map((finding) => finding.target_theme)).toEqual([
       'running shoes',
     ]);
-    // A newer reading of unknown coverage replaces the older one rather than reviving it,
-    // and a snapshot built on gaps is superseded once no gap dataset backs it.
     const newer = await dataset(p, 'missing_keywords', [{ keyword: 'running shoes' }]);
     await db
       .updateTable('search_intelligence_datasets')
@@ -311,6 +302,7 @@ describe('keyword gaps become Actions', () => {
       source_issue_ids: [],
       source_metric_ids: [],
       facts: NO_HANDOFF_FACTS,
+      grouping: 'search_queries' as const,
     });
     const groups = groupMembers([
       member('emerging_query', { kind: 'demand', identity_hash: 'h', url: null, query: ' Shoes ' }),
@@ -327,7 +319,7 @@ describe('keyword gaps become Actions', () => {
         keyword: 'Trail Socks',
         url: null,
       }),
-      member('missing_structured_data', { kind: 'site_page', url: `${OWNED}/a` }),
+      member('content_gap_improve_page', { kind: 'site_page', url: `${OWNED}/a` }),
       member('site_change_critical_regression', {
         kind: 'site_change',
         site_url_id: randomUUID(),
@@ -368,11 +360,12 @@ describe('keyword gaps become Actions', () => {
       source_issue_ids: [],
       source_metric_ids: [],
       facts: NO_HANDOFF_FACTS,
+      grouping: 'search_queries' as const,
     });
     const [page] = groupMembers([
-      member('missing_structured_data', 30),
+      member('site_link_near_orphan', 30),
       member('striking_distance_query', 20),
     ]);
-    expect([page?.priority_score, page?.families]).toEqual([30, ['search_console', 'site_health']]);
+    expect([page?.priority_score, page?.families]).toEqual([30, ['search_console', 'link_graph']]);
   });
 });

@@ -13,7 +13,6 @@ export function failureCode(error: unknown) {
   if (error instanceof AgentError) return error.code;
   if (error instanceof ApiError && [403, 404].includes(error.status)) return 'access_revoked';
   if (error instanceof ModelError) return 'provider_error';
-  // Validation and storage defects are ours, not the model provider's.
   return 'internal_error';
 }
 export type PromptSummary = Record<string, Json>;
@@ -22,13 +21,11 @@ export function bounded(text: string, limit: number, marker: string) {
     ? text
     : text.slice(0, Math.max(0, limit - marker.length)) + marker.slice(0, limit);
 }
-/** Merges the last prompt summary into the frozen manifest without rewriting it. */
 export function withSummary(summary: PromptSummary) {
   return {
     context_manifest: sql<Json>`context_manifest || jsonb_build_object('prompt_summary', ${JSON.stringify(summary)}::jsonb)`,
   };
 }
-/** Whether the member may still write to the chat; a refusal answers false, a database error still throws. */
 export async function stillAuthorized(db: Database, scope: Parameters<typeof authorize>[1]) {
   try {
     await authorize(db, scope);
@@ -53,7 +50,6 @@ export function savedNotice(number: number, formatLabel: string | null) {
   const format = formatLabel ? ` in ${formatLabel} format` : '';
   return `${documentLabel(number)} saved${format}.`;
 }
-/** One notice per page document the turn suggested changes to. */
 export function suggestedNotices(suggestions: TurnState['suggestions']) {
   const counts = new Map<number, number>();
   for (const { document } of suggestions) counts.set(document, (counts.get(document) ?? 0) + 1);
@@ -77,7 +73,6 @@ export function closable(state: TurnState) {
   const staged = state.staged.size > 0 || state.suggestions.length > 0;
   return staged && !state.waiting && state.messages.at(-1)?.role === 'user';
 }
-/** A turn stopped after it staged a document, which it can still save (B69). */
 export type StoppedTurn = { saveDocuments: () => Promise<void> };
 /**
  * A call refused for an unavailable model after the turn staged a document answers null,

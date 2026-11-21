@@ -6,23 +6,21 @@ import { gcpSetupCommands } from '@/lib/ai-traffic/gcp-commands';
 import { verificationFailureLabel } from '@/lib/ai-traffic/vocabulary';
 import { GCP_PULL_SETUP } from '@/lib/config/crawl-logs';
 import { Button } from '@/components/ui/button';
-import { Callout } from '@/components/ui/callout';
-import { MutationNotice } from '@/components/ui/mutation-notice';
 import { mutationNoticeForError } from '@/lib/api/mutation-notice';
 import { CopyButton } from '@/components/ui/copy-button';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Stack } from '@/components/ui/layout';
-import { panelClasses } from '@/components/ui/panel';
+import { Notice } from '@/components/ui/notice';
+import { wellClasses } from '@/components/ui/slip';
 
 type Source = z.infer<typeof crawlSourceSchema>;
 type GcpPull = z.infer<typeof crawlSourceListSchema>['gcp_pull'];
 
-/** Copyable preformatted text: generated commands or the sink filter. */
 function CodeText({ value, label }: Readonly<{ value: string; label: string }>) {
   return (
     <Stack>
-      <pre className={panelClasses('type-code overflow-x-auto break-all whitespace-pre-wrap')}>
+      <pre className={wellClasses('type-code overflow-x-auto break-all whitespace-pre-wrap')}>
         {value}
       </pre>
       <CopyButton value={value} className="w-fit">
@@ -32,16 +30,11 @@ function CodeText({ value, label }: Readonly<{ value: string; label: string }>) 
   );
 }
 
-/** The subscription CiteLadder pulls and the load balancer sample rate the customer set. */
 export function GcpFields({ model }: Readonly<{ model: ReturnType<typeof useCrawlConnections> }>) {
   const { subscription, setSubscription, sampleRate, setSampleRate } = model;
   return (
     <>
-      <Field
-        label="Pub/Sub subscription"
-        hint="The full path. The commands shown after you create the source create it."
-        className="desktop:col-span-2"
-      >
+      <Field label="Pub/Sub subscription" hint="Full path" className="desktop:col-span-2">
         {(field) => (
           <Input
             {...field}
@@ -53,7 +46,7 @@ export function GcpFields({ model }: Readonly<{ model: ReturnType<typeof useCraw
       </Field>
       <Field
         label="Load balancer logging sample rate"
-        hint="Between 0.001 and 1, as set on the backend service. Below 1, coverage stays partial."
+        hint="0.001–1, as set on the backend service. Below 1, coverage stays partial."
       >
         {(field) => (
           <Input
@@ -68,19 +61,14 @@ export function GcpFields({ model }: Readonly<{ model: ReturnType<typeof useCraw
   );
 }
 
-/** What the setup involves before the source, and its label nonce, exist. */
 export function GcpSteps() {
   return (
-    <p className="type-body text-ink-secondary">
-      CiteLadder pulls a Pub/Sub subscription in your Google Cloud project that a Cloud Logging sink
-      fills with crawler requests to your load balancer or Cloud Run services. Create the source
-      first: the setup commands then include its verification label. You pay Google for log routing
-      and Pub/Sub, which the crawler-only filter keeps small.
+    <p className="type-body text-ink-2">
+      Create the source first to get its setup commands. You pay Google for log routing and Pub/Sub.
     </p>
   );
 }
 
-/** The created source's setup commands and its subscription check. */
 export function GcpSourceSetup({
   source,
   gcp,
@@ -93,9 +81,8 @@ export function GcpSourceSetup({
   const outcome = verify.data;
   return (
     <Stack>
-      <p className="type-body">
-        Run these in Cloud Shell, then enable logging on each load balancer backend service. The
-        label lets CiteLadder confirm the subscription is yours.
+      <p className="type-body text-ink-2">
+        Run these in Cloud Shell, then enable logging on each load balancer backend service.
       </p>
       <CodeText
         label="Copy commands"
@@ -108,7 +95,7 @@ export function GcpSourceSetup({
         })}
       />
       <Button
-        variant="primary"
+        variant="secondary"
         className="w-fit"
         pending={verify.isPending}
         pendingLabel="Checking…"
@@ -116,18 +103,15 @@ export function GcpSourceSetup({
       >
         Verify subscription
       </Button>
-      {outcome?.verified ? (
-        <Callout tone="positive">
-          Verified. CiteLadder pulls the subscription every few minutes.
-        </Callout>
-      ) : null}
+      {outcome?.verified ? <Notice tone="positive">Verified.</Notice> : null}
       {outcome && !outcome.verified ? (
-        <Callout tone="negative">
+        <Notice tone="negative">
           {verificationFailureLabel(outcome.failure ?? 'unavailable')}
-        </Callout>
+        </Notice>
       ) : null}
       {verify.isError ? (
-        <MutationNotice
+        <Notice
+          kind="mutation"
           notice={mutationNoticeForError(verify.error, { action: 'verify the subscription' })}
           onRetry={() => verify.mutate(source.id)}
         />
@@ -136,7 +120,6 @@ export function GcpSourceSetup({
   );
 }
 
-/** The crawler catalog changed: each live pull source still on an older filter asks for it. */
 export function SinkFilterUpdates({
   data,
   projectId,
@@ -162,7 +145,6 @@ export function SinkFilterUpdates({
     />
   ));
 }
-/** Each source owns its confirmation, so one source's pending or failed state stays on it. */
 function SinkFilterUpdate({
   source,
   gcp,
@@ -179,10 +161,7 @@ function SinkFilterUpdate({
   const { confirmFilter } = useGcpPullActions(projectId, workspaceId);
   return (
     <Stack as="section" aria-label={`Sink filter update for ${source.host}`}>
-      <Callout tone="warning">
-        Update your sink filter. CiteLadder recognizes new crawlers; until the sink uses this
-        filter, coverage stays partial.
-      </Callout>
+      <Notice tone="warning">Update your sink filter. Until then, coverage stays partial.</Notice>
       <CodeText label="Copy filter" value={gcp.log_filter} />
       {canManage ? (
         <Button
@@ -195,7 +174,8 @@ function SinkFilterUpdate({
         </Button>
       ) : null}
       {confirmFilter.isError ? (
-        <MutationNotice
+        <Notice
+          kind="mutation"
           notice={mutationNoticeForError(confirmFilter.error, {
             action: 'confirm the sink filter',
           })}

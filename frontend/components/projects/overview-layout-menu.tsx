@@ -1,5 +1,3 @@
-import { LayoutGrid } from 'lucide-react';
-
 import {
   overviewWidgetTitles,
   type OverviewLayout,
@@ -15,12 +13,9 @@ import {
   MenuSeparator,
   MenuTrigger,
 } from '@/components/ui/menu';
+import { LayoutGrid } from '@/lib/icons';
 import { addableWidgets, addWidget } from '@/lib/overview/layout';
 
-/**
- * One fixed "Layout" button for members who can edit: editing, adding and
- * resetting all live in its menu, so the header never reflows between modes.
- */
 export function OverviewLayoutMenu({
   layout,
   editing,
@@ -32,7 +27,6 @@ export function OverviewLayoutMenu({
   editing: boolean;
   pending: boolean;
   onEditingChange: (editing: boolean) => void;
-  /** `null` resets to the default layout. */
   onSave: (widgets: OverviewWidget[] | null) => void;
 }>) {
   const addable = addableWidgets(layout.widgets);

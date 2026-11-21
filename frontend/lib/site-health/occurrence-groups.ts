@@ -1,23 +1,3 @@
-/**
- * The affected-page list of one issue, grouped by what was found.
- *
- * A form-control finding on a site-wide newsletter field is ONE template
- * element on every page, and listing it as N rows that each repeat
- * `input[name="email"]` and their own "Ask agent" presented one fix as N
- * jobs. Occurrences whose rendered evidence is identical become one shared
- * entry: the evidence once, then the pages it was found on.
- *
- * Equality is on what the evidence line RENDERS (`evidenceFacts`), not on the
- * raw evidence record: two records that differ only in an ordinal or an id
- * print the same line and are the same fix. A line that depends on the page it
- * is printed under ("→ this page") is never shared, because under a list of
- * pages it would point at none of them.
- *
- * Only the occurrences actually loaded are grouped. The detail read is paged,
- * so a group's count is how many of the LOADED pages share the evidence, and
- * the label says so unless the loaded list is the whole list.
- */
-
 import type { IssueOccurrence } from '@citeladder/contracts';
 
 import { evidenceFacts, evidenceLead } from './issue-evidence';
@@ -31,13 +11,10 @@ export type OccurrenceEntry =
       key: string;
       ruleId: string;
       facts: readonly string[];
-      /** One occurrence per page: the last one loaded for that page. */
       occurrences: NonEmpty<IssueOccurrence>;
-      /** Distinct pages in the group. */
       pageCount: number;
     }>;
 
-/** The rendered evidence line, or null when it is empty or names the page it sits under. */
 function sharedFacts(occurrence: IssueOccurrence): string[] | null {
   const facts = evidenceFacts(occurrence.rule_id, occurrence.evidence, {
     pageUrl: occurrence.normalized_url,
@@ -53,11 +30,6 @@ function distinctPages(occurrences: readonly IssueOccurrence[]): number {
   return new Set(occurrences.map((occurrence) => occurrence.site_url_id)).size;
 }
 
-/**
- * The loaded occurrences as entries, in the order the read ranked them: a
- * shared entry sits where its first page did. Evidence found on one page only
- * stays a per-page entry, as does an occurrence with no evidence line.
- */
 export function groupOccurrences(occurrences: readonly IssueOccurrence[]): OccurrenceEntry[] {
   const buckets = new Map<string, { facts: string[]; members: IssueOccurrence[] }>();
   const order: Array<{ key: string } | { occurrence: IssueOccurrence }> = [];
@@ -80,7 +52,6 @@ export function groupOccurrences(occurrences: readonly IssueOccurrence[]): Occur
     if ('occurrence' in slot) return [{ kind: 'page', occurrence: slot.occurrence }];
     const bucket = buckets.get(slot.key);
     if (!bucket) return [];
-    // One row per page: a page that repeats the evidence is still one page.
     const [first, ...rest] = [
       ...new Map(bucket.members.map((member) => [member.site_url_id, member])).values(),
     ];
@@ -100,10 +71,6 @@ export function groupOccurrences(occurrences: readonly IssueOccurrence[]): Occur
   });
 }
 
-/**
- * The lead for evidence shown once over many pages. A per-page lead says "on
- * this page"; over a list of pages that names none of them.
- */
 const SHARED_LEAD_BY_RULE: Readonly<Record<string, string>> = {
   'technical.internal_link_redirect': 'Links that redirect:',
   'technical.broken_internal_link': 'Broken links:',
@@ -117,12 +84,6 @@ function pages(count: number): string {
   return count === 1 ? 'page' : 'pages';
 }
 
-/**
- * How many pages a shared entry covers, claiming no more than the loaded rows
- * prove. `complete` means the loaded rows are the whole list (one page of
- * results, nothing before or after it); only then is the group's count a fact
- * about the issue rather than about this page of results.
- */
 export function sharedPagesLabel({
   pageCount,
   loadedPageCount,
@@ -143,7 +104,6 @@ export function sharedPagesLabel({
     : `On ${pageCount} of the ${loadedPageCount} ${pages(loadedPageCount)} shown`;
 }
 
-/** Distinct pages among the loaded occurrences. */
 export function loadedPageCount(occurrences: readonly IssueOccurrence[]): number {
   return distinctPages(occurrences);
 }

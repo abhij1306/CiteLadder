@@ -11,8 +11,6 @@ import {
   signalTarget,
 } from './signals';
 
-/** `evidence`/`metrics` are `Record<string, unknown>` on the wire, so these
- * helpers are the boundary that makes them safe to render. */
 function signal(overrides: Partial<DemandSignal> = {}): DemandSignal {
   return {
     id: '33333333-3333-4333-8333-333333333333',
@@ -58,9 +56,9 @@ describe('competingPages', () => {
         evidence: {
           pages: [
             { url: 'https://a.example', impressions: 10, share: 0.5 },
-            { url: 'https://b.example' }, // missing metrics
+            { url: 'https://b.example' },
             { url: 'https://c.example', impressions: 'lots', share: 0.5 },
-            { impressions: 4, share: 0.1 }, // missing url
+            { impressions: 4, share: 0.1 },
             null,
           ],
         },

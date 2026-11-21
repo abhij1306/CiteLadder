@@ -1,11 +1,3 @@
-/**
- * The parts of the `suggest_edits` built-in that are about suggestions rather
- * than the turn: what the model may name, how one call's suggestion is checked
- * against the page as the turn holds it, how staged suggestions follow the
- * turn's own edits, and how they are stored with the reply (F14). The server
- * resolves `old_string` to a span with its position and quote, and a field to
- * its current value, once; nothing reads `old_string` again.
- */
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { agentPageFieldsSchema } from '@citeladder/contracts/agent';
@@ -31,7 +23,6 @@ const p = policy.content_optimization.suggestions;
 const FIELDS = ['title', 'meta_description', 'json_ld'] as const satisfies readonly PageField[];
 const DEPENDS = ['section', 'body', ...FIELDS] as const;
 
-/** One suggestion as the model writes it. */
 export const suggestionInputSchema = z.strictObject({
   old_string: z
     .string()
@@ -77,7 +68,6 @@ export const suggestionInputSchema = z.strictObject({
 });
 type SuggestionInput = z.infer<typeof suggestionInputSchema>;
 
-/** A suggestion already stored for a page document, as the turn read it. */
 type KnownSuggestion = {
   id: string;
   open: boolean;
@@ -87,9 +77,7 @@ type KnownSuggestion = {
   position: Span | null;
   replacement: string | null;
 };
-/** A page document's SEO fields, its suggestions, and the list the model is shown. */
 export type PageState = { fields: PageFields; known: KnownSuggestion[]; digest: string | null };
-/** A suggestion this turn staged; its span is in the document's body as the turn now holds it. */
 export type StagedSuggestion = {
   id: string;
   document: number;
@@ -104,7 +92,6 @@ export type StagedSuggestion = {
   rationale: string;
   replaces: string[];
 };
-/** What one suggestion is checked against: the page as the turn holds it and the rules the turn offers. */
 type Page = {
   number: number;
   body: string;
@@ -117,7 +104,6 @@ type Checked = { ok: true; suggestion: StagedSuggestion } | { ok: false; text: s
 const refuse = (text: string): Checked => ({ ok: false, text });
 const blank = (text: string | null | undefined) => !text?.trim();
 
-/** The body span old_string names, or why it names none. */
 function spanOf(body: string, oldString: string): { at: Span } | { text: string } {
   const start = body.indexOf(oldString);
   if (start < 0)
@@ -131,7 +117,6 @@ function spanOf(body: string, oldString: string): { at: Span } | { text: string 
   return { at: { start, end: start + oldString.length } };
 }
 
-/** The text a suggestion's new_string would replace, and how long that replacement may be. */
 function targetOf(page: Page, input: SuggestionInput) {
   if (input.old_string && input.field) return { text: 'Give old_string or field, not both.' };
   if (input.field)
@@ -151,7 +136,6 @@ function targetOf(page: Page, input: SuggestionInput) {
 }
 
 type Texts = { input: SuggestionInput; current: string | null; max: number };
-/** Each way the texts the model wrote cannot be stored, with how to fix it, checked in order. */
 const TEXT_RULES: readonly [(texts: Texts) => boolean, (texts: Texts) => string][] = [
   [
     ({ input }) => input.new_string != null && input.needs_input != null,
@@ -183,19 +167,11 @@ const TEXT_RULES: readonly [(texts: Texts) => boolean, (texts: Texts) => string]
     () => `Give a nonblank rationale of at most ${p.rationale_max_chars} characters.`,
   ],
 ];
-/** Why the texts the model wrote cannot be stored, or null. */
 function textProblem(texts: Texts) {
   const broken = TEXT_RULES.find(([fails]) => fails(texts));
   return broken ? broken[1](texts) : null;
 }
 
-/**
- * Why the rule cannot be applied this turn, or null: a suggestion applies a
- * content rule the turn's context offers, writes the fix for a Site Health
- * rule failing on the fetched page (also offered), or writes the text for a
- * Site Health suggestion open on the page (the same rule). The model pass never
- * raises a Site Health rule that is passing or absent.
- */
 function ruleProblem(page: Page, ruleId: string) {
   if (page.rules.has(ruleId)) return null;
   const finding = page.state.known.some(
@@ -210,7 +186,6 @@ function ruleProblem(page: Page, ruleId: string) {
     : `rule_id ${ruleId} is not a content rule offered for this page, and none are offered this turn; suggest only text for an open Site Health finding.`;
 }
 
-/** Why the open suggestions it names cannot be replaced, or null. */
 function replacesProblem(page: Page, ids: readonly string[]) {
   const open = new Set(page.state.known.filter((known) => known.open).map((known) => known.id));
   const unknown = ids.find((id) => !open.has(id));
@@ -219,7 +194,6 @@ function replacesProblem(page: Page, ids: readonly string[]) {
     : null;
 }
 
-/** A target as one comparable key: the span where it is now, the field, or the page. */
 function targetKey(target: StagedSuggestion['target']) {
   if (target.kind === 'span') return `span:${target.at.start}:${target.at.end}`;
   return target.kind === 'field' ? `field:${target.field}` : 'page';
@@ -230,7 +204,6 @@ function knownKey(known: KnownSuggestion) {
   return known.position ? `span:${known.position.start}:${known.position.end}` : null;
 }
 
-/** Whether the suggestion repeats one already open or staged: the same target and the same text. */
 function repeats(page: Page, suggestion: StagedSuggestion) {
   const key = targetKey(suggestion.target);
   const same = (target: string | null, replacement: string | null) =>
@@ -241,10 +214,6 @@ function repeats(page: Page, suggestion: StagedSuggestion) {
   );
 }
 
-/**
- * The open Site Health suggestion a field suggestion writes the text for: the
- * same rule on the same field. Committing the new one closes it.
- */
 function attachedTo(page: Page, input: SuggestionInput) {
   return page.state.known
     .filter(
@@ -258,7 +227,6 @@ function attachedTo(page: Page, input: SuggestionInput) {
     .map((known) => known.id);
 }
 
-/** Whether applying the replacement would make the body longer than a document may be. */
 function overflows(page: Page, target: StagedSuggestion['target'], replacement: string | null) {
   if (target.kind !== 'span' || replacement === null) return false;
   return (
@@ -266,7 +234,6 @@ function overflows(page: Page, target: StagedSuggestion['target'], replacement: 
   );
 }
 
-/** Checks one suggestion against the page as the turn holds it; `scrub` removes record references from text. */
 export function checkSuggestion(
   page: Page,
   input: SuggestionInput,
@@ -292,7 +259,6 @@ export function checkSuggestion(
   return { ok: true, suggestion };
 }
 
-/** The staged form of a checked suggestion, its texts scrubbed of record references. */
 function staging(
   page: Page,
   input: SuggestionInput,
@@ -311,11 +277,6 @@ function staging(
   };
 }
 
-/**
- * The turn edited a document it had staged suggestions on: each span moves
- * through the edit, and one whose text the edit changed is dropped. Returns
- * how many were dropped.
- */
 export function followEdit(
   staged: StagedSuggestion[],
   number: number,
@@ -338,7 +299,6 @@ export function followEdit(
   return dropped;
 }
 
-/** Each page document's SEO fields, stored suggestions and the list a turn shows the model. */
 export async function pageStates(
   db: Database,
   workspaceId: string,
@@ -346,7 +306,7 @@ export async function pageStates(
 ) {
   const states = new Map<number, PageState>();
   for (const document of documents) {
-    const { entries } = await documentBoard(db, workspaceId, document.outputId);
+    const { entries } = await documentBoard(db, workspaceId, document.outputId); // NOSONAR -- One transaction connection: boards read in order.
     states.set(document.number, {
       fields: document.fields,
       digest: turnDigest(entries),
@@ -364,22 +324,15 @@ export async function pageStates(
   return states;
 }
 
-/** A staged suggestion's dependencies as stored, a section resolved in the committed revision. */
 function storedDependencies(suggestion: StagedSuggestion, body: string): Dependency[] {
   return suggestion.dependsOn.map((kind): Dependency => {
     if (kind === 'body') return { kind: 'body' };
     if (kind !== 'section') return { kind: 'field', field: kind };
-    // A section needs a span; the check refused it for a field or the page.
     const at = suggestion.target.kind === 'span' ? suggestion.target.at : { start: 0, end: 0 };
     return { kind: 'section', ...sectionOf(body, at) };
   });
 }
 
-/**
- * Stores the turn's staged suggestions against each document's latest
- * revision, in the reply's transaction, after its documents were saved. The
- * open suggestions they replace go stale.
- */
 export async function saveSuggestions(
   db: Database,
   chat: Chat,
@@ -388,11 +341,10 @@ export async function saveSuggestions(
 ) {
   for (const [number, outputId] of turn.outputs) {
     const mine = staged.filter((suggestion) => suggestion.document === number);
-    if (mine.length) await saveDocumentSuggestions(db, chat, outputId, mine, turn);
+    if (mine.length) await saveDocumentSuggestions(db, chat, outputId, mine, turn); // NOSONAR -- One transaction connection: documents save in order.
   }
 }
 
-/** One document's share of {@link saveSuggestions}: stales what it replaces, then stores it. */
 async function saveDocumentSuggestions(
   db: Database,
   chat: Chat,
@@ -406,7 +358,7 @@ async function saveDocumentSuggestions(
   const replaced = new Set(mine.flatMap((suggestion) => suggestion.replaces));
   for (const suggestion of await loadSuggestions(db, chat.workspace_id, outputId))
     if (replaced.has(suggestion.row.id) && statusOf(suggestion) === 'open')
-      await appendEvent(db, owner, suggestion, { status: 'stale', by, reason: 'replaced' });
+      await appendEvent(db, owner, suggestion, { status: 'stale', by, reason: 'replaced' }); // NOSONAR -- One transaction connection: events append in order.
   for (const suggestion of mine) {
     const { target } = suggestion;
     if (
@@ -414,7 +366,7 @@ async function saveDocumentSuggestions(
       revision.body.slice(target.at.start, target.at.end) !== target.exact
     )
       throw new TypeError('A staged suggestion does not match its committed revision');
-    await insertSuggestion(
+    await /* NOSONAR -- One transaction connection: suggestions insert in order. */ insertSuggestion(
       db,
       { ...owner, outputId, revision, by },
       {
@@ -434,7 +386,6 @@ async function saveDocumentSuggestions(
 }
 
 const fieldsSchema = agentPageFieldsSchema.nullable();
-/** A document's latest revision as the suggestion checks read it. */
 async function latestRevision(
   db: Database,
   workspaceId: string,

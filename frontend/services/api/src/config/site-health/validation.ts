@@ -1,4 +1,3 @@
-/** Cross-field constraints not expressible in an individual environment spec. */
 export function validateSiteHealthSettings(values: Record<string, unknown>) {
   const number = (key: string) => Number(values[key]);
   const atMost = (smaller: string, larger: string) => {
@@ -67,7 +66,6 @@ function validateRule(rule: Rule, byId: Map<string, Rule>) {
   validateComposite(rule);
 }
 
-/** Catalog relationships must remain valid when a config author changes a check. */
 export function validateSiteHealthCatalog(
   rules: readonly Rule[],
   weights: Record<string, number>,

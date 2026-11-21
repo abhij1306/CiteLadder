@@ -10,21 +10,14 @@ export type RadioOption<T extends string> = {
   description?: ReactNode;
 };
 
-/**
- * The 16px radio: a 1px `line` circle (`line-strong` on hover, decision
- * D5); selected is an `ink` disc with
- * a `surface` centre (an inset 4px ring), so the mark never changes size.
- */
 const RADIO =
-  'focus-ring bg-surface border-line data-[state=unchecked]:hover:border-line-strong data-[state=checked]:bg-ink data-[state=checked]:border-ink data-[state=checked]:ring-surface size-4 shrink-0 rounded-full border transition-[background-color,border-color,box-shadow] ring-inset data-[state=checked]:ring-4 disabled:cursor-not-allowed';
+  'press [--press:0.95] focus-ring bg-panel border-rule enabled:data-[state=unchecked]:hover:border-control-line data-[state=checked]:bg-primary data-[state=checked]:border-primary data-[state=checked]:ring-panel hit-area [--target-hit:var(--target-min)] size-4 shrink-0 rounded-full border ring-inset data-[state=checked]:ring-4 disabled:cursor-not-allowed';
 
-/**
- * RadioGroup — one choice from two to five options. `list` (default) stacks
- * the options with `space-3` between; `cards` lays them out as selectable
- * cards (`surface`, a 1px `line` border, `radius-md`, 16px padding) for
- * choices that need a sentence each, the selected card's border turning `ink`
- * so it never resizes. Arrow keys move and select (Radix).
- */
+const LIST_LAYOUT = {
+  list: 'flex flex-col gap-3',
+  inline: 'flex flex-row flex-wrap gap-x-6 gap-y-2',
+} as const;
+
 export function RadioGroup<T extends string>({
   value,
   onValueChange,
@@ -39,8 +32,7 @@ export function RadioGroup<T extends string>({
   options: readonly RadioOption<T>[];
   ariaLabel: string;
   className?: string;
-  variant?: 'list' | 'cards';
-  /** Cards per row. */
+  variant?: 'list' | 'inline' | 'cards';
   columns?: 1 | 2 | 3;
 }>) {
   return (
@@ -56,10 +48,10 @@ export function RadioGroup<T extends string>({
         variant === 'cards'
           ? cn(
               'grid gap-3',
-              columns === 2 && 'desktop:grid-cols-2',
-              columns === 3 && 'desktop:grid-cols-3',
+              columns === 2 && 'column-split:grid-cols-2',
+              columns === 3 && 'column-split:grid-cols-3',
             )
-          : 'flex flex-col gap-3',
+          : LIST_LAYOUT[variant],
         className,
       )}
     >
@@ -70,11 +62,10 @@ export function RadioGroup<T extends string>({
           <label
             key={option.value}
             className={cn(
-              'text-ink inline-flex cursor-pointer items-start gap-3',
-              option.disabled && 'cursor-not-allowed opacity-45',
+              'text-ink inline-flex cursor-pointer items-start gap-2',
+              option.disabled && 'cursor-not-allowed opacity-60',
             )}
           >
-            {/* The 16px circle centres on the 20px first line. */}
             <RadioGroupPrimitive.Item
               value={option.value}
               disabled={option.disabled}
@@ -88,13 +79,12 @@ export function RadioGroup<T extends string>({
   );
 }
 
-/** The option's label (and description), the text that names its radio. */
 function radioText<T extends string>(option: RadioOption<T>) {
   return (
     <span className="flex min-w-0 flex-1 flex-col">
-      <span className="text-body-sm">{option.label}</span>
+      <span className="type-body">{option.label}</span>
       {option.description != null ? (
-        <span className="text-body-sm text-ink-secondary">{option.description}</span>
+        <span className="type-body text-ink-2">{option.description}</span>
       ) : null}
     </span>
   );
@@ -107,10 +97,10 @@ function RadioCard<T extends string>({
   return (
     <label
       className={cn(
-        'bg-surface text-ink flex cursor-pointer items-start gap-3 rounded-md border p-4 transition-[background-color,border-color]',
-        selected ? 'border-ink' : 'border-line',
+        'text-ink flex cursor-pointer items-start gap-2 rounded-control border p-4 transition-[background-color,border-color]',
+        selected ? 'bg-panel overlay-selected border-control-line' : 'bg-panel border-rule',
         !selected && !option.disabled && 'hover:overlay-hover',
-        option.disabled && 'cursor-not-allowed opacity-45',
+        option.disabled && 'cursor-not-allowed opacity-60',
       )}
     >
       <RadioGroupPrimitive.Item

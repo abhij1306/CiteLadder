@@ -40,7 +40,6 @@ export const CRAWL_LOG_SETUPS = [
       'Local pre-filtering and resumable backfill. Full-day scans are labelled client-reported.',
   },
 ] as const;
-/** The Firehose buffer interval suggested at setup; the API enforces its own bounds. */
 export const FIREHOSE_BUFFER_INTERVAL = {
   default: 60,
   min: 60,
@@ -59,7 +58,6 @@ export const CLOUDFRONT_LOG_FIELDS = [
   'x-host-header',
   'cs(User-Agent)',
 ] as const;
-/** Names the generated Google Cloud setup commands create in the customer's project. */
 export const GCP_PULL_SETUP = {
   topic: 'citeladder-ai-crawlers',
   sink: 'citeladder-ai-crawlers',
@@ -68,29 +66,14 @@ export const GCP_PULL_SETUP = {
   sourceLabel: 'citeladder-source',
   subscriptionPlaceholder: 'projects/my-project/subscriptions/citeladder-ai-crawlers-sub',
 } as const;
-/** Machine senders post to the API host; locally that is the API container itself. */
 export { API_HOST_ORIGIN as CRAWL_INGEST_ORIGIN } from './api-host';
-export const TRAFFIC_TABS = [
-  { value: 'overview', label: 'Overview', crawlOnly: false },
-  { value: 'crawlers', label: 'Crawlers', crawlOnly: true },
-  { value: 'referrals', label: 'Referrals', crawlOnly: false },
-  { value: 'pages', label: 'Pages', crawlOnly: false },
-  { value: 'activity', label: 'Activity', crawlOnly: true },
-] as const;
-/** Views that show crawl logs alone; they are dropped when collection is unavailable. */
-export const CRAWL_ONLY_TABS: ReadonlySet<string> = new Set(
-  TRAFFIC_TABS.filter((t) => t.crawlOnly).map((t) => t.value),
-);
-/** How often the screen rechecks a source while an upload is being processed. */
 export const UPLOAD_PROCESSING_POLL_MS = 15000;
-/** How long the screen waits for an upload's processing before it stops rechecking. */
 export const UPLOAD_PROCESSING_MAX_WAIT_MS = 10 * 60 * 1000;
 export const TRAFFIC_RANGES = [
   { value: '30d', label: 'Last 30 days' },
   { value: '90d', label: 'Last 90 days' },
   { value: '1y', label: 'Last 12 months' },
 ] as const;
-/** The orders the AI Traffic pages table sorts by; the first is the default. */
 export const TRAFFIC_PAGE_SORTS = [
   'requests_desc',
   'sessions_desc',

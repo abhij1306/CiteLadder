@@ -8,14 +8,6 @@ import type { Audit } from '@citeladder/contracts';
 
 import { ProgressPanel, RunActions } from './progress-panel';
 
-/**
- * `components/runs` shipped with no colocated tests. The run lifecycle surface
- * is the one place a user can stop work that costs money, so the assertions
- * that matter are about the Cancel affordance: it must be live while — and only
- * while — the backend says it would still accept a cooperative cancel
- * (`cancelable`). A reporting run is not cancelable (execution and analysis are
- * already done).
- */
 const BASE_AUDIT: Audit = {
   id: '11111111-1111-4111-8111-111111111111',
   workspace_id: '22222222-2222-4222-8222-222222222222',
@@ -42,7 +34,6 @@ const BASE_AUDIT: Audit = {
   completed_at: null,
 };
 
-/** The run route renders the actions in its identity band beside the panel. */
 function renderPanel(
   audit: Partial<Audit> = {},
   props: { cancelPending?: boolean; onRerunFailures?: () => void; rerunPending?: boolean } = {},
@@ -73,10 +64,14 @@ describe('ProgressPanel', () => {
     expect(cancelButton()).toBeEnabled();
   });
 
-  it('disables Cancel once the run is reporting', () => {
-    renderPanel({ status: 'reporting', cancelable: false });
-    expect(cancelButton()).toBeDisabled();
-  });
+  it.each(['reporting', 'completed', 'failed'] as const)(
+    'offers no Cancel once the run is %s, which the backend would reject',
+    (status) => {
+      renderPanel({ status, cancelable: false, failed_count: 2 }, { onRerunFailures: vi.fn() });
+      expect(screen.queryByRole('button', { name: /Cancel run|Cancelling/ })).toBeNull();
+      expect(screen.getByRole('button', { name: 'Rerun failed' })).toBeEnabled();
+    },
+  );
 
   it('fires the cancel callback exactly once per click', async () => {
     const user = userEvent.setup();
@@ -90,15 +85,21 @@ describe('ProgressPanel', () => {
   it('disables Cancel and says so while a cancel is in flight', () => {
     renderPanel({ status: 'running' }, { cancelPending: true });
 
-    // Prevents a second cancel request against an already-cancelling run.
     expect(cancelButton()).toBeDisabled();
     expect(screen.getByText('Cancelling…')).toBeVisible();
+  });
+
+  it('says when the run started by time only: the masthead title carries its day', () => {
+    renderPanel({ status: 'running' });
+
+    expect(screen.getByText('Started 12:00 AM')).toBeVisible();
+    expect(screen.queryByText(/Aug 1, 2026/)).toBeNull();
   });
 
   it('counts failed answers as finished in the progress percentage', () => {
     renderPanel({ status: 'running', requested_count: 60, completed_count: 40, failed_count: 19 });
 
-    expect(screen.getByText('98%')).toBeVisible();
+    expect(screen.getByText('98.0%')).toBeVisible();
   });
 
   it('shows the updating indicator while reporting and hides it once completed', () => {

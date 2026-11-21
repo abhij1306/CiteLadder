@@ -9,7 +9,6 @@ const input = {
   payload: { target: 'example.com' },
   baseUrl: '',
 };
-/** The executor's dispatch path: local checks first, then one send. */
 const executeLive = async (live: typeof input, options: Parameters<typeof sendLive>[2]) =>
   sendLive(resolveLive(live), live.payload, options);
 const body = (result: unknown, cost: unknown = 0.012) => ({

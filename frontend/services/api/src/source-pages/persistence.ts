@@ -1,4 +1,3 @@
-/** Append an immutable reading and update only its lease-fenced page projection. */
 import { randomUUID } from 'node:crypto';
 
 import { policy } from '../config.ts';

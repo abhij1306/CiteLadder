@@ -1,17 +1,13 @@
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { MessageSquare } from 'lucide-react';
 
-import { Badge } from '@/components/ui/badge';
-import { Callout } from '@/components/ui/callout';
-import { ReadError, readErrorProps } from '@/components/ui/read-error';
-import { QueryState } from '@/components/ui/query-state';
+import { Tag } from '@/components/ui/tag';
 import { Button } from '@/components/ui/button';
 import { Disclosure } from '@/components/ui/disclosure';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
-import { Inline, Stack } from '@/components/ui/layout';
-import { MutationNotice } from '@/components/ui/mutation-notice';
+import { Stack } from '@/components/ui/layout';
+import { LedgerItem, LedgerList } from '@/components/ui/ledger-list';
+import { MessageSquare } from '@/lib/icons';
 import { commerceMutations } from '@/lib/api/commerce';
 import { mutationNoticeForError } from '@/lib/api/mutation-notice';
 import type { CommerceTarget } from '@citeladder/contracts/commerce-suite';
@@ -23,10 +19,17 @@ import { sameTarget } from '@/lib/products/targets';
 import { useGenerateBuyerPrompts } from '@/lib/products/use-generate-buyer-prompts';
 
 import type { CommerceQueries } from './commerce-queries';
-import { ledgerClasses, ledgerItemClasses } from '@/components/ui/workspace';
 import { useActiveWorkspaceId, useWorkspaceCapability } from '@/lib/project/project-context';
+import { Notice, readErrorProps } from '@/components/ui/notice';
+import { StateBlock } from '@/components/ui/state-block';
+import {
+  Section,
+  SectionContent,
+  SectionDescription,
+  SectionHeader,
+  SectionTitle,
+} from '@/components/ui/section';
 
-// Per hero product; the API defaults the count, and a category generates its matrix.
 const HERO_COUNT = 3;
 
 function forTarget(
@@ -36,21 +39,18 @@ function forTarget(
   return rows.filter((row) => sameTarget(row.target, target));
 }
 
-/**
- * The buyer prompts that measure one catalog product (hero-product prompts)
- * or category (its shopping-prompt matrix), on its page's Setup: generate,
- * approve, add manually, and review and launch an audit.
- */
 export function SetupPrompts({
   projectId,
   target,
   targetLabel,
   query,
+  level = 2,
 }: Readonly<{
   projectId: string;
   target: CommerceTarget;
   targetLabel: string;
   query: CommerceQueries['buyerPrompts'];
+  level?: 2 | 3;
 }>) {
   const workspaceId = useActiveWorkspaceId();
   const [text, setText] = useState('');
@@ -58,7 +58,6 @@ export function SetupPrompts({
   const [launchedAuditId, setLaunchedAuditId] = useState<string | null>(null);
   const [shortfall, setShortfall] = useState<number | null>(null);
   const [matrixOpen, setMatrixOpen] = useState(false);
-  // The audit stream refreshes the product metrics and Actions when the run finishes.
   useRunEvents(launchedAuditId, projectId, Boolean(launchedAuditId));
   const scope = { workspaceId, projectId };
   const { generate: generateFor, mutation: generate } = useGenerateBuyerPrompts(scope);
@@ -74,15 +73,13 @@ export function SetupPrompts({
     if (row.enabled) ids.push(row.id);
     return ids;
   }, []);
-  // Generating and launching are runs; approving and adding are writes. A role
-  // without either reads the prompts and their state only.
   const canRun = useWorkspaceCapability('run');
   const canWrite = useWorkspaceCapability('write');
   const busy = [generate.isPending, manual.isPending, decide.isPending].some(Boolean);
   const failed = [manual.isError, decide.isError].some(Boolean);
   return (
-    <Card>
-      <CardHeader
+    <Section>
+      <SectionHeader
         actions={
           <SetupPromptActions
             kind={target.kind}
@@ -97,33 +94,32 @@ export function SetupPrompts({
           />
         }
       >
-        <CardTitle>Prompts that measure it</CardTitle>
-        <CardDescription>
-          {approvedIds.length
-            ? 'Generated prompts stay disabled until you approve them.'
-            : `Approve at least one prompt to launch an audit for this ${target.kind}.`}
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
+        <SectionTitle level={level}>Prompts that measure it</SectionTitle>
+        {approvedIds.length ? null : (
+          <SectionDescription>Approve a prompt to launch.</SectionDescription>
+        )}
+      </SectionHeader>
+      <SectionContent>
         <Stack>
           {generate.isError ? (
-            <MutationNotice
+            <Notice
+              kind="mutation"
               notice={mutationNoticeForError(generate.error, { action: 'generate the prompts' })}
             />
           ) : null}
           {failed ? (
-            <Callout tone="negative">The buyer-prompt update failed. Please try again.</Callout>
+            <Notice tone="negative">The buyer-prompt update failed. Please try again.</Notice>
           ) : null}
           {shortfall !== null ? (
-            <Callout tone="info">
+            <Notice tone="info">
               {shortfall} of {HERO_COUNT} generated prompts were usable. Generate again for more.
-            </Callout>
+            </Notice>
           ) : null}
           {launchedAuditId ? (
-            <Callout tone="info">
+            <Notice tone="info">
               Audit launched. The metrics update when it finishes.{' '}
               <ProjectLink href={`/runs/${launchedAuditId}`}>View the run</ProjectLink>
-            </Callout>
+            </Notice>
           ) : null}
           {target.kind === 'category' ? (
             <CategoryMatrixSheet
@@ -152,22 +148,15 @@ export function SetupPrompts({
             pending={busy}
             onToggle={canWrite ? (id, approved) => decide.mutate({ id, approved }) : undefined}
           />
-          {/* Manual entry is the fallback for an unconfigured model, so it is
-            folded away rather than given equal billing beside Generate. */}
           {canWrite ? (
             <ManualPrompt text={text} onText={setText} busy={busy} onAdd={addPrompt} />
           ) : null}
         </Stack>
-      </CardContent>
-    </Card>
+      </SectionContent>
+    </Section>
   );
 }
 
-/**
- * The card's actions: a category's matrix (open to every role, since it reads),
- * or a hero product's Generate; then Review and launch. Generating and
- * launching are runs, offered only to a role that may run.
- */
 function SetupPromptActions({
   kind,
   busy,
@@ -181,17 +170,14 @@ function SetupPromptActions({
 }: Readonly<{
   kind: CommerceTarget['kind'];
   busy: boolean;
-  /** Whether the prompts have loaded; the matrix reads loaded prompts only. */
   loaded: boolean;
   generating: boolean;
-  /** How many prompts are approved; launching needs one. */
   approved: number;
   canRun: boolean;
   onMatrix: () => void;
   onGenerate: () => void;
   onLaunch: () => void;
 }>) {
-  // The list below owns the loading and error states.
   const matrix = (
     <Button variant="secondary" disabled={busy || !loaded} onClick={onMatrix}>
       Shopping prompts matrix
@@ -206,7 +192,7 @@ function SetupPromptActions({
     <>
       {kind === 'category' ? matrix : generate}
       {canRun ? (
-        <Button variant="primary" disabled={!approved || busy} onClick={onLaunch}>
+        <Button variant="secondary" disabled={!approved || busy} onClick={onLaunch}>
           Review and launch
         </Button>
       ) : null}
@@ -229,7 +215,7 @@ function ManualPrompt({
         placeholder="best instant read thermometer for grilling under $50"
       />
       <div>
-        <Button variant="primary" disabled={!text.trim() || busy} onClick={onAdd}>
+        <Button variant="secondary" disabled={!text.trim() || busy} onClick={onAdd}>
           Add prompt
         </Button>
       </div>
@@ -246,41 +232,45 @@ function PromptRows({
   query: CommerceQueries['buyerPrompts'];
   rows: NonNullable<CommerceQueries['buyerPrompts']['data']>;
   pending: boolean;
-  /** Approves or disables a prompt; omitted for a role that may not, which reads the state. */
   onToggle?: (id: string, approved: boolean) => void;
 }>) {
   if (query.isError)
-    return <ReadError {...readErrorProps(query)} fallback="Buyer prompts could not be loaded." />;
-  if (query.isPending) return <QueryState kind="loading" />;
+    return (
+      <Notice
+        kind="read"
+        {...readErrorProps(query)}
+        title="Couldn't load prompts"
+        fallback="Buyer prompts could not be loaded."
+      />
+    );
+  if (query.isPending)
+    return <StateBlock kind="loading" label="Loading prompts" shape={{ kind: 'list' }} />;
   if (!rows.length) {
     return (
-      <QueryState
-        kind="empty"
-        icon={MessageSquare}
-        heading="No prompts yet"
-        description={onToggle ? 'Generate a set, or add one manually.' : undefined}
-        headingLevel={3}
-      />
+      <StateBlock kind="empty" icon={MessageSquare} heading="No prompts yet" headingLevel={3} />
     );
   }
   return (
-    <ul className={ledgerClasses()}>
+    <LedgerList>
       {rows.map((row) => (
-        <Inline as="li" key={row.id} gap="compact" className={ledgerItemClasses('flex-wrap')}>
-          <span className="text-ink-secondary min-w-0 flex-1">{row.text}</span>
-          {onToggle ? (
-            <Button
-              variant={row.enabled ? 'secondary' : 'primary'}
-              disabled={pending}
-              onClick={() => onToggle(row.id, !row.enabled)}
-            >
-              {row.enabled ? 'Disable' : 'Approve'}
-            </Button>
-          ) : (
-            <Badge>{row.enabled ? 'Approved' : 'Not approved'}</Badge>
-          )}
-        </Inline>
+        <LedgerItem
+          key={row.id}
+          title={row.text}
+          meta={
+            onToggle ? (
+              <Button
+                variant="secondary"
+                disabled={pending}
+                onClick={() => onToggle(row.id, !row.enabled)}
+              >
+                {row.enabled ? 'Disable' : 'Approve'}
+              </Button>
+            ) : (
+              <Tag>{row.enabled ? 'Approved' : 'Not approved'}</Tag>
+            )
+          }
+        />
       ))}
-    </ul>
+    </LedgerList>
   );
 }

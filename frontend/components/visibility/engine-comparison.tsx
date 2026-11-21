@@ -1,24 +1,19 @@
-import { Bot } from 'lucide-react';
-
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
-import { ClampText, TableCell, TableRow } from '@/components/ui/table';
-import { Button } from '@/components/ui/button';
+import { TitledSection } from '@/components/ui/section';
+import { TableCell, TableCellLines, TableRow } from '@/components/ui/table';
+import { Pressable } from '@/components/ui/pressable';
+import { TextLink } from '@/components/ui/text-link';
 import type { Visibility } from '@citeladder/contracts';
+import { Bot } from '@/lib/icons';
 import { useEngineCatalog } from '@/lib/providers/engines';
-import {
-  formatRate,
-  measured,
-  visibleEngines,
-  type VisibilityFilters,
-} from '@/lib/visibility/dashboard';
-import { MissingValue } from '@/components/ui/unavailable-value';
-import { textRole } from '@/components/ui/typography';
+import { formatCount } from '@/lib/format';
+import { formatRate, visibleEngines, type VisibilityFilters } from '@/lib/visibility/dashboard';
 
 const COLUMNS: readonly DataTableColumn[] = [
   { key: 'model', label: 'Model' },
-  { key: 'visibility', label: 'Visibility', width: 'figure', numeric: true },
-  { key: 'owned', label: 'Owned citation rate', width: 'status', numeric: true },
-  { key: 'answers', label: 'Answers', width: 'figure', numeric: true },
+  { key: 'visibility', label: 'Visibility', width: 'figure', kind: 'number' },
+  { key: 'owned', label: 'Owned citation rate', width: 'status', kind: 'number' },
+  { key: 'answers', label: 'Answers', width: 'figure', kind: 'number' },
 ];
 
 export function EngineComparison({
@@ -33,46 +28,56 @@ export function EngineComparison({
   const catalog = useEngineCatalog();
   const engines = visibleEngines(visibility, filter, catalog.order);
   return (
-    <DataTable
-      title="By model"
-      columns={COLUMNS}
-      footer="How each answer engine treated your brand."
-      state={
-        engines.length
-          ? undefined
-          : { kind: 'empty', headingLevel: 3, icon: Bot, heading: 'No model observations' }
-      }
-    >
-      {engines.map((engine) => (
-        <TableRow key={engine.logical_engine}>
-          <TableCell>
-            {onSelect ? (
-              <Button variant="ghost" onClick={() => onSelect(engine.logical_engine)}>
-                {catalog.label(engine.logical_engine)}
-              </Button>
-            ) : (
-              <ClampText lines={1}>{catalog.label(engine.logical_engine)}</ClampText>
-            )}
-            <ClampText lines={1} className={textRole('caption', 'text-ink-secondary')}>
-              {visibility.model_provenance
-                .filter((item) => item.logical_engine === engine.logical_engine)
-                .map((item) => item.transport_model)
-                .join(', ')}
-            </ClampText>
-          </TableCell>
-          <TableCell numeric>
-            {measured(formatRate(engine.brand_mention_rate)) ?? <MissingValue />}
-          </TableCell>
-          <TableCell numeric>
-            {measured(formatRate(engine.owned_citation_rate)) ?? <MissingValue />}
-          </TableCell>
-          {/* This read "N measured / M expected", or "expected count
-              unavailable" — the run's own bookkeeping. How many answers
-              a rate is drawn from is the reader's business; how many we
-              hoped for is not. */}
-          <TableCell numeric>{engine.total_completed}</TableCell>
-        </TableRow>
-      ))}
-    </DataTable>
+    <TitledSection title="By model">
+      <DataTable
+        label="By model"
+        columns={COLUMNS}
+        state={
+          engines.length
+            ? undefined
+            : { kind: 'empty', headingLevel: 3, icon: Bot, heading: 'No model observations' }
+        }
+      >
+        {engines.map((engine) => (
+          <TableRow key={engine.logical_engine}>
+            <TableCell>
+              <TableCellLines
+                title
+                primary={
+                  onSelect ? (
+                    <TextLink asChild text="inherit" underline="hover">
+                      <Pressable
+                        className="inline-flex min-h-6 w-auto items-center"
+                        onClick={() => onSelect(engine.logical_engine)}
+                      >
+                        {catalog.label(engine.logical_engine)}
+                      </Pressable>
+                    </TextLink>
+                  ) : (
+                    catalog.label(engine.logical_engine)
+                  )
+                }
+                secondary={modelsOf(visibility, engine.logical_engine, catalog) || undefined}
+              />
+            </TableCell>
+            <TableCell numeric>{formatRate(engine.brand_mention_rate)}</TableCell>
+            <TableCell numeric>{formatRate(engine.owned_citation_rate)}</TableCell>
+            <TableCell numeric>{formatCount(engine.total_completed)}</TableCell>
+          </TableRow>
+        ))}
+      </DataTable>
+    </TitledSection>
   );
+}
+
+function modelsOf(
+  visibility: Visibility,
+  engine: string,
+  catalog: ReturnType<typeof useEngineCatalog>,
+): string {
+  return visibility.model_provenance
+    .filter((item) => item.logical_engine === engine)
+    .map((item) => catalog.modelLabel(engine, item.transport_model))
+    .filter((model): model is string => model !== null)
+    .join(', ');
 }

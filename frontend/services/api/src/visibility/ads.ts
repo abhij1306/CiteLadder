@@ -1,10 +1,3 @@
-/**
- * Ads in AI answers: the selection summary and one execution's ads.
- *
- * Projections over persisted `answer_ad_observations` and the
- * `response_analyses.ads_parser_version` marker; nothing is parsed, fetched
- * or repaired here. Ads never reach citations, mentions or scores.
- */
 import {
   adOwnershipSchema,
   type ExecutionAds,
@@ -37,7 +30,6 @@ const AD_COLUMNS = [
   'ad.snippet',
 ] as const;
 
-/** A persisted ad with its ownership parsed at the read boundary. */
 function observation<Row extends { ownership: string }>(row: Row) {
   return { ...row, ownership: adOwnershipSchema.parse(row.ownership) };
 }
@@ -45,7 +37,6 @@ function observation<Row extends { ownership: string }>(row: Row) {
 async function selectionAnswers(db: Database, selection: RunSelection) {
   const scoped = await scopedSelection(db, selection);
   const scope = () => evidenceScope(db, scoped);
-  // Each answer's ads at its own parser version, joined in SQL.
   const [rows, ads] = await Promise.all([
     scope()
       .select([
@@ -134,7 +125,6 @@ export async function getAds(
   };
 }
 
-/** One execution's ads at its own parser version, apart from its sources. */
 export async function executionAds(
   db: Database,
   input: {

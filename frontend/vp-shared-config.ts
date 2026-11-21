@@ -1,28 +1,3 @@
-/**
- * Shared Vite+ lint and format configuration (Vite+ reads its lint/fmt config
- * from `vite.config.ts` blocks).
- *
- * Consumed by two configs that must not drift:
- * - `frontend/vite.config.ts` -- frontend-scoped `vp lint` / `vp fmt` / `vp test`
- * - root `vite.config.ts` -- repo-root `vp staged` pre-commit hook
- *
- * Plain object literals on purpose: the root config is loaded by the global
- * `vp` binary and must not resolve any installed package.
- *
- * Ignore patterns are root-agnostic (leading doublestar) so the same config
- * matches whether `vp` runs from `frontend/` or the repository root.
- *
- * Oxfmt replaced Prettier and prettier-plugin-tailwindcss; `sortTailwindcss`
- * produces byte-identical ordering to the plugin it replaces, including this
- * project's custom v4 tokens and variant prefixes. `../.gitattributes` pins
- * `eol=lf` because oxfmt always writes LF.
- *
- * The exports are explicitly typed with the same config types Vite+'s
- * `defineConfig` uses: without the annotation, tsc infers huge literals and
- * dies with TS2321 "Excessive stack depth" at the defineConfig call sites.
- * Type-only imports are erased before bundling, so the root config (which is
- * bundled without node_modules resolution) is unaffected.
- */
 import type { OxlintConfig } from 'vite-plus/lint';
 import type { OxfmtConfig } from 'vite-plus/fmt';
 
@@ -58,8 +33,6 @@ export const lintConfig: OxlintConfig = {
     '**/coverage/**',
     '**/playwright-report/**',
     '**/test-results/**',
-    // Generated service and contract inputs, byte-checked against their
-    // generators in CI.
     '**/services/*/src/generated/**',
     '**/packages/*/src/generated/**',
   ],
@@ -96,8 +69,16 @@ export const lintConfig: OxlintConfig = {
     'typescript/prefer-as-const': 'error',
     'typescript/prefer-namespace-keyword': 'error',
     'typescript/triple-slash-reference': 'error',
+    'no-restricted-imports': [
+      'error',
+      { paths: [{ name: '@tabler/icons-react', message: 'Import glyphs from @/lib/icons.' }] },
+    ],
   },
   overrides: [
+    {
+      files: ['**/lib/icons.ts'],
+      rules: { 'no-restricted-imports': 'off' },
+    },
     {
       files: ['**/*.{js,jsx,mjs,ts,tsx,mts,cts}'],
       rules: {
@@ -184,8 +165,6 @@ export const fmtConfig: OxfmtConfig = {
     '**/playwright-report/**',
     '**/test-results/**',
     '**/pnpm-lock.yaml',
-    // Generated service and contract inputs, byte-checked against their
-    // generators in CI.
     '**/services/*/src/generated/**',
     '**/packages/*/src/generated/**',
     // Re-wrapping this inflates it past the owner line budget that

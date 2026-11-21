@@ -220,7 +220,6 @@ function hasTrendCoverage(rows: QueryInput[], windowEnd: string) {
   return true;
 }
 
-/** Impressions and rows in the prior and recent comparison windows; other dates are ignored. */
 function windowTotals(group: QueryInput[], windowEnd: string) {
   const recentStart = addDays(windowEnd, -(p.DEMAND_TREND_WINDOW_DAYS - 1));
   const priorStart = addDays(recentStart, -p.DEMAND_TREND_WINDOW_DAYS);

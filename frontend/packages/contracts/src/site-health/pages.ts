@@ -11,8 +11,6 @@ import {
 } from './issues.ts';
 import { cursorPageSchema } from './pagination.ts';
 
-// Deterministic HTTP delivery facts. `field_cwv_available` is a literal false —
-// the HTTP-first crawler never fabricates field Core Web Vitals (no LCP/CLS/INP).
 export const deliveryFactsSchema = responseObject({
   field_cwv_available: z.literal(false),
   status_code: z.number().int().nullable(),
@@ -26,7 +24,6 @@ export const deliveryFactsSchema = responseObject({
   blocking_resource_count: z.number().int().nullable(),
 });
 
-// Bounded normalized page facts (deterministic; extractor-versioned).
 const pageFactsSchema = responseObject({
   title: z.string().nullable(),
   meta_description: z.string().nullable(),
@@ -42,16 +39,11 @@ const pageFactsSchema = responseObject({
   structured_data_types: z.array(z.string()),
 });
 
-// Pages this crawl found linking to the URL, first sighting first and bounded
-// by crawl policy. Empty for the root and sitemap-only URLs — never "nothing
-// links here", which the link metrics own.
 export const referrerSchema = responseObject({
   site_url_id: uuid(),
   url: z.string(),
 });
 
-// Analyzed-page summary row (`/pages` list). Scores/issue-count are null when
-// analysis has not completed; `error_code` is '' when there is no error.
 export const pageSummarySchema = responseObject({
   site_url_id: uuid(),
   crawl_id: uuid(),
@@ -63,8 +55,6 @@ export const pageSummarySchema = responseObject({
   error_code: z.string(),
   linked_from: z.array(referrerSchema),
   ...analysisSummaryFields,
-  // Persisted internal-link metrics for this crawl. `null` means UNMEASURED —
-  // the crawl wrote no metric row for the URL — never "nothing links here".
   inbound_count: z.number().int().nullable(),
   main_content_inbound_count: z.number().int().nullable(),
   depth_from_home: z.number().int().nullable(),
@@ -84,19 +74,14 @@ export const rootErrorSchema = responseObject({
 });
 
 export const pagesPageSchema = cursorPageSchema(pageSummarySchema).extend({
-  // REQUIRED (backend always serializes); empty unless the crawl's root fetch
-  // failed terminally. Never enters the keyset pagination of `items`.
   root_errors: z.array(rootErrorSchema),
 });
 
-// The same page for the project's newest crawl, with the crawl it read and that
-// crawl's status, so a reader that did not yet know the crawl can file it.
 export const latestCrawlPagesPageSchema = pagesPageSchema.extend({
   crawl_id: uuid(),
   crawl_status: crawlOverallStatusSchema,
 });
 
-// One persisted rule evaluation on a page (all outcomes, current label).
 const ruleEvaluationSchema = responseObject({
   id: uuid(),
   rule_id: z.string(),
@@ -119,7 +104,6 @@ const ruleEvaluationSchema = responseObject({
   created_at: z.string(),
 });
 
-// One bounded top-N neighbour of a page in the crawl's internal link graph.
 const linkNeighbourSchema = responseObject({
   site_url_id: uuid().nullable(),
   url: z.string(),
@@ -129,11 +113,6 @@ const linkNeighbourSchema = responseObject({
   rel: z.array(z.string()),
 });
 
-// A page's persisted internal-link metrics. `depth_from_home` is shortest-path
-// over ALL followable internal links (a nav link is a real click);
-// `main_content_inbound_count` is the separate "genuinely linked, or only in
-// the menu" signal, taken from each anchor's DOM region — never from link
-// frequency.
 const anchorDiagnosticSchema = responseObject({
   kind: z.enum(['generic', 'repeated_destination', 'low_lexical_alignment']),
   anchor_text: z.string(),
@@ -163,14 +142,11 @@ const internalLinksSchema = responseObject({
   formula_version: z.string(),
 });
 
-// One issue on the page, named by the crawl's Issues group it belongs to (so
-// the page can hand that group to the agent) and by the scores it counts in.
 export const pageIssueSchema = issueOccurrenceSchema.extend({
   group_id: uuid(),
   score_roles: z.array(z.string()),
 });
 
-// Full analyzed-page detail (persisted facts/delivery/scores/issues/provenance).
 export const pageDetailSchema = responseObject({
   url_hash: z.string().optional(),
   site_url_id: uuid(),
@@ -194,20 +170,10 @@ export const pageDetailSchema = responseObject({
   issue_count: z.number().int().nullable(),
   last_audited: z.string().nullable(),
   page_kind: pageKindSchema.nullable(),
-  // Bounded classifier evidence behind page_kind ("why this kind?"
-  // disclosure); null until the URL has an analysis.
   page_kind_evidence: z.record(z.string(), z.unknown()).nullable(),
-  // Observed traits, independent of page_kind: a product page carrying an FAQ
-  // has both. Empty once analyzed and nothing was observed; null before that.
   page_traits: z.array(z.string()).nullable(),
-  // Pack-governed industry role. `null` = the pack classifier never ran.
-  // A present object with `role_id: null` plus an `abstention_reason` is an
-  // EXECUTED abstention — a different fact, rendered differently.
-  // Null when the page was never analyzed: not analyzed, never zero H1s,
-  // words or links.
   facts: pageFactsSchema.nullable(),
   delivery: deliveryFactsSchema,
-  // Null when this crawl persisted no link metric for the URL.
   internal_links: internalLinksSchema.nullable(),
   issues: z.array(pageIssueSchema),
   evaluations: z.array(ruleEvaluationSchema),
@@ -218,9 +184,6 @@ export const pageDetailSchema = responseObject({
   scoring_version: z.string(),
 });
 
-// Identity/status returned by the per-page rerun (202). A re-audit always runs
-// as a fresh single-page crawl (a running crawl refuses it), so the client
-// polls the returned `crawl_id`/`site_url_id`, not the crawl it was invoked from.
 export const rerunPageResponseSchema = responseObject({
   crawl_id: uuid(),
   site_url_id: uuid(),

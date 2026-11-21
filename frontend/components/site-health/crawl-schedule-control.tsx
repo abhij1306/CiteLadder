@@ -1,4 +1,3 @@
-import { ChevronDown } from 'lucide-react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import type { CrawlRobotsChoice, CrawlSchedule, CrawlScheduleCadence } from '@citeladder/contracts';
 
@@ -14,11 +13,12 @@ import {
   MenuSeparator,
   MenuTrigger,
 } from '@/components/ui/menu';
-import { MutationNotice } from '@/components/ui/mutation-notice';
 import { robotsChoiceNote } from '@/components/site-health/robots-choice';
+import { ChevronDown } from '@/lib/icons';
 import { mutationNoticeForError } from '@/lib/api/mutation-notice';
 import type { ProjectScope } from '@/lib/api/query-keys/scope';
 import { siteHealthMutations, siteHealthQueries } from '@/lib/api/site-health-queries';
+import { Notice } from '@/components/ui/notice';
 
 type Choice = 'off' | CrawlScheduleCadence;
 
@@ -34,7 +34,6 @@ const SKIPPED: Partial<Record<NonNullable<CrawlSchedule['last_outcome']>, string
   failed: 'Last run could not start a crawl. It will try again.',
 };
 
-/** The schedule turns itself off only after repeated failures; turning it off clears the outcome. */
 const TURNED_OFF = 'Turned off: scheduled crawls kept failing to start.';
 
 function choiceOf(schedule: CrawlSchedule | undefined): Choice {
@@ -47,12 +46,6 @@ function outcomeNote(schedule: CrawlSchedule | undefined) {
   return schedule.last_outcome === 'failed' ? TURNED_OFF : null;
 }
 
-/**
- * Scheduled crawls beside Run new crawl: off, weekly or monthly. Each run
- * audits the tracked pages again with the newest crawl's robots choice, as the
- * crawl button does, and uses the
- * plan's page fetches like any crawl.
- */
 function CrawlScheduleControl({
   schedule,
   unavailable,
@@ -60,12 +53,9 @@ function CrawlScheduleControl({
   robotsNote,
   onChange,
 }: Readonly<{
-  /** Undefined while the schedule loads or when it could not be read. */
   schedule: CrawlSchedule | undefined;
-  /** The schedule could not be read. */
   unavailable: boolean;
   pending: boolean;
-  /** The latest crawl ignores robots.txt, so scheduled runs do too; null otherwise. */
   robotsNote: string | null;
   onChange: (choice: Readonly<{ enabled: boolean; cadence: CrawlScheduleCadence }>) => void;
 }>) {
@@ -115,7 +105,6 @@ function CrawlScheduleControl({
   );
 }
 
-/** Under the choices: the kept robots choice, the next run and the last outcome. */
 function ScheduleNotes({
   schedule,
   robotsNote,
@@ -136,14 +125,9 @@ function ScheduleNotes({
   );
 }
 
-/**
- * The project's crawl schedule: the header control and, when saving failed, the
- * notice with its retry. Reads, and offers the control, only while `enabled`.
- */
 export function useCrawlSchedule(
   scope: ProjectScope,
   enabled: boolean,
-  /** The latest crawl's robots choice, which each scheduled run keeps. */
   robots: CrawlRobotsChoice | undefined,
 ) {
   const query = useQuery({ ...siteHealthQueries.crawlSchedule(scope), enabled });
@@ -162,7 +146,8 @@ export function useCrawlSchedule(
       />
     ) : null,
     notice: mutation.isError ? (
-      <MutationNotice
+      <Notice
+        kind="mutation"
         notice={mutationNoticeForError(mutation.error, { action: 'save the crawl schedule' })}
         onRetry={retry}
       />

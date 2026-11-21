@@ -1,8 +1,7 @@
-/** Freeze the access gate and its exact acquisition/evaluation sources. */
 import { sql } from 'kysely';
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
-import type { MeasurementProjection } from './score-summary.ts';
+import type { ProjectionEvaluation, ProjectionTask } from './score-summary.ts';
 import type { Crawl } from './site-task.ts';
 import { taskOutcome } from './task-outcome.ts';
 import { compareText } from '../text-order.ts';
@@ -12,21 +11,14 @@ type EligibilityTask =
   | { status: string; error_code: string; status_code?: number | null }
   | undefined;
 
-/**
- * One selected page's search-eligibility state and status bucket. Only the
- * critical checkpoints gate it; a page that left the corpus by policy is
- * excluded, and an unresolved failure is an error, not a blocker.
- */
 export function eligibilityState(outcomes: Record<string, string>, task: EligibilityTask) {
   const failure =
     task?.status === 'failed'
       ? taskOutcome({ errorCode: task.error_code, statusCode: task.status_code })
       : null;
-  // The site's own robots.txt exclusion is its choice, not a blocker to fix.
   if (failure === 'excluded') return { state: 'excluded', status: 'excluded' } as const;
   // A removed page cannot be indexed; the broken-link check reports whoever links to it.
   if (failure === 'gone') return { state: 'excluded', status: 'error' } as const;
-  // So is the page's own noindex, unless the owner said the page should be indexed.
   if (outcomes['search.indexability'] === 'not_applicable')
     return { state: 'excluded', status: 'audited' } as const;
   const critical = CRITICAL.map((key) => outcomes[key] ?? 'unknown');
@@ -36,36 +28,15 @@ export function eligibilityState(outcomes: Record<string, string>, task: Eligibi
   return { state: 'unknown', status: task?.status === 'failed' ? 'error' : 'pending' } as const;
 }
 
-type Evaluation = MeasurementProjection['evaluations'][number];
-type Task = MeasurementProjection['tasks'][number];
+type Evaluation = ProjectionEvaluation;
+type Task = ProjectionTask;
 
-/** Acquisition's own checkpoint: an artifact satisfies it, a robots denial is an observed miss. */
 function representation(task: Task | undefined) {
   if (task?.result_artifact_id)
     return { outcome: 'satisfied', reason: 'supported_public_representation' };
   if (task?.status === 'failed' && task.error_code === 'robots_denied')
     return { outcome: 'missing', reason: 'robots_denied' };
   return { outcome: 'unknown', reason: 'acquisition_not_determinate' };
-}
-
-/** The gate's evaluations per page, owned through the analyses' frozen source manifests. */
-function gateEvaluations(projection: MeasurementProjection) {
-  const owner = new Map(
-    projection.rows.flatMap((row) =>
-      (row.source_evaluation_ids ?? []).map((id) => [id, row.site_url_id] as const),
-    ),
-  );
-  const indexability = new Map<string, Evaluation>();
-  const snippets = new Map<string, Evaluation>();
-  let crawler: Evaluation | undefined;
-  for (const row of projection.evaluations) {
-    const siteUrlId = owner.get(row.id);
-    if (!siteUrlId) continue;
-    if (row.rule_id === 'technical.indexable') indexability.set(siteUrlId, row);
-    if (row.rule_id === 'search.snippet_access') snippets.set(siteUrlId, row);
-    if (row.rule_id === 'search.crawler_access') crawler = row;
-  }
-  return { indexability, snippets, crawler };
 }
 
 const checkpoint = (key: string, evaluation: Evaluation | undefined) => ({
@@ -76,19 +47,18 @@ const checkpoint = (key: string, evaluation: Evaluation | undefined) => ({
   source_evaluation_id: evaluation?.id ?? null,
 });
 
-/** The crawl gate: any blocker blocks, then any unknown, then any eligible page. */
 function gate(totals: Record<'eligible' | 'blocked' | 'unknown' | 'excluded', number>) {
   const order = ['blocked', 'unknown', 'eligible', 'excluded'] as const;
   return order.find((state) => totals[state] > 0) ?? 'unknown';
 }
 
 async function latestAttempts(db: Database, crawl: Crawl, taskIds: string[]) {
+  if (!taskIds.length) return new Map<string, { id: string; status_code: number | null }>();
   const attempts = await db
     .selectFrom('site_fetch_attempts')
-    .selectAll()
+    .select(['id', 'task_id', 'status_code'])
     .distinctOn('task_id')
     .where('workspace_id', '=', crawl.workspace_id)
-    // Each task is the one of the audit the page's analysis came from.
     .where('task_id', '=', sql<string>`any(${taskIds}::uuid[])`)
     .orderBy('task_id')
     .orderBy('attempt_number', 'desc')
@@ -98,58 +68,80 @@ async function latestAttempts(db: Database, crawl: Crawl, taskIds: string[]) {
   return new Map(attempts.map((row) => [row.task_id, row]));
 }
 
-export async function snapshotEligibility(
-  db: Database,
-  crawl: Crawl,
-  projection: MeasurementProjection,
-) {
-  const tasks = new Map(projection.tasks.map((row) => [row.site_url_id, row]));
-  const taskIds = projection.tasks.map((row) => row.id).toSorted(compareText);
-  const attempts = await latestAttempts(db, crawl, taskIds);
-  const { indexability, snippets, crawler } = gateEvaluations(projection);
-  const totals = { eligible: 0, blocked: 0, unknown: 0, excluded: 0 };
-  const statuses = { audited: 0, blocked: 0, excluded: 0, error: 0, pending: 0 };
-  const reasons: Record<string, unknown>[] = [];
-  for (const id of projection.selectedIds) {
-    const task = tasks.get(id);
-    const acquisition = representation(task);
-    const indexing = indexability.get(id);
-    const snippet = snippets.get(id);
-    const { state, status } = eligibilityState(
-      {
-        'acquisition.public_representation': acquisition.outcome,
-        'search.indexability': indexing?.outcome ?? 'unknown',
-        'search.crawler_access': crawler?.outcome ?? 'unknown',
-        'search.snippet_access': snippet?.outcome ?? 'unknown',
-      },
-      task && { ...task, status_code: attempts.get(task.id)?.status_code },
-    );
-    totals[state]++;
-    statuses[status]++;
-    if (state === 'eligible') continue;
-    reasons.push({
-      site_url_id: id,
-      state,
-      checkpoints: [
-        {
-          checkpoint_id: 'acquisition.public_representation',
-          ...acquisition,
-          source_task_id: task?.id ?? null,
-          source_attempt_id: (task && attempts.get(task.id)?.id) ?? null,
-          source_artifact_id: task?.result_artifact_id ?? null,
-        },
-        checkpoint('search.crawler_access', crawler),
-        checkpoint('search.snippet_access', snippet),
-        checkpoint('search.indexability', indexing),
-      ],
-    });
+function lastOf(rows: Evaluation[], rule: string) {
+  let found: Evaluation | undefined;
+  for (const row of rows)
+    if (row.rule_id === rule && (!found || compareText(found.id, row.id) < 0)) found = row;
+  return found;
+}
+
+export type EligibilityBatch = {
+  selectedIds: string[];
+  tasks: Map<string, Task>;
+  evaluations: Map<string, Evaluation[]>;
+};
+
+export class EligibilityFold {
+  private readonly totals = { eligible: 0, blocked: 0, unknown: 0, excluded: 0 };
+  private readonly statuses = { audited: 0, blocked: 0, excluded: 0, error: 0, pending: 0 };
+  private readonly reasons: Record<string, unknown>[] = [];
+  private readonly taskIds: string[] = [];
+  private readonly attemptIds: string[] = [];
+  private readonly crawler: Evaluation | undefined;
+  constructor(crawler: Evaluation | undefined) {
+    this.crawler = crawler;
   }
-  return {
-    search_eligibility: gate(totals),
-    eligibility_totals: totals,
-    eligibility_reasons: reasons,
-    status_counts: statuses,
-    source_task_ids: taskIds,
-    source_attempt_ids: [...attempts.values()].map((row) => row.id).toSorted(compareText),
-  };
+  async add(db: Database, crawl: Crawl, batch: EligibilityBatch) {
+    const taskIds = [...batch.tasks.values()].map((row) => row.id);
+    const attempts = await latestAttempts(db, crawl, taskIds);
+    this.taskIds.push(...taskIds);
+    this.attemptIds.push(...[...attempts.values()].map((row) => row.id));
+    const crawler = this.crawler;
+    for (const id of batch.selectedIds) {
+      const task = batch.tasks.get(id);
+      const own = batch.evaluations.get(id) ?? [];
+      const acquisition = representation(task);
+      const indexing = lastOf(own, 'technical.indexable');
+      const snippet = lastOf(own, 'search.snippet_access');
+      const attempt = task && attempts.get(task.id);
+      const { state, status } = eligibilityState(
+        {
+          'acquisition.public_representation': acquisition.outcome,
+          'search.indexability': indexing?.outcome ?? 'unknown',
+          'search.crawler_access': crawler?.outcome ?? 'unknown',
+          'search.snippet_access': snippet?.outcome ?? 'unknown',
+        },
+        task && { ...task, status_code: attempt?.status_code },
+      );
+      this.totals[state]++;
+      this.statuses[status]++;
+      if (state === 'eligible') continue;
+      this.reasons.push({
+        site_url_id: id,
+        state,
+        checkpoints: [
+          {
+            checkpoint_id: 'acquisition.public_representation',
+            ...acquisition,
+            source_task_id: task?.id ?? null,
+            source_attempt_id: attempt?.id ?? null,
+            source_artifact_id: task?.result_artifact_id ?? null,
+          },
+          checkpoint('search.crawler_access', crawler),
+          checkpoint('search.snippet_access', snippet),
+          checkpoint('search.indexability', indexing),
+        ],
+      });
+    }
+  }
+  result() {
+    return {
+      search_eligibility: gate(this.totals),
+      eligibility_totals: this.totals,
+      eligibility_reasons: this.reasons,
+      status_counts: this.statuses,
+      source_task_ids: this.taskIds.toSorted(compareText),
+      source_attempt_ids: this.attemptIds.toSorted(compareText),
+    };
+  }
 }

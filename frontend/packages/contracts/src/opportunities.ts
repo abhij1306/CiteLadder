@@ -1,16 +1,10 @@
 import { z } from 'zod';
-import { cursorPageSchema } from './site-health.ts';
+import { cursorPageSchema } from './site-health/pagination.ts';
 import { pageEntitySchema } from './source-pages.ts';
 
 const responseObject = <Shape extends z.ZodRawShape>(shape: Shape) => z.object(shape);
 const uuid = () => z.uuid();
 
-// ---------------------------------------------------------------------------
-// Opportunities (deterministic priority catalog — backend owns the contract)
-// ---------------------------------------------------------------------------
-
-// Opportunity vocabulary (config-owned; per-subsystem severity enum — the
-// site-health `issueSeveritySchema` is NOT reused, they evolve independently).
 export const opportunityTypeSchema = z.enum(['visibility', 'commerce', 'site', 'traffic', 'topic']);
 export const opportunitySeveritySchema = z.enum(['critical', 'high', 'medium', 'low', 'info']);
 export const implementationStateSchema = z.enum([
@@ -36,19 +30,6 @@ export const sourceMixSchema = responseObject({
   gap_keys: z.array(z.string()).optional(),
 });
 
-/**
- * The earned half of the handoff.
- *
- * Every field is optional: an owned-pathway handoff has none of them, and the
- * backend projects a different shape for each. They were all being fetched and
- * then stripped by this schema, which is why the evidence drawer could only
- * render one sentence and a button.
- *
- * `observed_competitors` (already declared below) are the rivals found ON the
- * page. `answer_competitors` are names that merely appeared in an answer that
- * cited it. They stay separate fields here, and separate on screen, because
- * collapsing them is the defect the page-keyed detector was built to remove.
- */
 const earnedHandoffFields = {
   rule_id: z.string().optional(),
   url_hash: z.string().optional(),
@@ -58,9 +39,7 @@ const earnedHandoffFields = {
   snapshot_id: z.string().nullable().optional(),
   read_at: z.string().nullable().optional(),
   extracted_chars: z.number().int().optional(),
-  // What to ask the publisher for, in one sentence.
   ask: z.string().optional(),
-  // The tracked prompts whose answers cited the page; a declaration measures these.
   affected_prompts: z.array(z.object({ prompt_id: z.string(), text: z.string() })).optional(),
   page_entities: z.array(pageEntitySchema).optional(),
   answer_competitors: z.array(z.string()).optional(),
@@ -96,7 +75,6 @@ const contentHandoffSchema = responseObject({
   snapshot_versions: z.record(z.string(), z.unknown()),
 });
 
-// One live opportunity row in the priority-sorted catalog.
 export const opportunitySchema = responseObject({
   id: uuid(),
   project_id: uuid(),
@@ -109,10 +87,7 @@ export const opportunitySchema = responseObject({
   target_prompt_id: uuid().nullable(),
   target_url: z.string().nullable(),
   target_theme: z.string().nullable(),
-  // Backend-owned target presentation (url / frozen prompt text / humanized
-  // theme / frozen product name); null when nothing user-facing exists.
   target_label: z.string().nullable(),
-  // The Action this row was grouped into; it owns the workflow status.
   action_id: uuid().nullable(),
   system_rank: z.number().int(),
   display_rank: z.number().int(),
@@ -189,10 +164,10 @@ export const commandCenterSchema = responseObject({
     benchmark_mode: z.string(),
     logical_engines: z.array(z.string()),
     comparable_audit_id: uuid().nullable(),
-    // The persisted baseline comparison's status for the core cohort, all
-    // engines (`comparable`, `no_baseline`, `matched_subset`, `baseline_pending`, ...);
-    // changes are shown against `comparable_audit_id` only when `comparable`.
     comparison_status: z.string(),
+    comparison_answers: responseObject({ matched: z.number().int(), total: z.number().int() })
+      .nullable()
+      .default(null),
     metric_snapshot_id: uuid().nullable().default(null),
     analyzer_version: z.string().nullable().default(null),
     scoring_rule_version: z.string().nullable().default(null),
@@ -213,20 +188,6 @@ export const commandCenterSchema = responseObject({
   ),
   actions: z.array(opportunitySchema),
   action_order_version: z.number().int(),
-  resolved_actions: responseObject({
-    since_audit_id: uuid().nullable(),
-    count: z.number().int(),
-    titles: z.array(z.string()),
-    evidence: z
-      .array(
-        responseObject({
-          action_id: uuid(),
-          implementation_event_ids: z.array(uuid()),
-          verification_event_ids: z.array(uuid()),
-        }),
-      )
-      .default([]),
-  }),
   report_available: z.boolean(),
   stale: z.boolean(),
 });
@@ -236,17 +197,12 @@ export const opportunityOrderResponseSchema = responseObject({
   ordered_opportunity_ids: z.array(uuid()),
 });
 
-/** The shared queue order to save, against the version the editor read; a stale version is a 409. */
 export const opportunityOrderUpdateRequestSchema = z.strictObject({
   ordered_opportunity_ids: z.array(z.uuid()),
   expected_version: z.int().min(0),
 });
 export type OpportunityOrderUpdateRequest = z.input<typeof opportunityOrderUpdateRequestSchema>;
 
-/**
- * The citation taxonomy: what kind of publisher a cited domain is. Descriptive,
- * never a causal claim or authority score; the order is the display order.
- */
 export const sourceClassSchema = z.enum([
   'brand_owned',
   'competitor_owned',
@@ -261,11 +217,6 @@ export const sourceClassSchema = z.enum([
 ]);
 export type SourceClass = z.infer<typeof sourceClassSchema>;
 
-/**
- * The sources a prompt gap's answers cited, classified: written into the
- * evidence of every prompt-gap Opportunity, read by its evidence view.
- * `distinct_domain_count` 0 means nothing was cited, not a measured zero.
- */
 export const sourcePatternSchema = z.object({
   taxonomy_version: z.string(),
   distinct_domain_count: z.number().int(),
@@ -287,12 +238,8 @@ export const sourcePatternSchema = z.object({
 });
 export type SourcePattern = z.infer<typeof sourcePatternSchema>;
 
-// Full evidence bundle + provenance for one opportunity. Superseded rows stay
-// readable.
 export const opportunityDetailSchema = opportunitySchema.extend({
   remediation: z.string(),
-  // The rule's evidence (`opportunityEvidenceSchemas`); the blocks the evidence
-  // view reads are typed, the rest pass through for the Agent and exports.
   evidence: z.looseObject({ source_pattern: sourcePatternSchema.optional() }),
   source_analysis_ids: z.array(z.string()),
   source_issue_ids: z.array(z.string()),
@@ -314,11 +261,6 @@ const siteRuleExpectedCheckSchema = responseObject({
   rule_id: z.string(),
   expected_outcome: z.enum(['pass', 'fail', 'partial']),
 });
-/**
- * Search Console clicks on the declared page or query, against a baseline
- * window frozen at declaration. Rows declared before scoping carry only
- * `expected_value` over the project total; they read as unmeasurable.
- */
 const metricExpectedCheckSchema = responseObject({
   kind: z.literal('traffic_metric'),
   metric: z.string(),
@@ -342,10 +284,6 @@ const visibilityExpectedCheckSchema = responseObject({
   baseline_metric_snapshot_id: uuid().optional(),
   baseline_value: z.number().optional(),
 });
-/**
- * What a `search_keyword_gap` finding stores as evidence: written by the gap
- * detector, read by the declaration check and the evidence view.
- */
 export const keywordGapEvidenceSchema = z.object({
   keyword: z.string().min(1),
   normalized_keyword: z.string(),
@@ -377,11 +315,6 @@ export const keywordGapEvidenceSchema = z.object({
   statement: z.string(),
 });
 export type KeywordGapEvidence = z.infer<typeof keywordGapEvidenceSchema>;
-/**
- * A keyword gap closes when you appear for the search: Search Console
- * impressions after go-live, or your ranking in a later Search Intelligence
- * dataset whose provider check postdates go-live. Absence is never a failure.
- */
 export const keywordPresenceExpectedCheckSchema = responseObject({
   kind: z.literal('keyword_presence'),
   keyword: z.string(),
@@ -390,17 +323,9 @@ export const keywordPresenceExpectedCheckSchema = responseObject({
   location_code: z.number().int().nullable(),
   language_code: z.string(),
 });
-/**
- * An answer to one of the frozen prompts cites an owned URL, in a run after
- * go-live. `page`: the improved page's URL. `new_page`: any owned URL outside
- * the ones already cited for those prompts from `baseline_from` to go-live.
- * Frozen at declaration, so a later reclustering or rematch never changes it.
- * It says whether a URL was cited, never which version of the page was read.
- */
 const ownedUrlCitedExpectedCheckSchema = responseObject({
   kind: z.literal('owned_url_cited'),
   prompt_ids: z.array(uuid()).min(1),
-  // The content-angle lineage that raised the gap; null for Analyze a page.
   lineage_id: z.string().nullable(),
   expectation: z.discriminatedUnion('target', [
     responseObject({ target: z.literal('page'), url: z.string().min(1), site_url_id: uuid() }),
@@ -412,12 +337,6 @@ const ownedUrlCitedExpectedCheckSchema = responseObject({
     }),
   ]),
 });
-/**
- * One product's metric over the answers after go-live: the Products read's
- * window, limited to executions after the declaration. Met once the reading
- * clears the rule (`at_least` / `at_most` the frozen target); a window with
- * fewer than `min_samples` samples is still waiting. Frozen at declaration.
- */
 export const productMetricExpectedCheckSchema = responseObject({
   kind: z.literal('product_metric'),
   product_id: uuid(),
@@ -429,15 +348,6 @@ export const productMetricExpectedCheckSchema = responseObject({
   window_days: z.number().int(),
   baseline_value: z.number().optional(),
 });
-/**
- * One Site Health rule across a frozen cohort of pages, read in the next crawl
- * comparable with `baseline_crawl_id` (same analyzer and rule catalog): met
- * when every cohort page passes, unmet with `partially_resolved` or
- * `still_failing` otherwise, unavailable (inconclusive) when that crawl could
- * not read the cohort. `page_count` counts the family's pages at declaration;
- * more than `site_url_ids` means the frozen list was cut, and then a passing
- * cohort is `cohort_sampled`, never met: the pages beyond it are unchecked.
- */
 const issueFamilyExpectedCheckSchema = responseObject({
   kind: z.literal('issue_family'),
   rule_id: z.string(),

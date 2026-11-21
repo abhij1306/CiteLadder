@@ -14,7 +14,6 @@ type RecommendationSpan = {
   text: string;
   rank: number | null;
   orderObservable: boolean;
-  /** A list item, as opposed to a prose sentence. */
   listed: boolean;
 };
 function recommendationSpans(answer: string): RecommendationSpan[] {
@@ -45,7 +44,6 @@ function recommendationSpans(answer: string): RecommendationSpan[] {
   }));
 }
 
-/** Shelf matching applies its own casefold and punctuation rules, independently of brand aliases. */
 function normalize(value: string) {
   return casefold(value)
     .replaceAll(/[^\p{L}\p{N}_]+/gu, ' ')
@@ -85,7 +83,6 @@ export const frozenTargetSchema = z.object({
   ),
 });
 export type FrozenShelfTarget = z.output<typeof frozenTargetSchema>;
-/** The products and approved competitors one answer is matched against. */
 export type ShelfCatalog = Pick<FrozenShelfTarget, 'products' | 'approved_competitors'>;
 type FrozenProduct = FrozenShelfTarget['products'][number];
 export type ShelfMatch =
@@ -94,7 +91,6 @@ export type ShelfMatch =
   | { product: null; competitor: null; confidence: 0 };
 export const NO_MATCH: ShelfMatch = { product: null, competitor: null, confidence: 0 };
 
-/** The catalog product or approved competitor whose page a carousel card links to. */
 export function matchPageUrl(url: string, target: ShelfCatalog): ShelfMatch {
   const page = canonicalPage(url);
   if (!page) return NO_MATCH;
@@ -106,15 +102,6 @@ export function matchPageUrl(url: string, target: ShelfCatalog): ShelfMatch {
   return competitor ? { product: null, competitor, confidence: 1 } : NO_MATCH;
 }
 
-/**
- * The catalog product or approved competitor the span names first.
- *
- * Names match whole tokens only, and identifiers shorter than the policy
- * minimum never match, so "Pro" or "10" cannot claim a sentence. A brand names
- * one owned product only together with an attribute value no other product of
- * that brand on the shelf shares. When a span names both sides ("Rival Y, a
- * cheaper alternative to Owned"), the one named first holds the slot.
- */
 export function matchRecommendation(text: string, target: ShelfCatalog): ShelfMatch {
   const haystack = ` ${normalize(text)} `;
   const at = (value: string | null | undefined) => {
@@ -154,7 +141,6 @@ export function matchRecommendation(text: string, target: ShelfCatalog): ShelfMa
   return best.match;
 }
 
-/** Textual attribute values no other same-brand product on the shelf carries. */
 function distinctiveAttributes(product: FrozenProduct, target: ShelfCatalog) {
   const textual = (row: FrozenProduct) =>
     Object.values(row.attributes).flatMap((value) => {
@@ -184,36 +170,20 @@ export const resolvedBatchSchema = z.object({
   recommendations: z.array(resolvedRecommendationSchema),
 });
 type ResolvedRecommendation = z.output<typeof resolvedRecommendationSchema>;
-/** One bounded model call per answer, over the numbered spans it is given. */
 export type ShelfResolver = { model: string; resolve(spans: string[]): Promise<unknown> };
-/**
- * What the optional resolver did for one span, each a distinct state:
- * `not_needed` (matched deterministically or no product signal, never sent),
- * `unavailable` (needed, but no resolver is configured), `failed` (the call
- * threw or returned malformed output), `omitted` (the call answered without
- * this span) and `resolved`.
- */
 type ResolverOutcome = 'resolved' | 'omitted' | 'not_needed' | 'failed' | 'unavailable';
 export type PreparedRecommendation = {
   span: RecommendationSpan;
   resolved: ResolvedRecommendation | null;
-  /** The resolver model that was called for this span; empty when none was. */
   model: string;
   outcome: ResolverOutcome;
 };
 
-/** A span worth a resolver call: a list item, or prose carrying a link or a price. */
 const hasProductSignal = (span: RecommendationSpan) =>
   span.listed ||
   /https?:\/\/|[$£€₹]\s*\d|\b(?:AUD|USD|CAD|NZD|GBP|EUR|INR)\s*\d/iu.test(span.text) ||
-  // A capitalized word after the first names something ("Consider the Rival Runner").
   /\s\p{Lu}\p{L}/u.test(span.text);
 
-/**
- * Deterministic matches first; the unmatched spans with a product signal go to
- * the resolver together, once. Unavailable or malformed output, or no
- * resolver, keeps every span as unresolved evidence.
- */
 export async function prepareRecommendations(
   answer: string,
   target: ShelfCatalog,
@@ -239,7 +209,6 @@ export async function prepareRecommendations(
         if (span) resolved.set(span, [...(resolved.get(span) ?? []), item]);
       }
     } catch (error) {
-      // Optional classification cannot erase unresolved evidence; the failure is recorded.
       getLogger('commerce.shelf').warning('commerce_shelf_resolution_failed', {
         model: resolver.model,
         spans: pending.length,
@@ -257,7 +226,6 @@ export async function prepareRecommendations(
   return spans.flatMap((span): PreparedRecommendation[] => {
     const items = resolved.get(span);
     if (!resolver || !items?.length) return [unresolved(span)];
-    // A span resolved into several products keeps no single rank.
     const shown = items.length > 1 ? { ...span, rank: null, orderObservable: false } : span;
     return items.map((item): PreparedRecommendation => ({
       span: shown,
@@ -315,16 +283,11 @@ export function resolvedCompetitorUrl(
   const canonical = canonicalPage(url);
   if (!canonical || evidence.citations.some((value) => canonicalPage(value) === canonical))
     return null;
-  // Sentence punctuation after a URL is not part of it.
   const inAnswer = (evidence.answer.match(/https?:\/\/[^\s)\]}>,"']+/giu) ?? []).some(
     (value) => canonicalPage(stripTrailing(value, '.;:!?')) === canonical,
   );
   return inAnswer ? competitorPageUrl(canonical, evidence.ownedHosts) : null;
 }
-/**
- * A product page that may stand for an AI-observed competitor: a web page off
- * the business's own hosts, not a known non-product host or path.
- */
 export function competitorPageUrl(url: string, ownedHosts: string[]): string | null {
   const canonical = canonicalPage(url);
   if (!canonical) return null;

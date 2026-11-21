@@ -3,7 +3,13 @@
  * service's own log stream. Nothing is stored and nothing leaves the service.
  * Who reported comes from the request's acting user, never from the body.
  */
-import { clientErrorReportSchema, withoutQueryStrings } from '@citeladder/contracts/client-errors';
+import { CSP_REPORTS_PATH } from '@citeladder/contracts/route-ownership';
+import {
+  clientReportSchema,
+  cspReportBatchSchema,
+  withoutQueryStrings,
+  type ClientReport,
+} from '@citeladder/contracts/client-errors';
 import type { Context } from 'hono';
 import { z } from 'zod';
 
@@ -19,14 +25,6 @@ import { readBody } from '../http/body.ts';
 import { getLogger } from '../logging.ts';
 import { definePostRoute } from './define.ts';
 
-/**
- * The reporting user and, when the request names one in `X-Workspace-Id`,
- * that workspace once the session's membership resolution accepts it. A
- * request naming none records none: it never falls back to the user's
- * earliest workspace. A signed-out or stale session, or a workspace the user
- * is not a member of, reports with whatever was proved: the user alone, or
- * nobody.
- */
 async function reporter(c: Context<AppEnv>, config: ServiceConfig, db: Database) {
   const seen: { workspaceId: string | null } = { workspaceId: null };
   const named = c.req.header('x-workspace-id') !== undefined;
@@ -43,9 +41,63 @@ async function reporter(c: Context<AppEnv>, config: ServiceConfig, db: Database)
   } catch (error) {
     if (!(error instanceof ApiError) || error.status >= 500) throw error;
   }
-  // Set only when the session proved a user, whether or not membership followed.
   const user: SessionUser | undefined = c.get('user');
   return { user_id: user?.id ?? null, workspace_id: seen.workspaceId };
+}
+
+async function admit(
+  c: Context<AppEnv>,
+  { config, db }: { config: ServiceConfig; db: Database },
+  { maxBytes, budgetName }: { maxBytes: number; budgetName: 'client_error_report' | 'csp_report' },
+) {
+  const raw = await c.req.text();
+  if (Buffer.byteLength(raw) > maxBytes) throw new ApiError(413, 'Request body too large');
+  const who = await reporter(c, config, db);
+  // Every browser of a self-hosted install acts as a user, so the budget is per user.
+  await spendBudget(db, budget(budgetName, config.settings), who.user_id ?? 'anonymous');
+  return who;
+}
+
+function logLine(report: ClientReport) {
+  switch (report.kind) {
+    case 'slow_interaction':
+      return {
+        event: 'client.slow_interaction',
+        level: 'info' as const,
+        fields: {
+          ...report,
+          scripts: report.scripts.map((script) => ({
+            ...script,
+            source: withoutQueryStrings(script.source),
+            invoker: withoutQueryStrings(script.invoker),
+          })),
+        },
+      };
+    case 'chunk_load':
+    case 'render':
+    case 'route':
+    case 'unhandled':
+      return {
+        event: 'client.error',
+        level: report.kind === 'chunk_load' ? ('warning' as const) : ('error' as const),
+        fields: {
+          kind: report.kind,
+          message: withoutQueryStrings(report.message),
+          stack: report.stack === null ? null : withoutQueryStrings(report.stack),
+          route: report.route,
+          release: report.release,
+          component: report.component ?? null,
+        },
+      };
+    default: {
+      const unreachable: never = report;
+      return unreachable;
+    }
+  }
+}
+
+function logged(url: string | null | undefined): string | null {
+  return url ? withoutQueryStrings(url) : null;
 }
 
 export const clientErrorRoutes = [
@@ -54,35 +106,55 @@ export const clientErrorRoutes = [
     authorize: 'public',
     path: '/api/v1/client-errors',
     params: { path: {}, query: {} },
-    body: clientErrorReportSchema,
+    body: clientReportSchema,
     response: z.null(),
     raw: true,
     status: 204,
     async handle({ c, db, config }) {
-      const raw = await c.req.text();
-      if (Buffer.byteLength(raw) > clientErrors.max_body_bytes)
-        throw new ApiError(413, 'Request body too large');
-      const who = await reporter(c, config, db);
-      // Every browser of a self-hosted install acts as a user, so the budget is per user.
-      await spendBudget(
-        db,
-        budget('client_error_report', config.settings),
-        who.user_id ?? 'anonymous',
+      const who = await admit(
+        c,
+        { config, db },
+        { maxBytes: clientErrors.max_body_bytes, budgetName: 'client_error_report' },
       );
-      const report = await readBody(c, clientErrorReportSchema);
-      const fields = {
-        kind: report.kind,
-        message: withoutQueryStrings(report.message),
-        stack: report.stack === null ? null : withoutQueryStrings(report.stack),
-        route: report.route,
-        release: report.release,
-        component: report.component ?? null,
-        ...who,
-      };
-      // A missing chunk is the expected cost of a deploy; the rest are defects.
+      const report = await readBody(c, clientReportSchema);
+      const line = logLine(report);
+      getLogger(clientErrors.logger)[line.level](line.event, { ...line.fields, ...who });
+      return c.body(null, 204);
+    },
+  }),
+  // The Reporting API delivers content security policy violations here,
+  // without the session cookie, so no reporter is recorded.
+  definePostRoute({
+    family: 'client-errors',
+    authorize: 'public',
+    path: CSP_REPORTS_PATH,
+    params: { path: {}, query: {} },
+    body: cspReportBatchSchema,
+    response: z.null(),
+    raw: true,
+    status: 204,
+    async handle({ c, db, config }) {
+      await admit(
+        c,
+        { config, db },
+        { maxBytes: clientErrors.max_csp_body_bytes, budgetName: 'csp_report' },
+      );
+      const reports = await readBody(c, cspReportBatchSchema, 'application/reports+json');
       const logger = getLogger(clientErrors.logger);
-      if (report.kind === 'chunk_load') logger.warning('client.error', fields);
-      else logger.error('client.error', fields);
+      for (const report of reports) {
+        if (!('body' in report)) continue;
+        const { body } = report;
+        logger.warning('client.csp_violation', {
+          directive: body.effectiveDirective,
+          disposition: body.disposition,
+          document: logged(body.documentURL),
+          blocked: logged(body.blockedURL),
+          source: logged(body.sourceFile),
+          line: body.lineNumber ?? null,
+          column: body.columnNumber ?? null,
+          sink: body.sample ?? null,
+        });
+      }
       return c.body(null, 204);
     },
   }),

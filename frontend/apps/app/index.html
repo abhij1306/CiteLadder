@@ -3,12 +3,248 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="text-scale" content="scale" />
     <meta name="color-scheme" content="light dark" />
     <meta name="robots" content="noindex" />
-    <!-- Apply the shared light/dark/system choice before first paint so a dark
-        reader never sees a light frame. The cookie name must match
-        THEME_COOKIE in lib/theme/theme.ts, which owns the preference. -->
     <script src="/theme-preference.js"></script>
+    <style>
+      .boot-shell {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        background: #f4f5f7;
+        color: #62666d;
+        font:
+          400 0.875rem/1.25rem var(--font-face-sans),
+          system-ui,
+          sans-serif;
+      }
+      .boot-shell * {
+        box-sizing: border-box;
+      }
+      .boot-shell:not([data-boot-shell]) > * {
+        display: none;
+      }
+      .boot-side {
+        flex: none;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        overflow: hidden;
+        width: var(--boot-side-width, 200px);
+        padding: 8px;
+      }
+      .boot-main {
+        flex: 1;
+        min-width: 0;
+        margin: 8px 8px 8px 0;
+        border-radius: 8px;
+        box-shadow: 0 0 0 1px rgb(0 0 0 / 8%);
+        background: #ffffff;
+      }
+      .boot-mast {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        height: 44px;
+        padding-inline: 24px;
+        border-block-end: 1px solid rgb(0 0 0 / 8%);
+      }
+      .boot-section {
+        display: flex;
+        flex: none;
+        align-items: center;
+        gap: 8px;
+        white-space: nowrap;
+      }
+      .boot-section::after {
+        content: '';
+        width: 12px;
+        height: 16px;
+      }
+      .boot-title {
+        overflow: hidden;
+        color: #111214;
+        font-weight: 500;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+      }
+      .boot-section:empty,
+      .boot-mode,
+      .boot-list,
+      .boot-foot,
+      .boot-rows {
+        display: none;
+      }
+      .boot-shell[data-boot-mode] .boot-mode {
+        display: grid;
+      }
+      .boot-shell[data-boot-mode] .boot-list {
+        display: block;
+      }
+      .boot-shell[data-boot-mode] .boot-foot,
+      .boot-shell[data-boot-mode='dashboard'] .boot-rows {
+        display: flex;
+      }
+      .boot-ident {
+        display: flex;
+        flex: none;
+        align-items: center;
+        height: 44px;
+      }
+      .boot-switcher,
+      .boot-account {
+        display: block;
+        height: 44px;
+        border-radius: 6px;
+        background: #f7f8f9;
+      }
+      .boot-switcher {
+        flex: 1;
+        margin-inline-end: 64px;
+      }
+      .boot-mode {
+        flex: none;
+        grid-template-columns: 1fr 1fr;
+        height: 28px;
+        padding: 1px;
+        border: 1px solid rgb(0 0 0 / 8%);
+        border-radius: 6px;
+      }
+      .boot-mode span {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 4px;
+      }
+      [data-boot-mode='dashboard'] [data-boot-seg='dashboard'],
+      [data-boot-mode='agent'] [data-boot-seg='agent'] {
+        background: #e6e6e8;
+        color: #111214;
+      }
+      .boot-list {
+        flex: 1;
+        min-height: 0;
+        overflow: hidden;
+        padding-block: 4px;
+      }
+      .boot-rows {
+        flex-direction: column;
+        gap: 16px;
+      }
+      .boot-group,
+      .boot-foot {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .boot-row,
+      .boot-group-title {
+        display: block;
+        height: 28px;
+        overflow: hidden;
+        line-height: 28px;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+      }
+      .boot-row {
+        padding-inline: 32px 8px;
+      }
+      .boot-group + .boot-group {
+        margin-top: -8px;
+      }
+      .boot-group-title {
+        padding-inline: 8px;
+        font-size: 0.75rem;
+        font-weight: 500;
+      }
+      .boot-foot {
+        flex: none;
+      }
+      .boot-account {
+        width: calc(100% - 34px);
+      }
+      @media (min-width: 1280px) {
+        .boot-side {
+          width: var(--boot-side-width, 224px);
+        }
+      }
+      @media (pointer: coarse) {
+        .boot-mast,
+        .boot-ident {
+          height: 52px;
+        }
+        .boot-switcher {
+          margin-inline-end: 96px;
+        }
+        .boot-mode {
+          height: 44px;
+        }
+        .boot-row,
+        .boot-group-title {
+          height: 44px;
+          line-height: 44px;
+        }
+      }
+      [data-sidebar-rail] .boot-side {
+        width: 56px;
+      }
+      [data-sidebar-rail] .boot-side > :not(.boot-ident) {
+        display: none;
+      }
+      [data-sidebar-rail] .boot-ident {
+        height: auto;
+      }
+      [data-sidebar-rail] .boot-switcher {
+        flex: none;
+        width: 40px;
+        height: 40px;
+        margin: 0;
+      }
+      @media (max-width: 899.98px) {
+        .boot-side,
+        .boot-section {
+          display: none;
+        }
+        .boot-main {
+          margin: 0;
+          border-radius: 0;
+          box-shadow: none;
+        }
+        .boot-mast {
+          height: 52px;
+          padding-inline: 76px 24px;
+        }
+      }
+      @media (max-width: 759.98px) {
+        .boot-mast {
+          padding-inline: 68px 16px;
+        }
+      }
+      [data-theme='dark'] .boot-shell {
+        background: #08090a;
+        color: #8a8f98;
+      }
+      [data-theme='dark'] :is(.boot-mast, .boot-mode) {
+        border-color: rgb(255 255 255 / 8%);
+      }
+      [data-theme='dark'] .boot-main {
+        background: #0f1011;
+        box-shadow: 0 0 0 1px rgb(255 255 255 / 8%);
+      }
+      [data-theme='dark'] .boot-title,
+      [data-theme='dark'] [data-boot-mode='dashboard'] [data-boot-seg='dashboard'],
+      [data-theme='dark'] [data-boot-mode='agent'] [data-boot-seg='agent'] {
+        color: #f7f8f8;
+      }
+      [data-theme='dark'] :is(.boot-switcher, .boot-account) {
+        background: #151618;
+      }
+      [data-theme='dark'] [data-boot-mode='dashboard'] [data-boot-seg='dashboard'],
+      [data-theme='dark'] [data-boot-mode='agent'] [data-boot-seg='agent'] {
+        background: #1a1b1c;
+      }
+    </style>
     <link rel="icon" href="/favicon.ico" sizes="any" />
     <title>CiteLadder</title>
     <style>
@@ -56,9 +292,18 @@
     </style>
   </head>
   <body>
-    <div id="root"></div>
-    <!-- Below the support matrix, this fills #root with an "Update your
-        browser" notice before the app shell runs, and main.tsx stays out. -->
+    <div id="root">
+      <div class="boot-shell" aria-hidden="true">
+        <div class="boot-side"><!-- boot-sidebar --></div>
+        <div class="boot-main">
+          <div class="boot-mast">
+            <span class="boot-section"></span><span class="boot-title"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- Generated at build from the route manifest (apps/app/boot-shell.ts). -->
+    <script src="/boot-title.js"></script>
     <script src="/browser-support.js"></script>
     <script type="module" src="/src/main.tsx"></script>
   </body>

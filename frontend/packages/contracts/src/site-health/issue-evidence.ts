@@ -1,17 +1,7 @@
-/**
- * What a site-level finding stores as evidence, by `rule_id`.
- *
- * Site-level findings (architecture rules and sitewide links) are judged over
- * the whole crawl and persisted once, against the homepage, with the pages,
- * page kinds or link targets they found. Their producers write these shapes
- * and the Issues view reads them; every other rule's evidence stays an open
- * record (`issueOccurrenceSchema.evidence`).
- */
 import { z } from 'zod';
 
 const count = () => z.number().int();
 
-/** One affected page, as the evidence samples it. */
 const evidencePageSchema = z.object({
   site_url_id: z.string(),
   url: z.string(),
@@ -19,37 +9,40 @@ const evidencePageSchema = z.object({
   page_kind: z.string(),
 });
 
-/** Fields every architecture finding records beside its bounded sample. */
 const architectureShape = {
-  // Every affected row, not the sample.
   count: count(),
-  // Affected pages per page kind, over every row: the Issues page-kind filter counts by these.
   page_kind_counts: z.record(z.string(), count()),
   coverage_state: z.string(),
 };
 
-/** A finding about pages: the first `max_evidence_items` of them. */
 const pageListEvidenceSchema = z.object({
   ...architectureShape,
   pages: z.array(evidencePageSchema.extend({ depth_from_home: count().nullable() })),
 });
 
-/** Pages no path from the homepage reaches, also grouped by section, largest first. */
 const unreachablePagesEvidenceSchema = pageListEvidenceSchema.extend({
   sections: z.array(
     z.object({ path_prefix: z.string(), page_count: count(), example_url: z.string() }),
   ),
 });
 
-/** A finding about page kinds, each with its page and duplicate-metadata counts. */
-const pageKindEvidenceSchema = z.object({
+const pageKindShape = { page_kind: z.string(), page_count: count() };
+
+const duplicateMetadataEvidenceSchema = z.object({
   ...architectureShape,
-  page_kinds: z.array(
-    z.object({ page_kind: z.string(), page_count: count(), duplicate_metadata_count: count() }),
+  duplicate_set_count: count(),
+  duplicate_sets: z.array(
+    z.object({ text: z.string(), page_count: count(), pages: z.array(evidencePageSchema) }),
   ),
 });
 
-/** Where a sitewide link goes wrong: an HTTP status (null when unanswered), a redirect, or a loop. */
+const unhubbedPageKindEvidenceSchema = z.object({
+  ...architectureShape,
+  page_kinds: z.array(
+    z.object({ ...pageKindShape, pages: z.array(evidencePageSchema).default([]) }),
+  ),
+});
+
 const statusOutcome = { url: z.string(), status_code: count().nullable() };
 const loopOutcome = { url: z.string(), reason: z.literal('redirect_limit') };
 const redirectOutcome = { url: z.string(), final_url: z.string(), hops: count() };
@@ -60,15 +53,12 @@ const sitewideTargetOutcomeSchema = z.union([
 ]);
 export type SitewideTargetOutcome = z.input<typeof sitewideTargetOutcomeSchema>;
 
-/** The pages carrying one failing sitewide link: how many, and a bounded sample. */
 const carriers = {
   linking_page_count: count(),
   pages: z.array(evidencePageSchema.extend({ artifact_id: z.string() })),
 };
 
-/** Failing sitewide link targets, each with the pages carrying it. */
 const sitewideLinkEvidenceSchema = z.object({
-  // Distinct pages carrying a failing link.
   count: count(),
   linking_page_kinds: z.array(z.string()),
   page_kind_counts: z.record(z.string(), count()),
@@ -83,24 +73,25 @@ const sitewideLinkEvidenceSchema = z.object({
 });
 
 export type PageListEvidence = z.input<typeof pageListEvidenceSchema>;
-export type PageKindEvidence = z.input<typeof pageKindEvidenceSchema>;
+export type DuplicateMetadataEvidence = z.input<typeof duplicateMetadataEvidenceSchema>;
+export type UnhubbedPageKindEvidence = z.input<typeof unhubbedPageKindEvidenceSchema>;
 export type SitewideLinkEvidence = z.input<typeof sitewideLinkEvidenceSchema>;
 
-/** The rules whose finding is persisted once for the site. */
 export const siteLevelRuleSchema = z.enum([
   'architecture.excessive_depth',
   'architecture.breadcrumb_hierarchy_conflict',
   'architecture.orphan_pages',
   'architecture.parentless_detail_pages',
   'architecture.unreachable_from_home',
-  'architecture.duplicate_metadata_in_page_kind',
+  'architecture.dead_end_pages',
+  'architecture.duplicate_titles',
+  'architecture.duplicate_meta_descriptions',
   'architecture.unhubbed_page_kind',
   'technical.sitewide_broken_link',
   'technical.sitewide_link_redirect',
 ]);
 export type SiteLevelRule = z.infer<typeof siteLevelRuleSchema>;
 
-/** One site-level finding's evidence, discriminated by its rule. */
 export const siteLevelFindingSchema = z.discriminatedUnion('rule_id', [
   z.object({
     rule_id: siteLevelRuleSchema.extract([
@@ -108,6 +99,7 @@ export const siteLevelFindingSchema = z.discriminatedUnion('rule_id', [
       'architecture.breadcrumb_hierarchy_conflict',
       'architecture.orphan_pages',
       'architecture.parentless_detail_pages',
+      'architecture.dead_end_pages',
     ]),
     evidence: pageListEvidenceSchema,
   }),
@@ -117,10 +109,14 @@ export const siteLevelFindingSchema = z.discriminatedUnion('rule_id', [
   }),
   z.object({
     rule_id: siteLevelRuleSchema.extract([
-      'architecture.duplicate_metadata_in_page_kind',
-      'architecture.unhubbed_page_kind',
+      'architecture.duplicate_titles',
+      'architecture.duplicate_meta_descriptions',
     ]),
-    evidence: pageKindEvidenceSchema,
+    evidence: duplicateMetadataEvidenceSchema,
+  }),
+  z.object({
+    rule_id: siteLevelRuleSchema.extract(['architecture.unhubbed_page_kind']),
+    evidence: unhubbedPageKindEvidenceSchema,
   }),
   z.object({
     rule_id: siteLevelRuleSchema.extract([
@@ -132,10 +128,6 @@ export const siteLevelFindingSchema = z.discriminatedUnion('rule_id', [
 ]);
 export type SiteLevelFinding = z.infer<typeof siteLevelFindingSchema>;
 
-/**
- * A site-level finding's evidence, typed by its rule, or `null` for a per-page
- * rule. Throws when a site-level rule's evidence breaks its contract.
- */
 export function siteLevelFinding(ruleId: string, evidence: unknown): SiteLevelFinding | null {
   return siteLevelRuleSchema.safeParse(ruleId).success
     ? siteLevelFindingSchema.parse({ rule_id: ruleId, evidence })

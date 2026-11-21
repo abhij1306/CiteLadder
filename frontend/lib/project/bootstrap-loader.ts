@@ -79,14 +79,12 @@ type Scope = {
   requestedProjectId: string | null;
 };
 
-/**
- * The workspace, and the project in it, that the loader started reading
- * before confirming them, and when the project's reads had all been issued.
- */
 type Guess = Readonly<{
   workspaceId: string;
   project: Readonly<{ id: string; issued: Promise<unknown> }> | null;
 }>;
+
+const WARM_KEYS = new Set(['project', 'workspace', 'tab']);
 
 /**
  * Start a project's reads: the landing screen's and the shell's own.
@@ -98,12 +96,10 @@ type Guess = Readonly<{
  * view, and filters in the address ask for a different key.
  */
 function warmProject(client: QueryClient, url: URL, scope: ProjectScope) {
-  const scopeOnly = [...url.searchParams.keys()].every(
-    (key) => key === 'project' || key === 'workspace',
-  );
+  const scopeOnly = [...url.searchParams.keys()].every((key) => WARM_KEYS.has(key));
   return Promise.all([
     prefetchProjectShell(client, scope),
-    scopeOnly ? prefetchRoute(client, url.pathname, scope) : null,
+    scopeOnly ? prefetchRoute(client, url.pathname + url.search, scope) : null,
   ]);
 }
 
@@ -128,14 +124,11 @@ function guessScope(client: QueryClient, url: URL): Guess | null {
   const projectId =
     url.searchParams.get('project') || (urlWorkspaceId ? null : readStoredActiveProjectId());
   if (!projectId || isWorkspaceOnlyRoute(url.pathname)) return { workspaceId, project: null };
-  // The shell renders the project's full view, which the summary list does
-  // not carry: its detail read goes out in this same round.
   void client.prefetchQuery(projectQueries.detail(projectId));
   const issued = warmProject(client, url, { projectId, workspaceId });
   return { workspaceId, project: { id: projectId, issued } };
 }
 
-/** An unanswered read of one project, other than the detail read that resolves the project itself. */
 function unansweredProjectRead(projectId: string) {
   return (query: Query) =>
     query.state.data === undefined &&
@@ -143,17 +136,6 @@ function unansweredProjectRead(projectId: string) {
     !queryKeys.projects.isDetail(query.queryKey);
 }
 
-/**
- * Withdraw what a wrong guess started, before the right reads begin.
- *
- * A read the backend scopes by workspace answers a project from another
- * workspace with `Project not found`, filed under the project's own key. Left
- * in flight, the screen's real read would join that request and render its
- * failure, so every unanswered read of the guessed project is cancelled and
- * dropped — once they have all been issued, since a read whose code was still
- * loading would otherwise start after the withdrawal. The guessed workspace's
- * own reads are keyed by that workspace and stay out of the way by themselves.
- */
 async function settleGuess(client: QueryClient, guess: Guess | null, actual: ProjectScope | null) {
   if (!guess?.project) return;
   const { id, issued } = guess.project;
@@ -164,10 +146,6 @@ async function settleGuess(client: QueryClient, guess: Guess | null, actual: Pro
   client.removeQueries({ predicate });
 }
 
-/**
- * Settle the guess against the project a bare address selected. An address
- * naming its project settled the guess when that project resolved.
- */
 function settleSelectedGuess(
   client: QueryClient,
   guess: Guess | null,
@@ -182,16 +160,6 @@ function settleSelectedGuess(
   );
 }
 
-/**
- * Resolve the requested project from its detail read (the workspace's list
- * carries summaries only); the read authorizes from the path, so a stale or
- * foreign remembered workspace can never hide a project. Once the project
- * names its workspace, settle the
- * guess and make sure its reads are running. A guess that named the project's
- * own workspace already started them, and repeating the warm joins those
- * requests. A project contradicting the address's workspace is rejected by
- * the caller and warms nothing.
- */
 async function requestedProject(
   client: QueryClient,
   url: URL,
@@ -215,14 +183,6 @@ async function requestedProject(
   return project;
 }
 
-/**
- * Which workspace this address is in, and the project it named if it named one.
- *
- * The explicitly requested project is resolved alongside the membership list
- * because it authorizes itself and identifies its own workspace — waiting for
- * a workspace to be guessed first is what made a freshly created project look
- * like it belonged somewhere else.
- */
 async function resolveScope(
   client: QueryClient,
   url: URL,
@@ -231,9 +191,6 @@ async function resolveScope(
   const requestedProjectId = url.searchParams.get('project') || null;
   const urlWorkspaceId = url.searchParams.get('workspace') || null;
 
-  // A membership list needs only the session cookie and the project only its
-  // id; neither depends on the other's answer. Sent together they cost one
-  // round trip instead of two — and one place to stall instead of two.
   const workspacesPending = settle(client.ensureQueryData(workspaceQueries.list()));
   const projectPending = requestedProjectId
     ? requestedProject(client, url, { projectId: requestedProjectId, urlWorkspaceId, guess })
@@ -242,8 +199,6 @@ async function resolveScope(
   if (!workspaces) return null;
   const resolvedProject = await projectPending;
 
-  // A URL naming both a workspace and a project from a DIFFERENT workspace is
-  // rejected rather than reconciled, and the gate says so.
   if (urlWorkspaceId && resolvedProject && resolvedProject.workspace_id !== urlWorkspaceId) {
     return null;
   }
@@ -264,17 +219,8 @@ function readProjects(client: QueryClient, workspaceId: string) {
   return settle<ProjectSummary[]>(client.ensureQueryData(projectQueries.list(workspaceId)));
 }
 
-/**
- * Which project is active, and how far the shell has got towards knowing.
- *
- * Every input here is settled — the loader does not return until the reads
- * have — so the pending flags the provider needs at render time are all false.
- * The algebra itself is `lib/project/selection.ts`, shared with the provider so
- * the loader cannot answer differently from the tree it is seeding.
- */
 function resolveSelection(scope: Scope, listed: ProjectSummary[]) {
   const { workspaceId, resolvedProject, requestedProjectId } = scope;
-  // Include an authorized detail the list may predate.
   const known = listed.some((project) => project.id === resolvedProject?.id);
   const projects: ProjectSummary[] =
     resolvedProject && !known ? [...listed, resolvedProject] : listed;
@@ -292,8 +238,6 @@ function resolveSelection(scope: Scope, listed: ProjectSummary[]) {
     noWorkspace: false,
     workspaceId,
     activeProjectId,
-    // A listed project is authorized; the provider reads its view before any
-    // screen renders against it.
     hasResolvedProject: projects.some((project) => project.id === activeProjectId),
     listSettled: true,
   });
@@ -338,9 +282,9 @@ export async function bootstrapPrivateRoutes({ request }: { request: Request }) 
     throw redirect(workspaceDestination('/onboarding', null, workspaceId));
   }
 
-  // The address gains the project it is already showing. This was an effect
-  // that fired a frame after landing, so the URL visibly rewrote itself.
   if (decision === 'ready' && projectRequired && activeProjectId && !requestedProjectId) {
+    void client.prefetchQuery(projectQueries.detail(activeProjectId));
+    void warmProject(client, url, { projectId: activeProjectId, workspaceId });
     throw redirect(
       `${projectDestination(url.pathname, url.searchParams, activeProjectId)}${url.hash}`,
     );

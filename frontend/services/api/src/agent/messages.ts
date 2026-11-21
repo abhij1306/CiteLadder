@@ -1,16 +1,11 @@
-/** Chat and message writes shared by admission, the runtime and the queue. */
 import { randomUUID } from 'node:crypto';
 import { sql } from 'kysely';
+import { z } from 'zod';
+import { agentAttachmentSchema } from '@citeladder/contracts/agent';
 import type { Database } from '../db/database.ts';
 import { notFound } from '../errors.ts';
 import type { Chat, Json, Run, Scope } from './contracts.ts';
 
-/**
- * A chat found by its workspace alone, which names its project: the one chat
- * read a request under `/agent/chats/{chat_id}` makes. The session read
- * already proved the membership, and every read after it filters by the
- * chat's workspace and project.
- */
 export async function workspaceChat(db: Database, workspaceId: string, id: string): Promise<Chat> {
   const chat = await db
     .selectFrom('agent_chats')
@@ -44,10 +39,11 @@ export async function appendMessage(
     skillId?: string | null;
     skillSource?: string | null;
     evidence?: string[];
-    /** Web pages the turn's searches returned, kept apart from CiteLadder records. */
     webSources?: { url: string; title: string }[];
     steps?: Json[];
     mentions?: Json[];
+    attachments?: Json[];
+    proposals?: Json[];
   },
 ) {
   const previous = await db
@@ -74,10 +70,35 @@ export async function appendMessage(
       web_sources: JSON.stringify(input.webSources ?? []),
       steps: JSON.stringify(input.steps ?? []),
       mentions: JSON.stringify(input.mentions ?? []),
+      attachments: JSON.stringify(input.attachments ?? []),
+      proposals: JSON.stringify(input.proposals ?? []),
       created_at: new Date(),
     })
     .returningAll()
     .executeTakeFirstOrThrow();
+}
+export async function turnRequest(db: Database, chat: Chat, messageId: string) {
+  const messages = await db
+    .selectFrom('agent_messages')
+    .select(['id', 'content', 'attachments'])
+    .where('workspace_id', '=', chat.workspace_id)
+    .where('chat_id', '=', chat.id)
+    .where('role', '=', 'user')
+    .execute();
+  const parsed = messages.map((message) => ({
+    id: message.id,
+    text: message.content,
+    attachments: z.array(agentAttachmentSchema).parse(message.attachments),
+  }));
+  const request = parsed.find((message) => message.id === messageId);
+  if (!request) throw new Error('The turn has no request message');
+  return {
+    request: { text: request.text, attachments: request.attachments },
+    written: parsed.flatMap((message) => [
+      message.text,
+      ...message.attachments.map((attachment) => attachment.text),
+    ]),
+  };
 }
 const RECOVERY: Record<string, string> = {
   stopped_at_limit:
@@ -122,7 +143,6 @@ export function touchChat(db: Database, workspaceId: string, chatId: string) {
     .returningAll()
     .executeTakeFirstOrThrow();
 }
-/** Every terminal turn answers its request, so no message is left unanswered. */
 export async function appendRecoveryReply(db: Database, run: Run, code: string) {
   const chat = await touchChat(db, run.workspace_id, run.chat_id);
   await appendMessage(db, chat, {

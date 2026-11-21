@@ -1,35 +1,18 @@
-/**
- * What an Opportunity is about. Producers emit a `TargetRef`; the persisted
- * `target_*` columns and the identity `target_key` derive here and nowhere
- * else, and Action grouping switches on the same union.
- */
 import { policy } from '../../config.ts';
 
 export type TargetRef =
-  /** A tracked prompt; `theme` is the prompt's theme when the run recorded one. */
   | { kind: 'prompt'; prompt_id: string; theme: string | null }
-  /** A prompt the run asked but no tracked prompt names any more. */
   | { kind: 'prompt_index'; audit_id: string; prompt_index: number; theme: string | null }
-  /** An owned page a Site Health rule failed on. */
   | { kind: 'site_page'; url: string }
-  /** One Site Health rule across every owned page it fails on; `label` is the rule's. */
   | { kind: 'issue_family'; rule_id: string; label: string }
-  /** One field of an owned page that changed between two crawls. */
   | { kind: 'site_change'; site_url_id: string; field: string; url: string }
-  /** An owned page that should link to related pages. */
   | { kind: 'link_source'; site_url_id: string; url: string }
-  /** A promoted Search Console signal on a page or a query. */
   | { kind: 'demand'; identity_hash: string; url: string | null; query: string | null }
   | { kind: 'product'; product_id: string }
   | { kind: 'category'; category_id: string }
-  /** A third-party page answers cite, keyed by its url hash. */
   | { kind: 'earned_page'; url_hash: string; url: string; theme: string | null }
   /** A search competitors rank for; `url` is the owned page that covers it, if any. */
   | { kind: 'search_gap'; terms: string; keyword: string; url: string | null }
-  /**
-   * A page to create, by a planned-page key its producer stored once
-   * (`plannedPageKey`), so no reader re-slugs a label that may have changed.
-   */
   | { kind: 'planned_page'; key: string; label: string };
 
 type TargetColumns = {
@@ -39,7 +22,6 @@ type TargetColumns = {
   target_theme: string | null;
 };
 
-/** The persisted target of an earned page, the key its Action is found by. */
 export const earnedTargetKey = (urlHash: string) =>
   `${policy.opportunity.earned_actions.EARNED_PAGE_TARGET_PREFIX}${urlHash}`;
 
@@ -54,7 +36,6 @@ const columns = (
   ...values,
 });
 
-/** The persisted columns of a target; `target_key` is its identity across snapshots. */
 export function targetColumns(target: TargetRef): TargetColumns {
   switch (target.kind) {
     case 'prompt':
@@ -104,5 +85,4 @@ export function targetColumns(target: TargetRef): TargetColumns {
   }
 }
 
-/** A hit's identity key: (rule, target) is one Opportunity across snapshots. */
 export const targetKey = (target: TargetRef) => targetColumns(target).target_key;

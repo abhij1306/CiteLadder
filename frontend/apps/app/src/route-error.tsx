@@ -1,20 +1,12 @@
-import { SearchX, TriangleAlert } from 'lucide-react';
 import { useEffect } from 'react';
 import { isRouteErrorResponse, useRouteError } from 'react-router-dom';
 
-import { ListScreen } from '@/components/layout/page-shell';
+import { FirstFrame } from '@/components/layout/first-frame';
+import { NoticePage, NoticeScreen } from '@/components/templates/notice-page';
+import { Button, buttonClasses } from '@/components/ui/button';
 import { ProjectLink } from '@/components/ui/project-link';
-import { ShellFallback } from '@/components/layout/shell-fallback';
-import { Button } from '@/components/ui/button';
-import { Callout } from '@/components/ui/callout';
-import { QueryState } from '@/components/ui/query-state';
-import { textRole } from '@/components/ui/typography';
 import { isChunkLoadError, reportClientError } from '@/lib/client-errors';
 
-/**
- * Report what the boundary caught once it shows: a route chunk that could not
- * download, an error response a loader threw, or `kind` for anything else.
- */
 function useReportedRouteError(kind: 'render' | 'route') {
   const caught = useRouteError();
   useEffect(() => {
@@ -32,6 +24,19 @@ function OverviewLink({ variant }: Readonly<{ variant?: 'secondary' }>) {
   );
 }
 
+function ReloadButton() {
+  return (
+    <Button variant="primary" onClick={() => window.location.reload()}>
+      Reload page
+    </Button>
+  );
+}
+
+const COULD_NOT_OPEN = {
+  heading: 'This page could not be opened',
+  children: 'Reload to try again, or go back to Overview.',
+} as const;
+
 /**
  * A screen that failed to render, shown inside the shell so navigation
  * stays available. Reloading also recovers a route chunk replaced by a
@@ -40,56 +45,50 @@ function OverviewLink({ variant }: Readonly<{ variant?: 'secondary' }>) {
 export function ScreenError() {
   useReportedRouteError('render');
   return (
-    <ListScreen title="Something went wrong">
-      <QueryState
-        kind="empty"
-        icon={TriangleAlert}
-        heading="This page could not be opened"
-        description="Reload to try again, or go back to Overview."
-        action={
-          <>
-            <Button variant="primary" onClick={() => window.location.reload()}>
-              Reload page
-            </Button>
-            <OverviewLink variant="secondary" />
-          </>
-        }
-      />
-    </ListScreen>
+    <NoticePage
+      tone="negative"
+      {...COULD_NOT_OPEN}
+      actions={
+        <>
+          <ReloadButton />
+          <OverviewLink variant="secondary" />
+        </>
+      }
+    />
   );
 }
 
-/** An application URL that matches no screen. */
-export function NotFoundScreen() {
-  return (
-    <ListScreen title="Page not found">
-      <QueryState
-        kind="empty"
-        icon={SearchX}
-        heading="There is no page at this address"
-        description="Check the link, or go back to Overview."
-        action={<OverviewLink />}
-      />
-    </ListScreen>
-  );
-}
-
-/** A fresh document also recovers route chunks replaced by a deployment. */
 export function RouteError() {
   useReportedRouteError('route');
   return (
-    <ShellFallback>
-      <main id="main" className="grid min-h-[60vh] place-items-center p-[var(--page-section-gap)]">
-        <Callout tone="warning" className="max-w-lg">
-          <div className="grid gap-4">
-            <h1 className={textRole('sectionTitle')}>This page could not be opened</h1>
-            <p>Reload this page to try again.</p>
-            <Button variant="primary" className="w-fit" onClick={() => window.location.reload()}>
-              Reload page
-            </Button>
-          </div>
-        </Callout>
-      </main>
-    </ShellFallback>
+    <FirstFrame>
+      <NoticeScreen
+        tone="warning"
+        heading="This page could not be opened"
+        actions={<ReloadButton />}
+      >
+        Reload this page to try again.
+      </NoticeScreen>
+    </FirstFrame>
+  );
+}
+
+export function ShellRouteError() {
+  useReportedRouteError('route');
+  return (
+    <FirstFrame>
+      <NoticePage
+        tone="warning"
+        {...COULD_NOT_OPEN}
+        actions={
+          <>
+            <ReloadButton />
+            <a href="/projects" className={buttonClasses('secondary')}>
+              Go to Overview
+            </a>
+          </>
+        }
+      />
+    </FirstFrame>
   );
 }

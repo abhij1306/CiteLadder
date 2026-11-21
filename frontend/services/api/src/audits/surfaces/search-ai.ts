@@ -1,4 +1,3 @@
-/** The `search_ai` surface (Google AI Overview): every retrieval records an observation. */
 import {
   overviewAnswer,
   parseOverview,
@@ -15,7 +14,6 @@ import { observedAdapter, type ObservedSurface } from './dataforseo.ts';
 const searchAiSurface: ObservedSurface = {
   capacity: (_task, context) => context.capacity,
   recoveryDeadline: () => null,
-  // A Google AI Overview task is bounded by its poll count; it has no recovery deadline.
   pollCeiling: true,
   requestSettings: () => ({}),
   async settle(deps, context, payload, taskId) {

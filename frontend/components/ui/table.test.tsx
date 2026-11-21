@@ -21,7 +21,6 @@ function renderCell() {
   );
 }
 
-/** jsdom has no layout; give every element the box a clamped cell would have. */
 function layout({ scrollHeight }: { scrollHeight: number }) {
   vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(40);
   vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(scrollHeight);
@@ -62,7 +61,6 @@ describe('table cell text', () => {
     expect(await screen.findByRole('tooltip')).toHaveTextContent(LONG);
 
     const second = screen.getByText('Second row prompt that is also cut by the clamp');
-    // A real pointer keeps moving once it crosses into the next row.
     await user.hover(second);
     await user.pointer({ target: second, coords: { clientX: 100, clientY: 100 } });
     await user.pointer({ target: second, coords: { clientX: 120, clientY: 100 } });

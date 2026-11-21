@@ -1,4 +1,3 @@
-/** The API's route families; the route gate checks every operation declares exactly one. */
 export const ROUTE_FAMILIES = [
   'actions',
   'agent',
@@ -36,3 +35,5 @@ export const ROUTE_FAMILIES = [
 ] as const;
 
 export type RouteFamily = (typeof ROUTE_FAMILIES)[number];
+
+export const CSP_REPORTS_PATH = '/api/v1/client-errors/csp-reports';

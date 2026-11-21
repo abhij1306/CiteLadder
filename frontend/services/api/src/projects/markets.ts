@@ -1,12 +1,3 @@
-/**
- * A project's measurement markets: the country and language a run measures
- * from. The default market is the project's own `country_code` and
- * `language_code`, never a row; `project_markets` holds only the additional
- * markets, each taking one `market_slots` occupancy slot.
- *
- * A market id of `null` means the project default everywhere: audit inputs,
- * schedules, audits and the visibility filter.
- */
 import { randomUUID } from 'node:crypto';
 
 import {
@@ -24,7 +15,6 @@ import { acquireProjectLock } from '../prompts/locks.ts';
 import type { ProjectScope } from './brand-profile.ts';
 
 export type MarketId = string | null;
-/** The measurement context one audit freezes. */
 export type Market = { id: MarketId; country_code: string; language_code: string };
 
 async function projectDefault(db: Database, scope: ProjectScope): Promise<Market> {
@@ -46,7 +36,6 @@ function extraMarkets(db: Database, scope: ProjectScope) {
     .where('project_id', '=', scope.projectId);
 }
 
-/** The default market first, then additional markets oldest first. */
 export async function listMarkets(db: Database, scope: ProjectScope): Promise<ProjectMarket[]> {
   const fallback = await projectDefault(db, scope);
   const rows = await extraMarkets(db, scope).orderBy('created_at').orderBy('id').execute();
@@ -100,11 +89,6 @@ export function addMarket(
   });
 }
 
-/**
- * Remove an additional market and drop it from the project's schedules (a
- * schedule left with no market measures the default). Its past runs keep
- * their frozen market and stay in run history.
- */
 export function deleteMarket(db: Database, scope: ProjectScope, marketId: string): Promise<void> {
   return db.transaction().execute(async (trx) => {
     await acquireProjectLock(trx, scope.projectId);
@@ -133,14 +117,12 @@ export function deleteMarket(db: Database, scope: ProjectScope, marketId: string
   });
 }
 
-/** A persisted market-id list (`jsonb`): uuids and `null` for the default. */
 export function marketIds(value: unknown): MarketId[] {
   return Array.isArray(value)
     ? value.filter((id): id is MarketId => id === null || typeof id === 'string')
     : [null];
 }
 
-/** The markets `ids` name, in order; an id outside the project is a 422. */
 export async function resolveMarkets(
   db: Database,
   scope: ProjectScope,

@@ -1,12 +1,3 @@
-/**
- * Reads behind the Overview's widgets. Each uses its page's own defaults
- * (latest run, organic prompts, default market and window) and its page's
- * query factory, so a widget and its page share a cache entry.
- *
- * The same definitions drive `warmOverviewWidgets`, which starts a layout's
- * reads before the widgets mount: from navigation intent beside the command
- * center, and from the screen as soon as the layout names them.
- */
 import { useQuery, type QueryClient } from '@tanstack/react-query';
 
 import type { OverviewWidget, OverviewWidgetKey } from '@citeladder/contracts/overview';
@@ -19,7 +10,6 @@ import { visibilityQueries } from '@/lib/api/visibility-queries';
 import { TRAFFIC_RANGES } from '@/lib/config/crawl-logs';
 import { INITIAL_DASHBOARD_PARAMS } from '@/lib/performance/performance';
 
-/** Rows a list widget shows; padded to this count so the card never resizes. */
 export const WIDGET_ROWS = 5;
 const COHORT = 'core';
 
@@ -44,7 +34,6 @@ const trafficOverviewQuery = (project: WidgetProject) =>
 const searchPerformanceQuery = (project: WidgetProject) =>
   performanceQueries.dashboard(widgetScope(project), INITIAL_DASHBOARD_PARAMS);
 
-/** Domain movers against the latest run's comparable baseline; empty when it has none. */
 function moverParams(visibility: LatestVisibility) {
   const comparison = visibility?.comparison;
   return {
@@ -70,7 +59,6 @@ const perceptionParams = (visibility: LatestVisibility) => ({
 const moversReady = (params: ReturnType<typeof moverParams>) =>
   Boolean(params.audit_id && params.baseline_audit_ids.length);
 
-/** The latest run's projection, shared with Visibility's first paint. */
 export function useLatestVisibility(project: Project) {
   return useQuery(latestVisibilityQuery(project));
 }
@@ -86,8 +74,6 @@ export function useLatestMovers(project: Project) {
     ...visibilityQueries.sourceMovers(widgetScope(project), params),
     enabled: moversReady(params),
   });
-  // The projection's own comparison, so the widget can say WHY nothing moved
-  // (no earlier run, changed settings, incomplete coverage) rather than one "not comparable".
   return { visibility, movers, comparison: visibility.data?.comparison ?? null };
 }
 
@@ -119,11 +105,6 @@ export function useSearchPerformance(project: Project) {
   return useQuery(searchPerformanceQuery(project));
 }
 
-/**
- * The latest run's projection for a warmup that needs its run id. A projection
- * that already failed stays as it is (see `warmQuery`), and its dependents wait
- * for the widget to retry it.
- */
 function warmedVisibility(client: QueryClient, project: WidgetProject) {
   const options = latestVisibilityQuery(project);
   if (client.getQueryState(options.queryKey)?.status === 'error') return Promise.resolve(null);
@@ -132,17 +113,11 @@ function warmedVisibility(client: QueryClient, project: WidgetProject) {
 
 type WidgetWarmup = (client: QueryClient, project: WidgetProject) => Promise<void> | void;
 
-/**
- * What each widget reads before it can paint. `null` is a widget drawn from the
- * command center alone; a new widget fails the type check until it says which.
- */
 const WIDGET_WARMUPS: Readonly<Record<OverviewWidgetKey, WidgetWarmup | null>> = {
   project_state: null,
-  citation_share: null,
   movement: null,
   next_action: null,
   ranked_actions: null,
-  progress_proof: null,
   company_facts: null,
   missing_prompts: (client, project) =>
     warmQuery(client, visibilityQueries.prompts(widgetScope(project))),
@@ -167,11 +142,6 @@ const WIDGET_WARMUPS: Readonly<Record<OverviewWidgetKey, WidgetWarmup | null>> =
   search_console: (client, project) => warmQuery(client, searchPerformanceQuery(project)),
 };
 
-/**
- * Start the reads a layout's widgets will make, so they run beside the command
- * center instead of after it. Reads that need the latest run's id start the
- * moment that projection lands rather than when the widget mounts.
- */
 export async function warmOverviewWidgets(
   client: QueryClient,
   project: WidgetProject,

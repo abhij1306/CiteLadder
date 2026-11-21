@@ -61,7 +61,6 @@ function file(data: string | Uint8Array, name = 'logs.ndjson') {
     stream: () =>
       new ReadableStream({
         start(controller) {
-          // Chunk boundaries split records and UTF-8 decoding.
           for (let i = 0; i < bytes.length; i += 13) controller.enqueue(bytes.slice(i, i + 13));
           controller.close();
         },
@@ -82,7 +81,6 @@ const run = (value: File, format = 'ndjson', resumeId?: string) =>
   });
 beforeEach(() => {
   vi.clearAllMocks();
-  // Fixture timestamps sit inside the admission window relative to this clock.
   vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-10-04T00:00:00Z'));
   vi.stubGlobal('TextDecoderStream', TextDecoderStream);
   vi.stubGlobal('DecompressionStream', DecompressionStream);
@@ -127,7 +125,6 @@ describe('local streaming upload privacy', () => {
       ...event('unmatched'),
       timestamp: day + 'T12:00:00Z',
     }));
-    // The server's completion time is returned, for the processing wait to compare against.
     await expect(run(file(rows.map((row) => JSON.stringify(row)).join('\n')))).resolves.toEqual({
       uploadId: 'upload',
       scanned: 3,
@@ -177,7 +174,6 @@ describe('local streaming upload privacy', () => {
     );
   });
   it('resumes deterministic batches on a later day and streams gzip JSON arrays', async () => {
-    // Resumed long after creation: the upload's own floor still admits these lines.
     vi.mocked(Date.now).mockReturnValue(Date.parse('2026-12-28T00:00:00Z'));
     const rows = [event('known-robot', '/one'), event('known-robot', '/two')];
     const original = file(gzipSync(Buffer.from(JSON.stringify(rows))), 'logs.json.gz');

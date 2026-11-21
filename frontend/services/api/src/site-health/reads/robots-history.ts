@@ -10,10 +10,6 @@ import {
 } from '../../http/keyset-cursor.ts';
 import { parseUuid } from '../../http/uuid.ts';
 
-/**
- * Observation order belongs to crawls; content-addressed bodies may recur.
- * The route authorizes the project before this read.
- */
 export async function robotsHistory(
   db: Database,
   workspaceId: string,

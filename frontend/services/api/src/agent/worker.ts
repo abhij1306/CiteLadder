@@ -5,7 +5,6 @@ import { leaseSignal, maintainLease } from '../queue/heartbeat.ts';
 import { getLogger } from '../logging.ts';
 import type { TurnEvents } from './stream.ts';
 
-/** Why the caller stopped a turn: its time ran out, or the browser left. */
 function stoppedCode(signal: AbortSignal) {
   const reason: unknown = signal.reason;
   return reason instanceof DOMException && reason.name === 'TimeoutError'
@@ -13,10 +12,6 @@ function stoppedCode(signal: AbortSignal) {
     : 'interrupted';
 }
 
-/**
- * One turn, executed once inside the browser's request. A failure or a stop
- * ends it with its reply; nothing schedules a replay, so a turn never runs twice.
- */
 export async function runAgentOnce(
   queue: AgentQueue,
   runtime: AgentRuntime,

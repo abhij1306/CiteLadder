@@ -8,20 +8,23 @@ import {
   type FactTopic,
 } from '@citeladder/contracts/fact-checking';
 
-import { Badge } from '@/components/ui/badge';
+import { StatusMark } from '@/components/ui/status-mark';
+import { Tag } from '@/components/ui/tag';
 import { Button } from '@/components/ui/button';
-import { Field } from '@/components/ui/field';
-import { QueryState } from '@/components/ui/query-state';
+import { Icon } from '@/components/ui/icon';
 import { Input } from '@/components/ui/input';
-import { Inline, Stack } from '@/components/ui/layout';
-import { MutationNotice } from '@/components/ui/mutation-notice';
-import { panelClasses } from '@/components/ui/panel';
+import { Inline } from '@/components/ui/layout';
+import { SettingField, SettingRow, SettingRows } from '@/components/ui/setting-row';
 import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { textRole } from '@/components/ui/typography';
+import { Archive, Check, Pencil, Plus, Save, X } from '@/lib/icons';
 import { mutationNoticeForError } from '@/lib/api/mutation-notice';
+import { formatCount } from '@/lib/format';
 import { projectMutations } from '@/lib/api/projects';
 import { TOPIC_LABELS } from '@/lib/visibility/accuracy';
+import { Notice } from '@/components/ui/notice';
+import { StateBlock } from '@/components/ui/state-block';
 
 const TOPIC_OPTIONS = factTopicSchema.options.map((topic) => ({
   value: topic,
@@ -33,11 +36,6 @@ type Change = { fact: BrandFact; update: Partial<Omit<BrandFact, 'id' | 'revisio
 
 const EMPTY_DRAFT: Draft = { topic: 'pricing', statement: '', source_url: '' };
 
-/**
- * Brand facts for the fact-checking pilot: statements of record that answers
- * are checked against. Only confirmed facts are used, and a run checks the
- * facts confirmed when it started.
- */
 export function BrandFactsPanel({
   workspaceId,
   projectId,
@@ -47,14 +45,12 @@ export function BrandFactsPanel({
   const scope = { workspaceId, projectId };
   const create = useMutation(projectMutations.createBrandFact(scope));
   const change = useMutation(projectMutations.updateBrandFact(scope));
-  // Settles with the save; the panel shows the error notice when it fails.
   const addFact = (draft: Draft) =>
     create.mutateAsync({
       topic: draft.topic,
       statement: draft.statement.trim(),
       source_url: draft.source_url.trim() || null,
     });
-  // Edits name the revision that was read; a stale one is refused.
   const changeFact = ({ fact, update }: Change) =>
     change.mutateAsync({
       factId: fact.id,
@@ -63,52 +59,59 @@ export function BrandFactsPanel({
   const active = list.facts.filter((fact) => fact.status !== 'retired');
   const retired = list.facts.filter((fact) => fact.status === 'retired');
   return (
-    <Stack gap="workspace">
-      {mayEdit ? <AddFact pending={create.isPending} onAdd={addFact} /> : null}
+    <>
       {create.isError ? (
-        <MutationNotice notice={mutationNoticeForError(create.error, { action: 'add the fact' })} />
+        <Notice
+          kind="mutation"
+          notice={mutationNoticeForError(create.error, { action: 'add the fact' })}
+        />
       ) : null}
       {change.isError ? (
-        <MutationNotice
+        <Notice
+          kind="mutation"
           notice={mutationNoticeForError(change.error, { action: 'update the fact' })}
         />
       ) : null}
       {!active.length ? (
-        <QueryState
+        <StateBlock
           kind="empty"
           inline
           message="No facts yet. Add pricing, plans, integrations or other facts to check."
         />
       ) : (
-        <Stack as="ul" gap="compact">
+        <SettingRows label="Brand facts">
           {active.map((fact) => (
             <FactRow
               key={fact.id}
               fact={fact}
               mayEdit={mayEdit}
+              maxChars={list.limits.statement_max_chars}
               pending={change.isPending}
               onChange={(update) => changeFact({ fact, update })}
             />
           ))}
-        </Stack>
+        </SettingRows>
       )}
       {retired.length ? (
-        <p className={textRole('caption', 'text-ink-muted')}>
-          {retired.length} retired {retired.length === 1 ? 'fact is' : 'facts are'} kept for earlier
-          runs and no longer checked.
-        </p>
+        <p className={textRole('caption')}>Retired facts: {formatCount(retired.length)}</p>
       ) : null}
-    </Stack>
+      {mayEdit ? (
+        <AddFact
+          maxChars={list.limits.statement_max_chars}
+          pending={create.isPending}
+          onAdd={addFact}
+        />
+      ) : null}
+    </>
   );
 }
 
 function AddFact({
+  maxChars,
   pending,
   onAdd,
-}: Readonly<{ pending: boolean; onAdd: (draft: Draft) => Promise<unknown> }>) {
+}: Readonly<{ maxChars: number; pending: boolean; onAdd: (draft: Draft) => Promise<unknown> }>) {
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
-  // A refused fact stays in the form to correct; only a saved one clears it,
-  // and only if it was not edited while the save was in flight.
   const submit = async () => {
     const sent = draft;
     try {
@@ -118,152 +121,181 @@ function AddFact({
     }
     setDraft((current) => (current === sent ? EMPTY_DRAFT : current));
   };
+  const empty = !draft.statement.trim();
   return (
-    <Stack
-      as="form"
-      gap="compact"
-      className={panelClasses()}
+    <form
+      aria-label="Add a fact"
       onSubmit={(event) => {
         event.preventDefault();
-        if (pending || !draft.statement.trim()) return;
+        if (pending || empty) return;
         void submit();
       }}
     >
-      <Field label="Topic">
-        {(props) => (
-          <Select
-            {...props}
-            ariaLabel="Topic"
-            value={draft.topic}
-            options={TOPIC_OPTIONS}
-            onValueChange={(topic) => setDraft({ ...draft, topic })}
-          />
-        )}
-      </Field>
-      <Field label="Fact" hint="One statement, as you would want an answer to say it.">
-        {(props) => (
-          <Textarea
-            {...props}
-            rows={2}
-            maxLength={300}
-            value={draft.statement}
-            placeholder="For example: The Pro plan costs $49 per month."
-            onChange={(event) => setDraft({ ...draft, statement: event.target.value })}
-          />
-        )}
-      </Field>
-      <Field label="Source page (optional)">
-        {(props) => (
-          <Input
-            {...props}
-            type="url"
-            value={draft.source_url}
-            placeholder="https://"
-            onChange={(event) => setDraft({ ...draft, source_url: event.target.value })}
-          />
-        )}
-      </Field>
-      <div>
-        <Button type="submit" variant="primary" disabled={pending || !draft.statement.trim()}>
-          Add draft fact
-        </Button>
-      </div>
-    </Stack>
+      <SettingRows
+        foot={
+          <Button type="submit" variant="primary" disabled={pending || empty}>
+            <Icon icon={Plus} />
+            Add draft fact
+          </Button>
+        }
+      >
+        <SettingField inline label="Topic">
+          {(props) => (
+            <Select
+              id={props.id}
+              ariaLabel="Topic"
+              value={draft.topic}
+              options={TOPIC_OPTIONS}
+              onValueChange={(topic) => setDraft({ ...draft, topic })}
+            />
+          )}
+        </SettingField>
+        <SettingField label="Fact">
+          {(props) => (
+            <Textarea
+              {...props}
+              rows={2}
+              maxLength={maxChars}
+              value={draft.statement}
+              onChange={(event) => setDraft({ ...draft, statement: event.target.value })}
+            />
+          )}
+        </SettingField>
+        <SettingField label="Source page (optional)" hint="Starts with https://">
+          {(props) => (
+            <Input
+              {...props}
+              type="url"
+              value={draft.source_url}
+              onChange={(event) => setDraft({ ...draft, source_url: event.target.value })}
+            />
+          )}
+        </SettingField>
+      </SettingRows>
+    </form>
   );
 }
 
 function FactRow({
   fact,
   mayEdit,
+  maxChars,
   pending,
   onChange,
 }: Readonly<{
   fact: BrandFact;
   mayEdit: boolean;
+  maxChars: number;
   pending: boolean;
-  /** Settles with the save; the panel shows the error notice when it fails. */
   onChange: (update: Change['update']) => Promise<unknown>;
 }>) {
   const [editing, setEditing] = useState<string | null>(null);
   return (
-    <Stack as="li" gap="compact" className={panelClasses('min-w-0')}>
-      <Inline as="span" className="flex-wrap">
-        <Badge>{TOPIC_LABELS[fact.topic]}</Badge>
-        {fact.status === 'confirmed' ? (
-          <Badge variant="status" value="success">
-            Confirmed
-          </Badge>
+    <SettingRow
+      label={
+        editing === null ? (
+          <span className={textRole('body')}>{fact.statement}</span>
         ) : (
-          <Badge variant="status" value="warning">
-            Draft · not used until confirmed
-          </Badge>
-        )}
-      </Inline>
-      {editing === null ? (
-        <span className={textRole('body', 'text-ink')}>{fact.statement}</span>
-      ) : (
-        <Textarea
-          aria-label="Edit fact"
-          rows={2}
-          maxLength={300}
-          value={editing}
-          onChange={(event) => setEditing(event.target.value)}
-        />
-      )}
-      {fact.source_url ? (
-        <span
-          className={textRole('caption', 'text-ink-muted block truncate')}
-          title={fact.source_url}
-        >
-          {fact.source_url}
-        </span>
-      ) : null}
-      {mayEdit ? (
-        <Inline as="span" className="flex-wrap">
-          {editing === null ? (
-            <>
-              {fact.status === 'draft' ? (
-                <Button
-                  variant="primary"
-                  disabled={pending}
-                  onClick={() => void onChange({ status: 'confirmed' }).catch(() => undefined)}
-                >
-                  Confirm
-                </Button>
-              ) : null}
-              <Button variant="secondary" onClick={() => setEditing(fact.statement)}>
-                Edit
-              </Button>
-              <Button
-                variant="ghost"
-                disabled={pending}
-                onClick={() => void onChange({ status: 'retired' }).catch(() => undefined)}
-              >
-                Retire
-              </Button>
-            </>
+          <Textarea
+            aria-label="Edit fact"
+            rows={2}
+            maxLength={maxChars}
+            value={editing}
+            onChange={(event) => setEditing(event.target.value)}
+          />
+        )
+      }
+      description={
+        <Inline as="span" gap="status">
+          <Tag>{TOPIC_LABELS[fact.topic]}</Tag>
+          {fact.status === 'confirmed' ? (
+            <StatusMark variant="status" value="success">
+              Confirmed
+            </StatusMark>
           ) : (
-            <>
-              <Button
-                variant="primary"
-                disabled={pending || !editing.trim()}
-                onClick={() => {
-                  // Keep the draft open until the save lands, so a failed save loses nothing.
-                  onChange({ statement: editing.trim() }).then(
-                    () => setEditing(null),
-                    () => undefined,
-                  );
-                }}
-              >
-                Save
-              </Button>
-              <Button variant="ghost" onClick={() => setEditing(null)}>
-                Cancel
-              </Button>
-            </>
+            <StatusMark variant="status" value="warning">
+              Draft
+            </StatusMark>
           )}
+          {fact.source_url ? (
+            <span className={textRole('caption', 'min-w-0 truncate')}>{fact.source_url}</span>
+          ) : null}
         </Inline>
-      ) : null}
-    </Stack>
+      }
+      action={
+        mayEdit ? (
+          <FactActions
+            fact={fact}
+            editing={editing}
+            pending={pending}
+            onEdit={setEditing}
+            onChange={onChange}
+          />
+        ) : undefined
+      }
+    />
+  );
+}
+
+function FactActions({
+  fact,
+  editing,
+  pending,
+  onEdit,
+  onChange,
+}: Readonly<{
+  fact: BrandFact;
+  editing: string | null;
+  pending: boolean;
+  onEdit: (draft: string | null) => void;
+  onChange: (update: Change['update']) => Promise<unknown>;
+}>) {
+  if (editing === null)
+    return (
+      <Inline as="span" className="flex-wrap">
+        {fact.status === 'draft' ? (
+          <Button
+            variant="secondary"
+            disabled={pending}
+            onClick={() => void onChange({ status: 'confirmed' }).catch(() => undefined)}
+          >
+            <Icon icon={Check} />
+            Confirm
+          </Button>
+        ) : null}
+        <Button variant="secondary" onClick={() => onEdit(fact.statement)}>
+          <Icon icon={Pencil} />
+          Edit
+        </Button>
+        <Button
+          variant="quiet"
+          disabled={pending}
+          onClick={() => void onChange({ status: 'retired' }).catch(() => undefined)}
+        >
+          <Icon icon={Archive} />
+          Retire
+        </Button>
+      </Inline>
+    );
+  return (
+    <Inline as="span" className="flex-wrap">
+      <Button variant="quiet" onClick={() => onEdit(null)}>
+        <Icon icon={X} />
+        Cancel
+      </Button>
+      <Button
+        variant="secondary"
+        disabled={pending || !editing.trim()}
+        onClick={() => {
+          onChange({ statement: editing.trim() }).then(
+            () => onEdit(null),
+            () => undefined,
+          );
+        }}
+      >
+        <Icon icon={Save} />
+        Save
+      </Button>
+    </Inline>
   );
 }

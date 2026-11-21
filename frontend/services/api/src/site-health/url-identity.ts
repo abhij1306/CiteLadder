@@ -40,10 +40,6 @@ export function canonicalIdentity(value: string, base?: string) {
     domain: getDomain(url.hostname) ?? url.hostname,
   };
 }
-/**
- * The identity hash of the same URL on the www/apex twin host, or null. Many
- * sites answer on both without redirecting; admission keeps one of the pair.
- */
 export function hostTwinHash(value: string): string | null {
   try {
     const url = new URL(value);
@@ -54,7 +50,6 @@ export function hostTwinHash(value: string): string | null {
   }
 }
 
-/** The canonical URL, or null when the value is not a public URL. */
 export function canonicalUrl(value: unknown, base?: string): string | null {
   if (typeof value !== 'string' || !value) return null;
   try {

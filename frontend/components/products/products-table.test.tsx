@@ -10,7 +10,7 @@ import { commerceQueries } from '@/lib/api/commerce';
 import type { CommerceProductRow } from '@citeladder/contracts/commerce-suite';
 import type { ProductColumnKey } from '@/lib/products/product-columns';
 
-import { ProductsTable } from './products-table';
+import { ProductsTable, type ProductsEmpty } from './products-table';
 
 const PROJECT_ID = '11111111-1111-4111-8111-111111111111';
 const ROAD = '22222222-2222-4222-8222-222222222222';
@@ -87,7 +87,9 @@ function Harness({
   onSort = vi.fn(),
   trackable = false,
   selectable,
+  empty = { kind: 'empty', source: 'catalog' },
 }: Readonly<{
+  empty?: ProductsEmpty;
   trackable?: boolean;
   selectable?: boolean;
   columns?: ProductColumnKey[];
@@ -104,6 +106,7 @@ function Harness({
       scope={{ window: '90', engine: 'chatgpt', promptSet: null }}
       columns={columns}
       trackable={trackable}
+      empty={empty}
       {...(selectable === undefined ? {} : { selectable })}
       sort="visibility"
       onSort={onSort}
@@ -141,6 +144,22 @@ const cells = (name: string) =>
     .map((cell) => cell.textContent);
 
 describe('ProductsTable', () => {
+  it('tells an empty catalog from a filtered page with nothing matching', async () => {
+    serve([]);
+    const onClear = vi.fn();
+    const { unmount } = renderWithProviders(<Harness />, projectRoute);
+    expect(await screen.findByRole('heading', { name: 'No products yet' })).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Clear filters' })).not.toBeInTheDocument();
+    unmount();
+
+    renderWithProviders(<Harness empty={{ kind: 'filtered', onClear }} />, projectRoute);
+    expect(
+      await screen.findByRole('heading', { name: 'No products match these filters' }),
+    ).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
+    expect(onClear).toHaveBeenCalledTimes(1);
+  });
+
   it('shows each metric, keeping unavailable, unknown, none and zero apart', async () => {
     serve(ITEMS);
     renderWithProviders(<Harness />, projectRoute);
@@ -155,25 +174,23 @@ describe('ProductsTable', () => {
       '$120.00',
       'runnerstore.com (2), shoes.example.eu (1)',
     ]);
-    // A competitor seen nowhere in scope: a real zero, no rank, no catalog.
     expect(cells('Zoom Glide')).toEqual([
       '0.0%',
       '0',
-      '–Not measured',
-      '–Not measured',
-      '–Not measured',
-      'None',
-      'None',
+      '—Not measured',
+      '—Not measured',
+      '—Not measured',
+      '—Not applicable',
+      '—None',
     ]);
-    // No answer in scope: visibility is unavailable; a missing catalog price is unknown.
     expect(cells('Acme Trail Climber')).toEqual([
-      '–Not measured',
+      '—Not measured',
       '0',
-      '–Not measured',
-      '–Not measured',
-      '–Not measured',
-      'Unknown',
-      'None',
+      '—Not measured',
+      '—Not measured',
+      '—Not measured',
+      '—Unknown',
+      '—None',
     ]);
   });
 

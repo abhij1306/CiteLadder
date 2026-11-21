@@ -8,7 +8,6 @@ const sink = vi.fn((_url: string, _init: RequestInit) =>
   Promise.resolve(new Response(null, { status: 204 })),
 );
 
-/** The reports the sink received, as the API reads them. */
 function reports() {
   return sink.mock.calls.map(([url, init]) => ({
     url,
@@ -36,7 +35,6 @@ class ScreenBoundary extends Component<{ children: ReactNode }, { message: strin
 beforeEach(() => {
   sink.mockClear();
   vi.stubGlobal('fetch', sink);
-  // React reports every caught error; the assertions are on what renders and is sent.
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 afterEach(() => {
@@ -105,7 +103,6 @@ describe('Lazy island', () => {
     ).toBeInTheDocument();
     expect(screen.queryByText("Couldn't load chart.")).not.toBeInTheDocument();
     unmount();
-    // The same defect again in this page load is not sent twice.
     render(tree());
 
     expect(reports().map((r) => r.body)).toEqual([

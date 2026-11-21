@@ -1,4 +1,3 @@
-/** Bounded lexical selection over persisted crawl evidence; no acquisition. */
 import { USABLE_CRAWL_STATUSES } from '@citeladder/contracts/site-health';
 import { sql } from 'kysely';
 import { policy } from '../../config.ts';
@@ -10,7 +9,6 @@ import type { Scope } from '../../opportunities/sources.ts';
 import { currentSiteCrawlQuery, latestPagesQuery, type ViewCrawl } from './crawl.ts';
 
 const p = policy.agent_context;
-/** A URL as pages are matched: scheme, `www.` and a trailing slash do not tell pages apart. */
 export const comparableUrl = (value: string) =>
   stripTrailing(
     value
@@ -32,7 +30,6 @@ function clean(value: unknown, cap = p.content_context_field_max_chars) {
     .slice(0, cap);
 }
 type PageRow = Awaited<ReturnType<ReturnType<typeof rowsQuery>['execute']>>[number];
-/** The crawl's finalized pages with facts, at their latest audit (`latestPagesQuery`, SH-B9). */
 function rowsQuery(db: Database, crawl: ViewCrawl) {
   return latestPagesQuery(db, crawl)
     .where('a.finalized_at', 'is not', null)
@@ -62,7 +59,6 @@ function rowsQuery(db: Database, crawl: ViewCrawl) {
       'f.extractor_version',
     ]);
 }
-/** A page's context block; the requested page carries a longer body excerpt. */
 function pageBlock(row: PageRow, target: boolean) {
   const facts = record(row.normalized_facts),
     headings = record(facts.headings);
@@ -87,7 +83,6 @@ function pageBlock(row: PageRow, target: boolean) {
     ),
   };
 }
-/** Whether the row is the requested page, by either recorded URL. */
 function isTarget(row: PageRow, target: string) {
   return (
     Boolean(target) &&
@@ -165,9 +160,6 @@ export async function selectContentFragments(
   targetUrl = '',
   crawlId?: string,
 ) {
-  // The named usable crawl (a failed one has no audit of its own) or, without
-  // one, the current crawl (SH-B1); either must hold content pages. A current
-  // crawl without them never falls back to an older crawl: it reports no usable crawl.
   const candidate = crawlId
     ? db
         .selectFrom('site_crawls')

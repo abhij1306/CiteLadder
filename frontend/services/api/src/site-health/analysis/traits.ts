@@ -1,8 +1,3 @@
-/**
- * Additive page traits: what else a page carries, independent of its kind. A
- * product page with an FAQ stays a product and gains `has_faq`. Each trait is
- * an observation the page's own evidence supports, never a guess.
- */
 import { analysisPolicy } from './policy.ts';
 import { observedQuestionCount } from './questions.ts';
 import { count, list, record, text, textList, type Facts } from './read-facts.ts';
@@ -28,7 +23,6 @@ const schemaTypes = (facts: Facts) => new Set(textList(record(facts.structured_d
 const hasSchema = (facts: Facts, trait: string) =>
   (SCHEMA_TYPES[trait] ?? []).some((type) => schemaTypes(facts).has(type));
 
-/** A route segment, else a bounded title/H1 phrase. */
 function intent(trait: string, finalUrl: string, facts: Facts) {
   const segments = pathSegments(finalUrl);
   if ((ROUTE_SEGMENTS[trait] ?? []).some((segment) => segments.has(segment))) return true;
@@ -89,7 +83,6 @@ function observed(finalUrl: string, facts: Facts): Record<string, boolean> {
   };
 }
 
-/** Observed traits in stable config order. */
 export function deriveTraits(finalUrl: string, facts: Facts): string[] {
   const found = observed(finalUrl, facts);
   return t.order.filter((trait) => found[trait]);

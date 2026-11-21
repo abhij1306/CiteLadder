@@ -1,9 +1,11 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 
 import { promptsMutations, promptsQueries } from '@/lib/api/prompts';
 import type { PromptSet } from '@citeladder/contracts';
 import { useProjectScope } from '@/lib/project/active-project-scope';
+
+import { libraryOrder, mainPromptSet, rowSetNames } from './prompt-sets';
 
 /**
  * Resolve the active project's prompt set.
@@ -19,10 +21,16 @@ export function usePromptSet() {
   const scope = { workspaceId, projectId };
 
   const listQuery = useQuery(promptsQueries.sets(scope));
-  // The embedded prompt sets render the table until the list (and its form bounds) loads.
   const embedded = project.prompt_sets;
   const sets = listQuery.data?.prompt_sets ?? embedded;
-  const promptSet: PromptSet | null = sets[0] ?? null;
+  const promptSet: PromptSet | null = mainPromptSet(sets);
+  const ordered = useMemo(() => libraryOrder(sets), [sets]);
+  const prompts = useMemo(() => ordered.flatMap((set) => set.prompts), [ordered]);
+  const setNames = useMemo(() => rowSetNames(sets), [sets]);
+  const commerceSetIds: ReadonlySet<string> = useMemo(
+    () => new Set(sets.filter((set) => set.kind === 'commerce').map((set) => set.id)),
+    [sets],
+  );
 
   const createMutation = useMutation(promptsMutations.ensureSet(scope));
 
@@ -34,11 +42,11 @@ export function usePromptSet() {
   return {
     projectId,
     promptSet,
-    prompts: promptSet?.prompts ?? [],
-    /** Server-enforced bounds of the prompt forms; null until the list loads. */
+    prompts,
+    setNames,
+    commerceSetIds,
     limits: listQuery.data?.limits ?? null,
     isLoading: listQuery.isLoading && !embedded.length,
-    /** The list read's failure; null unless it failed. */
     error: listQuery.error,
     retry: () => void listQuery.refetch(),
     retrying: listQuery.isFetching,

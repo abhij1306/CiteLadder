@@ -18,10 +18,24 @@ it('lets the account select and retain a named timezone, then return to Auto', a
   await user.type(screen.getByRole('textbox', { name: 'IANA timezone' }), 'Asia/Kolkata');
   await user.click(screen.getByRole('button', { name: 'Save timezone' }));
   expect(readTimeZonePreference(document.cookie)).toBe('Asia/Kolkata');
-  expect(screen.getByText('Timestamps currently display in Asia/Kolkata.')).toBeVisible();
+  expect(screen.getByText('Asia/Kolkata')).toBeVisible();
   await user.click(screen.getByRole('combobox', { name: 'Display timezone preference' }));
   await user.click(screen.getByRole('option', { name: /Auto/ }));
   expect(readTimeZonePreference(document.cookie)).toBe('auto');
+});
+
+it('ties an invalid timezone to its field, so returning to the field reads the error', async () => {
+  const user = userEvent.setup();
+  render(<TimeZoneSetting />);
+  await user.click(screen.getByRole('combobox', { name: 'Display timezone preference' }));
+  await user.click(screen.getByRole('option', { name: 'Named timezone' }));
+  await user.type(screen.getByRole('textbox', { name: 'IANA timezone' }), 'Not/AZone');
+  await user.click(screen.getByRole('button', { name: 'Save timezone' }));
+
+  const field = screen.getByRole('textbox', { name: 'IANA timezone' });
+  expect(field).toBeInvalid();
+  expect(field).toHaveAccessibleDescription('Enter a valid IANA timezone, such as Asia/Kolkata.');
+  expect(readTimeZonePreference(document.cookie)).not.toBe('Not/AZone');
 });
 
 it('refreshes the saved choice on focus without discarding an unsaved custom edit', async () => {
@@ -43,7 +57,7 @@ it('refreshes the saved choice on focus without discarding an unsaved custom edi
     window.dispatchEvent(new Event('focus'));
   });
   expect(screen.getByRole('textbox', { name: 'IANA timezone' })).toHaveValue('Europe/London');
-  expect(screen.getByText('Timestamps currently display in Asia/Kolkata.')).toBeVisible();
+  expect(screen.getByText('Asia/Kolkata')).toBeVisible();
 
   await user.click(screen.getByRole('button', { name: 'Save timezone' }));
   expect(readTimeZonePreference(document.cookie)).toBe('Europe/London');

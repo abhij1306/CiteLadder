@@ -4,7 +4,9 @@ import { describe, expect, it, vi } from 'vite-plus/test';
 
 import type { Prompt, Topic } from '@citeladder/contracts';
 
-import { ConfirmDeleteDialog, type PendingDelete } from './confirm-delete-dialog';
+import { ConfirmDialog } from '@/components/ui/dialog';
+
+import { deleteRequest, type PendingDelete } from './confirm-delete-dialog';
 
 const topic = { id: 't1', name: 'Footwear', active_count: 3 } as Topic;
 const prompt = { id: 'p1', text: 'best trail shoes' } as Prompt;
@@ -12,11 +14,11 @@ const prompt = { id: 'p1', text: 'best trail shoes' } as Prompt;
 function renderDialog(pending: PendingDelete | null) {
   const onConfirm = vi.fn();
   const onCancel = vi.fn();
-  render(<ConfirmDeleteDialog pending={pending} onConfirm={onConfirm} onCancel={onCancel} />);
+  render(<ConfirmDialog request={deleteRequest(pending, onConfirm)} onCancel={onCancel} />);
   return { onConfirm, onCancel };
 }
 
-describe('ConfirmDeleteDialog', () => {
+describe('deleteRequest', () => {
   it('shows nothing until a delete is pending', () => {
     renderDialog(null);
 
@@ -47,7 +49,7 @@ describe('ConfirmDeleteDialog', () => {
   it('states what a topic delete does to its prompts before it happens', () => {
     renderDialog({ kind: 'topic', topic });
 
-    expect(screen.getByRole('dialog').textContent).toMatch(/Footwear/);
-    expect(screen.getByRole('dialog').textContent).toMatch(/3 active prompts/);
+    expect(screen.getByRole('alertdialog').textContent).toMatch(/Footwear/);
+    expect(screen.getByRole('alertdialog').textContent).toMatch(/3 active prompts/);
   });
 });

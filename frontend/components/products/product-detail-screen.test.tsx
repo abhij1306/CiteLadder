@@ -66,6 +66,7 @@ const ROAD_DETAIL: CommerceProductDetail = {
     },
   ],
   merchants: [{ domain: 'runnerstore.com', count: 2 }],
+  seen_in: [],
   sources: [
     {
       url: 'https://reviews.example/best-road',
@@ -140,7 +141,6 @@ function serve(detail: Record<string, CommerceProductDetail>) {
   );
 }
 
-/** The page at `path`; URL filters read the live address, so it is set there too. */
 function renderAt(path: string, role: TestRole = 'owner') {
   window.history.replaceState(null, '', path);
   return renderWithProviders(
@@ -168,18 +168,24 @@ describe('ProductDetailScreen', () => {
 
     expect(await screen.findByRole('heading', { name: 'Acme Road Runner' })).toBeInTheDocument();
     expect(requested).toEqual(['?window=90']);
-    expect(screen.getByText('A daily trainer for road miles.')).toBeInTheDocument();
+    expect(
+      screen.getByRole('link', { name: /^A daily trainer for road miles\.,\s?https:\/\/shop/ }),
+    ).toHaveAttribute('href', 'https://shop.example/products/road');
+    expect(screen.queryByText('A daily trainer for road miles.')).toBeNull();
     const kpis = within(screen.getByRole('group', { name: 'Product metrics' }));
     expect(kpis.getByText('75.0%')).toBeInTheDocument();
     expect(kpis.getByText('$120.00')).toBeInTheDocument();
-    // No ordered win, no quoted price: the missing mark, never zero.
-    expect(kpis.getAllByText('Not measured')).toHaveLength(2);
+    expect(kpis.getAllByText('Not measured')).toHaveLength(1);
+    expect(kpis.getByText('Not mentioned')).toBeInTheDocument();
 
     const rival = screen.getByRole('link', { name: 'Rival Pacer' });
     expect(new URL(rival.getAttribute('href')!, 'https://app.test').pathname).toBe(
       `/products/${RIVAL}`,
     );
-    expect(screen.getByText(/ranked above it in 1/)).toBeInTheDocument();
+    const rivalCells = within(screen.getByRole('row', { name: /Rival Pacer/ })).getAllByRole(
+      'cell',
+    );
+    expect(rivalCells.slice(1).map((cell) => cell.textContent)).toEqual(['2', '1', '1.5']);
     expect(screen.getByRole('link', { name: /Best road shoes/ })).toHaveAttribute(
       'href',
       'https://reviews.example/best-road',
@@ -187,13 +193,13 @@ describe('ProductDetailScreen', () => {
     expect(
       screen.getByText('No search queries were captured for the answers that named it.'),
     ).toBeInTheDocument();
-    expect(screen.getByText('The newest 1 of 3 answers that named it.')).toBeInTheDocument();
+    expect(screen.getByText('Newest 1 of 3')).toBeInTheDocument();
     expect(screen.getByText('Lost')).toBeInTheDocument();
 
     const setup = within(screen.getByRole('region', { name: 'Setup' }));
     expect(setup.getByRole('link', { name: 'Add the missing price' })).toBeInTheDocument();
     const agent = setup
-      .getAllByRole('link', { name: 'Work with the agent' })
+      .getAllByRole('link', { name: /^Work with the agent/ })
       .map((link) => new URL(link.getAttribute('href')!, 'https://app.test').searchParams);
     expect(agent.map((params) => params.get('action_id'))).toEqual([null, ACTION]);
     expect(agent[0]!.get('target_url')).toBe('https://shop.example/products/road');
@@ -224,7 +230,7 @@ describe('ProductDetailScreen', () => {
 
     const user = userEvent.setup();
     await screen.findByRole('heading', { name: 'Acme Road Runner' });
-    await chooseFilterOption(user, 'Window', 'Last 7 days');
+    await chooseFilterOption(user, 'Period', 'Last 7 days');
     await waitFor(() => expect(requested).toEqual(['?window=30', '?window=7']));
   });
 
@@ -307,7 +313,6 @@ describe('ProductDetailScreen', () => {
     const price = await screen.findByRole('textbox', { name: 'Price' });
     await user.clear(price);
     await user.type(price, '99.5');
-    // Someone renames the product; the page refetches while the drawer is open.
     let refetched = 0;
     mswServer.use(
       http.get(`${base}/products/:holder`, () => {
@@ -397,7 +402,7 @@ describe('ProductDetailScreen', () => {
     await waitFor(() => expect(sent).toEqual([[RIVAL, { decision: 'approved' }]]));
   });
 
-  it('opens a category’s setup and reports an unknown product as not loaded', async () => {
+  it('opens a category’s setup and reports an unknown product as not found', async () => {
     serve({});
     const category = renderAt(`/products/${CATEGORY}`);
     expect(await screen.findByRole('heading', { name: 'Road' })).toBeInTheDocument();
@@ -406,6 +411,6 @@ describe('ProductDetailScreen', () => {
     category.unmount();
 
     renderAt(`/products/${RIVAL}`);
-    expect(await screen.findByText('Product not found')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Page not found' })).toBeInTheDocument();
   });
 });

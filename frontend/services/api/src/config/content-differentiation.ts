@@ -1,4 +1,3 @@
-/** Bounded comparison of inspected sources and owned content. */
 export const contentDifferentiation = {
   formula_version: 'content-differentiation-1',
   result_limit: 10,

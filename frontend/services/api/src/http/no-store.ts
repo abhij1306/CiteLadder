@@ -1,10 +1,3 @@
-/**
- * API responses are never stored unless they are revalidated on every use.
- *
- * Every `/api/` and machine-route response, errors included, carries `private, no-store`
- * unless the route chose revalidation (`http/revalidate.ts`); nothing is
- * served from a browser cache without a request that re-checks access.
- */
 import type { MiddlewareHandler } from 'hono';
 
 import type { AppEnv } from '../context.ts';

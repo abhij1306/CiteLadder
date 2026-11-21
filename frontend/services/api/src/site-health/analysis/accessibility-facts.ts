@@ -1,4 +1,3 @@
-/** Static accessible-name, heading-order and document-language observations. */
 import {
   ancestors,
   attribute,
@@ -16,7 +15,6 @@ const HEADINGS = new Set(['h1', 'h2', 'h3', 'h4', 'h5', 'h6']);
 const CONTROLS = new Set(['input', 'select', 'textarea', 'button']);
 const inputType = (node: HtmlElement) => attribute(node, 'type').trim().toLowerCase();
 
-/** Whether a node is outside the accessibility tree: template, hidden, inert or aria-hidden. */
 function excluded(node: HtmlElement, templateOnly = false) {
   for (const item of [node, ...ancestors(node)]) {
     if (item.tagName === 'template') return true;
@@ -31,7 +29,6 @@ function excluded(node: HtmlElement, templateOnly = false) {
   return false;
 }
 
-/** Text alternatives a naming subtree contributes; a directly referenced label may be hidden. */
 function accessibleText(node: HtmlElement, directlyReferenced = false) {
   const parts: string[] = [];
   for (const text of textNodes(node)) {
@@ -99,7 +96,6 @@ function controlFacts(root: HtmlNode) {
   const referenced = new Set(
     controls.flatMap((control) => attribute(control, 'aria-labelledby').split(/\s+/u)),
   );
-  // Ids should be unique; when one repeats, a label names only its first element.
   const firstWithId = new Map<string, HtmlElement>();
   for (const node of all) {
     const id = attribute(node, 'id').trim();
@@ -127,8 +123,6 @@ function controlFacts(root: HtmlNode) {
     name: identifier(control, 'name'),
     ordinal,
   }));
-  // One reference snippet per page, of its first unnamed control: the issue
-  // catalog keeps one per issue family from these (`issue-catalog.ts`).
   const first = unnamed[0];
   return {
     count: controls.length,

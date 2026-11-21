@@ -8,6 +8,7 @@ import { currentIssueFilter } from '../site-health/reads/page-rows.ts';
 import type { DB } from '../generated/db-schema.ts';
 import { parseUuid } from '../http/uuid.ts';
 import { getAction } from '../opportunities/actions.ts';
+import { statusView } from '../opportunities/action-status.ts';
 import { getExecutionEvidence } from '../visibility/execution.ts';
 import { authorizedWorkspaceIds, authorizeProject } from './data.ts';
 import { businessContext } from './context.ts';
@@ -277,12 +278,11 @@ const records = {
     'created_at',
   ]),
 } as const satisfies Record<Exclude<RecordKindName, OwnedKind>, Descriptor>;
-/** Kinds resolved by their owners rather than the column allowlist. */
 type OwnedKind = 'project' | 'prompt' | 'action';
-/** Every allowlisted kind is a contracts record kind. */
 type Kind = RecordKindName;
 
-const NOT_A_RECORD = 'id must be an allowlisted citeladder:// record URI';
+const NOT_A_RECORD =
+  "id must be a citeladder:// record id exactly as a read or search returned it. Read a page on the project's site with read_page_text and a page AI answers cited with read_source_url; fetch reads no other web pages.";
 export function parseRecordId(value: string): { kind: Kind; id: string; part: number } {
   const uri = URL.parse(value);
   if (!uri) throw new McpInputError(NOT_A_RECORD);
@@ -397,7 +397,6 @@ async function resolvePrompt(
   };
 }
 
-/** Only a published dataset, or a row of one, is evidence. */
 function publishedFilter(kind: Kind) {
   if (kind === 'search_dataset') return sql`and r.status = 'published'`;
   if (kind === 'search_row')
@@ -448,8 +447,7 @@ async function attachActionStatus(
         .where('project_id', '=', projectId)
         .executeTakeFirst()
     : undefined;
-  // No Action row is an unknown status, never an open one.
-  row.status = status?.status ?? null;
+  row.status = status ? statusView(status.status).status : null;
   row.provenance = {
     analyzer_version: row.analyzer_version,
     rule_version: row.rule_version,
@@ -457,7 +455,6 @@ async function attachActionStatus(
   };
 }
 
-/** Columns each lifecycle record reports as its progress counts. */
 const countColumns: Partial<Record<Kind, Record<string, string>>> = {
   site_crawl: {
     admitted: 'admitted_url_count',
@@ -475,7 +472,6 @@ const countColumns: Partial<Record<Kind, Record<string, string>>> = {
   },
 };
 
-/** Synchronous per-kind reshaping of the persisted row. */
 const rowShapers: Partial<Record<Kind, (row: Evidence) => void>> = {
   site_snapshot: (row) => {
     row.scores = {
@@ -516,7 +512,6 @@ function attachCounts(kind: Kind, row: Evidence) {
   for (const column of Object.values(fields)) delete row[column];
 }
 
-/** Attaches the page's artifact, rule evaluations and current issues; returns its title. */
 async function attachSitePage(
   db: Database,
   row: Evidence,
@@ -635,13 +630,10 @@ async function resolveSpecRecord(
   attachCounts(kind, row);
   rowShapers[kind]?.(row);
   if (kind === 'site_page') title = await attachSitePage(db, row, recordScope, title);
-  // Site records' page and link URLs, the title included (a page may be titled
-  // by its URL), leave without query or fragment, as the Site tools return them.
   if (kind.startsWith('site_')) {
     title = textWithoutUrlQuery(title);
     for (const [key, value] of Object.entries(row)) row[key] = withoutQueryDeep(value);
   }
-  // Put the diagnosis ahead of bulky crawl facts in continuation documents.
   const record =
     kind === 'site_page' ? { issues: row.issues, evaluations: row.evaluations, ...row } : row;
   return { record, title, projectId, observedAt };
@@ -662,7 +654,6 @@ async function resolveRecord(
   return resolveSpecRecord(db, principal, workspaces, kind, id);
 }
 
-/** Split by Unicode code points, measuring the entire encoded document in UTF-8. */
 export function retrievalDocument({
   kind,
   id,
@@ -687,9 +678,8 @@ export function retrievalDocument({
   const normalized = z.record(z.string(), z.json()).parse(jsonValue(record));
   const serialized = JSON.stringify(normalized);
   const uri = `citeladder://${kind}/${id}`;
-  const url = appLink(origin, recordPath(kind, normalized), projectId);
+  const url = appLink(origin, recordPath(kind, { id, ...normalized }), projectId);
   const limit = Math.min(maxBytes, mcpPolicy.max_document_bytes);
-  // The record travels once, as the document text.
   const document = (textPart: string, partUris: string[] = []) => ({
     id: partUris.length ? `${uri}?part=${part}` : uri,
     title,
@@ -719,8 +709,6 @@ export function retrievalDocument({
   ) {
     const count = Math.ceil(characters.length / chunkSize);
     const uris = Array.from({ length: count }, (_, index) => `${uri}?part=${index}`);
-    // Bound metadata first: decreasing chunk size cannot rescue a URI manifest
-    // that already exceeds the document budget.
     if (bytes(document('', uris)) > limit)
       throw new Error('Retrieval metadata exceeds the document size limit');
     const parts = Array.from({ length: count }, (_, index) =>

@@ -110,7 +110,6 @@ it('folds each check from the source that can read it, within the window, idempo
   const checks = (name: string) => storedOutcomes(latest(name)?.result);
   for (const name of ['site', 'traffic', 'visibility', 'earned'])
     expect(latest(name)?.kind, name).toBe('verified');
-  // Site-wide clicks never stand in for the page's own Search Console row.
   expect(latest('traffic_other')?.kind).toBe('observed');
   expect(checks('traffic_other').get(0)).toMatchObject({
     state: 'unavailable',
@@ -118,7 +117,6 @@ it('folds each check from the source that can read it, within the window, idempo
   });
   expect(checks('missing_prompt').get(0)?.reason).toBe('prompt_not_in_run');
   expect(checks('legacy').get(0)?.reason).toBe('not_prompt_scoped');
-  // Neither the crawl nor the window settles both checks; folded, they verify.
   expect(named('mixed').map((r) => r.kind)).toEqual(['observed', 'verified']);
   expect([...checks('mixed').values()].map((c) => c.source_kind).sort()).toEqual([
     'site_crawl',
@@ -182,7 +180,6 @@ it('announces evidence once: a refresh, and a re-check only where declared work 
   try {
     const audit = randomUUID();
     const scope = { workspaceId: declared.workspaceId, projectId: declared.projectId };
-    // A replayed announcement adds nothing.
     for (let attempt = 0; attempt < 2; attempt++)
       await announceEvidence(db, scope, { kind: 'audit', id: audit });
     const traffic = randomUUID();
@@ -206,7 +203,6 @@ it('announces evidence once: a refresh, and a re-check only where declared work 
         `implementation-verification:traffic_snapshot:${traffic}:implementation-verifier-1:task-1`,
       ],
     ]);
-    // Another workspace's declarations never make this project's evidence a re-check.
     await announceEvidence(
       db,
       { workspaceId: bare.workspace_id, projectId: bare.project_id },
@@ -329,7 +325,6 @@ it('compares scoped referral windows and frozen branded-demand sources without t
   const d = await declaration(own.declarations.site!);
   const scope = { workspace_id: own.workspaceId, project_id: own.projectId };
   const hour = 3_600_000;
-  // Before the declaration (a day before the seed's moment) and after it.
   const baselineTime = new Date(Date.parse(own.moment) - 48 * hour);
   const postTime = new Date(Date.parse(own.moment) + 12 * hour);
   const window = {
@@ -487,7 +482,6 @@ it('keeps baseline gaps unknown until a later snapshot and suppresses changed au
   expect((await buildVerificationResult(db, d, different)).legs.visibility?.state).toBe(
     'non_comparable',
   );
-  // A foreign baseline audit must remain unavailable even when its ID exists.
   await db
     .updateTable('opportunity_snapshots')
     .set({ audit_id: foreign.auditId })

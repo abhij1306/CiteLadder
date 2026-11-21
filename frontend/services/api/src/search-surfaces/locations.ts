@@ -1,13 +1,3 @@
-/**
- * The reviewed DataForSEO locations file: which measurement countries each
- * search surface supports, at which location code, and the market languages
- * each surface offers (DataForSEO lists languages per surface, not per
- * country, so they are stored once).
- *
- * The file is written by the operator CLI (`pnpm dataforseo:locations`) and
- * reviewed in a pull request; nothing here calls DataForSEO. A country absent
- * from the file, or a surface absent for a country, is unsupported there.
- */
 import { MARKET_COUNTRIES, MARKET_LANGUAGES } from '@citeladder/contracts/markets';
 import { z } from 'zod';
 
@@ -16,15 +6,10 @@ import { ConfigError } from '../config/config-error.ts';
 import { dataforseo, enginesOfKind } from '../config/providers.ts';
 
 const locationPaths = dataforseo.constants.locations_paths;
-/** A routed engine DataForSEO observes: one with a DataForSEO locations list. */
 export type SearchSurface = keyof typeof locationPaths;
 const hasLocationPaths = (engine: string): engine is SearchSurface =>
   Object.hasOwn(locationPaths, engine);
 const observedEngines: readonly string[] = enginesOfKind('search_ai', 'llm_scraper');
-/**
- * The observed surfaces: the provider routes whose surface kind is observed,
- * in the reviewed locations file's order.
- */
 export const searchSurfaces: readonly SearchSurface[] = Object.keys(locationPaths)
   .filter(hasLocationPaths)
   .filter((surface) => observedEngines.includes(surface));
@@ -38,7 +23,6 @@ if (
 export const isSearchSurface = (value: string): value is SearchSurface =>
   hasLocationPaths(value) && searchSurfaces.includes(value);
 
-/** The DataForSEO language for a market language tag: its primary subtag (`pt-BR` is `pt`). */
 export const searchLanguageOf = (language: string) =>
   language.trim().split(/[-_]/u)[0]!.toLowerCase();
 
@@ -62,29 +46,22 @@ const byCode = new Map(
   Object.values(locations.countries).map((entry) => [entry.location_code, entry]),
 );
 
-/**
- * The countries a surface measures, with their location codes, in the
- * reviewed file's order: the markets a screen offers and names.
- */
 export function surfaceMarkets(surface: SearchSurface) {
   return Object.entries(locations.countries)
     .filter(([, entry]) => entry.surfaces.includes(surface))
     .map(([country_code, entry]) => ({ country_code, location_code: entry.location_code }));
 }
 
-/** The DataForSEO location code of a market country, or 0 when no surface supports it. */
 function locationCodeOf(country: string): number {
   return locations.countries[country.trim().toUpperCase()]?.location_code ?? 0;
 }
 
-/** The search language a country is measured in, or '' when no surface offers it there. */
 function searchLanguageFor(country: string, language: string): string {
   const entry = locations.countries[country.trim().toUpperCase()];
   const code = searchLanguageOf(language);
   return entry?.surfaces.some((surface) => locations.languages[surface].includes(code)) ? code : '';
 }
 
-/** A country and language's project search context; 0 and '' where no surface supports it. */
 export function searchContext(country: string, language: string) {
   return {
     serp_location_code: locationCodeOf(country),
@@ -92,7 +69,6 @@ export function searchContext(country: string, language: string) {
   };
 }
 
-/** Whether `surface` can measure at this location code in this DataForSEO language. */
 export function surfaceSupports(
   surface: SearchSurface,
   locationCode: number,

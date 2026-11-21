@@ -1,4 +1,3 @@
-/** Descriptive comparisons over versioned, persisted page evidence. */
 import { randomUUID } from 'node:crypto';
 import { sql } from 'kysely';
 import { getDomain } from 'tldts';
@@ -22,7 +21,6 @@ export type ComparisonPage = {
   tables: string[][];
   domains: string[];
 };
-/** The compared structural features, in the (alphabetical) order results list them. */
 const FEATURES = ['heading_topics', 'outbound_sources', 'table_structures'] as const;
 function features(page: ComparisonPage): Record<(typeof FEATURES)[number], Set<string>> {
   return {
@@ -98,7 +96,6 @@ function countFeatureValues(compared: ComparisonPage[], feature: (typeof FEATURE
     for (const value of features(page)[feature]) counts.set(value, (counts.get(value) ?? 0) + 1);
   return counts;
 }
-/** Split feature values into parity, gaps and unique owned contributions. */
 function classify(
   owned: ComparisonPage,
   compared: ComparisonPage[],
@@ -141,7 +138,6 @@ function sourceFacts(id: string, facts: unknown): ComparisonPage {
     domains: strings(raw.outbound_domains),
   };
 }
-/** The heading texts of a page's stored `primary_heading_outline`. */
 export function outlineHeadings(outline: unknown): string[] {
   return Array.isArray(outline)
     ? outline.flatMap((item) => {
@@ -219,7 +215,6 @@ export function refreshDifferentiation(
       .orderBy('candidate.id')
       .execute();
     if (!candidates.length) return;
-    // Only successful readings can be compared; failed attempts never load.
     const readings = await trx
       .selectFrom('source_page_snapshots as snapshot')
       .innerJoin('audits as audit', 'audit.id', 'snapshot.audit_id')
@@ -325,8 +320,6 @@ export function refreshDifferentiation(
         report: JSON.stringify(report),
         created_at: new Date(),
       };
-      // Derived results are insert-only: a refresh appends a report only when it
-      // differs from the task's newest one at this formula version.
       const latest = await trx // NOSONAR -- One transaction: reports insert in order.
         .selectFrom('content_differentiation_reports')
         .select(['owned_site_url_id', sql<boolean>`report = ${values.report}::jsonb`.as('same')])

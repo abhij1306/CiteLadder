@@ -1,4 +1,3 @@
-/** An owned page: every finding on one URL (`www.` and slash variants alike) is one Action. */
 import { normalizeDomain } from '../../analysis/domains.ts';
 import { normalizedUrlForCompare } from '../../analysis/url-compare.ts';
 import { resolveOwnedPages } from '../../demand/page-equivalence.ts';
@@ -8,7 +7,6 @@ import { cappedPages, evidencePages, ownedPages } from './shared.ts';
 
 export const pageKey = (url: string) => `page:${normalizedUrlForCompare(url)}`;
 
-/** The page a page Action is about; null for any other Action. */
 export const actionPageUrl = (action: Pick<TargetAction, 'target_kind' | 'target_url'>) =>
   action.target_kind === 'page' ? action.target_url : null;
 
@@ -37,7 +35,6 @@ export const pageTarget: AgentNamedTargetModule<'page'> = {
   },
   async declarationTargets({ db, action, members, website }) {
     const selected = await ownedPages(db, action, evidencePages(members));
-    // No finding names a crawled page: the Action's own URL, when it resolves to one.
     if (!selected.length && action.target_url) {
       const pages = await resolveOwnedPages(
         db,
@@ -54,7 +51,6 @@ export const pageTarget: AgentNamedTargetModule<'page'> = {
     return cappedPages(selected);
   },
   async detail({ db, action }) {
-    // A page Action on one of the latest crawl's content pages opens the page workspace (E3).
     const editable =
       action.target_url !== null &&
       (await isContentPage(

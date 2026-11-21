@@ -11,6 +11,11 @@ try {
   const theme = stored === 'light' || stored === 'dark' ? stored : device;
   document.documentElement.dataset.theme = theme;
   document.querySelector('meta[name="color-scheme"]')?.setAttribute('content', theme);
-} catch {
-  // Cookies or matchMedia unavailable: the stylesheet's light default stands.
-}
+} catch {}
+// The app's first-paint shell draws the collapsed rail; the key is
+// COLLAPSED_KEY in lib/sidebar-width.ts. Absent on the website and docs.
+try {
+  if (localStorage.getItem('citeladder:app:sidebar-collapsed') === '1') {
+    document.documentElement.dataset.sidebarRail = '';
+  }
+} catch {}

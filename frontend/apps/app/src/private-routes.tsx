@@ -1,9 +1,11 @@
 import { Suspense, type ReactNode } from 'react';
-import { Outlet, ScrollRestoration } from 'react-router-dom';
+import { Outlet } from 'react-router-dom';
 
+import { AppScrollRestoration } from '@/components/layout/app-scroll-restoration';
 import { AppShell } from '@/components/layout/app-shell';
+import { FirstFrame, HeldContent } from '@/components/layout/first-frame';
 import { OnboardingGate } from '@/components/layout/onboarding-gate';
-import { ShellFallback } from '@/components/layout/shell-fallback';
+import { RouteLoadingScreen } from '@/components/layout/page-shell';
 import { UserMenuController } from '@/components/layout/user-menu';
 import { ToastProvider } from '@/components/ui/toast';
 import { SessionGuard } from '@/lib/auth/session-guard';
@@ -23,11 +25,9 @@ import { useEngineCatalog } from '@/lib/providers/engines';
  * the state lives.
  */
 export function PrivateRouteLayout() {
-  // Engine names and order come from the provider catalogue; read it alongside
-  // the workspace bootstrap so screens render with labels already cached.
   useEngineCatalog();
   return (
-    <Suspense fallback={<ShellFallback />}>
+    <Suspense fallback={<FirstFrame />}>
       <ProjectProvider>
         <SessionGuard fallback={sessionFallback}>
           <UserMenuController>
@@ -39,22 +39,21 @@ export function PrivateRouteLayout() {
   );
 }
 
-function sessionFallback(content: ReactNode) {
-  return <ShellFallback>{content}</ShellFallback>;
+function sessionFallback(content?: ReactNode) {
+  return <FirstFrame>{content}</FirstFrame>;
 }
 
 /** Application chrome and its project-route recovery gate. */
 export function ApplicationRouteLayout() {
   return (
     <ToastProvider>
-      {/* The document scrolls, so a new screen starts at the top; returning to
-          a screen restores where it was. A tab or filter change keeps the
-          position because the key is the path alone. */}
-      <ScrollRestoration getKey={(location) => location.pathname} />
+      <AppScrollRestoration />
       <AppShell>
-        <OnboardingGate>
-          <Outlet />
-        </OnboardingGate>
+        <HeldContent frame={<RouteLoadingScreen />}>
+          <OnboardingGate>
+            <Outlet />
+          </OnboardingGate>
+        </HeldContent>
       </AppShell>
     </ToastProvider>
   );

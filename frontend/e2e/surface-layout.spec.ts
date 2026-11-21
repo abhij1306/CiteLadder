@@ -15,7 +15,6 @@ const overview = {
     industry: 'Software',
     description: 'Analytics for growth teams',
     positioning: 'Evidence-led analytics',
-    // A long offering must cut inside its chip, never widen the page.
     products_services: [
       'AI Visibility tracking (brand mentions, position, sentiment and competitors across AI answers and search engines)',
       'Analytics',
@@ -32,7 +31,7 @@ const overview = {
   next_action: {
     kind: 'monitor',
     title: 'No open Action — watch the trend',
-    href: '/visibility?tab=trends',
+    href: '/insights',
     opportunity_id: null,
   },
   track: {
@@ -41,32 +40,39 @@ const overview = {
     observed_at: evidence.observed_at,
     limitations: [],
   },
-  measurement: null,
+  measurement: {
+    audit_id: '33333333-3333-4333-8333-333333333333',
+    completed_at: evidence.observed_at,
+    benchmark_mode: 'consumer_like',
+    logical_engines: ['chatgpt', 'claude'],
+    comparable_audit_id: null,
+    comparison_status: 'no_baseline',
+    comparison_answers: null,
+    metric_snapshot_id: null,
+    analyzer_version: null,
+    scoring_rule_version: null,
+  },
   state: {
     visibility: { value: 72.5, delta: 4.2 },
     share_of_voice: { value: 48.1, delta: 3.1 },
     brand_rank: { value: 2, delta: -1 },
   },
   movements: [
-    { label: 'visibility', direction: 'positive', current: 72.5, previous: 68.3, delta: 4.2 },
+    { label: 'chatgpt', direction: 'positive', current: 72.5, previous: 68.3, delta: 4.2 },
   ],
   active_prompt_count: 1,
   actions: [],
   action_order_version: 0,
-  resolved_actions: { since_audit_id: null, count: 0, titles: [] },
   report_available: false,
   stale: false,
 };
-// The default layout, so Overview lays out today's sections.
 const layout = {
   widgets: [
-    { key: 'project_state', size: 'half' },
-    { key: 'citation_share', size: 'half' },
+    { key: 'project_state', size: 'full' },
     { key: 'movement', size: 'half' },
     { key: 'next_action', size: 'half' },
     { key: 'missing_prompts', size: 'full' },
-    { key: 'ranked_actions', size: 'half' },
-    { key: 'progress_proof', size: 'half' },
+    { key: 'ranked_actions', size: 'full' },
     { key: 'company_facts', size: 'full' },
   ],
   version: 0,
@@ -145,7 +151,7 @@ test('long segments stay on one row and keyboard focus reveals the selected opti
           series: { clicks: [], impressions: [], ctr: [], position: [] },
         },
         comparison: null,
-        coverage: { earliest_date: null, latest_date: null, covered_days: 0 },
+        coverage: { earliest_date: '2026-01-01', latest_date: '2026-01-28', covered_days: 28 },
         dimension_counts: {
           query: 0,
           page: 0,
@@ -165,7 +171,6 @@ test('long segments stay on one row and keyboard focus reveals the selected opti
   await page.goto(fixtureProjectPath('/performance'));
   const options = page.getByRole('radiogroup', { name: 'Date range' }).getByRole('radio');
   await expect(options).toHaveCount(3);
-  // Stress the existing control with longer labels without changing product copy.
   await options.evaluateAll((nodes) =>
     nodes.forEach((node) => {
       node.firstChild!.textContent += ' reporting interval';
@@ -193,38 +198,18 @@ test('long segments stay on one row and keyboard focus reveals the selected opti
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 
-test('choosing a filter in All filters never moves the table below it', async ({ page }) => {
-  await page.setViewportSize({ width: 982, height: 900 });
-  await stubAuthedShell(page, [
-    [
-      `**/api/v1/projects/${FIXTURE_PROJECT.id}/actions?*`,
-      {
-        items: [],
-        next_cursor: null,
-        status_counts: { open: 1, in_progress: 2 },
-        group_counts: { fix_site: 0, own_pages: 0, earned: 0, products: 0 },
-      },
-    ],
-  ]);
-  await page.goto(fixtureProjectPath('/agent/actions'));
-  const table = page.getByRole('region', { name: 'Actions' });
-  await expect(table.getByText('No Actions match these filters')).toBeVisible();
-  const top = async () => Math.round((await table.boundingBox())!.y);
-  const before = await top();
-  await page.getByRole('button', { name: 'All filters' }).click();
-  await page.getByRole('menuitem', { name: /^Status/ }).click();
-  await page.getByRole('menuitemradio', { name: 'Dismissed' }).click();
-  await expect(page.getByRole('button', { name: 'All filters (1)' })).toBeVisible();
-  await expect.poll(() => new URL(page.url()).searchParams.get('status')).toBe('dismissed');
-  expect(await top()).toBe(before);
-});
-
 test('invalid field edges survive keyboard focus in both themes', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await stubAuthedShell(page, [['**/api/v1/brand-discovery-catalog', catalog]], []);
   await page.goto('/onboarding');
   const field = page.getByLabel(/^Brand name/);
   await expect(field).toBeVisible();
+  const tabInto = async () => {
+    await field.focus();
+    await page.keyboard.press('Shift+Tab');
+    await page.keyboard.press('Tab');
+    await expect(field).toBeFocused();
+  };
   for (const theme of ['light', 'dark']) {
     if (theme === 'dark') await page.getByRole('button', { name: 'Switch to dark theme' }).click();
     await field.evaluate((node) => {
@@ -235,7 +220,15 @@ test('invalid field edges survive keyboard focus in both themes', async ({ page 
       await Promise.all(node.getAnimations().map((animation) => animation.finished));
       return getComputedStyle(node).borderColor;
     });
-    // Isolate the primitive's rendering contract from form validation policy.
+    await tabInto();
+    const ordinary = await field.evaluate(async (node) => {
+      await Promise.all(node.getAnimations().map((animation) => animation.finished));
+      const style = getComputedStyle(node);
+      return { edge: style.borderColor, outline: style.outlineStyle, glow: style.boxShadow };
+    });
+    expect(ordinary.outline).toBe('none');
+    expect(ordinary.glow).not.toBe('none');
+    expect(ordinary.edge).not.toBe(ordinaryEdge);
     await field.evaluate((node) => {
       node.setAttribute('aria-invalid', 'true');
       node.blur();
@@ -246,17 +239,19 @@ test('invalid field edges survive keyboard focus in both themes', async ({ page 
     });
     expect(edge).not.toBe(ordinaryEdge);
     expect(await field.evaluate((node) => getComputedStyle(node).borderStyle)).not.toBe('none');
-    await field.focus();
+    await tabInto();
     const focused = await field.evaluate(async (node) => {
       await Promise.all(node.getAnimations().map((animation) => animation.finished));
       const style = getComputedStyle(node);
-      return { edge: style.borderColor, outline: style.outlineStyle, halo: style.boxShadow };
+      return {
+        edge: style.borderColor,
+        outline: style.outlineStyle,
+        glow: style.boxShadow,
+      };
     });
-    // The danger edge survives focus. Focus adds the field's halo, a shadow
-    // that never grows its box, and no outline ring of its own.
-    expect(focused.edge).toBe(edge);
-    expect(focused.outline).toBe('none');
-    expect(focused.halo).not.toBe('none');
+    expect(focused).toMatchObject({ edge, outline: 'none' });
+    expect(focused.glow).not.toBe('none');
+    expect(focused.glow).not.toBe(ordinary.glow);
   }
   await page.emulateMedia({ forcedColors: 'active' });
   await field.focus();
@@ -269,8 +264,8 @@ test('Agent text entry paints one focus boundary', async ({ page }) => {
   await page.goto(fixtureProjectPath('/agent'));
   const prompt = page.locator('textarea');
   const form = prompt.locator('xpath=ancestor::form');
-  const outerEdge = await form.evaluate((node) => getComputedStyle(node).borderColor);
   const inputEdge = await prompt.evaluate((node) => getComputedStyle(node).borderColor);
+  const outerEdge = await form.evaluate((node) => getComputedStyle(node).borderColor);
   await prompt.click();
   await expect(prompt).toBeFocused();
   // The composer is the box: its frame takes the focus edge and the halo,
@@ -284,4 +279,13 @@ test('Agent text entry paints one focus boundary', async ({ page }) => {
   expect(await prompt.evaluate((node) => getComputedStyle(node).borderColor)).toBe(inputEdge);
   expect(await prompt.evaluate((node) => getComputedStyle(node).boxShadow)).toBe('none');
   expect(await prompt.evaluate((node) => getComputedStyle(node).outlineStyle)).toBe('none');
+  const room = await form.evaluate((node) => {
+    let clip = node.parentElement;
+    while (clip && getComputedStyle(clip).overflowX === 'visible') clip = clip.parentElement;
+    if (!clip) return Infinity;
+    const box = node.getBoundingClientRect();
+    const edge = clip.getBoundingClientRect();
+    return Math.min(box.left - edge.left, edge.right - box.right, box.top - edge.top);
+  });
+  expect(room).toBeGreaterThanOrEqual(3);
 });

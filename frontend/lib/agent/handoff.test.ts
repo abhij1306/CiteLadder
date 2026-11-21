@@ -24,6 +24,7 @@ describe('agent handoff', () => {
       issueGroup: { crawlId: DATASET, groupId: ROW, siteUrlId: PAGE },
       siteFacts: { crawlId: DATASET },
       outputRevision: { outputId: ACTION, revisionId: ROW },
+      objectionGroupId: PAGE,
     };
     const full = parse(agentHandoffHref(input));
     expect(full).toEqual(agentHandoff(input));
@@ -31,9 +32,15 @@ describe('agent handoff', () => {
       issue_group_reference: { crawl_id: DATASET, group_id: ROW, site_url_id: PAGE },
       site_facts_reference: { crawl_id: DATASET },
       output_revision_reference: { output_id: ACTION, revision_id: ROW },
+      objection_group_id: PAGE,
     });
     const chips = contextChips(full.context);
-    expect(chips).toHaveLength(3);
+    expect(chips.map((chip) => chip.label)).toEqual([
+      'Selected page issue',
+      'Selected crawl robots policy',
+      'Selected document revision',
+      'Objection',
+    ]);
     for (const chip of chips)
       expect(withoutContext(full.context, chip.key)[chip.key]).toBeUndefined();
   });
@@ -81,6 +88,27 @@ describe('agent handoff', () => {
     expect(handoff).toEqual({ actionId: undefined, prompt: undefined, context: {} });
   });
 
+  it('sends the Actions pages’ scopes: ticked URLs of an Action, or one URL with its Actions', () => {
+    const ticked = parse(agentHandoffHref({ actionId: ACTION, actionUrlIds: [PAGE, ROW, PAGE] }));
+    expect(ticked).toEqual({
+      actionId: ACTION,
+      prompt: undefined,
+      context: { action_url_ids: [PAGE, ROW] },
+    });
+    expect(contextChips(ticked.context)).toEqual([
+      { key: 'action_url_ids', label: '2 selected URLs' },
+    ]);
+    expect(parse(`/agent?action_url_id=${PAGE}`).context).toEqual({});
+    const one = parse(agentHandoffHref({ urlActionsSiteUrlId: PAGE }));
+    expect(one.context).toEqual({ url_actions_reference: { site_url_id: PAGE } });
+    expect(
+      contextChips(one.context, { url_actions_reference: 'URL: /shop/p01' }).map((c) => c.label),
+    ).toEqual(['URL: /shop/p01']);
+    expect(
+      agentHandoff({ actionId: ACTION, actionUrlIds: [PAGE], urlActionsSiteUrlId: ROW }).context,
+    ).toEqual({ action_url_ids: [PAGE], url_actions_reference: { site_url_id: ROW } });
+  });
+
   it('removes a page as one chip whether named by URL or id', () => {
     const context = { target_url: 'https://acme.test/a', target_site_url_id: PAGE };
     expect(contextChips(context)).toEqual([{ key: 'target_url', label: 'https://acme.test/a' }]);
@@ -100,7 +128,6 @@ describe('developerTicket', () => {
     ],
     member_measurement: { [ACTION]: 'next_crawl' as const, [PAGE]: null },
     diagnosis: { donts: ['Do not hide content.'] },
-    cohort: null,
     declaration: null,
   };
 
@@ -157,7 +184,7 @@ describe('developerTicket', () => {
         '## How it will be verified',
         '',
         '- Missing structured data: checked by the next crawl of this page',
-        '- Thin content: not measured automatically',
+        '- Thin content: no automatic check',
         '',
         'When it ships, record the deployment on the Action in CiteLadder: Mark implemented with the day it went live and the release, pull request or commit. Readings before that day are not counted.',
         '',
@@ -165,48 +192,21 @@ describe('developerTicket', () => {
     );
   });
 
-  it('lists an issue family’s pages up to its bound and a declared Action’s deployment and checks', () => {
-    const pages = Array.from({ length: 52 }, (_, index) => ({
-      site_url_id: PAGE,
-      url: `https://acme.test/p/${index}`,
-    }));
+  it('writes a declared Action’s deployment and checks', () => {
     const ticket = developerTicket(
       {
         ...pageAction,
-        target_label: 'Images without alt text',
-        target_url: null,
-        cohort: {
-          rule_label: 'Images without alt text',
-          page_count: 120,
-          pages,
-          crawl_completed_at: '2026-11-07T00:00:00Z',
-        },
         declaration: {
           declared_implemented_at: '2026-11-09T15:00:00Z',
           deployed_by: 'dev@acme.test',
           deployment_reference: 'v2.4.1',
-          checks: [{ kind: 'site_rule', state: 'met', reason: null }],
+          checks: [{ kind: 'site_rule', state: 'met' }],
         },
       },
       [],
       day,
     );
     const lines = ticket.split('\n');
-    expect(
-      lines.slice(lines.indexOf('## Affected pages'), lines.indexOf('## Affected pages') + 4),
-    ).toEqual([
-      '## Affected pages',
-      '',
-      'Images without alt text on 120 pages (crawl completed 2026-11-07):',
-      '',
-    ]);
-    expect(lines).toContain('- https://acme.test/p/49');
-    expect(lines).not.toContain('- https://acme.test/p/50');
-    // 52 stored pages of 120: 2 more are on the Action, 68 are stored nowhere.
-    expect(lines.slice(lines.indexOf('- https://acme.test/p/49') + 1).slice(0, 2)).toEqual([
-      '- and 2 more pages, listed on the Action in CiteLadder',
-      '- and 68 more pages with this issue, not listed',
-    ]);
     expect(lines).toContain('- No evidence is recorded for this Action.');
     expect(
       ticket.endsWith(
@@ -215,7 +215,7 @@ describe('developerTicket', () => {
           '',
           'Deployed on 2026-11-09, recorded by dev@acme.test (v2.4.1).',
           '',
-          '- Site Health check passes: Met',
+          '- Website check passes: Met',
           '',
         ].join('\n'),
       ),

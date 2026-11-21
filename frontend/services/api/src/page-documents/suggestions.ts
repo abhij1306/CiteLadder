@@ -1,17 +1,3 @@
-/**
- * Suggestions on a page document (content optimization phase 2, PR 2): the
- * insert-only findings, their append-only events, and where each one's text
- * is in the document's latest revision.
- *
- * A suggestion is made against one revision. Each event that leaves its text
- * in a revision (`open`, `applied`, `reverted`) records that revision and the
- * span there; every later revision moves it through the diff of each revision
- * against its predecessor. An open suggestion holds only while its span still
- * maps and still reads its exact quote, its field still equals the value it
- * was made against, and nothing it depends on changed since that revision.
- * Every revision a person or the Agent appends rechecks the open suggestions
- * and marks the ones that no longer hold `stale`; reads only report.
- */
 import { randomUUID } from 'node:crypto';
 import type { Selectable } from 'kysely';
 import { z } from 'zod';
@@ -39,19 +25,16 @@ type Status = z.infer<typeof agentSuggestionSchema>['status'];
 type EventRow = Selectable<AgentOutputSuggestionEvents>;
 type EventStatus = 'open' | 'applied' | 'dismissed' | 'reverted' | 'stale';
 
-/** One suggestion with its parsed anchor and dependencies and its events in order. */
 export type Suggestion = {
   row: Selectable<AgentOutputSuggestions>;
   anchor: Anchor;
   dependsOn: Dependency[];
   events: EventRow[];
 };
-/** Who changed a suggestion: a person, the Agent's turn, or CiteLadder itself. */
 export type Actor =
   | { actor: 'user'; userId: string }
   | { actor: 'agent'; runId: string | null }
   | { actor: 'system' };
-/** A revision as the checks read it. */
 export type RevisionText = { id: string; number: number; body: string; fields: PageFields | null };
 type Owner = { workspaceId: string; projectId: string };
 
@@ -59,19 +42,16 @@ const dependencies = z.array(agentSuggestionDependencySchema);
 const fieldsSchema = agentPageFieldsSchema.nullable();
 
 const statusSchema = agentSuggestionSchema.shape.status;
-/** Its status: the last event's, where `reverted` is open again. */
 export function statusOf(suggestion: Suggestion): Status {
   const last = suggestion.events.at(-1)?.status ?? 'open';
   return last === 'reverted' ? 'open' : statusSchema.parse(last);
 }
 
-/** `ready` carries text to apply, `needs_input` asks the person, `advice` has neither. */
 export function readinessOf(suggestion: Suggestion) {
   if (suggestion.row.replacement !== null) return 'ready' as const;
   return suggestion.row.needs_input === null ? ('advice' as const) : ('needs_input' as const);
 }
 
-/** The latest event that left the suggestion's text in a revision, with its span there. */
 function lastPlaced(suggestion: Suggestion, statuses: readonly string[]) {
   const event = suggestion.events.findLast(
     (item) => item.revision_id !== null && statuses.includes(item.status),
@@ -84,10 +64,6 @@ function lastPlaced(suggestion: Suggestion, statuses: readonly string[]) {
   return { revisionId: event.revision_id, position };
 }
 
-/**
- * The document's revisions from the oldest one a suggestion still refers to,
- * in order; each revision's diff against its predecessor is computed once.
- */
 export class RevisionChain {
   readonly revisions: readonly RevisionText[];
   readonly latest: RevisionText;
@@ -112,7 +88,6 @@ export class RevisionChain {
     }
     return changes;
   }
-  /** A span of one revision moved to the latest, or null when any later revision changed its text. */
   mapToLatest(revisionId: string, span: Span): Span | null {
     const from = this.index.get(revisionId);
     if (from === undefined) return null;
@@ -123,14 +98,12 @@ export class RevisionChain {
   }
 }
 
-/** Where an open suggestion's text is now, or why it no longer holds. */
 export type Located =
   | { ok: true; position: Span | null; section: Span | null }
   | { ok: false; reason: StaleReason };
 const stale = (reason: StaleReason): Located => ({ ok: false, reason });
 
 type Held = { ok: true; position: Span | null } | { ok: false; reason: StaleReason };
-/** The anchor's own check: the span still reads its quote, or the field still has its value. */
 function anchorHolds(
   suggestion: Suggestion,
   chain: RevisionChain,
@@ -148,7 +121,6 @@ function anchorHolds(
   return { ok: true, position: mapped };
 }
 
-/** The section a span's judgement read, at the base revision: the same extent around the span. */
 function baseSection(
   anchor: Anchor,
   dependency: Extract<Dependency, { kind: 'section' }>,
@@ -161,7 +133,6 @@ function baseSection(
   return { start: Math.max(0, at.start - before), end: Math.min(body.length, at.end + after) };
 }
 
-/** Whether one dependency is unchanged since the base revision; a section reports where it is now. */
 function dependencyHolds(
   suggestion: Suggestion,
   dependency: Dependency,
@@ -190,7 +161,6 @@ function dependencyHolds(
   }
 }
 
-/** Checks an open suggestion against the latest revision: its anchor, then each dependency. */
 export function locate(suggestion: Suggestion, chain: RevisionChain): Located {
   const base = lastPlaced(suggestion, ['open', 'reverted']);
   const revision = base ? chain.revision(base.revisionId) : null;
@@ -209,7 +179,6 @@ export function locate(suggestion: Suggestion, chain: RevisionChain): Located {
   return { ok: true, position: held.position, section };
 }
 
-/** Where an applied span's replacement is now, or null once it was edited. */
 export function appliedPosition(suggestion: Suggestion, chain: RevisionChain): Span | null {
   const placed = lastPlaced(suggestion, ['applied']);
   if (!placed?.position || suggestion.row.replacement === null) return null;
@@ -220,7 +189,6 @@ export function appliedPosition(suggestion: Suggestion, chain: RevisionChain): S
     : null;
 }
 
-/** The document's suggestions, oldest first, each with its events in order. */
 export async function loadSuggestions(
   db: Database,
   workspaceId: string,
@@ -255,7 +223,6 @@ export async function loadSuggestions(
   }));
 }
 
-/** The revisions the suggestions refer to, from the oldest one onwards, through the latest. */
 export async function loadChain(
   db: Database,
   workspaceId: string,
@@ -282,7 +249,6 @@ export async function loadChain(
     .select(['id', 'number', 'body', 'fields'])
     .where('workspace_id', '=', workspaceId)
     .where('output_id', '=', outputId);
-  // Without a referenced revision only the latest is read.
   query = Number.isFinite(oldest)
     ? query.where('number', '>=', oldest).orderBy('number')
     : query.orderBy('number', 'desc').limit(1);
@@ -331,10 +297,6 @@ export async function appendEvent(
   return row;
 }
 
-/**
- * After a new revision of the document: every open suggestion that no longer
- * holds against it becomes stale. Returns how many did.
- */
 export async function recheckOpen(db: Database, owner: Owner, outputId: string, by: Actor) {
   const suggestions = (await loadSuggestions(db, owner.workspaceId, outputId)).filter(
     (suggestion) => statusOf(suggestion) === 'open',
@@ -345,21 +307,23 @@ export async function recheckOpen(db: Database, owner: Owner, outputId: string, 
   for (const suggestion of suggestions) {
     const located = locate(suggestion, chain);
     if (located.ok) continue;
-    await appendEvent(db, owner, suggestion, { status: 'stale', by, reason: located.reason });
+    await /* NOSONAR -- One transaction connection: events append in order. */ appendEvent(
+      db,
+      owner,
+      suggestion,
+      { status: 'stale', by, reason: located.reason },
+    );
     staled++;
   }
   return staled;
 }
 
-/** A finding to store, made against one revision. A span anchor is given by its position there. */
 export type NewSuggestion = {
-  /** Given before it is stored, so the turn that staged it could name it. */
   id: string;
   anchor: { kind: 'span'; position: Span } | { kind: 'field'; field: PageField } | { kind: 'page' };
   dependsOn: Dependency[];
   replacement: string | null;
   needsInput: string | null;
-  /** A content rule catalog id; its category, source and strength are stored with it. */
   ruleId: string;
   rationale: string;
 } & (
@@ -367,7 +331,6 @@ export type NewSuggestion = {
   | { source: 'site_health'; snapshotId: string; ruleVersion: string }
 );
 
-/** The stored anchor: a span's quote, or a field's value, read from the revision. */
 function storedAnchor(anchor: NewSuggestion['anchor'], revision: RevisionText): Anchor {
   switch (anchor.kind) {
     case 'span':
@@ -391,7 +354,6 @@ function storedAnchor(anchor: NewSuggestion['anchor'], revision: RevisionText): 
   }
 }
 
-/** Stores one suggestion against a revision and opens it there. */
 export async function insertSuggestion(
   db: Database,
   owner: Owner & { outputId: string; revision: RevisionText; by: Actor },
@@ -435,7 +397,6 @@ export async function insertSuggestion(
   return suggestion;
 }
 
-/** Whether two open suggestions offer alternatives for the same text or the same field. */
 export function competing(
   left: { anchor: Anchor; at: Span | null },
   right: { anchor: Anchor; at: Span | null },

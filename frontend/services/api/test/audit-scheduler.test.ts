@@ -249,9 +249,8 @@ describe('durable audit occurrence planning', () => {
     ).toEqual({
       failure_count: 1,
       enabled: false,
-      last_error: 'execution_credentials_unavailable', // the admission code the owner can act on
+      last_error: 'execution_credentials_unavailable',
       lease_owner: null,
-      // Paused: no backoff lease, so Resume plans the held occurrence at once.
       lease_expires_at: null,
       next_run_at: at,
     });
@@ -280,7 +279,6 @@ describe('durable audit occurrence planning', () => {
     expect(
       await new AuditScheduler(db, runtime, settings, { now: () => start }).runOnce(start),
     ).toBe(0);
-    // Backing off: the occurrence is held, not claimable on the next pass.
     const failing = new AuditScheduler(db, runtime, settings, { now: () => start });
     expect(await failing.claimDue(start)).toEqual([]);
     await connections(true);

@@ -1,6 +1,3 @@
-/** Persisted evidence for Action, refresh and verification PostgreSQL tests.
- * Reuse native fixtures for ORM-only defaults; never run providers or a worker.
- */
 import { randomUUID } from 'node:crypto';
 import type { Insertable, RawBuilder } from 'kysely';
 import { plannedPageKey } from '../src/opportunities/targets/registry.ts';
@@ -118,7 +115,6 @@ async function issue(
       remediation: 'Fix it.',
       analyzer_version: 'v1',
       rule_version: 'v1',
-      // The finalized analysis names its evaluation, so the issue is current.
       is_current: true,
       created_at: now,
     })
@@ -318,25 +314,15 @@ export function opportunityRow(
   };
 }
 
-/** One angle of a seeded content-angle run, with the citations its counts rest on. */
 export type AngleSeed = {
   label: string;
-  /** Reuse a lineage of an earlier run; a new lineage otherwise. */
   lineageId?: string;
-  /** The matched owned page; none when absent. */
   siteUrlId?: string;
   ownedCited?: boolean;
-  /** The angle's prompts; one id no prompt has when absent. */
   promptIds?: string[];
-  /** One cited page per entry; each domain cited `citations` times. */
   members: { url: string; title: string; competitor?: boolean; citations?: number }[];
 };
 
-/**
- * A content-angle run as the `content_angle_refresh` task persists it, written
- * directly: the run, any new lineages, its angles, members and owned matches.
- * Returns the run id and each angle's lineage id, in angle order.
- */
 export async function angleRun(
   db: Database,
   scope: { workspaceId: string; projectId: string },
@@ -389,7 +375,6 @@ export async function angleRun(
           id: lineageId,
           ...tenancy,
           topic_id: null,
-          // As the refresh creates a lineage: keyed by its first label.
           planned_page_key: plannedPageKey(angle.label),
           first_run_id: runId,
           created_at: now,
@@ -461,7 +446,6 @@ export function actionRow(
     id: randomUUID(),
     origin: 'evidence',
     status: 'open',
-    // Before any output or declaration, the stored status is the one readers see.
     effective_status: values.status ?? 'open',
     families: '[]',
     approach: '',

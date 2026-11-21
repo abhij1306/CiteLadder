@@ -1,7 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 
-import { QueryState } from '@/components/ui/query-state';
-import { ReadError } from '@/components/ui/read-error';
+import { settingRowsClasses } from '@/components/ui/setting-row';
 import { ledgerClasses } from '@/components/ui/workspace';
 import { providerQueries } from '@/lib/api/providers';
 import type { LogicalEngine } from '@citeladder/contracts';
@@ -9,26 +8,25 @@ import { buildEngineCards, buildProviderGroups, transportForEngine } from '@/lib
 import { useActiveWorkspaceId } from '@/lib/project/project-context';
 
 import { ProviderRow } from './provider-row';
+import { StateBlock } from '@/components/ui/state-block';
 
-/**
- * The workspace's BYOK credentials, one row per provider. Shared by Settings
- * and the launch dialog's inline setup so both connect the same way.
- *
- * Rows are driven by `/provider-catalog`: a transport appears once, with every
- * engine it measures, so one DataForSEO login covers all its surfaces.
- * `expandEngine` opens the row that measures that engine on arrival (the
- * launch dialog's clicked engine chip).
- */
+const LEDGER_ROWS = '*:py-3 *:first:pt-0 *:last:pb-0';
+
 export function ProviderList({
   expandEngine = null,
-}: Readonly<{ expandEngine?: LogicalEngine | null }>) {
+  framed = false,
+  compact = false,
+}: Readonly<{
+  expandEngine?: LogicalEngine | null;
+  framed?: boolean;
+  compact?: boolean;
+}>) {
   const catalogQuery = useQuery(providerQueries.catalog());
   const workspaceId = useActiveWorkspaceId();
   const connectionsQuery = useQuery({
     ...providerQueries.connections(workspaceId),
     enabled: workspaceId !== null,
   });
-  // A failure here leaves every row at its fail-closed default.
   const statesQuery = useQuery({
     ...providerQueries.states(workspaceId),
     enabled: workspaceId !== null,
@@ -36,9 +34,11 @@ export function ProviderList({
 
   if (catalogQuery.isError || connectionsQuery.isError) {
     return (
-      <ReadError
+      <StateBlock
+        kind="error"
+        title="Couldn't load providers"
         error={catalogQuery.error ?? connectionsQuery.error}
-        fallback="Could not load providers. Check your connection and try again."
+        fallback="Couldn't load providers. Check your connection and try again."
         onRetry={() => {
           if (catalogQuery.isError) void catalogQuery.refetch();
           if (connectionsQuery.isError) void connectionsQuery.refetch();
@@ -48,7 +48,7 @@ export function ProviderList({
     );
   }
   if (catalogQuery.isLoading || connectionsQuery.isLoading) {
-    return <QueryState kind="loading" />;
+    return <StateBlock kind="loading" label="Loading providers…" shape={{ kind: 'list' }} />;
   }
 
   const groups = buildProviderGroups(
@@ -57,13 +57,14 @@ export function ProviderList({
   const connections = connectionsQuery.data ?? [];
   const expand = expandEngine ? transportForEngine(groups, expandEngine) : null;
   return (
-    <ul className={ledgerClasses()}>
+    <ul className={framed ? settingRowsClasses() : ledgerClasses(LEDGER_ROWS)}>
       {groups.map((group) => (
         <ProviderRow
           key={group.transport}
           group={group}
           connections={connections}
           defaultOpen={group.transport === expand}
+          compact={compact}
         />
       ))}
     </ul>

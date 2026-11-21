@@ -17,7 +17,6 @@ function startTiming(timing: TimingNames, detail?: string): boolean {
     return false;
   }
   try {
-    // Static entry names retain only the latest onboarding transaction.
     performanceApi.clearMeasures(timing.entry);
     performanceApi.clearMarks(timing.start);
     performanceApi.clearMarks(timing.end);
@@ -35,29 +34,24 @@ function finishTiming(timing: TimingNames, started: boolean) {
     performanceApi.mark(timing.end);
     performanceApi.measure(timing.entry, timing.start, timing.end);
   } catch {
-    // Best-effort observability must never block project creation or navigation.
   } finally {
     performanceApi.clearMarks(timing.start);
     performanceApi.clearMarks(timing.end);
   }
 }
 
-/** Begin the accepted-completion HTTP boundary. */
 export function startOnboardingCompletionRequest(): boolean {
   return startTiming(COMPLETION_REQUEST);
 }
 
-/** Finish the accepted-completion HTTP boundary, including failed requests. */
 export function finishOnboardingCompletionRequest(started: boolean) {
   finishTiming(COMPLETION_REQUEST, started);
 }
 
-/** Start the route handoff and bind it to the exact committed project. */
 export function startOnboardingNavigationHandoff(projectId: string) {
   startTiming(NAVIGATION_HANDOFF, projectId);
 }
 
-/** Finish only after `/projects` renders with the same resolved project. */
 export function finishOnboardingNavigationHandoff(projectId: string) {
   const performanceApi = globalThis.performance;
   if (typeof performanceApi?.getEntriesByName !== 'function') return;

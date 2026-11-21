@@ -9,7 +9,6 @@ import { makeProject } from '@/test/fixtures/project';
 
 const { roleState } = vi.hoisted(() => ({ roleState: { mayDelete: true } }));
 
-// Active project context — the danger zone deletes the active project.
 const activeProject = makeProject({
   id: '00000000-0000-4000-8000-0000000000p1',
   workspace_id: '00000000-0000-4000-8000-0000000000w1',
@@ -23,10 +22,8 @@ const nextProject = {
 };
 const setActiveProjectId = vi.fn();
 vi.mock('@/lib/project/project-context', () => ({
-  // Links keep the active project; this screen's links carry none.
   useOptionalProjectContext: () => null,
   useActiveWorkspaceId: () => 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-  // Controls gate themselves on the caller's effective capability — an Owner here.
   useWorkspaceCapability: (capability: string) =>
     capability !== 'delete_projects' || roleState.mayDelete,
   useProjectContext: () => ({
@@ -46,8 +43,6 @@ vi.mock('@/lib/project/project-context', () => ({
 
 const deleteProject = vi.fn().mockResolvedValue(undefined);
 const listProjects = vi.fn().mockResolvedValue([]);
-// The transport is replaced on the module's own client object, so the real
-// deletion descriptor (its refresh and its re-read of the list) runs against it.
 vi.mock('@/lib/api/projects', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/api/projects')>();
   Object.assign(actual.projectsApi, {
@@ -57,15 +52,10 @@ vi.mock('@/lib/api/projects', async (importOriginal) => {
   return actual;
 });
 
-// The Provider Settings tab fetches the catalog/connections; stub the panel so
-// this suite stays focused on the tab shell (the panel has its own suite in
-// provider-settings.test.tsx).
 vi.mock('@/components/settings/provider-settings', () => ({
   ProviderSettings: () => <div data-testid="provider-settings-panel">provider settings</div>,
 }));
 
-// The Integrations tab fetches connections and owns the OAuth-callback notice;
-// stub it the same way (its own suite is integration-settings.test.tsx).
 vi.mock('@/components/settings/integration-settings', () => ({
   IntegrationSettings: () => <div data-testid="integration-settings-panel">integrations</div>,
 }));
@@ -96,7 +86,6 @@ describe('SettingsScreen', () => {
     const ue = userEvent.setup();
     renderScreen();
 
-    // Panels stay mounted for stable aria-controls targets; inactive ones are hidden.
     expect(screen.getByTestId('provider-settings-panel')).not.toBeVisible();
     await ue.click(screen.getByRole('tab', { name: 'Providers' }));
     expect(screen.getByTestId('provider-settings-panel')).toBeVisible();
@@ -122,7 +111,6 @@ describe('SettingsScreen', () => {
       'true',
     );
     expect(screen.getByTestId('integration-settings-panel')).toBeVisible();
-    // The tab's aria-controls resolves to the mounted panel.
     const panelId = screen.getByRole('tab', { name: 'Integrations' }).getAttribute('aria-controls');
     expect(document.getElementById(panelId ?? '')).toContainElement(
       screen.getByTestId('integration-settings-panel'),
@@ -151,13 +139,15 @@ describe('SettingsScreen', () => {
     expect(screen.getByRole('tab', { name: 'General' })).toHaveAttribute('aria-selected', 'true');
   });
 
-  it('supports arrow-key navigation across tabs', async () => {
+  it('moves down the section rail with the arrow keys', async () => {
     const ue = userEvent.setup();
     renderScreen();
 
     const general = screen.getByRole('tab', { name: 'General' });
     general.focus();
     await ue.keyboard('{ArrowRight}');
+    expect(general).toHaveAttribute('aria-selected', 'true');
+    await ue.keyboard('{ArrowDown}');
     expect(screen.getByRole('tab', { name: 'Providers' })).toHaveAttribute('aria-selected', 'true');
     await ue.keyboard('{End}');
     expect(screen.getByRole('tab', { name: 'API keys' })).toHaveAttribute('aria-selected', 'true');
@@ -191,7 +181,6 @@ describe('SettingsScreen', () => {
     await ue.click(within(dialog).getByRole('button', { name: 'Delete project' }));
 
     await waitFor(() => expect(setActiveProjectId).toHaveBeenCalledWith(nextProject.id));
-    // The deleted project is replaced in-place, so Back cannot return to it.
     await waitFor(() =>
       expect(window.location.pathname + window.location.search).toBe(
         `/settings?project=${nextProject.id}`,

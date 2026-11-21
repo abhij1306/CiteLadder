@@ -42,7 +42,6 @@ function response(state: 'available' | 'unavailable' | 'non_comparable') {
   };
 }
 
-/** One persisted change of the A → B pair. */
 function change(id: string, url: string) {
   return {
     ...response('available'),
@@ -128,9 +127,11 @@ describe('Website Changes', () => {
     renderWithProviders(<ChangesPanel projectId={PROJECT} />);
     expect(await screen.findByRole('cell', { name: 'Page content' })).toBeInTheDocument();
     await userEvent.click(
-      screen.getByRole('button', { name: 'View evidence: Page content on acme.test/guide' }),
+      screen.getByRole('button', {
+        name: 'View evidence: Page content on https://acme.test/guide',
+      }),
     );
-    const drawer = await screen.findByRole('dialog', { name: 'Page content' });
+    const drawer = await screen.findByRole('dialog', { name: 'Change evidence' });
     const after = within(drawer).getByRole('region', { name: 'After' });
     expect(after).toHaveTextContent('Word count: 200');
     expect(after).toHaveTextContent('Content delta ratio: 0.5');
@@ -144,21 +145,21 @@ describe('Website Changes', () => {
     handlers('available', { implementation_event_id: '88888888-8888-4888-8888-888888888888' });
     renderWithProviders(<ChangesPanel projectId={PROJECT} />);
 
-    expect(await screen.findByRole('link', { name: 'acme.test/guide' })).toHaveAttribute(
-      'href',
-      `/site/crawls/${CRAWL_B}/pages/${SITE_URL}`,
-    );
+    const pageLink = await screen.findByRole('link', { name: 'https://acme.test/guide' });
+    expect(pageLink).toHaveAttribute('href', `/site/crawls/${CRAWL_B}/pages/${SITE_URL}`);
+    expect(pageLink.textContent).toBe('/guide');
     expect(screen.getByRole('cell', { name: 'HTTP status' })).toBeInTheDocument();
     const table = screen.getByRole('region', { name: 'Website changes' });
-    expect(within(table).getByText('Critical regression')).toHaveAttribute(
-      'data-badge-tone',
-      'negative',
-    );
+    expect(
+      within(table).getByText('Critical regression').closest('[data-status-tone]'),
+    ).toHaveAttribute('data-status-tone', 'negative');
     const open = screen.getByRole('button', {
-      name: 'View evidence: HTTP status on acme.test/guide',
+      name: 'View evidence: HTTP status on https://acme.test/guide',
     });
     await userEvent.click(open);
-    const drawer = await screen.findByRole('dialog', { name: 'HTTP status' });
+    const drawer = await screen.findByRole('dialog', { name: 'Change evidence' });
+    expect(within(drawer).queryByText('HTTP status')).toBeNull();
+    expect(within(drawer).queryByText('https://acme.test/guide')).toBeNull();
     expect(within(drawer).getByRole('region', { name: 'Before' })).toHaveTextContent('200');
     expect(within(drawer).getByRole('region', { name: 'After' })).toHaveTextContent('503');
     expect(within(drawer).getByRole('link', { name: 'Previous crawl' })).toHaveAttribute(
@@ -175,6 +176,24 @@ describe('Website Changes', () => {
     await userEvent.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     await waitFor(() => expect(open).toHaveFocus());
+  });
+
+  it('says once why nothing compares, without a row of unmeasured counts', async () => {
+    handlers('unavailable');
+    const { unmount } = renderWithProviders(<ChangesPanel projectId={PROJECT} />);
+    expect(
+      await screen.findByRole('heading', { name: 'Changes need two completed crawls' }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Not measured')).not.toBeInTheDocument();
+    unmount();
+
+    handlers('available');
+    renderWithProviders(<ChangesPanel projectId={PROJECT} />);
+    expect(
+      await screen.findByRole('group', {
+        name: 'Tracked field changes since the previous crawl',
+      }),
+    ).toBeInTheDocument();
   });
 
   it('draws the first load inside the changes table, under its header', async () => {
@@ -215,14 +234,16 @@ describe('Website Changes', () => {
 
     await userEvent.click(await screen.findByRole('button', { name: 'Next page' }));
 
-    expect(screen.getByRole('link', { name: 'acme.test/first' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'https://acme.test/first' })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Website changes' })).toHaveAttribute(
       'aria-busy',
       'true',
     );
     expect(screen.getByRole('button', { name: 'Previous page' })).toBeInTheDocument();
-    expect(await screen.findByRole('link', { name: 'acme.test/later' })).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'acme.test/first' })).not.toBeInTheDocument();
+    expect(
+      await screen.findByRole('link', { name: 'https://acme.test/later' }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'https://acme.test/first' })).not.toBeInTheDocument();
   });
 
   it('drops the previous pair’s rows when the summary names a different pair', async () => {
@@ -249,7 +270,7 @@ describe('Website Changes', () => {
         <ChangesPanel projectId={PROJECT} />
       </QueryClientProvider>,
     );
-    expect(await screen.findByRole('link', { name: 'acme.test/old' })).toHaveAttribute(
+    expect(await screen.findByRole('link', { name: 'https://acme.test/old' })).toHaveAttribute(
       'href',
       `/site/crawls/${CRAWL_B}/pages/${SITE_URL}`,
     );
@@ -261,12 +282,11 @@ describe('Website Changes', () => {
       }),
     );
 
-    // The old pair's row would now link under the new head crawl: it must not stay.
     const table = screen.getByRole('region', { name: 'Website changes' });
     expect(
       await within(table).findByRole('status', { name: 'Loading persisted website changes…' }),
     ).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'acme.test/old' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'https://acme.test/old' })).not.toBeInTheDocument();
   });
 
   it('colours an improvement apart from a regression', async () => {
@@ -274,7 +294,10 @@ describe('Website Changes', () => {
     renderWithProviders(<ChangesPanel projectId={PROJECT} />);
     expect(await screen.findByRole('cell', { name: 'Meta description' })).toBeInTheDocument();
     const table = screen.getByRole('region', { name: 'Website changes' });
-    expect(within(table).getByText('Improvement')).toHaveAttribute('data-badge-tone', 'positive');
+    expect(within(table).getByText('Improvement').closest('[data-status-tone]')).toHaveAttribute(
+      'data-status-tone',
+      'positive',
+    );
   });
 
   it('says when two crawls cannot be compared', async () => {

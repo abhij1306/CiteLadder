@@ -45,7 +45,6 @@ import { compareText } from '../text-order.ts';
 import { firstOf } from '../lists.ts';
 
 type Leg = z.infer<typeof trafficLegSchema>;
-/** Every pattern needs referral evidence, so only GA4-mapped projects derive insights. */
 export async function ga4Mapped(db: Database, scope: CrawlScope) {
   return !!(await db
     .selectFrom('integration_property_mappings')
@@ -56,7 +55,6 @@ export async function ga4Mapped(db: Database, scope: CrawlScope) {
     .where('status', '=', 'active')
     .executeTakeFirst());
 }
-/** An exact window, or a preset's newest snapshot whichever day it ends on. */
 export function insightSnapshot(db: Database, scope: CrawlScope, options: CrawlReadOptions) {
   let query = db
     .selectFrom('ai_traffic_insights')
@@ -140,11 +138,6 @@ export function pageComparable(r: JoinedPage, context: Awaited<ReturnType<typeof
       ))
   );
 }
-/**
- * A page's owned citations from the window's persisted run facts: a window
- * without a completed run is not connected, and a run without its fact is
- * unavailable (not computed) rather than zero.
- */
 function citationLeg(value: number | null, coverage: CitationCoverage): Leg {
   switch (coverage) {
     case 'no_completed_run':
@@ -272,7 +265,6 @@ async function observedCoverage(
     label: 'Observed crawl coverage' as const,
   };
 }
-/** A pattern's pages, read over the window its snapshot was derived from. */
 async function patternScope<T extends PageOptions>(
   db: Database,
   scope: CrawlScope,
@@ -296,10 +288,6 @@ async function patternScope<T extends PageOptions>(
     urlHashes,
   };
 }
-/**
- * The window a Pages cursor pinned and the row it continues after. The window
- * must be the request's explicit dates, or span the request's preset.
- */
 function cursorPosition(position: string[], options: CrawlReadOptions) {
   const [start, end, ...after] = position;
   if (position.length !== 4 || !start || !end) throw new InvalidCursorError('invalid Pages cursor');
@@ -334,7 +322,6 @@ export async function pagesRead(db: Database, scope: CrawlScope, input: PageOpti
     throw e;
   }
   const { w, after } = position;
-  // Every read below takes the pinned dates, never the preset again.
   const options = { ...requested, range: null, start_date: w.start, end_date: w.end };
   const [data, context] = await Promise.all([
     pageDataset(db, scope, { ...options, after, url_hashes: urlHashes }),
@@ -365,20 +352,12 @@ export async function pagesRead(db: Database, scope: CrawlScope, input: PageOpti
     ),
   });
 }
-/**
- * Every Pages row for one export, in the paged read's order. The window,
- * pattern and context resolve once and the rows are counted and refused past
- * the export cap; then keyset batches of the dataset stream. The cursor and
- * page size of the request do not apply.
- */
 export async function pagesExport(db: Database, scope: CrawlScope, input: PageOptions = {}) {
   const { options, urlHashes } = await patternScope(
     db,
     scope,
     await withReportingTimezone(db, scope, input),
   );
-  // A preset is pinned to its dates once, so the rows and their context read
-  // the same window even if the reporting day rolls over between the reads.
   const w = crawlWindow(options),
     { cursor: _cursor, limit: _limit, ...rest } = options,
     filters = { ...rest, range: null, start_date: w.start, end_date: w.end, url_hashes: urlHashes },
@@ -433,8 +412,6 @@ export async function urlRead(
       where workspace_id=${scope.workspaceId}::uuid and project_id=${scope.projectId}::uuid and url_hash=${urlHash}
       and reporting_date between ${w.start}::date and ${w.end}::date
       group by ai_source order by sum(sessions) desc,ai_source asc limit ${cap + 1}`.execute(db),
-    // The page's owned citations in the window's persisted run facts, dated
-    // on the reporting day the run was selected by.
     sql`select to_char(r.created_at at time zone ${options.reporting_timezone},'YYYY-MM-DD') as date,c.id as citation_id,r.audit_id
       from (${citationRuns(db, scope, bounds).select('m.owned_citation_pages')}) r
       cross join lateral jsonb_to_recordset(r.owned_citation_pages) as p(url_hash text,citation_ids jsonb)

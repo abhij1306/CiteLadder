@@ -44,7 +44,6 @@ it('deletes events older than the retention period in batches and keeps newer on
   const recent = await record(days(29));
   const today = await record(now);
 
-  // Three rows are past the cutoff, so one batch of two stops at two.
   expect(await pruneSecurityEvents(db, now, { retentionDays: 30, batch: 2 })).toBe(2);
   let pruned: number;
   do {

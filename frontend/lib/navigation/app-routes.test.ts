@@ -3,16 +3,19 @@ import { describe, expect, it } from 'vite-plus/test';
 import {
   hasPageTitle,
   isWorkspaceOnlyRoute,
+  isAgentPath,
   navigationMode,
   projectSwitchPathname,
   resolveTitle,
 } from './app-routes';
+import { routeTrail } from './route-trail';
 
 describe('app route manifest', () => {
   it('titles a page by its own route, else by the section it sits below', () => {
-    expect(resolveTitle('/runs/1f0c')).toBe('Run detail');
+    expect(resolveTitle('/runs/1f0c')).toBe('Run');
     expect(resolveTitle('/site/crawls/c1/pages/p1')).toBe('Page detail');
-    expect(resolveTitle('/agent/chats/c1')).toBe('Agent');
+    expect(resolveTitle('/agent/chats/c1')).toBe('Chat');
+    expect(resolveTitle('/products/overview')).toBe('Shopping');
     expect(resolveTitle('/settings/unknown')).toBe('Settings');
     expect(resolveTitle('/nowhere')).toBe('CiteLadder');
   });
@@ -33,14 +36,42 @@ describe('app route manifest', () => {
   it('lands a project switch on the collection of a record the next project lacks', () => {
     expect(projectSwitchPathname('/runs/r1')).toBe('/runs');
     expect(projectSwitchPathname('/agent/chats/c1')).toBe('/agent');
-    expect(projectSwitchPathname('/agent/actions/a1')).toBe('/agent/actions');
+    expect(projectSwitchPathname('/actions/a1')).toBe('/actions');
     expect(projectSwitchPathname('/site/crawls/c1/pages/p1')).toBe('/site');
     expect(projectSwitchPathname('/performance')).toBe('/performance');
   });
 
-  it('puts every Agent path, known or not, in Agent mode', () => {
-    expect(navigationMode('/agent/skills')).toBe('agent');
-    expect(navigationMode('/agent/unknown')).toBe('agent');
-    expect(navigationMode('/prompts')).toBe('dashboard');
+  it('trails a record page to its collection, and a top-level page or a chat nowhere', () => {
+    expect(routeTrail('/runs/r1')).toEqual([{ label: 'Runs', href: '/runs' }]);
+    expect(routeTrail('/site/crawls/c1/pages/p1')).toEqual([
+      { label: 'Site health', href: '/site' },
+    ]);
+    expect(routeTrail('/prompts/abc')).toEqual([{ label: 'Prompts', href: '/prompts' }]);
+    expect(routeTrail('/prompts/build')).toEqual([]);
+    expect(routeTrail('/runs')).toEqual([]);
+    expect(routeTrail('/agent/chats/c1')).toEqual([]);
+  });
+
+  it("tells the Agent's own pages, known or not, from every other page", () => {
+    expect(isAgentPath('/agent')).toBe(true);
+    expect(isAgentPath('/agent/unknown')).toBe(true);
+    expect(isAgentPath('/agents-report')).toBe(false);
+    expect(isAgentPath('/prompts')).toBe(false);
+  });
+
+  it.each([
+    ['/agent', 'agent'],
+    ['/agent/chats/c1', 'agent'],
+    ['/agent/skills', 'agent'],
+    ['/agent/context', 'agent'],
+    ['/actions', 'dashboard'],
+    ['/actions/a1', 'dashboard'],
+    ['/projects', 'dashboard'],
+    ['/site/crawls/c1/pages/p1', 'dashboard'],
+    ['/products/overview', 'dashboard'],
+    ['/agents-report', 'dashboard'],
+    ['/settings', 'dashboard'],
+  ] as const)('puts %s in %s mode', (pathname, mode) => {
+    expect(navigationMode(pathname)).toBe(mode);
   });
 });

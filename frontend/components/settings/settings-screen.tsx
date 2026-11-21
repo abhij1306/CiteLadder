@@ -1,50 +1,39 @@
 import { useMutation } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { Trash2 } from 'lucide-react';
 import { useState } from 'react';
 
-import { BrandMark } from '@/components/ui/brand-mark';
 import { Button } from '@/components/ui/button';
-import { Callout } from '@/components/ui/callout';
-import { MutationNotice } from '@/components/ui/mutation-notice';
 import { Dialog } from '@/components/ui/dialog';
 import { IntegrationSettings } from '@/components/settings/integration-settings';
 import { McpConnections } from '@/components/settings/mcp-connections';
 import { ApiKeys } from '@/components/settings/api-keys';
 import { ProviderSettings } from '@/components/settings/provider-settings';
 import { TimeZoneSetting } from '@/components/settings/time-zone-setting';
-import { TabPanel, TabsRoot } from '@/components/ui/tabs';
-import { ListScreen } from '@/components/layout/page-shell';
+import { TabPanel, TabRail, TabsRoot } from '@/components/ui/tabs';
+import { SettingsPage } from '@/components/templates/settings-page';
+import { Trash2 } from '@/lib/icons';
 import { projectMutations } from '@/lib/api/projects';
 import { mutationNoticeForError } from '@/lib/api/mutation-notice';
 import { useProjectContext, useWorkspaceCapability } from '@/lib/project/project-context';
 import { useSelectProject, workspaceDestination } from '@/lib/navigation/project-destination';
+import { SETTINGS_TABS, type SettingsTab } from '@/lib/settings/tabs';
 import { stringUrlCodec, useUrlState } from '@/lib/navigation/url-state';
 import { textRole } from '@/components/ui/typography';
-import { SettingsSection, SettingsSections } from '@/components/ui/settings-section';
 import { Icon } from '@/components/ui/icon';
-import { IdentityRow } from '@/components/ui/workspace';
-
-const SETTINGS_TABS = [
-  { id: 'general', label: 'General' },
-  { id: 'providers', label: 'Providers' },
-  { id: 'integrations', label: 'Integrations' },
-  { id: 'connections', label: 'MCP connections' },
-  { id: 'api-keys', label: 'API keys' },
-] as const;
-
-type SettingsTab = (typeof SETTINGS_TABS)[number]['id'];
+import { SettingRow, SettingRows, SettingsGroup } from '@/components/ui/setting-row';
+import { Notice } from '@/components/ui/notice';
+import { StateBlock } from '@/components/ui/state-block';
 
 /** The API keys tab shows only when the user may manage credentials. */
 function visibleTabs(hasWorkspace: boolean, managesCredentials: boolean) {
   return SETTINGS_TABS.filter(
     (tab) =>
-      tab.id === 'general' || (hasWorkspace && (tab.id !== 'api-keys' || managesCredentials)),
+      tab.value === 'general' || (hasWorkspace && (tab.value !== 'api-keys' || managesCredentials)),
   );
 }
 
 const SETTINGS_TAB_CODEC = stringUrlCodec(
-  SETTINGS_TABS.map((tab) => tab.id),
+  SETTINGS_TABS.map((tab) => tab.value),
   'general' as SettingsTab,
 );
 
@@ -81,24 +70,18 @@ function ProjectDeletionControls() {
   if (!mayDelete) return null;
   return (
     <>
-      <SettingsSection
-        title="Danger zone"
-        description="Permanently delete the active project and everything inside it."
-      >
+      <SettingsGroup title="Delete project">
+        {deleteMutation.isError ? (
+          <Notice
+            kind="mutation"
+            notice={mutationNoticeForError(deleteMutation.error, { action: 'delete the project' })}
+          />
+        ) : null}
         {activeProject ? (
-          <>
-            <IdentityRow
-              media={
-                <BrandMark
-                  name={activeProject.brand_name}
-                  logoUrl={activeProject.brand?.logo_url}
-                  websiteUrl={activeProject.website_url}
-                  placement="header"
-                />
-              }
-              title={<div className={textRole('itemTitle', 'truncate')}>{activeProject.name}</div>}
-              caption={<p className="type-caption">Brand: {activeProject.brand_name}</p>}
-              actions={
+          <SettingRows>
+            <SettingRow
+              label={activeProject.name}
+              action={
                 <Button
                   variant="danger"
                   onClick={() => setConfirmOpen(true)}
@@ -109,22 +92,11 @@ function ProjectDeletionControls() {
                 </Button>
               }
             />
-            <Callout tone="negative">
-              Deleting a project removes all of its prompts, topics, audits, visibility history, and
-              generated content. This cannot be undone.
-            </Callout>
-            {deleteMutation.isError ? (
-              <MutationNotice
-                notice={mutationNoticeForError(deleteMutation.error, {
-                  action: 'delete the project',
-                })}
-              />
-            ) : null}
-          </>
+          </SettingRows>
         ) : (
-          <p className="type-body">No project selected.</p>
+          <StateBlock kind="empty" inline message="No project is selected." />
         )}
-      </SettingsSection>
+      </SettingsGroup>
       <Dialog
         open={confirmOpen}
         onOpenChange={(open) => {
@@ -151,9 +123,9 @@ function ProjectDeletionControls() {
           </>
         }
       >
-        <p className={textRole('body')}>
-          This permanently deletes the project and all of its prompts, topics, audits, visibility
-          history, and generated content. This cannot be undone.
+        <p className={textRole('body', 'text-ink-2')}>
+          Deletes its prompts, topics, audits, visibility history and generated content. Cannot be
+          undone.
         </p>
       </Dialog>
     </>
@@ -184,34 +156,20 @@ export function SettingsScreen() {
   // `?tab=` is deep-linkable, so someone can arrive asking for a tab that is
   // not offered. Fall back to General rather than selecting
   // a tab that no longer exists, which would leave no panel visible at all.
-  const activeTab = tabs.some((tab) => tab.id === requestedTab) ? requestedTab : 'general';
+  const activeTab = tabs.some((tab) => tab.value === requestedTab) ? requestedTab : 'general';
 
   return (
-    <TabsRoot value={activeTab} onValueChange={setActiveTab}>
-      <ListScreen
-        narrow
-        tabs={{
-          items: tabs.map((tab) => ({ value: tab.id, label: tab.label })),
-          ariaLabel: 'Settings sections',
-        }}
-      >
+    <TabsRoot value={activeTab} onValueChange={setActiveTab} orientation="vertical">
+      <SettingsPage rail={<TabRail items={tabs} ariaLabel="Settings sections" />}>
         <TabPanel value="general" forceMount className="focus-ring data-[state=inactive]:hidden">
-          {/* One card per section, the danger zone last. */}
-          <SettingsSections>
-            <TimeZoneSetting />
-            <ProjectDeletionControls />
-          </SettingsSections>
+          <TimeZoneSetting />
+          <ProjectDeletionControls />
         </TabPanel>
 
         <TabPanel value="providers" forceMount className="focus-ring data-[state=inactive]:hidden">
           <ProviderSettings />
         </TabPanel>
 
-        {/* Not forceMount, unlike its siblings. This panel owns a connection
-            list that fans out into a mappings query and a 3s backfill poll per
-            connection, so mounting it behind every other tab meant opening
-            Profile issued five integration requests and then polled a backfill
-            the reader could not see. */}
         <TabPanel value="integrations" className="focus-ring">
           <IntegrationSettings />
         </TabPanel>
@@ -221,7 +179,7 @@ export function SettingsScreen() {
         <TabPanel value="api-keys" className="focus-ring">
           <ApiKeys />
         </TabPanel>
-      </ListScreen>
+      </SettingsPage>
     </TabsRoot>
   );
 }

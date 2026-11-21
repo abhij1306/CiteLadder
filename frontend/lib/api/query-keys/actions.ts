@@ -1,8 +1,3 @@
-/**
- * Actions query-key namespace — one unit of work per target. Lists are scoped
- * keys (`[actions, projectId, 'list', workspaceId, filters]`); a status change
- * or a declaration invalidates `actionKeys.all`.
- */
 import { scopedKeys, type ProjectScope } from './scope';
 
 const actions = scopedKeys('actions');
@@ -12,8 +7,8 @@ export const actionKeys = {
     scope: ProjectScope,
     filters: {
       status: string | null;
+      q: string | null;
       targetKind: string | null;
-      group: string | null;
       approach: string | null;
       priority: string | null;
       family: string | null;
@@ -21,10 +16,19 @@ export const actionKeys = {
       limit: number;
     },
   ) => actions.read('list', scope, filters),
-  /** Analyze a page's picker: the latest crawl's content pages matching a search. */
+  tree: (scope: ProjectScope, params: Readonly<Record<string, string | undefined>>) =>
+    actions.read('tree', scope, params),
+  groupingRows: (
+    scope: ProjectScope,
+    params: Readonly<Record<string, string | undefined>>,
+    cursor: string,
+  ) => actions.read('grouping-rows', scope, params, cursor),
   analyzePages: (scope: ProjectScope, search: string) =>
     actions.read('analyze-pages', scope, search),
-  // An Action page knows only its id; the workspace follows it.
+  urlActions: (scope: ProjectScope, siteUrlId: string) =>
+    actions.read('url-actions', scope, siteUrlId),
   detail: (workspaceId: string | null, actionId: string) =>
     ['actions', 'detail', actionId, workspaceId] as const,
+  urls: (workspaceId: string | null, actionId: string, cursor: string) =>
+    ['actions', 'urls', actionId, workspaceId, cursor] as const,
 };

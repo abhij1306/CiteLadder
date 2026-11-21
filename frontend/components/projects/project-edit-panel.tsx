@@ -1,9 +1,6 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Plus, X } from 'lucide-react';
 import { useState } from 'react';
 
-import { MutationNotice } from '@/components/ui/mutation-notice';
-import { QueryState } from '@/components/ui/query-state';
 import { Button, IconButton } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { Field } from '@/components/ui/field';
@@ -13,6 +10,7 @@ import { Inline, Stack } from '@/components/ui/layout';
 import { MarketSelect } from '@/components/ui/market-select';
 import { ProjectMarkets } from './project-markets';
 import { textRole } from '@/components/ui/typography';
+import { Plus, X } from '@/lib/icons';
 import { projectMutations } from '@/lib/api/projects';
 import { brandDiscoveryQueries } from '@/lib/api/brand-discoveries';
 import type { Project } from '@citeladder/contracts';
@@ -20,46 +18,21 @@ import { mutationNoticeForError } from '@/lib/api/mutation-notice';
 import { MARKET_COUNTRIES, MARKET_LANGUAGES } from '@citeladder/contracts/markets';
 
 import { MentionRuleFields, mentionRuleDraft, type MentionRuleDraft } from './mention-rule-fields';
+import { Notice } from '@/components/ui/notice';
+import { StateBlock } from '@/components/ui/state-block';
 
-/**
- * Edit an existing project's configuration.
- *
- * Onboarding replaced `/setup` and owns *creation*; this owns everything
- * afterwards. Without it, a brand's website, competitors and domains were fixed
- * at whatever discovery produced on day one — the gap left by retiring the
- * setup edit form.
- *
- * Deliberately a flat panel, not a stepper. The old edit surface was a
- * five-step wizard, which is the wrong shape for changing one alias: a wizard
- * is for a task you do once, a panel is for a thing you keep. Everything is
- * visible at once and Save sends only what changed.
- *
- * Comma-separated text for the list fields rather than per-row editors. These
- * are short lists of short strings, and a row-with-remove-button UI for
- * aliases was a meaningful chunk of the old form's weight for no real gain.
- */
 const splitList = (value: string): string[] =>
   value
     .split(',')
     .map((entry) => entry.trim())
     .filter(Boolean);
 
-/**
- * Draft rows carry a stable `key` because the list is editable AND removable.
- * Keyed by array index, removing the first of three rows shifted every row's
- * identity: React reused the same DOM inputs for different competitors, so
- * focus, selection, and any in-flight IME composition landed on the wrong row.
- * The counter is module-scoped and monotonic — it only has to be unique within
- * one mounted list, never persisted or sent to the backend.
- */
 let competitorKeySeq = 0;
 const nextCompetitorKey = () => {
   competitorKeySeq += 1;
   return `competitor-${competitorKeySeq}`;
 };
 
-// Aliases are not edited here; each row carries its own so a rename keeps them.
-// A tracked row carries its `id`, so a rename keeps the competitor and its logo.
 type CompetitorDraft = {
   key: string;
   id?: string;
@@ -69,7 +42,6 @@ type CompetitorDraft = {
   rule: MentionRuleDraft;
 };
 
-/** Only rules a person changed are saved; the rest keep following their defaults. */
 function touchedRules(entities: readonly { name: string; rule: MentionRuleDraft }[]) {
   return entities.flatMap(({ name, rule }) =>
     name.trim() && rule.touched
@@ -85,7 +57,6 @@ function touchedRules(entities: readonly { name: string; rule: MentionRuleDraft 
   );
 }
 
-/** An unnamed competitor row still needs something for a screen reader to say. */
 function competitorName(name: string, index: number): string {
   return name || `competitor ${index + 1}`;
 }
@@ -105,10 +76,6 @@ export function ProjectEditPanel({
   const [websiteUrl, setWebsiteUrl] = useState(project.website_url);
   const [country, setCountry] = useState(project.country_code);
   const [language, setLanguage] = useState(project.language_code);
-  // Lazy initializers: these join/map the project's arrays, and a bare
-  // `useState(expr)` re-runs `expr` on every keystroke in this panel only to
-  // throw the result away.
-  const [aliases, setAliases] = useState(() => project.brand.aliases.join(', '));
   const [brandRule, setBrandRule] = useState(() => mentionRuleDraft(project.brand.matching));
   const [ownedDomains, setOwnedDomains] = useState(() => project.owned_domains.join(', '));
   const [unintendedDomains, setUnintendedDomains] = useState(() =>
@@ -131,16 +98,15 @@ export function ProjectEditPanel({
   const save = useMutation(
     projectMutations.update({ workspaceId: project.workspace_id, projectId: project.id }),
   );
+  const nameMissing = name.trim() === '';
   const submit = () =>
     save.mutate(
       {
-        // An emptied name keeps the current one rather than failing the save.
-        name: name.trim() || project.name,
+        name: name.trim(),
         brand_name: brandName.trim(),
         website_url: websiteUrl.trim(),
         country_code: country.trim().toUpperCase(),
         language_code: language.trim(),
-        brand: { aliases: splitList(aliases) },
         owned_domains: splitList(ownedDomains),
         unintended_domains: splitList(unintendedDomains),
         competitors: competitors.flatMap((competitor) => {
@@ -171,14 +137,14 @@ export function ProjectEditPanel({
       open={open}
       onOpenChange={onOpenChange}
       title={`Edit ${project.brand_name || project.name}`}
-      description="Changes apply to future audits. Existing results keep the settings they ran with."
       width="wide"
       footer={
         <>
-          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={save.isPending}>
+          <Button variant="quiet" onClick={() => onOpenChange(false)} disabled={save.isPending}>
+            <Icon icon={X} />
             Cancel
           </Button>
-          <Button variant="primary" onClick={submit} disabled={save.isPending}>
+          <Button variant="primary" onClick={submit} disabled={save.isPending || nameMissing}>
             {save.isPending ? 'Saving…' : 'Save changes'}
           </Button>
         </>
@@ -186,13 +152,18 @@ export function ProjectEditPanel({
     >
       <Stack gap="workspace">
         {save.isError ? (
-          <MutationNotice
+          <Notice
+            kind="mutation"
             notice={mutationNoticeForError(save.error, { action: 'save the project' })}
           />
         ) : null}
 
         <Stack gap="workspace">
-          <Field label="Project name" hint="How this project appears in your project list.">
+          <Field
+            label="Project name"
+            error={nameMissing ? 'Enter a project name.' : undefined}
+            required
+          >
             {(props) => (
               <Input {...props} value={name} onChange={(event) => setName(event.target.value)} />
             )}
@@ -204,7 +175,6 @@ export function ProjectEditPanel({
                 value={brandName}
                 onChange={(event) => {
                   setBrandName(event.target.value);
-                  // Rules are saved by name, so a renamed entity carries its rule.
                   setBrandRule((rule) => ({ ...rule, touched: true }));
                 }}
               />
@@ -216,19 +186,6 @@ export function ProjectEditPanel({
                 {...props}
                 value={websiteUrl}
                 onChange={(event) => setWebsiteUrl(event.target.value)}
-              />
-            )}
-          </Field>
-          <Field
-            label="Brand aliases"
-            hint="Comma separated. Every other spelling an answer might use for you — a mention only counts when it matches one of these or your brand name."
-          >
-            {(props) => (
-              <Input
-                {...props}
-                value={aliases}
-                onChange={(event) => setAliases(event.target.value)}
-                placeholder="Acme Inc, Acme Co"
               />
             )}
           </Field>
@@ -263,7 +220,7 @@ export function ProjectEditPanel({
         </Stack>
 
         <Stack gap="workspace">
-          <p className={textRole('label')}>Domains</p>
+          <p className={textRole('body', 'text-ink-2')}>Domains</p>
           <Field label="Owned" hint="Comma separated">
             {(props) => (
               <Input
@@ -274,7 +231,7 @@ export function ProjectEditPanel({
               />
             )}
           </Field>
-          <Field label="Unintended" hint="Domains that are not yours but get confused for you">
+          <Field label="Unintended">
             {(props) => (
               <Input
                 {...props}
@@ -287,12 +244,12 @@ export function ProjectEditPanel({
 
         <Stack gap="compact">
           <Inline>
-            <p className={textRole('label')}>Competitors</p>
+            <p className={textRole('body', 'text-ink-2')}>Competitors</p>
             <span className="type-caption">
               {competitors.length} of {maximumCompetitors ?? '…'}
             </span>
             <Button
-              variant="ghost"
+              variant="quiet"
               className="ms-auto"
               aria-label="Add competitor"
               disabled={competitorLimitReached}
@@ -314,7 +271,7 @@ export function ProjectEditPanel({
             </Button>
           </Inline>
           {competitors.length === 0 ? (
-            <QueryState kind="empty" inline message="None tracked." />
+            <StateBlock kind="empty" inline message="None tracked." />
           ) : (
             <Stack as="ul" gap="compact" className="list-none">
               {competitors.map((competitor, index) => (

@@ -9,7 +9,6 @@ type ProjectLinkProps = Omit<ComponentProps<typeof Link>, 'to'> & {
   projectId?: string | null;
 };
 
-/** A link whose destination is owned by the currently selected project. */
 export function ProjectLink({ href, projectId, ...props }: Readonly<ProjectLinkProps>) {
   const projectHref = useProjectHref();
   if (!isAppRoute(href)) {

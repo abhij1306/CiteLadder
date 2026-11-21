@@ -86,7 +86,6 @@ export function previewCost(
   };
 }
 
-/** Applicable usage without a verified rate makes a total partial, even when other lines are known. */
 export function projectCost(usage: unknown, pricing: RateCard) {
   const source = z.record(z.string(), z.unknown()).safeParse(usage).data ?? {};
   const count = (key: string) => usageCount(source[key]);
@@ -139,7 +138,6 @@ export function projectCost(usage: unknown, pricing: RateCard) {
     projected_total_cost_microusd: projected,
   };
 }
-/** Caller owns the transaction. Each immutable artifact/version pair is inserted once. */
 export async function appendCostProjection(
   db: Database,
   workspaceId: string,
@@ -179,7 +177,6 @@ export async function appendCostProjection(
       raw_response_artifact_id: artifact.id,
       audit_id: artifact.audit_id,
       task_id: artifact.task_id,
-      // The cost outlives its answer: it keeps what was priced.
       logical_engine: artifact.logical_engine,
       transport_provider: artifact.transport_provider,
       transport_model: artifact.transport_model,

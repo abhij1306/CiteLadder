@@ -1,8 +1,3 @@
-/**
- * Ads persistence in the derive transaction against real PostgreSQL: ownership
- * with the frozen competitor id, the parsed-for-ads marker, and ads kept out
- * of citations and mentions.
- */
 import { randomUUID } from 'node:crypto';
 
 import { afterAll, describe, expect, it } from 'vitest';
@@ -26,7 +21,6 @@ afterAll(async () => {
   await db.destroy();
 });
 
-/** Derive one answer whose immutable artifact stores `rawResponse`. */
 async function derive(tenant: Tenant, auditId: string, engine: string, rawResponse: unknown) {
   const { taskId } = await fixtures.execution(tenant, { auditId, engine, analysis: null });
   const artifactId = randomUUID();

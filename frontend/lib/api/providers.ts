@@ -59,25 +59,13 @@ export const providersApi = {
     const res = await apiClient.get<ProviderCatalog>('/provider-catalog', options);
     return strictValidate(providerCatalogSchema, res, 'providers.getCatalog');
   },
-  /**
-   * The AUTHENTICATED workspace projection: what this workspace can actually
-   * execute with. Distinct from the public catalog's `availability` — a
-   * provider can be generally available and still `missing` here.
-   */
   getConnectionStates: async (options?: ApiRequestOptions) => {
     const res = await apiClient.get<unknown>('/provider-connections/states', options);
     return strictValidate(providerConnectionStatesSchema, res, 'providers.getConnectionStates');
   },
 };
 
-/**
- * Provider reads. A workspace owns its provider connections, so those reads
- * are keyed and sent for one; without that, switching workspace showed the
- * previous workspace's engines as configured. Callers hold them disabled
- * until the workspace is known.
- */
 export const providerQueries = {
-  /** The public catalog: which transports exist and the engines each measures. */
   catalog: () =>
     queryOptions({
       queryKey: queryKeys.providers.catalog(),
@@ -88,10 +76,6 @@ export const providerQueries = {
       queryKey: queryKeys.providers.connections(workspaceId ?? 'unresolved'),
       queryFn: ({ signal }) => providersApi.listConnections({ signal, workspaceId }),
     }),
-  /**
-   * The AUTHENTICATED state projection. A failure leaves every engine at its
-   * fail-closed default rather than implying `connected`.
-   */
   states: (workspaceId: string | null) =>
     queryOptions({
       queryKey: queryKeys.providers.states(workspaceId ?? 'unresolved'),
@@ -99,11 +83,6 @@ export const providerQueries = {
     }),
 };
 
-/**
- * Every workspace's connections and states, after a save or a probe: the
- * probe denormalizes its outcome onto the connection, and that outcome gates
- * launching and the status badge.
- */
 export const refreshProviderReads = (client: QueryClient) =>
   Promise.all([
     client.invalidateQueries({ queryKey: queryKeys.providers.allConnections() }),

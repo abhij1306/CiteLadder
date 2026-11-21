@@ -48,19 +48,17 @@ describe('humanizeApiError', () => {
 
   it('falls back when the message is blank', () => {
     expect(humanizeApiError(new ApiError('  ', 500, '')).message).toBe(
-      'Something went wrong. Please try again.',
+      'Something went wrong. Try again.',
     );
   });
 
   it('uses the Error message for non-API errors', () => {
     expect(humanizeApiError(new Error('offline')).message).toBe('offline');
-    expect(humanizeApiError(new Error('  ')).message).toBe(
-      'Something went wrong. Please try again.',
-    );
+    expect(humanizeApiError(new Error('  ')).message).toBe('Something went wrong. Try again.');
   });
 
   it('uses the fallback for non-error values', () => {
-    expect(humanizeApiError(undefined).message).toBe('Something went wrong. Please try again.');
+    expect(humanizeApiError(undefined).message).toBe('Something went wrong. Try again.');
     expect(humanizeApiError('nope', 'Custom fallback.').message).toBe('Custom fallback.');
   });
 

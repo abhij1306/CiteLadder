@@ -7,12 +7,18 @@ describe('streamed CSV download', () => {
   it('writes the header and each batch as the client reads', async () => {
     async function* batches() {
       yield [{ url: 'https://a.example/', hits: 2 }];
-      yield [{ url: '=cmd()', hits: null }];
+      yield [
+        { url: '=cmd()', hits: null },
+        { url: 'Pro costs $59, "monthly"\nbilled', hits: 1 },
+      ];
     }
     const response = csvDownload('pages.csv', ['url', 'hits'], batches());
 
     expect(response.headers.get('content-disposition')).toBe('attachment; filename="pages.csv"');
-    expect(await response.text()).toBe("url,hits\r\nhttps://a.example/,2\r\n'=cmd(),\r\n");
+    expect(await response.text()).toBe(
+      "url,hits\r\nhttps://a.example/,2\r\n'=cmd(),\r\n" +
+        '"Pro costs $59, ""monthly""\nbilled",1\r\n',
+    );
   });
 
   it('ends the download and logs the export when a later batch fails', async () => {

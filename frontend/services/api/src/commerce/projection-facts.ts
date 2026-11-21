@@ -5,26 +5,18 @@ import { onlyOf } from '../lists.ts';
 import { catalogFactsSchema, type CatalogFacts } from '../site-health/analysis/catalog-facts.ts';
 import { canonicalUrl } from '../site-health/url-identity.ts';
 
-/** Site Health's persisted page facts, read through the producer's schema. */
 export const readFacts = (value: unknown): CatalogFacts =>
   catalogFactsSchema.parse(jsonObject(value, 'site_fetch_artifacts.normalized_facts'));
 const indexNames = new Set<string>(policy.commerce.breadcrumb_index_names);
-/** Category identity: `commerce_categories.normalized_name`. */
 export const categoryKey = (name: string) => name.trim().toLowerCase().replaceAll(/\s+/gu, ' ');
-/** The platform default (WooCommerce's "Uncategorized") names no category; a product without one has none. */
 export const UNCATEGORIZED_KEY = 'uncategorized';
 const named = (name: string) => /[\p{L}\p{N}]/u.test(name);
-/** A name that identifies a real category. */
 export const isCategoryName = (name: string) =>
   named(name) && categoryKey(name) !== UNCATEGORIZED_KEY && !indexNames.has(categoryKey(name));
 
 // Private suffixes count: on a shared host (a.myshopify.com) another tenant is another site.
 const site = (url: string) => getDomain(url, { allowPrivateDomains: true });
 
-/**
- * The page's catalog URL in Site Health's identity (`site_urls.normalized_url`), so
- * shelves and products link by the same key; null when no public URL identifies it.
- */
 export function pageIdentity(facts: CatalogFacts, base: string): string | null {
   const declared = facts.canonical_url ? canonicalUrl(facts.canonical_url, base) : null;
   const domain = site(base);
@@ -51,20 +43,17 @@ function finitePrice(value: unknown): number | null {
  * spaces (as `Intl.NumberFormat` writes them) and apostrophes (Swiss prices).
  */
 const GROUPING_MARKS = String.fromCodePoint(0xa0, 0x2009, 0x202f, 0x27, 0x2019);
-/** Characters inside a written amount, as a regular expression class body. */
 export const AMOUNT_CHARACTERS = String.raw`\d,.` + GROUPING_MARKS;
 const GROUPING_MARK = new RegExp(`[${GROUPING_MARKS}]`, 'u');
 const isAmountPunctuation = (char: string) =>
   char === ',' || char === '.' || GROUPING_MARKS.includes(char);
 
-/** Punctuation after the amount (`$59.`, `$129.99,`) ends the sentence, not the number. */
 function withoutTrailingPunctuation(raw: string): string {
   let end = raw.length;
   while (end > 0 && isAmountPunctuation(raw.charAt(end - 1))) end -= 1;
   return raw.slice(0, end);
 }
 
-/** Currency-qualified visible amounts; grouping must be unambiguous. */
 export function localizedPrice(raw: string): number | null {
   const amount = withoutTrailingPunctuation(raw);
   if (GROUPING_MARK.test(amount)) return markGroupedPrice(amount);
@@ -86,7 +75,6 @@ export function localizedPrice(raw: string): number | null {
   if (parts.length > 1) return validGroups(parts) ? finitePrice(parts.join('')) : null;
   return /^\d+$/u.test(amount) ? finitePrice(amount) : null;
 }
-/** `1 299,50` or `1'299.50`: the mark groups thousands, so `.` or `,` can only be the decimal. */
 function markGroupedPrice(amount: string): number | null {
   const [, integer, fraction] = /^([^,.]+)(?:[,.](\d{1,2}))?$/u.exec(amount) ?? [];
   if (integer === undefined) return null;
@@ -95,7 +83,6 @@ function markGroupedPrice(amount: string): number | null {
   const digits = groups.join('');
   return finitePrice(fraction === undefined ? digits : `${digits}.${fraction}`);
 }
-/** Thousands groups (`1,299,000`), or Indian lakh groups (`12,34,567`). */
 function validGroups(groups: string[]): boolean {
   const [head, ...rest] = groups;
   if (head === undefined || !rest.length) return false;
@@ -129,15 +116,12 @@ function visiblePrice(facts: CatalogFacts) {
     return { price: null, currency: '' };
   const amounts = [...text.matchAll(visiblePattern)].flatMap((match) => {
     const marker = match[0].toUpperCase();
-    return (
-      [
-        adjacentAmount(text, match.index + match[0].length, 1),
-        adjacentAmount(text, match.index - 1, -1),
-      ]
-        // A quote or full stop beside the marker with no digit is not an amount.
-        .filter((amount) => /\d/u.test(amount))
-        .map((amount) => ({ marker, amount }))
-    );
+    return [
+      adjacentAmount(text, match.index + match[0].length, 1),
+      adjacentAmount(text, match.index - 1, -1),
+    ]
+      .filter((amount) => /\d/u.test(amount))
+      .map((amount) => ({ marker, amount }));
   });
   const only = onlyOf(amounts);
   if (!only) return { price: null, currency: '' };
@@ -149,7 +133,6 @@ function visiblePrice(facts: CatalogFacts) {
   };
 }
 
-/** The product fields a page projects, each with its own provenance. */
 export const PRODUCT_FIELDS = [
   'canonical_url',
   'name',
@@ -206,7 +189,6 @@ export function categoryTitle(facts: CatalogFacts, fallback: string): string {
   return (crumb || heading || (isCategoryName(title) ? title : '')).trim().slice(0, 255);
 }
 
-/** The category a listing's breadcrumb trail names one level above `name`; '' at the top. */
 export function breadcrumbParent(facts: CatalogFacts, name: string): string {
   const crumbs = facts.commerce.breadcrumbs.filter(
     (crumb) => isCategoryName(crumb) && !indexNames.has(categoryKey(crumb)),
@@ -215,7 +197,6 @@ export function breadcrumbParent(facts: CatalogFacts, name: string): string {
   return position > 0 ? crumbs[position - 1]!.trim().replaceAll(/\s+/gu, ' ').slice(0, 255) : '';
 }
 
-/** A product page's categories: its structured categories, then its breadcrumb path top first. */
 export function productCategories(facts: CatalogFacts, url: string, aliases: string[]) {
   const path = breadcrumbPath(facts, url, aliases);
   return {
@@ -226,7 +207,6 @@ export function productCategories(facts: CatalogFacts, url: string, aliases: str
   };
 }
 
-/** The breadcrumb categories above a product page, top first. */
 function breadcrumbPath(facts: CatalogFacts, url: string, aliases: string[]): string[] {
   const crumbs = facts.commerce.breadcrumbs
     .map((value) => value.trim().replaceAll(/\s+/gu, ' '))
@@ -275,7 +255,6 @@ export function catalogApplicability(
   return typeof primary === 'string' && KNOWN_MODELS.has(primary) ? 'not_applicable' : 'unknown';
 }
 
-/** Whether a brand's confirmed business model, primary or secondary, sells a catalog. Unknown fails closed. */
 export function sellsCatalog(businessContext: unknown): boolean {
   return catalogApplicability(businessContext) === 'applicable';
 }

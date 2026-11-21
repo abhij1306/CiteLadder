@@ -1,12 +1,3 @@
-/**
- * `classify_referrals`: one provenance-stamped classification per event an
- * artifact ingested, then the chain's `ai_referrals_snapshot_refresh` link.
- *
- * Committed batches insert `ON CONFLICT (referral_event_id) DO NOTHING`, so a
- * re-run or a concurrent duplicate attempt never mutates a classification.
- * Cooperative cancel is honored at every batch boundary; committed batches
- * stay, and a later attempt resumes where the last one stopped.
- */
 import { randomUUID } from 'node:crypto';
 
 import { sql } from 'kysely';
@@ -24,7 +15,6 @@ const BATCH_SIZE = 500;
 export const classifyReferrals: Executor = async (task, { db, checkCancelled, maxAttempts }) => {
   const projectId = requireProject(task);
   const artifact = await ownedArtifact(db, task.workspace_id, payloadArtifactId(task), projectId);
-  // The refresh window comes from the artifact's sync run.
   const run = await db
     .selectFrom('integration_sync_runs')
     .select([
@@ -72,11 +62,9 @@ export const classifyReferrals: Executor = async (task, { db, checkCancelled, ma
       .insertInto('referral_classifications')
       .values(
         events.map((event) => {
-          // An unmatched event is `other` with empty match fields: never a guess.
           const match = classifyReferralSignals(event);
           return {
             id: randomUUID(),
-            // The composite (workspace, event) key requires the event's workspace.
             workspace_id: task.workspace_id,
             project_id: event.project_id,
             referral_event_id: event.id,

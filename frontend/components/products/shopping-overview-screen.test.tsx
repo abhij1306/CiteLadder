@@ -85,7 +85,7 @@ function Harness() {
   const query = useQuery(
     commerceQueries.overview({ workspaceId: null, projectId: PROJECT_ID }, 'window=90'),
   );
-  return <OverviewSections query={query} windowDays="90" filters={[]} />;
+  return <OverviewSections query={query} windowDays="90" />;
 }
 
 beforeAll(() => mswServer.listen({ onUnhandledFrame: 'error' }));
@@ -115,23 +115,23 @@ describe('Shopping overview', () => {
 
     const ranking = await screen.findByRole('region', { name: 'Ranking' });
     expect(rowCells(ranking, 'Acme')).toEqual(['AcmeYour brand', '66.7%', '50.0%', '1.5', '60.0%']);
+    const shareHead = { name: /share of shelf/i };
+    expect(within(ranking).getByRole('columnheader', shareHead)).toBeInTheDocument();
 
     fireEvent.click(within(ranking).getByRole('radio', { name: 'Products' }));
-    expect(within(ranking).queryByText('Share of Shelf')).not.toBeInTheDocument();
+    expect(within(ranking).queryByRole('columnheader', shareHead)).not.toBeInTheDocument();
     expect(rowCells(ranking, 'Rival Pacer')).toEqual([
       'Rival PacerRival · Competitor',
       '66.7%',
       '50.0%',
       '1.5',
     ]);
-    // Never named: a real zero visibility, but no rank to measure.
     expect(rowCells(ranking, 'Acme Merino Sock')).toEqual([
-      'Acme Merino SockAcme · Your product',
+      'Acme Merino SockAcme',
       '0.0%',
-      'Unavailable',
-      'Unavailable',
+      '—Unavailable',
+      '—Unavailable',
     ]);
-    // Every product opens its page in the overview's window, competitors included.
     expect(within(ranking).getByRole('link', { name: 'Acme Road Runner' })).toHaveAttribute(
       'href',
       `/products/${ROAD}?window=90`,
@@ -148,7 +148,7 @@ describe('Shopping overview', () => {
 
     await screen.findByRole('region', { name: 'Most visible' });
     expect(rowCells(table('Least visible'), 'Acme Merino Sock')).toEqual([
-      'Acme Merino SockAcme · Your product',
+      'Acme Merino SockAcme',
       '0',
       '0.0%',
     ]);
@@ -158,12 +158,8 @@ describe('Shopping overview', () => {
       '1',
     ]);
     const fanout = table('Top fan-out queries');
-    // The third answer searched without exposing its queries: unknown, not "no search".
-    expect(fanout).toHaveTextContent(
-      'From the 3 answers that named a product: 1 with readable search queries, 1 without a search, 1 unknown.',
-    );
+    expect(fanout).toHaveTextContent('3 answers · 1 with queries · 1 without a search · 1 unknown');
     expect(rowCells(fanout, 'best road running shoes')).toEqual(['best road running shoes', '2']);
-    // No category chosen: no category shelf.
     expect(screen.queryByText('Category shelf')).not.toBeInTheDocument();
   });
 
@@ -180,12 +176,34 @@ describe('Shopping overview', () => {
     });
     renderWithProviders(<Harness />, projectRoute);
 
-    expect(
-      await screen.findByText('No Commerce run has measured this category yet.'),
-    ).toBeInTheDocument();
-    expect(table('Ranking')).toHaveTextContent('No brand yet.');
-    expect(table('Top merchants')).toHaveTextContent('No answer named a merchant.');
-    expect(table('Top fan-out queries')).toHaveTextContent('No answer named a product.');
+    const shelf = (await screen.findByText('Category shelf')).closest('section')!;
+    const setUp = within(shelf).getByRole('link', { name: 'Set up its shopping prompts' });
+    expect(new URL(setUp.getAttribute('href')!, 'https://app.test').pathname).toBe(
+      `/products/${CATEGORY}`,
+    );
+    const heading = screen.getByRole('heading', {
+      level: 2,
+      name: 'No shopping answers in the last 30 days',
+    });
+    const empty = heading.closest<HTMLElement>('[data-state-block]')!;
+    expect(within(empty).getByRole('link', { name: 'Open Products' })).toBeInTheDocument();
+    expect(screen.getAllByRole('link', { name: 'Open Products' })).toHaveLength(1);
+    expect(screen.queryByRole('region', { name: 'Ranking' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Acme Merino Sock')).not.toBeInTheDocument();
+    expect(screen.queryByText(/0 answers ·/)).not.toBeInTheDocument();
+  });
+  it('gives an empty table its own empty state, without its head', async () => {
+    serve({
+      ...OVERVIEW,
+      merchants: [],
+      fanout: { answers: 3, answers_with_queries: 0, answers_without_search: 3, queries: [] },
+    });
+    renderWithProviders(<Harness />, projectRoute);
+
+    const merchants = await screen.findByRole('region', { name: 'Top merchants' });
+    expect(merchants).toHaveTextContent('No merchant yet');
+    expect(within(merchants).queryByRole('columnheader')).not.toBeInTheDocument();
+    expect(table('Top fan-out queries')).toHaveTextContent('3 answers · 0 with queries');
   });
 
   it('reads the category shelf from its latest Commerce run', async () => {
@@ -206,11 +224,10 @@ describe('Shopping overview', () => {
     renderWithProviders(<Harness />, projectRoute);
 
     const shelf = (await screen.findByText('Category shelf')).closest('section')!;
-    expect(shelf).toHaveTextContent('from 5 answers and 8 recognized recommendations');
+    expect(shelf).toHaveTextContent('5 answers · 8 recommendations');
     expect(within(shelf).getByText('40.0%')).toBeInTheDocument();
     expect(within(shelf).getByText('25.0%')).toBeInTheDocument();
-    expect(within(shelf).getByText('2.00')).toBeInTheDocument();
-    // Measured, but no answer ranked a product: unavailable, not "not measured".
+    expect(within(shelf).getByText('2.0')).toBeInTheDocument();
     expect(within(shelf).getByText('Unavailable')).toBeInTheDocument();
     expect(within(shelf).queryByText('Not measured')).not.toBeInTheDocument();
   });
@@ -231,7 +248,6 @@ describe('Shopping overview', () => {
         return HttpResponse.json(OVERVIEW);
       }),
     );
-    // A project switch kept the previous project's category in the URL.
     renderWithProviders(<ShoppingOverviewScreen />, {
       ...projectRoute,
       initialEntries: [`/products/overview?project=${PROJECT_ID}&category=${FOREIGN_CATEGORY}`],

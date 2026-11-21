@@ -30,11 +30,6 @@ export type { ProjectionOwners } from './surfaces/adapter.ts';
 
 const logger = getLogger('workers.audit');
 
-/**
- * One lease advances one stored phase. The worker owns the lease, heartbeat, deadlines
- * and provider capacity; the task's surface adapter owns dispatch and persistence.
- * Provider retries live exclusively in PostgreSQL.
- */
 export class AuditWorker {
   readonly owner: string;
   readonly #db: Database;
@@ -42,7 +37,6 @@ export class AuditWorker {
   readonly #runtime: AuditRuntime;
   readonly #key: string;
   readonly #projections: ProjectionOwners;
-  /** Each claim adds its own lease owner (`#execute`). */
   readonly #deps: Omit<PhaseDeps, 'owner'>;
   readonly #taskScope: { workspaceId: string; auditId: string } | undefined;
   readonly #now: () => Date;
@@ -78,11 +72,9 @@ export class AuditWorker {
         projections.prepare ? projections.prepare(context, result) : projections.execution,
     };
   }
-  /** Earliest due retry, capacity wait or provider poll, so an idle runner stays for it. */
   nextDue() {
     return this.#queue.nextDue();
   }
-  /** The runner lane reclaims expired leases first; stuck-audit repair stays in periodic maintenance. */
   async runOnce(signal?: AbortSignal) {
     if (signal?.aborted) return 0;
     const tasks = await this.#queue.claim(
@@ -90,7 +82,6 @@ export class AuditWorker {
       this.#runtime.audits.worker_concurrency,
       this.#taskScope,
     );
-    // Every claimed task settles before a failure surfaces; none is left running detached.
     const settled = await Promise.allSettled(tasks.map((task) => this.#execute(task, signal)));
     const failure = settled.find(
       (result): result is PromiseRejectedResult => result.status === 'rejected',
@@ -98,12 +89,6 @@ export class AuditWorker {
     if (failure) throw failure.reason;
     return tasks.length;
   }
-  /**
-   * Keep up to `worker_concurrency` tasks in flight while the caller admits:
-   * each settlement frees a slot the next claim refills, so one slow answer
-   * never idles the others. Refills stop once a claim finds nothing, admission
-   * ends or the claim window closes; claimed work always settles.
-   */
   async drain(canAdmit: () => boolean) {
     const limit = this.#runtime.audits.worker_concurrency;
     const windowEnd = performance.now() + this.#runtime.audits.claim_window_seconds * 1000;
@@ -116,7 +101,6 @@ export class AuditWorker {
       try {
         tasks = await this.#queue.claim(this.owner, limit - inFlight.size, this.#taskScope);
       } catch (error) {
-        // In-flight work still settles before the failure surfaces.
         failures.push(error);
         return;
       }
@@ -142,7 +126,6 @@ export class AuditWorker {
   }
   async #execute(lease: ClaimedAuditTask, signal?: AbortSignal) {
     const startedAt = performance.now();
-    // Every write under this claim is fenced by the claim's own lease owner.
     const deps: PhaseDeps = { ...this.#deps, owner: lease.lease_owner };
     let claimed: AuditTask = lease;
     const heartbeat = maintainLease(
@@ -181,7 +164,6 @@ export class AuditWorker {
         dispatchSignal,
       );
     } catch (error) {
-      // The surface adapter decides retry or failure; the log records where it broke.
       logLaneFailure(AUDIT_LANE.table, claimed, {
         phase: dispatch.started ? 'dispatch' : 'prepare',
         startedAt,
@@ -198,10 +180,6 @@ export class AuditWorker {
       await this.#finalize(claimed);
     }
   }
-  /**
-   * The task already settled: one audit's failed finalize never fails the lane
-   * or its siblings. Maintenance finalizes an audit whose tasks are all terminal.
-   */
   async #finalize(task: AuditTask) {
     try {
       await this.#projections.finalize(task.workspace_id, task.audit_id);
@@ -213,7 +191,6 @@ export class AuditWorker {
       });
     }
   }
-  /** The leased dispatch: ownership is rechecked right before any network boundary. */
   async #dispatchLeased(
     deps: PhaseDeps,
     adapter: SurfaceAdapter,

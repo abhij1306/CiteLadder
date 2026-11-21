@@ -38,7 +38,6 @@ import { defineGetRoute, definePostRoute, definePutRoute, defineDeleteRoute } fr
 
 const family = 'agent',
   body = agentRequestSchemas(agentPolicy);
-// A route under the project path resolves the project in the session read.
 const projectFamily = { family, authorize: 'active-project' } as const;
 const projectPath = { project_id: { scalar: { kind: 'uuid' }, required: true } } as const;
 const chatPath = { chat_id: { scalar: { kind: 'uuid' }, required: true } } as const;
@@ -55,7 +54,6 @@ const suggestionPath = {
   suggestion_id: { scalar: { kind: 'uuid' }, required: true },
 } as const;
 type SuggestionChange = 'apply' | 'dismiss' | 'revert';
-/** `POST …/suggestions/{suggestion_id}/{change}` against the revision the person saw. */
 function suggestionRoute(change: SuggestionChange) {
   return definePostRoute({
     family,
@@ -90,11 +88,6 @@ function key(c: Context<AppEnv>) {
 function scope(c: Context<AppEnv>, projectId: string): Scope {
   return { workspaceId: c.get('workspace').workspaceId, userId: c.get('user').id, projectId };
 }
-/**
- * The scope of a chat in the active workspace, which the session read
- * authorized: one chat read names its project. Turns, edits and other writes
- * re-check access inside their own transaction (`agent/access.ts`).
- */
 async function chatScope(db: Database, c: Context<AppEnv>, id: string): Promise<Scope> {
   const chat = await workspaceChat(db, c.get('workspace').workspaceId, id);
   return scope(c, chat.project_id);
@@ -102,7 +95,6 @@ async function chatScope(db: Database, c: Context<AppEnv>, id: string): Promise<
 function workspaceOf(c: Context<AppEnv>) {
   return { workspaceId: c.get('workspace').workspaceId };
 }
-/** An Agent store call with its refusals as HTTP errors; Analyze a page shares it. */
 export async function mapped<T>(action: () => Promise<T>) {
   try {
     return await action();
@@ -111,7 +103,6 @@ export async function mapped<T>(action: () => Promise<T>) {
     throw agentHttpError(error.code);
   }
 }
-/** The HTTP error an Agent refusal answers with. */
 function agentHttpError(code: string) {
   if (code === 'model_unavailable')
     return new ApiError(503, 'The Agent model is not configured', {
@@ -136,7 +127,6 @@ function agentHttpError(code: string) {
     code: asApiErrorCode(conflictCode(code)),
   });
 }
-/** Why a suggestion change was refused, in words the person can act on. */
 const SUGGESTION_CONFLICTS: Readonly<Record<string, string>> = {
   suggestion_not_open: 'This suggestion is no longer open.',
   suggestion_not_ready:
@@ -151,7 +141,6 @@ function conflictCode(code: string) {
   if (code === 'agent_skill_unknown') return 'validation_error';
   return code;
 }
-/** One interactive turn as server-sent events, with a heartbeat under proxy idle limits. */
 function turnStream(
   execute: (events: TurnEvents) => Promise<unknown>,
   finished: () => Promise<z.infer<typeof agentRunSchema>>,
@@ -159,7 +148,6 @@ function turnStream(
 ) {
   const encoder = new TextEncoder();
   return new ReadableStream<Uint8Array>({
-    // The reader went away: the browser closed, so the turn stops.
     cancel: onCancel,
     start(controller) {
       let open = true;
@@ -265,7 +253,6 @@ export const agentRoutes = [
     async handle({ db }) {
       const { catalog } = await agentBindings(db);
       const { workflows } = catalog;
-      // Explicit projection: skill bodies and format guidance are model input only.
       return {
         skills: [...catalog.skills.values()].map((skill) => ({
           id: skill.id,
@@ -274,11 +261,7 @@ export const agentRoutes = [
           output_kind: skill.outputKind,
           description: skill.description,
         })),
-        workflow_groups: workflows.groups,
-        workflows: workflows.workflows.map((workflow) => ({
-          ...workflow,
-          format_id: workflow.format_id ?? null,
-        })),
+        workflows: workflows.workflows.map(({ id, label }) => ({ id, label })),
         output_kinds: Object.entries(workflows.kinds).map(([kind, presentation]) => ({
           kind,
           label: presentation.label,
@@ -288,8 +271,11 @@ export const agentRoutes = [
             prompt: step.prompt,
           })),
         })),
-        // The same bound the turn request schemas enforce.
-        limits: { mentions_max: agentPolicy.mentions_max },
+        limits: {
+          mentions_max: agentPolicy.mentions_max,
+          attachments_max: agentPolicy.attachments_max,
+          attachment_max_chars: agentPolicy.attachment_max_chars,
+        },
       };
     },
   }),
@@ -338,7 +324,6 @@ export const agentRoutes = [
     async handle({ db, c }, { path }) {
       const input = await readBody(c, body.create),
         { store } = await agentBindings(db);
-      // A page workflow answers with its chat and no turn until the page is read.
       const created = await mapped(() =>
         store.create(scope(c, path.project_id), {
           message: input.message,
@@ -353,6 +338,7 @@ export const agentRoutes = [
               ),
             ),
           mentionIds: input.mentions,
+          attachments: input.attachments,
           key: key(c),
         }),
       );
@@ -387,6 +373,7 @@ export const agentRoutes = [
           message: input.message,
           skillId: input.skill_id,
           mentionIds: input.mentions,
+          attachments: input.attachments,
           key: key(c),
         }),
       );

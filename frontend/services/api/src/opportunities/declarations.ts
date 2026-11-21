@@ -1,4 +1,3 @@
-/** One atomic declaration per Action. Replays never resolve evidence again. */
 import { createHash, randomUUID } from 'node:crypto';
 import { sql } from 'kysely';
 import { policy } from '../config.ts';
@@ -10,7 +9,8 @@ import { epochMicros, isoformat, parseDatetime, toUtc } from '../http/datetimes.
 import { record } from '../db/json.ts';
 import { acquireProjectLock } from '../prompts/locks.ts';
 import { currentSiteCrawlQuery } from '../site-health/reads/crawl.ts';
-import { declarableMembers, recordStatus, requireAction, type ActionRow } from './actions.ts';
+import { declarableMembers, requireAction, type ActionRow } from './actions.ts';
+import { recordStatus } from './action-status.ts';
 import { declarationChecks } from './declaration-checks.ts';
 import { ruleCheckKind } from './checks/registry.ts';
 import { declarationTargets } from './targets/registry.ts';
@@ -30,7 +30,6 @@ export type DeclarationInput = {
   recommendation_ids?: string[];
   output_revision_id: string | null;
   declared_implemented_at: string;
-  /** What shipped it (a release, pull request or commit); null when none was given. */
   deployment_reference?: string | null;
 };
 
@@ -48,15 +47,12 @@ async function replay(
     .where('workspace_id', '=', action.workspace_id)
     .where('idempotency_key', '=', key)
     .executeTakeFirst();
-  // These are the immutable original request fields, including the revision's
-  // non-nullifying FK. Compare their meaning, not a serialization hash.
   if (
     row &&
     (row.project_id !== action.project_id ||
       row.action_id !== action.id ||
       row.output_revision_id !== input.output_revision_id ||
       row.deployment_reference !== (input.deployment_reference ?? null) ||
-      // Unreadable stored checks are unknown, never an empty selection.
       !Array.isArray(row.expected_checks) ||
       JSON.stringify(
         row.expected_checks
@@ -90,7 +86,6 @@ async function checkedRevision(db: Database, action: ActionRow, revisionId: stri
   if (!revision) throw declarationConflict('The output revision does not belong to this Action');
 }
 
-/** The pages the declaration covers, as its Action's target kind resolves them; a 409 when it cannot. */
 async function targets(
   db: Database,
   action: ActionRow,
@@ -105,10 +100,6 @@ async function targets(
   };
 }
 
-/**
- * When the work went live: not in the future beyond clock skew, and not
- * earlier than new evidence would still measure it.
- */
 function boundDeclaredAt(declaredAt: string, now: Date): void {
   const declared = Number(epochMicros(parseDatetime(declaredAt)!) / 1000n);
   if (declared > now.getTime() + o.DECLARATION_FUTURE_SKEW_SECONDS * 1000)
@@ -120,18 +111,12 @@ function boundDeclaredAt(declaredAt: string, now: Date): void {
     );
 }
 
-/**
- * Evidence already observed after a backdated go-live: the latest crawl,
- * audit and Search Console window are read for this declaration now rather
- * than at their next settlement.
- */
 async function verifyExistingEvidence(
   trx: Database,
   row: { id: string; workspace_id: string; project_id: string },
   declaredAt: string,
 ) {
   const after = sql<Date>`${declaredAt}::timestamptz`;
-  // The current crawl among those that finished after go-live, a partial one included.
   const crawl = await currentSiteCrawlQuery(trx, row.workspace_id, row.project_id, {
     completedAfter: declaredAt,
   })
@@ -180,12 +165,6 @@ async function verifyExistingEvidence(
   for (const trigger of triggers) await enqueueImplementationVerification(trx, trigger); // NOSONAR -- The declaration transaction runs one statement at a time.
 }
 
-/**
- * The refresh that resolved every finding of an Action, when it committed at
- * or before go-live; null when the findings were still live then, so the first
- * reading after go-live decides them. Action sync stamps the clearing
- * snapshot on the Action and leaves an already-cleared row untouched.
- */
 async function resolvedBeforeGoLive(trx: Database, action: ActionRow, declaredAt: string) {
   if (!action.opportunity_snapshot_id) return null;
   const clearing = await trx
@@ -233,12 +212,11 @@ export function declareAction(
     const existing = await replay(trx, action, key, input, declaredAt);
     if (existing) return { row: existing, created: false };
     boundDeclaredAt(declaredAt, now);
-    if (action.status !== a.ACTION_STATUS_OPEN)
-      throw declarationConflict('Only an open Action can be declared implemented');
+    if (!a.ACTION_DECLARABLE_STATUSES.includes(action.status))
+      throw declarationConflict('Only a new or in-progress Action can be declared implemented');
     await checkedRevision(trx, action, input.output_revision_id);
     const { members, resolved: membersResolved } = await declarableMembers(trx, action);
     if (!members.length) throw declarationConflict('No finding targets this Action');
-    // The baseline is what was known when the change went live; none is unavailable.
     const snapshot = await trx
       .selectFrom('opportunity_snapshots')
       .select(['id', 'audit_id'])
@@ -258,12 +236,8 @@ export function declareAction(
       .where('workspace_id', '=', workspaceId)
       .where('id', '=', action.project_id)
       .executeTakeFirstOrThrow();
-    // Findings resolved before go-live freeze no check: a later reading would
-    // credit this deployment with an outcome that predates it.
     if (resolvedBefore && input.recommendation_ids?.length)
       throw declarationConflict('The selected links were resolved before the change went live');
-    // A cleared Action's link suggestions left with its findings, so none can
-    // be selected: those findings are declared and freeze no link check.
     const unselectable = membersResolved && !input.recommendation_ids?.length;
     const measured = unselectable ? members.filter((member) => !isContextualLink(member)) : members;
     const checks = resolvedBefore
@@ -279,7 +253,6 @@ export function declareAction(
           },
           input.recommendation_ids ?? [],
         );
-    // Every finding is declared; selectable contextual links only as far as selected.
     const linked = new Set(checks.flatMap(({ member }) => (member ? [member.id] : [])));
     const declaredMembers = unselectable
       ? members
@@ -316,8 +289,7 @@ export function declareAction(
       if (!stored) throw replayConflict();
       return { row: stored, created: false };
     }
-    await recordStatus(trx, action, a.ACTION_STATUS_IMPLEMENTED, userId);
-    // Nothing reads a declaration resolved before go-live.
+    await recordStatus(trx, [action], a.ACTION_STATUS_IMPLEMENTED, userId);
     if (!resolvedBefore) await verifyExistingEvidence(trx, row, declaredAt);
     return { row, created: true };
   });

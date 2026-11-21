@@ -165,7 +165,6 @@ describe('expired lease reclaim', () => {
       .execute();
     const other = await expiredTask(0);
     await db.transaction().execute(async (trx) => {
-      // A heartbeat or publication holding the row: SKIP LOCKED passes over it.
       await trx
         .selectFrom('site_crawl_tasks')
         .select('id')

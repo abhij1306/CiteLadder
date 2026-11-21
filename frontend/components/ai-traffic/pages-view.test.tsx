@@ -7,6 +7,7 @@ import { renderWithProviders } from '@/test/render';
 import { makeProject } from '@/test/fixtures/project';
 import { focusByKeyboard } from '@/test/keyboard-focus';
 import { TrafficPages } from './pages-view';
+import { TrafficUrlButton } from './url-panel';
 
 const WORKSPACE = '11111111-1111-4111-8111-111111111111';
 const PROJECT = '88888888-8888-4888-8888-888888888888';
@@ -65,7 +66,6 @@ function pagesBody(items: unknown[], nextCursor: string | null = null) {
     items,
   };
 }
-/** The pager's announced range, e.g. "1–10 paths", whose noun is set muted. */
 function pagerRange(text: string) {
   return (_: string, element: Element | null) =>
     element?.tagName === 'OUTPUT' && element.textContent === text;
@@ -94,7 +94,7 @@ it('keeps inventory, zero, partial values and distinct unavailable reasons reada
           },
           {
             ...pathRow('second'),
-            crawl: { state: 'unknown', value: null, coverage: 'partial', reason: 'missing_days' },
+            crawl: { state: 'value', value: 5, coverage: 'partial', reason: 'missing_days' },
             key_events: null,
             errors_5xx: null,
           },
@@ -110,20 +110,45 @@ it('keeps inventory, zero, partial values and distinct unavailable reasons reada
   const partial = within(row).getByRole('button', {
     name: '12 citations',
   });
-  expect(partial).toHaveTextContent('12Partial');
-  const missing = within(row).getByRole('button', { name: 'Unavailable requests' });
-  expect(missing).toHaveTextContent('–');
+  expect(partial.textContent).toBe('12');
+  const coverageCell = (cells: HTMLElement[]) => cells[4]!.textContent;
+  expect(coverageCell(within(row).getAllByRole('cell'))).toBe('Partial');
+  const missing = within(row).getByRole('button', { name: 'Not connected' });
+  expect(missing.textContent).toBe('—Not connected');
   focusByKeyboard(missing);
   expect(await screen.findByRole('tooltip')).toHaveTextContent('requests: Not connected');
   await user.keyboard('{Escape}');
-  expect(within(row).getByRole('button', { name: /4xx and 5xx unavailable/ })).toHaveTextContent(
-    '–',
-  );
+  expect(within(row).getAllByRole('cell').at(-1)?.textContent).toBe('—Unavailable');
   const second = screen.getByRole('row', { name: /\/second/ });
-  expect(
-    within(second).getByRole('button', { name: '5xx unavailable' }).closest('td'),
-  ).toHaveTextContent('0 / –');
+  expect(within(second).getAllByRole('cell').at(-1)?.textContent).toBe('0 / —Unavailable');
   expect(screen.getByText(/Crawl coverage unknown · 200 known pages/)).toBeVisible();
+});
+
+it('leaves out a column no row measures, and gives way to one state when none is', async () => {
+  const unmeasured = {
+    ...pathRow('unmeasured'),
+    crawl: unavailable,
+    key_events: null,
+    errors_4xx: null,
+    errors_5xx: null,
+  };
+  let rows: unknown[] = [pathRow('a'), pathRow('b')];
+  mswServer.use(http.get(PAGES, () => HttpResponse.json(pagesBody(rows))));
+  const view = renderPages();
+  const table = await screen.findByRole('table', {
+    name: 'Path-level AI traffic with separate signal units',
+  });
+  await within(table).findByRole('row', { name: /\/a\b/ });
+  expect(
+    within(table)
+      .getAllByRole('columnheader')
+      .map((head) => head.textContent),
+  ).toEqual(['Path', 'Requests', 'Key events', '4xx / 5xx']);
+
+  rows = [unmeasured];
+  await view.queryClient.refetchQueries();
+  expect(await screen.findByText(/No signal measured these paths/)).toBeVisible();
+  expect(screen.queryByRole('columnheader')).toBeNull();
 });
 
 it('keeps the rows and the pager on screen while the next page loads', async () => {
@@ -146,15 +171,13 @@ it('keeps the rows and the pager on screen while the next page loads', async () 
   const user = userEvent.setup();
   renderPages();
   const table = await screen.findByRole('table', {
-    name: 'Path-level AI Traffic with separate signal units',
+    name: 'Path-level AI traffic with separate signal units',
   });
   expect(await within(table).findByRole('row', { name: /first-1\b/ })).toBeVisible();
   expect(screen.getByText(pagerRange('1–10 paths'))).toBeVisible();
 
   await user.click(screen.getByRole('button', { name: 'Next page' }));
   await waitFor(() => expect(asked).toEqual(['first:10', 'page-2:10']));
-  // The next page is in flight: the first page's rows, the coverage line and
-  // the pager stay where they were, with navigation paused.
   expect(within(table).getByRole('row', { name: /first-10\b/ })).toBeVisible();
   expect(screen.getByText(/Crawl coverage unknown · 200 known pages/)).toBeVisible();
   expect(screen.getByRole('button', { name: 'Previous page' })).toBeDisabled();
@@ -183,11 +206,10 @@ it('never shows one workspace’s rows while another workspace’s page loads', 
   );
   const view = renderPages();
   const table = await screen.findByRole('table', {
-    name: 'Path-level AI Traffic with separate signal units',
+    name: 'Path-level AI traffic with separate signal units',
   });
   expect(await within(table).findByRole('row', { name: /first-workspace/ })).toBeVisible();
 
-  // The same project id under another workspace: the old rows must not stand in.
   view.rerender(
     <TrafficPages workspaceId={OTHER_WORKSPACE} projectId={PROJECT} filters={{ range: '30d' }} />,
   );
@@ -196,6 +218,37 @@ it('never shows one workspace’s rows while another workspace’s page loads', 
 
   releaseOther();
   expect(await within(table).findByRole('row', { name: /other-workspace/ })).toBeVisible();
+});
+
+it('lists each count with its qualifiers when the drawer opens from outside the table', async () => {
+  const row = {
+    ...pathRow('guide'),
+    crawl: { state: 'value', value: 3, coverage: 'partial', reason: null },
+  };
+  mswServer.use(
+    http.get(`${PAGES}/${row.url_hash}`, () =>
+      HttpResponse.json({
+        page: row,
+        window_start: '2026-01-01',
+        window_end: '2026-01-28',
+        crawls: [],
+        referrals: [],
+        citations: [],
+        provenance: { crawl_id: null, formula_version: '1', bounded: false },
+      }),
+    ),
+  );
+  const user = userEvent.setup();
+  renderWithProviders(<TrafficUrlButton urlHash={row.url_hash} />, {
+    projectSelection: { activeProject: project },
+  });
+  await user.click(screen.getByRole('button', { name: 'View AI traffic' }));
+  const panel = await screen.findByRole('dialog', { name: '/guide' });
+  const record = async (name: string) =>
+    (await within(panel).findByText(name, { selector: 'dt' })).nextElementSibling?.textContent;
+  expect(await record('Crawler requests')).toBe('3Partial coverageCrawlers');
+  expect(await record('Tracked citations')).toBe('—Not connectedVisibility');
+  expect(within(panel).queryByText(/^Sources:/)).not.toBeInTheDocument();
 });
 
 it('keeps the drawer’s crawler when a path is opened from it', async () => {
@@ -226,7 +279,7 @@ it('keeps the drawer’s crawler when a path is opened from it', async () => {
     { projectSelection: { activeProject: project } },
   );
   await user.click(
-    await screen.findByRole('button', { name: 'View AI Traffic for https://example.test/guide' }),
+    await screen.findByRole('button', { name: 'View AI traffic for https://example.test/guide' }),
   );
   await waitFor(() => expect(detailParams).not.toBeNull());
   expect(Object.fromEntries(detailParams!)).toEqual({

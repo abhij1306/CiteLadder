@@ -2,10 +2,6 @@ import type { Topic } from '@citeladder/contracts';
 
 export type RailTopic = { topic: Topic; nested: boolean; label: string };
 
-/**
- * Topics in rail order: each top-level topic followed by its subtopics.
- * A subtopic whose parent is missing from the list shows at top level.
- */
 export function orderTopicsForRail(topics: readonly Topic[]): RailTopic[] {
   const byId = new Map(topics.map((topic) => [topic.id, topic]));
   const children = new Map<string, Topic[]>();

@@ -58,7 +58,6 @@ export function poolOptions(config: DatabaseConfig, use: PoolUse = {}): pg.PoolC
     query_timeout: db.commandTimeoutSeconds * 1000,
     statement_timeout: db.statementTimeoutMs,
     lock_timeout: db.lockTimeoutMs,
-    // Detect a dead peer (database VM restart) instead of waiting on a silent socket.
     keepAlive: true,
     idle_in_transaction_session_timeout: db.idleTransactionTimeoutMs,
     application_name: config.appName,

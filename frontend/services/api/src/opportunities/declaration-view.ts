@@ -1,4 +1,3 @@
-/** The declaration and bounded observation history, with persisted measurement legs. */
 import { sql, type Selectable } from 'kysely';
 import type { Database } from '../db/database.ts';
 import type { OpportunityImplementationEvents } from '../generated/db-schema.ts';
@@ -16,16 +15,11 @@ import type { CheckKind, CheckModule } from './checks/kind.ts';
 const observationKind = z.enum(['observed', 'verified', 'contradicted']);
 const o = policy.opportunity.opportunities;
 
-/**
- * What a check names, for a reader: its rule, prompt text, page or query, link
- * or search. A prompt deleted since names nothing.
- */
 function subject(check: ExpectedCheck, prompts: ReadonlyMap<string, string>) {
   const module: CheckModule<CheckKind> = CHECKS[check.kind];
   return module.subject(check, prompts);
 }
 
-/** The project's tracked prompts that visibility checks measure, by id. */
 async function checkPrompts(
   db: Database,
   row: Selectable<OpportunityImplementationEvents>,
@@ -51,7 +45,6 @@ async function checkPrompts(
   return new Map(prompts.map((prompt) => [prompt.id, prompt.text]));
 }
 
-/** Each expected check with the state the latest observation folded for it. */
 function checkStates(
   checks: ExpectedCheck[],
   result: unknown,
@@ -81,32 +74,33 @@ export async function declarationView(
   db: Database,
   row: Selectable<OpportunityImplementationEvents>,
 ) {
-  const observations = await db
-    .selectFrom('opportunity_verification_events')
-    .selectAll()
-    .where('workspace_id', '=', row.workspace_id)
-    .where('project_id', '=', row.project_id)
-    .where('implementation_event_id', '=', row.id)
-    .orderBy('created_at', 'desc')
-    .orderBy('id', 'desc')
-    .limit(policy.opportunity.opportunities.IMPLEMENTATION_VERIFICATION_HISTORY_MAX)
-    .execute();
+  const [observations, timestamp, recorder] = await Promise.all([
+    db
+      .selectFrom('opportunity_verification_events')
+      .selectAll()
+      .where('workspace_id', '=', row.workspace_id)
+      .where('project_id', '=', row.project_id)
+      .where('implementation_event_id', '=', row.id)
+      .orderBy('created_at', 'desc')
+      .orderBy('id', 'desc')
+      .limit(policy.opportunity.opportunities.IMPLEMENTATION_VERIFICATION_HISTORY_MAX)
+      .execute(),
+    db
+      .selectFrom('opportunity_implementation_events')
+      .select(utcTextOf(sql.ref('declared_implemented_at')).as('at'))
+      .where('workspace_id', '=', row.workspace_id)
+      .where('id', '=', row.id)
+      .executeTakeFirstOrThrow(),
+    db
+      .selectFrom('workspace_members as member')
+      .innerJoin('users', 'users.id', 'member.user_id')
+      .select('users.email')
+      .where('member.workspace_id', '=', row.workspace_id)
+      .where('member.user_id', '=', row.actor_user_id)
+      .executeTakeFirst(),
+  ]);
   observations.reverse();
   const latest = observations.at(-1);
-  const timestamp = await db
-    .selectFrom('opportunity_implementation_events')
-    .select(utcTextOf(sql.ref('declared_implemented_at')).as('at'))
-    .where('workspace_id', '=', row.workspace_id)
-    .where('id', '=', row.id)
-    .executeTakeFirstOrThrow();
-  // Who recorded the deployment, while they are still a member of this workspace.
-  const recorder = await db
-    .selectFrom('workspace_members as member')
-    .innerJoin('users', 'users.id', 'member.user_id')
-    .select('users.email')
-    .where('member.workspace_id', '=', row.workspace_id)
-    .where('member.user_id', '=', row.actor_user_id)
-    .executeTakeFirst();
   const checks = z.array(expectedCheckSchema).parse(row.expected_checks ?? []);
   const measuredUntil = new Date(row.declared_implemented_at);
   measuredUntil.setUTCDate(

@@ -20,11 +20,6 @@ export const SITE_HEALTH_UUID_2 = '22222222-2222-4222-8222-222222222222';
 const SITE_HEALTH_WORKSPACE = '33333333-3333-4333-8333-333333333333';
 const SITE_HEALTH_PROFILE = '55555555-5555-4555-8555-555555555555';
 
-/**
- * The bounded site-facts blob the worker persists (the `site_setup` task in
- * frontend/services/api/src/site-health/site-setup-task.ts): robots AI-crawler stance,
- * llms.txt probe, sitemap file list. The backend always emits the key.
- */
 export type SiteFactsFixture = {
   robots: Record<string, unknown>;
   llms_txt: Record<string, unknown>;
@@ -161,8 +156,6 @@ export function makeSiteCrawl(overrides: Partial<SiteCrawl> = {}): SiteCrawl {
   };
 }
 
-/** A completed, monitored page. `page_kind` differs from `title` so that
- * badge-text assertions stay unambiguous. */
 export function makePageSummary(overrides: Partial<PageSummary> = {}): PageSummary {
   return {
     site_url_id: SITE_HEALTH_UUID,

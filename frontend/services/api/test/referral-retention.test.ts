@@ -1,8 +1,3 @@
-/**
- * AI referral retention follows the Performance window (OD7): the sweep keeps
- * referral evidence Performance can still read, so an in-window AI session is
- * still counted as AI after a sweep, and deletes only what is older.
- */
 import { afterAll, beforeEach, expect, it } from 'vitest';
 
 import { classifyReferrals } from '../src/referrals/classify.ts';
@@ -31,7 +26,6 @@ afterAll(async () => {
 
 it('keeps a 200-day-old AI referral counted in Performance and deletes one older than 480 days', async () => {
   const inWindow = daysAgo(200);
-  // The first day of a 480-day Performance window ending yesterday.
   const firstDay = daysAgo(480);
   const expired = daysAgo(481);
   const seed = await seedImport(db, {

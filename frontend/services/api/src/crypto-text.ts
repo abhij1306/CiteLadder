@@ -1,14 +1,10 @@
-/** Random base62 text, SHA-256 digests and canonical-JSON fingerprints shared across owners. */
 import { createHash, randomInt } from 'node:crypto';
 
-/** SHA-256 hex of UTF-8 text. */
 export const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 
 const BASE62 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
-/** Base62 characters needed to carry at least `bits` random bits. */
 export const base62Length = (bits: number) => Math.ceil(bits / Math.log2(BASE62.length));
 
-/** `length` uniformly random base62 characters: no punctuation to mangle. */
 export function base62(length: number): string {
   return Array.from({ length }, () => BASE62.charAt(randomInt(BASE62.length))).join('');
 }
@@ -24,11 +20,9 @@ function canonical(value: unknown): unknown {
     );
   return value;
 }
-/** SHA-256 of `value` as plain `JSON.stringify` output, keys in insertion order. */
 export const digest = (value: unknown): string =>
   createHash('sha256').update(JSON.stringify(value)).digest('hex');
 
-/** SHA-256 of `value` as canonical JSON. */
 export function fingerprint(value: unknown) {
   return createHash('sha256')
     .update(JSON.stringify(canonical(value)))

@@ -1,4 +1,3 @@
-/** Persisted Performance reads shared by the API and Agent. */
 import {
   performanceDimensionSchema,
   performanceDashboardSchema,
@@ -34,12 +33,6 @@ function customWindow(start?: string | null, end?: string | null): Window | null
     throw new ApiError(422, `window exceeds ${p.PERFORMANCE_CUSTOM_RANGE_MAX_DAYS} days`);
   return [start, end];
 }
-/**
- * A custom window ending no later than the latest imported date, so a future
- * `to` names the same persisted window as the data it can contain. A window
- * that starts after that date is returned unchanged (and has no evidence);
- * `latest` is null without any imported evidence.
- */
 export async function clampedCustomWindow(
   db: Database,
   scope: Scope,
@@ -115,7 +108,6 @@ async function selectedDates(
       .executeTakeFirst();
     if (!row?.start || !row.end) return null;
     const floor = addDays(row.end, -(p.TRAFFIC_MAX_WINDOW_DAYS - 1));
-    // ISO dates order as text; the later of the first import and the window floor.
     return [compareText(row.start, floor) > 0 ? row.start : floor, row.end];
   }
   if (range in extended) {
@@ -288,7 +280,6 @@ function encodeTableCursor(fingerprint: string, value: string | number | null, i
     .replaceAll('+', '-')
     .replaceAll('/', '_');
 }
-/** Keyset continuation after `after`, with nulls sorted last in either direction. */
 function afterKeyset(
   expression: RawBuilder<unknown>,
   after: TableKeyset,

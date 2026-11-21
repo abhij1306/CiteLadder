@@ -19,7 +19,6 @@ const config = testConfig(),
   app = createApp(config, db);
 const original = { ...crawlLogs };
 const ROWS = 100_000;
-/** Below the export's own CSV text, which a buffered export would retain whole. */
 const HEAP_BOUND = 8 * 1024 * 1024;
 let tenant: Tenant;
 
@@ -47,7 +46,6 @@ beforeAll(async () => {
     client_ip: '192.0.2.2',
   };
   await ingest(db, source, Buffer.from(JSON.stringify(line)), { key: 'memory-seed' });
-  // One statement copies the ingested request into the 100k verified rows the export reads.
   await sql`insert into bot_requests (id,workspace_id,project_id,source_id,batch_id,occurred_at,host,display_path,
       canonical_url,identity,identity_reason,url_hash,folder,resource_class,method,status_code,bot_id,catalog_version,
       verification,verification_reason,verification_basis,ip_range_snapshot_id,provider_request_id,line_hash)
@@ -99,7 +97,6 @@ describe('AI Traffic exports', () => {
         peak = Math.max(peak, process.memoryUsage().heapUsed - baseline);
       }
     }
-    // The header plus every row, newest first: one second before the seed down to the oldest.
     expect(lines).toBe(ROWS + 1);
     expect(first).toMatch(/,openai_gptbot,acme\.example,\/guide\/1,/u);
     expect(last).toMatch(/,openai_gptbot,acme\.example,\/guide\/100000,/u);

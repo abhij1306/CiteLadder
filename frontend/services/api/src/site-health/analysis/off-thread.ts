@@ -1,16 +1,9 @@
-/**
- * CPU-bound parsing of fetched documents stays off the event loop, on a small
- * persistent pool: page interpretation, sitemap XML and the logo refresh's
- * homepage HTML. Spawning a thread (and loading the analyzer) per page cost
- * more than many analyses on a one-vCPU runner. Each job has a time limit: a
- * thread that overruns it is replaced, so one pathological document never
- * stalls the jobs queued behind it.
- */
 import { Worker } from 'node:worker_threads';
 import { policy } from '../../config.ts';
 import { resolveSettingSpec } from '../../config/settings.ts';
 import {
   SitemapParseError,
+  SitemapTooLargeError,
   type parseSitemap,
   type SitemapLimits,
 } from '../../web-evidence/sitemaps.ts';
@@ -38,21 +31,19 @@ export type Interpretation =
   | { kind: 'sitemap'; body: Uint8Array; contentType: string; limits: SitemapLimits }
   | { kind: 'page_icons'; body: Uint8Array; url: string };
 
-/** A sitemap job's reply: an invalid document is an answer, not a thread failure. */
 export type SitemapParse =
   | { kind: 'parsed'; document: ReturnType<typeof parseSitemap> }
-  | { kind: 'invalid'; reason: string };
+  | { kind: 'invalid'; reason: string }
+  | { kind: 'too_large'; reason: string };
 
 type Pending = {
   input: Interpretation;
   resolve: (value: unknown) => void;
   reject: (error: Error) => void;
 };
-/** A thread runs its jobs in arrival order, so the first pending job is the running one. */
 type Slot = {
   worker: Worker;
   pending: Map<number, Pending>;
-  /** The running job the timer limits. */
   running?: number;
   timer?: NodeJS.Timeout;
 };
@@ -74,10 +65,6 @@ export class InterpretationTimeoutError extends Error {
   }
 }
 
-/**
- * Idle threads never keep a draining job process alive, and the running job's
- * time limit starts when it reaches the head of its thread.
- */
 function settle(slot: Slot) {
   if (slot.pending.size) slot.worker.ref();
   else slot.worker.unref();
@@ -89,11 +76,6 @@ function settle(slot: Slot) {
     running === undefined ? undefined : setTimeout(() => expire(slot, running), jobTimeoutMs());
 }
 
-/**
- * Retire a thread: fail the job it was running (the head of its queue) with
- * `error` and move the jobs queued behind it to another thread. A thread is
- * retired once; its later `error` or `exit` changes nothing.
- */
 function retire(slot: Slot, error: Error) {
   const index = slots.indexOf(slot);
   if (index < 0) return;
@@ -107,7 +89,6 @@ function retire(slot: Slot, error: Error) {
   for (const waiting of queued) post(waiting);
 }
 
-/** The running job overran: fail it, retire its thread and move the queued jobs to another. */
 function expire(slot: Slot, id: number) {
   if (slot.running !== id || !slot.pending.has(id)) return;
   retire(slot, new InterpretationTimeoutError());
@@ -128,7 +109,6 @@ function start(): Slot {
     if (error === undefined) job.resolve(result);
     else job.reject(new Error(error));
   });
-  // A crashed thread fails only the job it was running; its queue moves to a replacement.
   worker.on('error', (error: unknown) =>
     retire(slot, error instanceof Error ? error : new Error(String(error))),
   );
@@ -137,7 +117,6 @@ function start(): Slot {
   return slot;
 }
 
-/** The least-busy thread, starting one while the pool is below its size. */
 function slot(): Slot {
   const idle = slots.find((candidate) => candidate.pending.size === 0);
   if (idle) return idle;
@@ -172,7 +151,6 @@ export const extractFactsAsync = (
 export const analyzePageAsync = (facts: Facts, context: PageContext) =>
   interpret<ReturnType<typeof analyzePage>>({ kind: 'analyze', facts, context });
 
-/** A discovered page's links and facts from one parse of the whole document. */
 export const discoverAsync = (
   body: Uint8Array,
   delivery: Delivery,
@@ -187,13 +165,19 @@ export const discoverAsync = (
     scope,
   });
 
-/** `parseSitemap` off the event loop; a document that does not parse throws `SitemapParseError`. */
 export async function parseSitemapAsync(body: Buffer, contentType: string, limits: SitemapLimits) {
   const reply = await interpret<SitemapParse>({ kind: 'sitemap', body, contentType, limits });
-  if (reply.kind === 'invalid') throw new SitemapParseError(reply.reason);
-  return reply.document;
+  switch (reply.kind) {
+    case 'parsed':
+      return reply.document;
+    case 'invalid':
+      throw new SitemapParseError(reply.reason);
+    case 'too_large':
+      throw new SitemapTooLargeError(reply.reason);
+    default:
+      return reply satisfies never;
+  }
 }
 
-/** The icon links a fetched homepage declares, parsed off the event loop. */
 export const pageIconsAsync = (body: Buffer, url: string) =>
   interpret<string[]>({ kind: 'page_icons', body, url });

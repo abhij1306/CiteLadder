@@ -80,7 +80,6 @@ describe('shared PostgreSQL provider capacity', () => {
     const t = await seed();
     const limited = { ...runtime, audits: { ...runtime.audits, per_transport_concurrency: 1 } };
     const [first, second, third] = t.tasks.map((task) => ({ ...t.request, taskId: task.id }));
-    // Older than any other fixture's lease, so it is in the first purge batch.
     const old = new Date('2001-01-01T00:00:00Z');
     expect((await acquireCapacity(db, first!, limited, old)).acquired).toBe(true);
     await releaseCapacity(db, first!, limited, {}, old);
@@ -93,7 +92,6 @@ describe('shared PostgreSQL provider capacity', () => {
       .select(['task_id', 'released_at'])
       .where('task_id', 'in', [first!.taskId!, second!.taskId!])
       .execute();
-    // One live lease per BYOK pool (transport and connection); the old ones are gone.
     expect(remaining).toEqual([
       { task_id: second!.taskId, released_at: null },
       { task_id: second!.taskId, released_at: null },
@@ -136,7 +134,6 @@ describe('shared PostgreSQL provider capacity', () => {
 describe('DataForSEO account identity compatibility', () => {
   const key = 'capacity-identity-test-key',
     cipher = createSecretCipher(key);
-  // Reference vectors, including full Unicode casefold and strip semantics.
   const vectors = [
     ['  USER@Example.COM  ', 'a11a484b636deed1b5d02ffbcc02cbeb009cd47da4a7c13864b688404970f9e6'],
     [

@@ -48,7 +48,6 @@ const internalLinksApi = {
 const scoped = (scope: ProjectScope) => ({ workspaceId: scope.workspaceId });
 
 export const internalLinksQueries = {
-  /** One analysis of the project's internal links; without an id, the newest. */
   analysis: (scope: ProjectScope, analysisId?: string) =>
     queryOptions({
       queryKey: queryKeys.siteHealth.internalLinks(scope, analysisId),
@@ -57,13 +56,7 @@ export const internalLinksQueries = {
     }),
 };
 
-/** Internal-link writes; each success writes or refreshes the reads it changes. */
 export const internalLinksMutations = {
-  /**
-   * Start an analysis of a crawl. The newest-analysis read is marked stale
-   * without a refetch (the caller moves to the new analysis), and the new
-   * analysis's own entry is seeded so that move does not flash a reload.
-   */
   analyze: (scope: ProjectScope) =>
     mutationOptions({
       mutationFn: (input: InternalLinksInput) =>
@@ -81,7 +74,6 @@ export const internalLinksMutations = {
           );
       },
     }),
-  /** Cancel an analysis; the answer replaces the read it was shown from. */
   cancel: (scope: ProjectScope, shownAnalysisId?: string) =>
     mutationOptions({
       mutationFn: (analysisId: string) =>

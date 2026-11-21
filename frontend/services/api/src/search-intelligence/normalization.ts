@@ -11,10 +11,8 @@ const numeric = (value: unknown): string | null =>
     : null;
 const integer = (value: unknown) =>
   numeric(value) !== null && Number.isSafeInteger(Number(value)) ? Number(value) : null;
-/** The typed integer columns are 32-bit; a larger provider count lives in the summary instead. */
 export const INT4_MAX = 2_147_483_647;
 const INTENT_LENGTH = 32;
-/** Whole intents only, as many as the intent column holds. */
 function intentLabel(values: string[]) {
   let label = '';
   for (const value of values) {
@@ -353,7 +351,6 @@ function backlinkSummary(result: Record<string, unknown>): Record<string, unknow
     object_type: 'analyzed_domain',
   };
 }
-/** Normalize only one verified provider task, retaining unavailable and empty separately. */
 export function normalizeResponse(
   kind: string,
   body: Record<string, unknown>,

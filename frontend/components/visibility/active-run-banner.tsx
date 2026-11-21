@@ -1,29 +1,20 @@
-import { Callout } from '@/components/ui/callout';
 import { Inline } from '@/components/ui/layout';
 import { Spinner } from '@/components/ui/spinner';
 import { AUDIT_STATES } from '@/lib/runs/status';
 import type { ActiveRun } from '@/lib/visibility/dashboard';
 import { TextLink } from '@/components/ui/text-link';
+import { Notice } from '@/components/ui/notice';
 
-/**
- * In-progress run banner for the Visibility workspace. An active run has no
- * metric snapshot yet, so it can't appear in the run selector — this banner is
- * how the user learns a run is underway (and where to watch it) instead of
- * seeing stale data or a bare empty state after navigating back mid-run.
- */
 export function ActiveRunBanner({ run }: Readonly<{ run: ActiveRun }>) {
   return (
-    <Callout tone="info">
+    <Notice tone="info">
       <Inline className="flex-wrap">
         <Spinner />
-        <span>
-          A run is in progress ({AUDIT_STATES[run.status].label}). Results appear here when it
-          completes.
-        </span>
+        <span>A run is in progress ({AUDIT_STATES[run.status].label}).</span>
         <TextLink text="emphasis" className="whitespace-nowrap" href={`/runs/${run.id}`}>
           Watch live progress →
         </TextLink>
       </Inline>
-    </Callout>
+    </Notice>
   );
 }

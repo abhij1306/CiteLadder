@@ -1,7 +1,7 @@
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 
-import { SidebarIdentButton, SidebarTextTooltip } from '@/components/ui/app-shell';
+import { SidebarIdentButton, SidebarTextTooltip } from '@/components/ui/sidebar';
 import {
   Menu,
   MenuContent,
@@ -17,7 +17,7 @@ import { scopedNavigationDestination } from '@/lib/navigation/project-destinatio
 import { useProjectContext } from '@/lib/project/project-context';
 import { Avatar } from '@/components/ui/avatar';
 
-import { USER_MENU_ITEMS } from './nav-items';
+import { ACCOUNT_MENU_ITEMS, isAccountCurrent, isNavItemActive } from './nav-items';
 
 type UserMenuState = {
   email: string;
@@ -25,7 +25,7 @@ type UserMenuState = {
   setOpen: (presenter: UserMenuPresenter, open: boolean) => void;
 };
 
-type UserMenuPresenter = 'sidebar' | 'compact';
+type UserMenuPresenter = 'sidebar' | 'drawer' | 'compact';
 
 const UserMenuContext = createContext<UserMenuState | null>(null);
 
@@ -35,18 +35,24 @@ function useUserMenu() {
   return state;
 }
 
-function UserMenuContent({ presenter }: Readonly<{ presenter: UserMenuPresenter }>) {
+function UserMenuContent({
+  presenter,
+  currentHref,
+}: Readonly<{ presenter: UserMenuPresenter; currentHref?: string }>) {
   const { email } = useUserMenu();
   const { activeProjectId, activeWorkspaceId } = useProjectContext();
-  const sidebar = presenter === 'sidebar';
+  const sidebar = presenter !== 'compact';
   return (
     <MenuContent align={sidebar ? 'start' : 'end'} side={sidebar ? 'top' : 'bottom'}>
       <MenuLabel>{email}</MenuLabel>
       <MenuSeparator />
-      {USER_MENU_ITEMS.map(({ label, href, icon: Icon, scope }) => (
+      {ACCOUNT_MENU_ITEMS.map(({ label, href, icon: Icon, scope }) => (
         <MenuLinkItem key={href}>
-          <Link to={scopedNavigationDestination(href, scope, activeProjectId, activeWorkspaceId)}>
-            <Icon className="size-4 shrink-0" aria-hidden />
+          <Link
+            to={scopedNavigationDestination(href, scope, activeProjectId, activeWorkspaceId)}
+            aria-current={href === currentHref ? 'page' : undefined}
+          >
+            <Icon className="size-3.5 shrink-0" aria-hidden />
             <span>{label}</span>
           </Link>
         </MenuLinkItem>
@@ -59,38 +65,39 @@ function UserMenuContent({ presenter }: Readonly<{ presenter: UserMenuPresenter 
   );
 }
 
-/**
- * The account trigger. In the sidebar it is the system's identity button
- * (the email over the workspace, an avatar in the rail); in a signed-in flow
- * bar it is the avatar alone.
- */
 export function UserMenuTrigger({ presenter }: Readonly<{ presenter: UserMenuPresenter }>) {
   const { activePresenter, email, setOpen } = useUserMenu();
   const { activeWorkspace } = useProjectContext();
+  const { pathname } = useLocation();
+  const [searchParams] = useSearchParams();
+  const currentHref = ACCOUNT_MENU_ITEMS.filter((item) =>
+    isNavItemActive(pathname, searchParams, item),
+  ).sort((a, b) => b.href.length - a.href.length)[0]?.href;
   const open = activePresenter === presenter;
   const label = `Account menu for ${email}`;
   return (
     <Menu open={open} onOpenChange={(next) => setOpen(presenter, next)}>
-      {presenter === 'sidebar' ? (
-        <SidebarTextTooltip inRail>
+      {presenter === 'compact' ? (
+        <MenuTrigger
+          aria-label={label}
+          className="focus-ring not-data-[state=open]:hover:overlay-hover data-[state=open]:overlay-pressed rounded-control flex size-[var(--control-md)] shrink-0 items-center justify-center transition-colors"
+        >
+          <Avatar name={email} />
+        </MenuTrigger>
+      ) : (
+        <SidebarTextTooltip inRail="only">
           <MenuTrigger asChild>
             <SidebarIdentButton
               aria-label={label}
               title={email}
               meta={activeWorkspace?.name}
+              current={isAccountCurrent(pathname, searchParams)}
               lead={<Avatar name={email} />}
             />
           </MenuTrigger>
         </SidebarTextTooltip>
-      ) : (
-        <MenuTrigger
-          aria-label={label}
-          className="focus-ring not-data-[state=open]:hover:overlay-hover data-[state=open]:overlay-pressed flex size-[var(--control-md)] shrink-0 items-center justify-center rounded-md transition-colors"
-        >
-          <Avatar name={email} />
-        </MenuTrigger>
       )}
-      {open ? <UserMenuContent presenter={presenter} /> : null}
+      <UserMenuContent presenter={presenter} currentHref={currentHref} />
     </Menu>
   );
 }

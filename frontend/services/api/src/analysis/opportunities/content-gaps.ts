@@ -1,11 +1,3 @@
-/**
- * Content gaps over one succeeded content-angle run (content optimization
- * section 2). An angle cited often enough across enough domains is a gap
- * unless its matched owned content page is already cited for its prompts:
- * with a matched page it is `content_gap_improve_page` on that page, without
- * one it is `content_gap_new_page` on the planned page its lineage keys.
- * Deterministic: counts come from the run, the model never scores. Pure.
- */
 import {
   CONTENT_GAP_EVIDENCE_MEMBERS,
   type ContentGapImprovePageEvidence,
@@ -17,10 +9,8 @@ import { compareText } from '../../text-order.ts';
 import type { DetectorHit } from './evidence.ts';
 
 const g = policy.opportunity.opportunities.CONTENT_GAP;
-/** The gap thresholds (`min_citations`, `min_domains`). */
 const t = policy.content_optimization;
 
-/** The run a refresh reads gaps from. */
 export type ContentGapRun = {
   id: string;
   window: { start: string; end: string };
@@ -38,12 +28,10 @@ type ContentGapMember = {
   citation_count: number;
 };
 
-/** What an angle matched: an owned content page (and whether it is cited), or none. */
 type AngleMatch =
   | { kind: 'page'; site_url_id: string; url: string; owned_cited: boolean }
   | {
       kind: 'none';
-      /** The lineage's key, fixed when it was created; null when its label had no slug. */
       planned_page_key: string | null;
     };
 
@@ -52,7 +40,6 @@ export type ContentGapAngle = {
   lineage_id: string;
   label: string;
   topic_id: string | null;
-  /** Each prompt with its library text at this refresh; null when the library no longer has it. */
   prompts: { id: string; text: string | null }[];
   engines: string[];
   citation_count: number;
@@ -60,7 +47,6 @@ export type ContentGapAngle = {
   competitor_count: number;
   members: ContentGapMember[];
   match: AngleMatch;
-  /** The planned-page Action of this lineage an improve-page gap continues, if any. */
   continues_action_id: string | null;
 };
 
@@ -103,7 +89,6 @@ function gapHit(run: ContentGapRun, angle: ContentGapAngle): DetectorHit | null 
   const shared = {
     source_analysis_ids: [],
     source_issue_ids: [],
-    // The run and the angle are the persisted readings the finding rests on.
     source_metric_ids: [run.id, angle.id].sort(compareText),
     value_factor: valueFactor(angle.prompts.length),
     gap_factor: gapFactor(angle),
@@ -111,7 +96,6 @@ function gapHit(run: ContentGapRun, angle: ContentGapAngle): DetectorHit | null 
   const { match } = angle;
   switch (match.kind) {
     case 'page': {
-      // A matched page already cited for the angle's prompts covers it.
       if (match.owned_cited) return null;
       return {
         ...shared,
@@ -145,7 +129,6 @@ function gapHit(run: ContentGapRun, angle: ContentGapAngle): DetectorHit | null 
   }
 }
 
-/** One hit per angle that clears both thresholds and is not already covered. */
 export function detectContentGaps(
   run: ContentGapRun,
   angles: readonly ContentGapAngle[],

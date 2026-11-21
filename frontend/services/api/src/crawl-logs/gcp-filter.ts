@@ -1,15 +1,8 @@
-/**
- * The Cloud Logging sink filter a Google Cloud pull source installs: load
- * balancer and Cloud Run request logs whose user agent matches the crawler
- * catalog, so the customer routes and pays for crawler requests only.
- */
 import { crawlers } from '../config/crawlers.ts';
 
 type Catalog = { bots: readonly { ua_patterns: readonly string[] }[] };
 
-/** RE2 metacharacters; each catalog pattern must match literally. */
 const RE2_META = /[\\^$.|?*+()[\]{}]/gu;
-/** Escape for RE2, then for a Logging query string literal (backslash and quote). */
 function literal(pattern: string) {
   return pattern
     .replaceAll(RE2_META, (meta) => '\\' + meta)

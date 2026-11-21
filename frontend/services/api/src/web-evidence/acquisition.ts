@@ -1,4 +1,3 @@
-/** Durable operator suppression, destination robots, and publisher pacing at every hop. */
 import { setTimeout as delay } from 'node:timers/promises';
 import robotsModule from 'robots-parser';
 import type { CrawlRobotsHandling } from '@citeladder/contracts/site-health';
@@ -23,7 +22,6 @@ const robotsParser = robotsModule as unknown as (
 
 const RULE_FIELDS = new Set(['allow', 'disallow', 'crawl-delay']);
 
-/** One robots.txt line's lower-cased field and value, comment removed; no colon, no field. */
 function robotsLine(raw: string) {
   const line = raw.split('#', 1)[0] ?? '';
   const colon = line.indexOf(':');
@@ -33,14 +31,8 @@ function robotsLine(raw: string) {
   };
 }
 
-/** A `User-agent` value as the parser keys it: lower-cased, without a version. */
 const agentToken = (value: string) => value.toLowerCase().split('/', 1)[0]?.trim() ?? '';
 
-/**
- * The user-agent groups robots.txt gives rules (allow, disallow or crawl
- * delay), lower-cased without a version, grouped as the parser groups them:
- * consecutive `User-agent` lines share the rules that follow.
- */
 function ruleGroups(body: string) {
   const groups = new Set<string>();
   let agents: string[] = [];
@@ -98,12 +90,6 @@ export async function authorizeAcquisition(db: Database, url: URL) {
 }
 type HostState = { chain: Promise<void>; last: number; active: number; waiting: (() => void)[] };
 
-/**
- * Per-host politeness: at most `concurrency` requests in flight to one host,
- * successive starts spaced by the delay, and an explicit cool-down after a
- * rate limit. Starts queue behind one another rather than all sleeping
- * against the same stale timestamp.
- */
 export class HostPacer {
   readonly #hosts = new Map<string, HostState>();
   readonly concurrency: number;
@@ -118,7 +104,6 @@ export class HostPacer {
     }
     return state;
   }
-  /** Hold the host back for `seconds` from now, e.g. after a 429. */
   coolDown(authority: string, seconds: number) {
     const state = this.#host(authority);
     state.last = Math.max(state.last, performance.now() + seconds * 1000);
@@ -199,24 +184,18 @@ export function robotsPolicy(
   const groups = fetched ? ruleGroups(body) : new Set<string>();
   const declared = robots.getCrawlDelay(policy.web_fetch.user_agent);
   const seconds = declared === undefined ? settings.defaultDelay : Math.max(0, declared);
-  // Readable, not access-blocked, and asking for a delay the crawler honours.
   const fetchable = readable && Number.isFinite(seconds) && seconds <= settings.maxDelay;
   const permits = (url: string) =>
     fetchable && robots.isAllowed(url, policy.web_fetch.user_agent) === true;
   return {
     status,
-    /** The policy text when robots.txt answered 2xx, else null. */
     body: fetched ? body : null,
     unavailable,
-    /**
-     * Whether asking again may answer: a 429, 5xx or network failure. A refusal
-     * (SSRF, suppression, size, redirects) repeats, so it is cached and final.
-     */
     transient: unavailable,
+    failure: null as string | null,
     restricted,
     readable,
     delay: seconds,
-    /** Whether the publisher's rules admit `agent`, for reporting another crawler's stance. */
     allows: (url: string, agent: string) =>
       !fetched || !body.trim() || robots.isAllowed(url, agent) !== false,
     matched: (tokens: string[]) => {
@@ -225,21 +204,13 @@ export function robotsPolicy(
     },
     sitemaps: robots.getSitemaps(),
     permits,
-    /** The rules disallow the crawler from `url` (not whether robots.txt was readable). */
     excludes: (url: string) => robots.isAllowed(url, policy.web_fetch.user_agent) === false,
-    /**
-     * Whether a fetch of `url` may go ahead. `ignore` waives only the disallow
-     * rules: an unreadable or access-blocked robots.txt, or an unsupported
-     * crawl delay, still stops it.
-     */
     admits: (url: string, handling: CrawlRobotsHandling) =>
       handling === 'ignore' ? fetchable : permits(url),
   };
 }
 export type RobotsPolicy = ReturnType<typeof robotsPolicy>;
-/** How one fetch treats robots.txt at each destination it requests. */
 export type RobotsChoice = (destination: URL) => CrawlRobotsHandling;
-/** Every caller but the project's own site crawl respects robots.txt everywhere. */
 export const respectRobots: RobotsChoice = () => 'respect';
 
 export class PageAcquirer {
@@ -262,9 +233,13 @@ export class PageAcquirer {
     this.settings = settings;
     this.floor = floor;
   }
-  async robots(origin: string): Promise<RobotsPolicy> {
+  cachedRobots(origin: string): Promise<RobotsPolicy> | null {
     const cached = this.#cache.get(origin);
-    if (cached && cached.expires > Date.now()) return cached.value;
+    return cached && cached.expires > Date.now() ? cached.value : null;
+  }
+  async robots(origin: string): Promise<RobotsPolicy> {
+    const cached = this.cachedRobots(origin);
+    if (cached) return cached;
     const value = this.#robots(origin);
     this.#cache.set(origin, { expires: Date.now() + this.settings.robotsTtl * 1000, value });
     if (this.settings.robotsAuthorities && this.#cache.size > this.settings.robotsAuthorities) {
@@ -276,14 +251,9 @@ export class PageAcquirer {
       }
     }
     const result = await value;
-    // A transient failure is never cached: the next request asks the host again.
     if (result.transient && this.#cache.get(origin)?.value === value) this.#cache.delete(origin);
     return result;
   }
-  /**
-   * robots.txt, with a transient failure (429, 5xx, network) retried after an
-   * exponential backoff up to `robotsAttempts` requests in all.
-   */
   async #robots(origin: string, tried = 1): Promise<RobotsPolicy> {
     const robots = await this.#robotsAttempt(origin);
     if (!robots.transient || tried >= this.settings.robotsAttempts) return robots;
@@ -303,26 +273,19 @@ export class PageAcquirer {
       });
       return robotsPolicy(origin, result.status, result.body.toString('utf8'), this.settings);
     } catch (error) {
-      // Status 0 reads as unreachable robots.
+      const facts = failureFacts(error);
       logger.info('robots_fetch_failed', {
-        ...failureFacts(error),
+        ...facts,
         elapsed_ms: Math.round(performance.now() - startedAt),
       });
-      // A refusal (SSRF, suppression, size, redirects) repeats on retry; a network failure may not.
       const transient = !(error instanceof FetchError) || error.code === 'dns_resolution_failed';
-      return { ...robotsPolicy(origin, 0, '', this.settings), transient };
+      const failure = facts.error_code ?? facts.error_class;
+      return { ...robotsPolicy(origin, 0, '', this.settings), transient, failure };
     }
   }
-  /** Pause new requests to an origin, e.g. after it answered 429. */
   coolDown(origin: string, seconds: number) {
     this.#pacer.coolDown(origin, seconds);
   }
-  /**
-   * `admit` screens each page hop (never robots.txt) before the shared
-   * authorization. `robots` decides per hop and respects robots.txt unless the
-   * caller is the project's own site crawl, that crawl chose to ignore
-   * robots.txt, and the hop is on the crawl's own site.
-   */
   fetch(
     url: string,
     options: Omit<FetchOptions, 'gate' | 'authorize'> & {

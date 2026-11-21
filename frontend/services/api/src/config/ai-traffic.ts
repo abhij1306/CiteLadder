@@ -14,11 +14,6 @@ export const aiTraffic = z
   })
   .parse(config);
 
-/**
- * The AI Traffic insights refresh every producer requests through
- * `enqueueCoalesced`: debounced, earliest deadline wins. Projects without GA4
- * settle it as a no-op in the executor.
- */
 export const insightsRefresh = {
   kind: 'ai_traffic_insights_refresh',
   delaySeconds: aiTraffic.refresh_delay_seconds,

@@ -17,10 +17,6 @@ export type AuditLaunch = {
 };
 type AuditScope = { workspaceId: string; projectId: string };
 
-/**
- * One launch: an audit per selected market, committed together with one
- * shared `launch_id`, or none at all. Returns the audit ids in market order.
- */
 export function createAudits(
   db: Database,
   workspaceId: string,
@@ -34,7 +30,6 @@ export function createAudits(
   );
 }
 
-/** The scheduler holds its scoped occurrence row; planner and cadence advancement share that transaction. */
 export async function createAuditsInTransaction(
   trx: Database,
   workspaceId: string,
@@ -204,6 +199,8 @@ async function persistSnapshots(
     prompt_index: index,
     text: prompt.text,
     theme: prompt.theme,
+    topic_id: prompt.topic_name === null ? null : prompt.topic_id,
+    topic_name: prompt.topic_name,
     intent: prompt.intent,
     buyer_stage: prompt.buyer_stage,
     prompt_intent: prompt.prompt_intent,

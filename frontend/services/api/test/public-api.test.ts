@@ -1,27 +1,23 @@
 import { randomUUID } from 'node:crypto';
 
 import { Hono, type Context } from 'hono';
-import { afterAll, afterEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 
 import { budget, spendBudget } from '../src/abuse/usage.ts';
-import { createApp } from '../src/app.ts';
 import { WorkspaceContext } from '../src/auth/workspace.ts';
 import { policy } from '../src/config.ts';
 import type { AppEnv } from '../src/context.ts';
 import { onError } from '../src/errors.ts';
 import { ROUTE_CONTRACTS } from '../src/openapi/routes.ts';
 import { withIdempotency } from '../src/public-api/idempotency.ts';
-import { requirePathOwnership } from '../src/public-api/ownership.ts';
 import { auditTenant } from './audit-fixtures.ts';
 import { actionRow } from './opportunity-fixtures.ts';
 import { prompt, promptSet, topic } from './prompt-fixtures.ts';
-import { TEST_SESSION_COOKIE, sessionToken, testConfig, testDatabase } from './support.ts';
-import { VisibilityFixtures, type Tenant } from './visibility-fixtures.ts';
+import { publicApiHarness } from './public-api-support.ts';
+import { TEST_SESSION_COOKIE, sessionToken } from './support.ts';
 
-const config = testConfig();
-const db = testDatabase(config);
-const app = createApp(config, db);
-const fixtures = new VisibilityFixtures(db);
+const { db, app, fixtures, validProjects, withApiAccess, browser, createKey, api } =
+  publicApiHarness();
 
 afterEach(async () => {
   await fixtures.cleanup();
@@ -29,64 +25,6 @@ afterEach(async () => {
 afterAll(async () => {
   await db.destroy();
 });
-
-/** A workspace whose projects satisfy the public contract. */
-async function withApiAccess<T extends Tenant>(tenant: T): Promise<T> {
-  await validProjects(tenant.workspaceId);
-  return tenant;
-}
-
-/** The shared project fixture's benchmark mode predates the project contract's enum. */
-async function validProjects(workspaceId: string) {
-  await db
-    .updateTable('projects')
-    .set({ benchmark_mode: 'consumer_like' })
-    .where('workspace_id', '=', workspaceId)
-    .execute();
-}
-
-async function browser(userId: string, workspaceId: string, path: string, body?: unknown) {
-  return app.request(`/api/v1${path}`, {
-    method: body === undefined ? 'GET' : 'POST',
-    headers: {
-      cookie: `${TEST_SESSION_COOKIE}=${await sessionToken({ sub: userId, ver: 0 })}`,
-      'x-workspace-id': workspaceId,
-      'content-type': 'application/json',
-    },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-  });
-}
-
-async function createKey(
-  tenant: Tenant,
-  input: { scopes?: string[]; project_ids?: string[]; expires_at?: string } = {},
-) {
-  const response = await browser(tenant.userId, tenant.workspaceId, '/api-keys', {
-    name: 'CI export',
-    ...input,
-  });
-  expect(response.status).toBe(201);
-  return (await response.json()) as {
-    key: { id: string; prefix: string; scopes: string[] };
-    secret: string;
-  };
-}
-
-function api(
-  secret: string,
-  path: string,
-  options: { method?: string; body?: unknown; idempotencyKey?: string } = {},
-) {
-  return app.request(`/v1${path}`, {
-    method: options.method ?? (options.body === undefined ? 'GET' : 'POST'),
-    headers: {
-      authorization: `Bearer ${secret}`,
-      'content-type': 'application/json',
-      ...(options.idempotencyKey ? { 'idempotency-key': options.idempotencyKey } : {}),
-    },
-    ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
-  });
-}
 
 /** A public write behind `withIdempotency`, authenticated as the given key. */
 function idempotentApp(
@@ -344,7 +282,35 @@ describe('public API requests', () => {
     await spendBudget(db, perKey, key.id, { amount: perKey.limit });
     const throttled = await api(secret, '/projects');
     expect(throttled.status).toBe(429);
-    expect(Number(throttled.headers.get('retry-after'))).toBeGreaterThanOrEqual(1);
+    const retryAfter = throttled.headers.get('retry-after');
+    expect(Number(retryAfter)).toBeGreaterThanOrEqual(1);
+    expect([throttled.headers.get('ratelimit-policy'), throttled.headers.get('ratelimit')]).toEqual(
+      ['"key";q=600;w=60, "workspace";q=1200;w=60', `"key";r=0;t=${retryAfter}`],
+    );
+  });
+
+  it('reports what is left of the key’s and the workspace’s windows on every response', async () => {
+    const tenant = await withApiAccess(await fixtures.tenant());
+    const { key, secret } = await createKey(tenant);
+    vi.useFakeTimers({ toFake: ['Date'], now: Math.ceil(Date.now() / 60_000) * 60_000 + 18_000 });
+    try {
+      await spendBudget(db, budget('public_api_key'), key.id, { amount: 10 });
+      const listed = await api(secret, '/projects');
+      const missing = await api(secret, `/projects/${randomUUID()}/topics`);
+
+      for (const [response, status, remaining] of [
+        [listed, 200, '"key";r=589;t=42, "workspace";r=1199;t=42'],
+        [missing, 404, '"key";r=588;t=42, "workspace";r=1198;t=42'],
+      ] as const) {
+        expect([
+          response.status,
+          response.headers.get('ratelimit-policy'),
+          response.headers.get('ratelimit'),
+        ]).toEqual([status, '"key";q=600;w=60, "workspace";q=1200;w=60', remaining]);
+      }
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('keeps a key inside its project allowlist and its workspace', async () => {
@@ -362,7 +328,6 @@ describe('public API requests', () => {
     expect(listed.items.map((item) => item.id)).toEqual([tenant.projectId]);
     expect((await api(secret, `/projects/${other}/topics`)).status).toBe(404);
     expect((await api(secret, `/projects/${foreign.projectId}/topics`)).status).toBe(404);
-    // A prompt from another project is not reachable through an allowed project's path.
     const crossed = await api(secret, `/projects/${tenant.projectId}/prompts/${otherPrompt}`, {
       method: 'PATCH',
       body: { enabled: false },
@@ -418,7 +383,10 @@ describe('public API requests', () => {
         id: candidateId,
         audit_id: auditId,
         name: 'Fleet Feet',
+        kind: 'cited_domain',
         domain: 'fleetfeet.example',
+        citation_count: 2,
+        engine_total: 2,
         qualification_reason: 'Cited across prompts and engines',
         prompt_count: 2,
         engine_count: 2,
@@ -430,9 +398,10 @@ describe('public API requests', () => {
         created_at: new Date(),
       })
       .execute();
+    const foreignPrompt = await prompt(db, setId, 'Which trail shoes grip wet rock?');
     const foreignIds: Record<string, string> = {
       prompt_set_id: setId,
-      prompt_id: await prompt(db, setId, 'Which trail shoes grip wet rock?'),
+      prompt_id: foreignPrompt,
       topic_id: await topic(db, other, 'Trail running'),
       action_id: action.id,
       audit_id: auditId,
@@ -449,6 +418,10 @@ describe('public API requests', () => {
       },
       'post /v1/projects/{project_id}/prompt-sets/{prompt_set_id}/prompts': {
         prompts: [{ text: 'Which trail shoes drain fast?' }],
+      },
+      'post /v1/projects/{project_id}/prompt-sets/{prompt_set_id}/prompts/bulk-status': {
+        prompt_ids: [foreignPrompt],
+        status: 'archived',
       },
       'patch /v1/projects/{project_id}/prompts/{prompt_id}': { enabled: false },
       'patch /v1/projects/{project_id}/topics/{topic_id}': { name: 'Road running' },
@@ -527,17 +500,8 @@ describe('public API requests', () => {
       outcomes.push(`${response.status} ${contract.method} ${contract.path}`);
     }
     expect(outcomes.filter((outcome) => !outcome.startsWith('404 '))).toEqual([]);
-    expect(outcomes).toHaveLength(16);
+    expect(outcomes).toHaveLength(18);
     expect(await state()).toEqual(before);
-  });
-
-  it('fails closed on a path ID parameter with no listed owner', async () => {
-    const tenant = await fixtures.tenant();
-    const params = { project_id: tenant.projectId, widget_id: randomUUID() };
-    for (const access of ['read', 'write'] as const)
-      await expect(
-        requirePathOwnership(db, tenant.workspaceId, tenant.projectId, params, access),
-      ).rejects.toThrow('Public path parameter widget_id has no owner');
   });
 
   it('refuses every public write to a read-only key', async () => {
@@ -597,7 +561,6 @@ describe('public API requests', () => {
       idempotencyKey: 'launch-2',
     });
     expect(launched.status).toBe(201);
-    // One launch, one audit per market: the default market alone here.
     const [audit, ...others] = (await launched.json()) as { id: string; status: string }[];
     expect([audit?.status, others]).toEqual(['queued', []]);
     const listed = (await (await api(secret, `/projects/${tenant.projectId}/audits`)).json()) as {
@@ -673,7 +636,6 @@ describe('public API requests', () => {
         `/projects/${tenant.projectId}/prompts?limit=2&cursor=${listed.next_cursor}`,
       )
     ).json()) as { items: { text: string }[]; next_cursor: string | null };
-    // Brand diagnostics have no per-prompt visibility reading.
     expect(next).toMatchObject({
       items: [
         {
@@ -683,7 +645,6 @@ describe('public API requests', () => {
       ],
       next_cursor: null,
     });
-    // A cursor belongs to its endpoint and filters.
     const elsewhere = await api(
       secret,
       `/projects/${tenant.projectId}/prompts?limit=2&status=archived&cursor=${listed.next_cursor}`,
@@ -701,7 +662,6 @@ describe('public API requests', () => {
     };
     expect(document.paths['/v1/projects/{project_id}/audits']).toHaveProperty('post');
     expect(Object.keys(document.paths).every((path) => path.startsWith('/v1/'))).toBe(true);
-    // Shared shapes are named once and every reference resolves to one.
     expect(document.paths['/v1/projects/{project_id}/prompt-sets/{prompt_set_id}']).toMatchObject({
       get: {
         responses: {

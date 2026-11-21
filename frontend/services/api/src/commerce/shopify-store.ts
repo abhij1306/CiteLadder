@@ -1,10 +1,3 @@
-/**
- * A Shopify storefront's public catalog (`/products.json`), fetched page by
- * page through the shared safe fetcher for a catalog import (CM3). Only the
- * project's own hosts and `*.myshopify.com` stores are fetched, redirects
- * included. No transaction is open while it fetches: the host check reads and
- * commits first, and the pages are stored afterwards as a staged import.
- */
 import { z } from 'zod';
 
 import { policy } from '../config.ts';
@@ -17,7 +10,6 @@ import type { CommerceScope } from './reads.ts';
 const shopify = policy.commerce.catalog_sources.shopify;
 const pageSchema = z.object({ products: z.array(z.unknown()) });
 
-/** The host a person typed as their store: a domain or a URL. */
 function storeHost(value: string): string {
   try {
     const url = new URL(/^[a-z][a-z0-9+.-]*:\/\//iu.test(value) ? value : `https://${value}`);
@@ -36,7 +28,6 @@ function unavailable(message: string): never {
   throw new ApiError(422, message, { code: 'commerce_store_unavailable' });
 }
 
-/** One `products.json` page: the host that answered, after redirects, and its body. */
 async function fetchPage(
   url: string,
   context: {
@@ -72,7 +63,6 @@ async function fetchPage(
   }
 }
 
-/** How many products a fetched page lists; a page that is not a product list is refused. */
 function pageProducts(body: string): number {
   try {
     return pageSchema.parse(JSON.parse(body)).products.length;
@@ -81,11 +71,6 @@ function pageProducts(body: string): number {
   }
 }
 
-/**
- * Every page of the store's `products.json`, at most `max_pages`, as the
- * stored payload `catalog-sources.ts` parses; the store host is the one that
- * answered, after redirects.
- */
 export async function fetchShopifyStore(
   db: Database,
   scope: CommerceScope,

@@ -90,14 +90,12 @@ export function createApp(
   app.notFound(onNotFound);
   registerMcpRoutes(app, config, db);
 
-  // Readiness: bounded database reachability; never calls a provider.
   app.get('/ready', async (c) =>
     (await databaseReachable(db, config.readinessTimeoutMs))
       ? c.json({ status: 'ready' })
       : c.json({ status: 'unavailable', database: 'down' }, 503),
   );
 
-  // The public API's own description; anonymous, like any OpenAPI document.
   const publicDocument = publicApiDocument(ROUTE_CONTRACTS);
   app.get(`${policy.api.machine_prefix}/openapi.json`, (c) => c.json(publicDocument));
 

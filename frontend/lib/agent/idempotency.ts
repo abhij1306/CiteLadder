@@ -1,11 +1,3 @@
-/**
- * Idempotency keys for writes that start paid work: Agent turns and
- * shopping-prompt generation.
- *
- * A retry of the SAME request after an ambiguous failure must reuse its key,
- * or a request the server already accepted runs a second time. A key is kept
- * until the request is accepted or its input changes.
- */
 import { useRef } from 'react';
 
 export const newIdempotencyKey = () => globalThis.crypto.randomUUID();

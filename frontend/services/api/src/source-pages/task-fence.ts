@@ -3,7 +3,6 @@ import type { Database } from '../db/database.ts';
 import type { QueueTask } from '../queue/task-queue.ts';
 import { TaskCancelledError } from '../queue/executor.ts';
 
-/** Lock the task row while this worker still holds its live lease. */
 export function lockOwnedTask(db: Database, task: QueueTask) {
   return db
     .selectFrom('analytics_tasks')

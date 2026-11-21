@@ -13,7 +13,6 @@ import { failureFacts, getLogger } from '../logging.ts';
 import { prepareSavedShelf } from '../commerce/shelf-recovery.ts';
 import { enqueueContentAngles } from '../content-gaps/enqueue.ts';
 
-/** Compose existing deterministic analysis, bounded shelf preparation and persisted downstream work. */
 export function auditProjections(
   db: Database,
   resolver?: MeterableShelfResolver | null,
@@ -40,10 +39,6 @@ export function auditProjections(
   };
 }
 
-/**
- * A finished audit queues its source-page inspection and its content-angle
- * refresh; an enqueue failure is logged and never fails finalize.
- */
 async function enqueueAuditAnalytics(
   db: Database,
   workspaceId: string,

@@ -1,30 +1,27 @@
 import { useQuery } from '@tanstack/react-query';
-import { TrendingUp } from 'lucide-react';
 import type { z } from 'zod';
 
 import { AppGrid } from '@/components/ui/app-grid';
 import { DataTable, type DataTableColumn, type DataTableState } from '@/components/ui/data-table';
-import { ClampText, TableCell, TableRow } from '@/components/ui/table';
+import { readErrorProps } from '@/components/ui/notice';
+import { TitledSection } from '@/components/ui/section';
+import { ClampText } from '@/components/ui/clamp-text';
+import { TableCell, TableRow } from '@/components/ui/table';
 import { Delta } from '@/components/ui/delta';
 import { Stack } from '@/components/ui/layout';
 import { EditorialSectionHeader } from '@/components/ui/workspace';
 import type { SourceFilters } from '@/components/visibility/source-rows';
+import { TrendingUp } from '@/lib/icons';
 import { visibilityQueries } from '@/lib/api/visibility-queries';
 import { pathOf, percent } from '@/lib/visibility/sources';
-import { selectionParams, type SourceQueries } from '@/lib/visibility/use-source-analysis';
+import { topicSelectionParams, type SourceQueries } from '@/lib/visibility/use-source-analysis';
 import type { visibilitySourceMoversSchema } from '@citeladder/contracts/visibility-evidence';
 
 type Movers = z.infer<typeof visibilitySourceMoversSchema>;
 type Mover = Movers['risers'][number];
 
-/** Each list reserves this many rows, so a short list never shortens the card. */
 const MOVER_ROWS = 5;
 
-/**
- * Sources ranked by change in citation share against the dashboard's
- * comparison, which is the previous comparable period. Without a comparable
- * baseline there is no movement to rank.
- */
 export function useSourceMovers(
   filters: SourceFilters,
   queries: SourceQueries,
@@ -33,7 +30,7 @@ export function useSourceMovers(
   const comparison = queries.visibilityQuery.data?.comparison;
   const baseline = comparison?.status === 'comparable' ? comparison.baseline_audit_ids : undefined;
   const params = {
-    ...selectionParams(filters, queries),
+    ...topicSelectionParams(filters, queries),
     baseline_audit_ids: baseline,
     dimension,
     limit: MOVER_ROWS,
@@ -61,15 +58,10 @@ const STATUS_COPY: Record<string, string> = {
 
 const MOVER_COLUMNS: readonly DataTableColumn[] = [
   { key: 'source', label: 'Source' },
-  { key: 'share', label: 'Share', width: 'status', numeric: true },
-  { key: 'change', label: 'Change', width: 'figure', numeric: true },
+  { key: 'share', label: 'Share', width: 'status', kind: 'number' },
+  { key: 'change', label: 'Change', width: 'figure', kind: 'number' },
 ];
 
-/**
- * What both lists show instead of rows: no comparable period, a failed read,
- * the first load, or a comparison the server could not make. Undefined once
- * there are movers to list.
- */
 function moversState(
   query: ReturnType<typeof useSourceMovers>,
   comparable: boolean,
@@ -84,10 +76,9 @@ function moversState(
   if (query.isError) {
     return {
       kind: 'error',
-      error: query.error,
-      fallback: 'Could not load top movers.',
-      onRetry: () => void query.refetch(),
-      pending: query.isFetching,
+      ...readErrorProps(query),
+      title: "Couldn't load the top movers",
+      fallback: 'The request failed or timed out.',
     };
   }
   const data = query.data;
@@ -112,42 +103,43 @@ function MoverTable({
   busy: boolean;
 }>) {
   return (
-    <DataTable
-      title={title}
-      columns={MOVER_COLUMNS}
-      pageSize={MOVER_ROWS}
-      rowCount={movers.length}
-      busy={{ active: busy, label: 'Updating top movers' }}
-      state={
-        state ??
-        (movers.length
-          ? undefined
-          : {
-              kind: 'empty',
-              headingLevel: 3,
-              icon: TrendingUp,
-              heading: 'No source moved this way',
-            })
-      }
-    >
-      {movers.map((mover) => (
-        <TableRow key={mover.key}>
-          <TableCell>
-            <ClampText lines={1}>{dimension === 'url' ? pathOf(mover.key) : mover.key}</ClampText>
-          </TableCell>
-          <TableCell numeric className="text-ink-secondary">
-            {`${percent(mover.previous_share, 1)} → ${percent(mover.current_share, 1)}`}
-          </TableCell>
-          <TableCell numeric>
-            <Delta value={mover.delta} policy="neutral" unit=" pp" />
-          </TableCell>
-        </TableRow>
-      ))}
-    </DataTable>
+    <TitledSection title={title}>
+      <DataTable
+        label={title}
+        columns={MOVER_COLUMNS}
+        pageSize={MOVER_ROWS}
+        rowCount={movers.length}
+        busy={{ active: busy, label: 'Updating top movers' }}
+        state={
+          state ??
+          (movers.length
+            ? undefined
+            : {
+                kind: 'empty',
+                headingLevel: 3,
+                icon: TrendingUp,
+                heading: 'No source moved this way',
+              })
+        }
+      >
+        {movers.map((mover) => (
+          <TableRow key={mover.key}>
+            <TableCell>
+              <ClampText lines={1}>{dimension === 'url' ? pathOf(mover.key) : mover.key}</ClampText>
+            </TableCell>
+            <TableCell numeric className="text-ink-2">
+              {`${percent(mover.previous_share)} → ${percent(mover.current_share)}`}
+            </TableCell>
+            <TableCell numeric>
+              <Delta value={mover.delta} policy="neutral" unit=" pp" />
+            </TableCell>
+          </TableRow>
+        ))}
+      </DataTable>
+    </TitledSection>
   );
 }
 
-/** Risers and fallers by citation share, current period against the previous one. */
 export function TopMoversCard({
   dimension,
   query,
@@ -155,17 +147,13 @@ export function TopMoversCard({
 }: Readonly<{
   dimension: 'domain' | 'url';
   query: ReturnType<typeof useSourceMovers>;
-  /** Whether the dashboard found a comparable earlier period at all. */
   comparable: boolean;
 }>) {
   const state = moversState(query, comparable);
   const shared = { dimension, state, busy: query.isFetching };
   return (
     <Stack as="section" aria-label="Top movers">
-      <EditorialSectionHeader
-        title="Top movers"
-        description={`The ${dimension === 'url' ? 'pages' : 'domains'} whose share of citations changed most against the previous comparable period, in percentage points.`}
-      />
+      <EditorialSectionHeader title="Top movers" />
       <AppGrid layout="halves">
         <MoverTable title="Rising" movers={query.data?.risers ?? []} {...shared} />
         <MoverTable title="Falling" movers={query.data?.fallers ?? []} {...shared} />

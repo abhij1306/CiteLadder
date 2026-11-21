@@ -1,8 +1,3 @@
-/**
- * Overview PDF sections for the library widgets. Each calls the persisted read
- * its page widget uses, with the page's defaults: the latest run, organic
- * (`core`) prompts and the default market.
- */
 import type { commandCenterSchema } from '@citeladder/contracts/opportunities';
 import { overviewWidgetTitles, type OverviewWidgetKey } from '@citeladder/contracts/overview';
 import type { z } from 'zod';
@@ -36,12 +31,8 @@ export type ReportContext = {
   scope: ProjectScope;
   view: z.output<typeof commandCenterSchema>;
   report: PdfReport;
-  /** The latest run's prompts; null before the first completed run. */
   prompts: PromptMetricItem[] | null;
-  /** How many brands the latest run ranked; null before the first completed run. */
   brands: number | null;
-  /** The widgets on the saved layout. */
-  shown: ReadonlySet<OverviewWidgetKey>;
 };
 export type Section = (context: ReportContext) => Promise<void> | void;
 
@@ -50,21 +41,14 @@ const COHORT = policy.visibility.core_cohort;
 
 export const heading = (report: PdfReport, key: OverviewWidgetKey) =>
   report.heading(overviewWidgetTitles[key]);
-/** A quiet line: an empty state or a qualification. */
 export const quiet = (report: PdfReport, text: string) =>
   report.text(text, { size: 9, tone: 'inkMuted' });
-/** Says how much of a longer list the report printed. */
 export function truncated(report: PdfReport, total: number, noun: string) {
   if (total > ROWS) quiet(report, `Showing ${ROWS} of ${plural(total, noun)}.`);
 }
 
-/**
- * The run the cover describes, so a run finishing mid-build cannot change the
- * sections; null before the first completed run.
- */
 const reportRun = ({ view }: ReportContext) => view.measurement?.audit_id ?? null;
 
-/** The page defaults on the report's run; AnalysisNotFoundError before the first completed run. */
 function latest(context: ReportContext): RunSelection {
   const auditId = reportRun(context);
   if (auditId === null)
@@ -288,7 +272,6 @@ const searchConsole: Section = async ({ db, scope, report }) => {
   heading(report, 'search_console');
   const performance = await getPerformance(db, scope);
   const totals = performance.selected.totals;
-  // An observed zero is a measurement, so only a window never synced reads as unavailable.
   if (performance.selected.evidence_state === 'not_run') {
     quiet(report, 'Search Console data is not available for this window.');
     return;

@@ -1,11 +1,11 @@
 import { fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vite-plus/test';
 
 import { ReorderList } from './reorder-list';
 
 const ITEMS = ['Alpha', 'Beta', 'Gamma'].map((name) => ({ key: name, name, content: name }));
 
-/** A drag's data store, shared by its start and its drop like the browser's. */
 function dataTransfer(entries: Record<string, string> = {}) {
   const store = new Map(Object.entries(entries));
   return {
@@ -47,13 +47,26 @@ describe('ReorderList', () => {
     expect(onMove.mock.calls).toEqual([[1, 2]]);
   });
 
-  it('moves a row with its named move controls', () => {
+  it('moves a row from its menu or with Alt+arrows, named by its rank so rows with one name stay apart', async () => {
+    const user = userEvent.setup();
     const moves: [number, number][] = [];
-    render(<ReorderList items={ITEMS} pending={false} onMove={(...move) => moves.push(move)} />);
+    const items = [...ITEMS, { key: 'Beta again', name: 'Beta', content: 'Beta again' }];
+    render(<ReorderList items={items} pending={false} onMove={(...move) => moves.push(move)} />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Move Beta up' }));
+    await user.click(screen.getByRole('button', { name: 'Reorder 4, Beta' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Move 4, Beta, up' }));
+    fireEvent.keyDown(row('Beta'), { key: 'ArrowUp', altKey: true });
+    fireEvent.keyDown(row('Alpha'), { key: 'ArrowUp', altKey: true });
+    fireEvent.keyDown(row('Alpha'), { key: 'ArrowDown' });
+    await user.click(screen.getByRole('button', { name: 'Reorder 1, Alpha' }));
 
-    expect(moves).toEqual([[1, 0]]);
-    expect(screen.getByRole('button', { name: 'Move Alpha up' })).toBeDisabled();
+    expect(moves).toEqual([
+      [3, 2],
+      [1, 0],
+    ]);
+    expect(screen.getByRole('menuitem', { name: 'Move 1, Alpha, up' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
   });
 });

@@ -6,7 +6,6 @@ import type { SuggestionHighlight } from '@/lib/agent/page-workspace';
 import { highlightAt, highlightField, setHighlights } from './editor-highlights';
 
 const BODY = 'Our plans start at ten dollars.';
-// "ten dollars"
 const SPAN: SuggestionHighlight = { id: 'a', from: 19, to: 30, tone: 'ready', label: 'Clarity' };
 
 function stateWith(highlights: readonly SuggestionHighlight[]) {
@@ -29,7 +28,6 @@ describe('highlightField', () => {
   });
 
   it('drops a highlight once a deletion crosses its start or end', () => {
-    // Deletes "at ten", across the highlight's start.
     const state = stateWith([SPAN]).update({ changes: { from: 16, to: 22 } }).state;
     expect(state.doc.toString()).toBe('Our plans start  dollars.');
     expect(state.field(highlightField)).toEqual([]);

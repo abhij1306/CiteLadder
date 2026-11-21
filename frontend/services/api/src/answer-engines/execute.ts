@@ -36,11 +36,9 @@ function openaiPayload(request: AnswerRequest): Record<string, unknown> {
     ...(request.retrieval_enabled
       ? {
           tools: [{ type: 'web_search', ...approximateLocation(request) }],
-          // One search round per answer, as a consumer chat answer runs; zero leaves it uncapped.
           ...(request.openai_max_tool_calls > 0
             ? { max_tool_calls: request.openai_max_tool_calls }
             : {}),
-          // The sources each search consulted, cited or not.
           include: ['web_search_call.action.sources'],
         }
       : {}),
@@ -119,7 +117,6 @@ function assertNoAnthropicSearchError(payload: unknown) {
   }
 }
 
-/** Exactly one paid call per attempt. Queue policy owns every retry. */
 export async function executeAnswer(
   request: AnswerRequest,
   credential: { secret: string; base_url: string },
@@ -172,15 +169,6 @@ export async function executeAnswer(
   return answered(answer);
 }
 
-/**
- * An exchange without answer text is not an observation: scoring it would turn
- * an engine failure into "brand not mentioned". It fails the attempt instead.
- * A budget exhausted before any text and an unexplained empty answer can
- * succeed on a fresh call; a safety decline will not. Non-empty text cut off
- * by the budget remains an observation, its `length` finish reason retained.
- * An exchange the provider reports as failed, cancelled or paused is not an
- * answer either, whatever text it carries: its text is unfinished.
- */
 const UNFINISHED = new Set<Answer['finish_reason']>(['error', 'cancelled', 'paused']);
 function answered(answer: Answer): Answer {
   if (UNFINISHED.has(answer.finish_reason)) throw new ProviderError('answer_unfinished', true);

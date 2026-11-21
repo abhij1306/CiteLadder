@@ -80,7 +80,6 @@ function prepareLine(line: string, input: Input) {
   };
   return { kind: 'prepared' as const, at, row };
 }
-/** A line without the identifying fields is rejected on its own, not with its batch. */
 function prepareLineOrFormatError(line: string, input: Input) {
   try {
     return prepareLine(line, input);
@@ -122,7 +121,6 @@ export function prepareBatch(input: Input) {
     if (result.kind === 'prepared') prepared.push(result.row);
     else counts[result.kind]++;
   }
-  // The batch is unsupported only when no line carried the fields at all.
   if (formatErrors < input.lines.length) unsupported = null;
   return { counts, prepared, first, last, unsupported };
 }

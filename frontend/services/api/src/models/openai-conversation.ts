@@ -1,9 +1,3 @@
-/**
- * Native tool calling over OpenAI chat completions. The stored conversation
- * uses Messages API blocks; this adapter translates them, drops blocks chat
- * completions cannot carry (thinking, compaction), and writes its own answer
- * back as text and tool_use blocks so a transcript replays the same way.
- */
 import { z } from 'zod';
 
 import { getLogger } from '../logging.ts';
@@ -140,7 +134,6 @@ type Folded = {
   usage?: Record<string, unknown>;
 };
 
-/** Folds an event stream into one answer, telling the listener each new piece of text. */
 async function folded(response: Response, listener?: ConversationListener): Promise<Folded> {
   if (!response.body) throw new ModelError('parse');
   const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
@@ -189,7 +182,6 @@ async function readAnswer(response: Response, listener?: ConversationListener): 
       return await folded(response, listener);
     } catch (error) {
       if (error instanceof ModelError) throw error;
-      // A dropped stream is a connection failure, which the caller may retry.
       throw new ModelError('connection');
     }
   }
@@ -210,7 +202,6 @@ async function readAnswer(response: Response, listener?: ConversationListener): 
   };
 }
 
-/** Tool arguments as the model wrote them; unreadable JSON becomes `{}`, which the tool refuses. */
 function decodedArguments(text: string): Record<string, Json> {
   try {
     return toolInput(JSON.parse(text || '{}'));

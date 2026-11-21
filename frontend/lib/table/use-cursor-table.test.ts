@@ -27,15 +27,11 @@ describe('useCursorTable', () => {
     expect(result.current.page).toBe(1);
 
     act(() => result.current.push('cursor-1'));
-    // Under rapid clicks the same cursor can arrive twice; advancing twice
-    // would skip a page rather than move by one.
     act(() => result.current.push('cursor-1'));
     expect(result.current.page).toBe(2);
   });
 
   it('resets the stack when the scope changes', () => {
-    // The server binds every cursor to its filters and REFUSES a replay, so
-    // a scope change must drop the stack rather than send a doomed request.
     const { result, rerender } = renderHook(({ scope }) => useCursorTable(scope), {
       initialProps: { scope: 'scope-a' },
     });
@@ -53,7 +49,6 @@ describe('useCursorTable', () => {
 
     act(() => result.current.push('cursor-1'));
     act(() => result.current.setPageSize(50));
-    // A different page size cuts different cursors.
     expect(result.current.pageSize).toBe(50);
     expect(result.current.cursor).toBeUndefined();
   });
@@ -69,7 +64,6 @@ describe('pageRange', () => {
   it('describes the rows actually returned', () => {
     expect(pageRange(1, 10, 10)).toEqual({ from: 1, to: 10 });
     expect(pageRange(3, 10, 10)).toEqual({ from: 21, to: 30 });
-    // A short last page reads honestly rather than assuming a full page.
     expect(pageRange(3, 10, 4)).toEqual({ from: 21, to: 24 });
     expect(pageRange(1, 10, 0)).toEqual({ from: 0, to: 0 });
   });

@@ -1,4 +1,3 @@
-/** Strict client for the persisted AI-referral projection. */
 import { mutationOptions, queryOptions, skipToken, type QueryClient } from '@tanstack/react-query';
 import type { z } from 'zod';
 
@@ -38,15 +37,8 @@ type SnapshotGranularity = z.infer<typeof snapshotGranularitySchema>;
 export type AiReferrals = z.infer<typeof aiReferralsSchema>;
 export type AiSource = z.infer<typeof aiSourceSchema>;
 
-/** An exact persisted window. Composed into `AiReferralsWindowParams` below. */
 type AiReferralsWindow = { from: string; to: string } | { from?: never; to?: never };
 
-/**
- * How a caller names the window it wants: an explicit persisted `from`/`to`,
- * or a `range` preset the SERVER resolves against persisted evidence. The
- * two are mutually exclusive — a preset carries no client-computed dates,
- * which is what keeps a lagging provider's window from being missed.
- */
 export type AiReferralsRangeParams =
   | { range: string; from?: never; to?: never }
   | { range?: never };
@@ -93,7 +85,6 @@ export const aiTrafficApi = {
       crawlTokenSchema,
       options,
     ),
-  /** Check a Google Cloud source's subscription now; it activates on a pass. */
   verifySource: (projectId: string, sourceId: string, options?: ApiRequestOptions) =>
     write(
       projectId,
@@ -102,7 +93,6 @@ export const aiTrafficApi = {
       crawlVerificationSchema,
       options,
     ),
-  /** The customer installed the sink filter for the current crawler catalog. */
   confirmSinkFilter: (projectId: string, sourceId: string, options?: ApiRequestOptions) =>
     write(
       projectId,
@@ -191,7 +181,6 @@ export const aiTrafficApi = {
   },
 };
 export type TrafficFilters = Record<string, string | number | undefined | null>;
-/** What a table view reads: its project and its filters, without cursor or limit. */
 export type TrafficTableScope = Readonly<{
   workspaceId: string;
   projectId: string;
@@ -203,14 +192,7 @@ const scoped = (scope: ProjectScope, signal?: AbortSignal) => ({
   workspaceId: scope.workspaceId,
 });
 
-/**
- * The screen's reads. The Overview tab's are also built by its route
- * prefetcher and the shell's landing warm, so a warmed entry is the one the
- * screen reads. Every key holds the project and the workspace, so a table
- * keeps its rows across a page turn only inside one project.
- */
 export const aiTrafficQueries = {
-  /** Crawl log sources: which tabs the screen offers. */
   sources: (scope: ProjectScope) =>
     queryOptions({
       queryKey: queryKeys.aiTraffic.view(scope, 'sources'),
@@ -222,20 +204,17 @@ export const aiTrafficQueries = {
       queryFn: ({ signal }) =>
         aiTrafficApi.overview(scope.projectId, filters, scoped(scope, signal)),
     }),
-  /** Persisted patterns for the range; independent of the overview response. */
   insights: (scope: ProjectScope, range: string) =>
     queryOptions({
       queryKey: queryKeys.aiTraffic.view(scope, 'insights', { range }),
       queryFn: ({ signal }) =>
         aiTrafficApi.insights(scope.projectId, { range }, scoped(scope, signal)),
     }),
-  /** The crawler catalog: bot labels and purposes for the filters and rows. */
   catalog: (scope: ProjectScope) =>
     queryOptions({
       queryKey: queryKeys.aiTraffic.view(scope, 'catalog'),
       queryFn: ({ signal }) => aiTrafficApi.catalog(scope.projectId, scoped(scope, signal)),
     }),
-  /** One page of a table view; `filters` carries its cursor and limit. */
   crawlers: (scope: ProjectScope, filters: TrafficFilters) =>
     queryOptions({
       queryKey: queryKeys.aiTraffic.view(scope, 'crawlers', filters),
@@ -259,7 +238,6 @@ export const aiTrafficQueries = {
       queryFn: ({ signal }) =>
         aiTrafficApi.coverage(scope.projectId, filters, scoped(scope, signal)),
     }),
-  /** One URL's crawler activity; skips until a URL is chosen. */
   url: (scope: ProjectScope, urlHash: string | null, filters: TrafficFilters) =>
     queryOptions({
       queryKey: queryKeys.aiTraffic.view(scope, 'url', { urlHash, ...filters }),
@@ -267,11 +245,6 @@ export const aiTrafficQueries = {
         ? ({ signal }) => aiTrafficApi.url(scope.projectId, urlHash, filters, scoped(scope, signal))
         : skipToken,
     }),
-  /**
-   * The retained referrals dashboard for one window and granularity. A
-   * changed window keeps the previous chart on screen, but only inside the
-   * same workspace and project.
-   */
   dashboard: (scope: ProjectScope, params: AiReferralsWindowParams) =>
     queryOptions({
       queryKey: queryKeys.aiTraffic.dashboard(scope, params),
@@ -284,20 +257,16 @@ export const aiTrafficQueries = {
     }),
 };
 
-/** Every AI Traffic read of the project, after its crawl log data changed. */
 export const refreshAiTraffic = (client: QueryClient, projectId: string) =>
   client.invalidateQueries({ queryKey: queryKeys.aiTraffic.project(projectId) });
 
-/** The project's crawl log sources alone, while a finished upload is processed. */
 export const refreshCrawlSources = (client: QueryClient, projectId: string) =>
   client.invalidateQueries({ queryKey: queryKeys.aiTraffic.resource(projectId, 'sources') });
 
-/** A source command: issue a new source, or rotate or revoke an existing one's token. */
 export type CrawlSourceAction =
   | Readonly<{ kind: 'create'; input: CrawlSourceCreateRequest }>
   | Readonly<{ kind: 'rotate' | 'revoke'; id: string }>;
 
-/** Crawl log source writes; each success refreshes the project's AI Traffic reads. */
 export const aiTrafficMutations = {
   source: (scope: ProjectScope) =>
     mutationOptions({
@@ -308,7 +277,6 @@ export const aiTrafficMutations = {
       onSuccess: (_token, _action, _result, { client }) =>
         refreshAiTraffic(client, scope.projectId),
     }),
-  /** Check a Google Cloud source's subscription now; it activates on a pass. */
   verifySource: (scope: ProjectScope) =>
     mutationOptions({
       mutationFn: (sourceId: string) =>
@@ -316,7 +284,6 @@ export const aiTrafficMutations = {
       onSuccess: (_outcome, _sourceId, _result, { client }) =>
         refreshAiTraffic(client, scope.projectId),
     }),
-  /** The customer installed the sink filter for the current crawler catalog. */
   confirmSinkFilter: (scope: ProjectScope) =>
     mutationOptions({
       mutationFn: (sourceId: string) =>

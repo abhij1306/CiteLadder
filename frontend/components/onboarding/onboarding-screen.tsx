@@ -2,9 +2,11 @@ import { useEffect, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 
 import { UserMenuTrigger } from '@/components/layout/user-menu';
+import { SetupPage, StepBack } from '@/components/templates/setup-page';
 import { Button } from '@/components/ui/button';
-import { OnboardingShell, StepBack } from '@/components/ui/onboarding-shell';
+import { Icon } from '@/components/ui/icon';
 import { TextLink } from '@/components/ui/text-link';
+import { X } from '@/lib/icons';
 import { projectDestination } from '@/lib/navigation/project-destination';
 import { useProjectContext } from '@/lib/project/project-context';
 
@@ -21,14 +23,11 @@ import {
 
 const STEPS = ['Basics', 'Research', 'Confirm'] as const;
 
-/** The onboarding transaction coordinator; each visual stage owns its own UI. */
 export function OnboardingScreen() {
   const location = useLocation();
   // Cached routes may retain component state. A fresh Add project URL must
   // start a fresh transaction, and a hidden route must not keep redirecting.
   if (stripTrailingSlashes(location.pathname) !== '/onboarding') return null;
-  // Draft replacements retain this entry's transaction. An explicit navigation
-  // gets a new key, even when it opens another draft without leaving this route.
   const transactionKey: string = location.state?.onboardingTransactionKey ?? location.key;
   return <OnboardingTransaction key={transactionKey} transactionKey={transactionKey} />;
 }
@@ -36,18 +35,6 @@ export function OnboardingScreen() {
 function OnboardingTransaction({ transactionKey }: Readonly<{ transactionKey: string }>) {
   const flow = useOnboardingFlow(transactionKey);
   const { activeProjectId } = useProjectContext();
-  /**
-   * Where leaving setup would land — or nothing, when leaving has nowhere to go.
-   *
-   * `?new=1` says the reader ASKED for another project, not that they have one.
-   * "Add project" on the empty state sets it too, so a workspace with no
-   * projects was offered a way out to `/projects`, which is precisely the
-   * address that sends an empty workspace back into setup. The reader saw a
-   * flicker and landed back in the flow they were trying to leave.
-   *
-   * A resolved project is the honest test: it is both the thing to return to
-   * and the proof that returning goes somewhere.
-   */
   const projectsHref = activeProjectId
     ? projectDestination('/projects', null, activeProjectId)
     : undefined;
@@ -57,8 +44,8 @@ function OnboardingTransaction({ transactionKey }: Readonly<{ transactionKey: st
   const exitHref = flow.isAdditional ? projectsHref : undefined;
 
   return (
-    <OnboardingShell
-      mainLabel="Project setup"
+    <SetupPage
+      label="Project setup"
       steps={STEPS}
       current={flow.step}
       barEnd={
@@ -73,15 +60,10 @@ function OnboardingTransaction({ transactionKey }: Readonly<{ transactionKey: st
       }
     >
       {onboardingStage(flow, flow.isCompleting ? undefined : stageActions(flow, projectsHref))}
-    </OnboardingShell>
+    </SetupPage>
   );
 }
 
-/**
- * Move focus to the new stage's heading when the stage changes, so keyboard
- * and screen-reader users start at the top of what replaced the old stage.
- * The first render leaves focus where the page load put it.
- */
 function useStageHeadingFocus(stage: string | number) {
   const previous = useRef(stage);
   useEffect(() => {
@@ -117,7 +99,6 @@ function onboardingStage(
   if (flow.step === 1) {
     return (
       <DiscoveryStage
-        brandName={flow.brand?.brand_name}
         discovery={flow.discovery}
         onEdit={() => flow.setStep(0)}
         onRerun={flow.rerunDiscovery}
@@ -128,7 +109,6 @@ function onboardingStage(
   return <ReviewStage flow={flow} actions={actions} />;
 }
 
-/** Each stage's Back and its one ink action, in the step card's footer. */
 function stageActions(
   flow: ReturnType<typeof useOnboardingFlow>,
   projectsHref: string | undefined,
@@ -136,10 +116,12 @@ function stageActions(
   if (flow.step === 0) {
     return {
       back:
-        // Same rule as the exit above: cancelling has to lead somewhere.
         flow.isAdditional && projectsHref ? (
-          <Button asChild variant="ghost">
-            <Link to={projectsHref}>Cancel</Link>
+          <Button asChild variant="quiet">
+            <Link to={projectsHref}>
+              <Icon icon={X} />
+              Cancel
+            </Link>
           </Button>
         ) : undefined,
       next: (

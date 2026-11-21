@@ -1,4 +1,3 @@
-/** Static branded documents: local fonts, measured wrapping, bounded page layout. */
 import PDFDocument from 'pdfkit';
 
 import {
@@ -13,9 +12,7 @@ import {
 } from './pdf-brand.ts';
 
 const MARGIN = 50;
-/** Where content starts on a page after the first, below the running logo. */
 const CONTINUATION_TOP = 56;
-/** Content ends here; the footer sits below. */
 const BOTTOM_GAP = 60;
 const CELL_PAD = 6;
 const CELL_Y_PAD = 5;
@@ -28,7 +25,6 @@ export type Column = { header: string; width: number; align?: 'left' | 'right' }
 export type Stat = { label: string; value: string; note: string };
 export type Tag = { label: string; tone: 'danger' | 'warning' | 'neutral' };
 export type RankedItem = { rank: string; title: string; detail: string; tag: Tag | null };
-/** A paragraph, or a set of short labels shown as chips. */
 export type Fact = { label: string; value: string | readonly string[] };
 type Chip = { label: string; x: number; width: number };
 
@@ -38,14 +34,12 @@ const TAG_TONES: Record<Tag['tone'], { ink: Tone; fill: Tone }> = {
   neutral: { ink: 'inkSecondary', fill: 'surfaceSunken' },
 };
 
-/** No HTML interpretation, remote fonts, scripts, attachments or interactive fields. */
 export class PdfReport {
   private readonly document: PDFKit.PDFDocument;
   private readonly faces: Record<Style, FaceChain>;
   private readonly palette: Palette;
   private readonly footer: string;
   private readonly completed: Promise<Uint8Array>;
-  /** The top of the next element, in points from the top of the page. */
   private y = MARGIN;
   readonly width: number;
 
@@ -95,7 +89,6 @@ export class PdfReport {
     for (const character of text) {
       const code = character.codePointAt(0) ?? 0;
       const face = faces.find((item) => item.characters.has(code));
-      // Unsupported scripts remain inspectable instead of turning identity into blank glyphs.
       const font = face?.name ?? faces[0].name;
       const value = face ? character : `[U+${code.toString(16).toUpperCase()}]`;
       const previous = runs.at(-1);
@@ -131,7 +124,6 @@ export class PdfReport {
     return lines;
   }
 
-  /** Splits a word wider than the line per character; returns the unfinished last line. */
   private breakWord(
     word: string,
     lines: string[],
@@ -150,7 +142,6 @@ export class PdfReport {
     return line;
   }
 
-  /** One line cut to a width with an ellipsis. */
   private fit(text: string, size: number, style: Style, width: number): string {
     if (this.measure(text, size, style) <= width) return text;
     let cut = text;
@@ -158,7 +149,6 @@ export class PdfReport {
     return `${cut.trimEnd()}…`;
   }
 
-  /** Draws one line with its alphabetic baseline at `baseline`. */
   private draw(text: string, x: number, baseline: number, { size, style, tone }: Ink): void {
     for (const run of this.runs(text, size, style)) {
       this.document
@@ -200,12 +190,6 @@ export class PdfReport {
     if (this.y + height > this.bottom) this.newPage();
   }
 
-  /**
-   * Lays out a block of lines with `pad` points of chrome around each page's part.
-   * A block that fits on a page moves to the next page whole; a taller one
-   * splits between lines, so nothing is drawn past the content bottom. `part`
-   * draws lines `[start, end)` in a box at `top` of `height`.
-   */
   private paginate(
     heights: readonly number[],
     pad: number,
@@ -237,7 +221,6 @@ export class PdfReport {
     } while (start < heights.length);
   }
 
-  /** The first page's brand band: logo, eyebrow, title and context lines on a sunken band. */
   cover({
     eyebrow,
     title,
@@ -262,7 +245,6 @@ export class PdfReport {
     this.y = height + 22;
   }
 
-  /** A plain document title under the logo, for documents without a cover band. */
   title(text: string): void {
     this.logo(MARGIN, this.y, 16);
     this.y += 46;
@@ -273,7 +255,6 @@ export class PdfReport {
   }
 
   heading(text: string): void {
-    // Room for the heading, a table header and one row, so a heading never ends a page.
     this.ensure(90);
     this.y += 18;
     for (const line of this.wrap(text, 13.5, 'display', this.width - 10)) {
@@ -301,7 +282,6 @@ export class PdfReport {
     this.y += 4;
   }
 
-  /** A one-time notice on a sunken strip. */
   note(text: string): void {
     const lines = this.wrap(text, 9, 'medium', this.width - 24);
     this.paginate(
@@ -321,7 +301,6 @@ export class PdfReport {
     this.y += 10;
   }
 
-  /** The recommended step, on a sunken field. */
   callout({
     eyebrow,
     title,
@@ -330,7 +309,6 @@ export class PdfReport {
     const inner = this.width - 28;
     const titleInk: Ink = { size: 12, style: 'medium', tone: 'ink' };
     const detailInk: Ink = { size: 9, style: 'text', tone: 'inkSecondary' };
-    // Each line advances to its own baseline; the first detail line also clears the title.
     const lines = [
       ...this.wrap(title, 12, 'medium', inner).map((text) => ({ text, ink: titleInk, step: 16 })),
       ...(detail ? this.wrap(detail, 9, 'text', inner) : []).map((text, index) => ({
@@ -361,12 +339,10 @@ export class PdfReport {
     this.y += 10;
   }
 
-  /** Headline figures in a row of equal cells under a Flare rule. */
   stats(stats: readonly Stat[]): void {
     if (!stats.length) return;
     const cell = this.width / stats.length;
     const room = (index: number) => cell - (index ? 12 : 0) - 8;
-    // Every note line prints; the strip grows to the longest note.
     const notes = stats.map((stat, index) => this.wrap(stat.note, 8, 'text', room(index)));
     const height = 74 + Math.max(...notes.map((lines) => lines.length)) * 10.5;
     this.ensure(height + 10);
@@ -428,7 +404,6 @@ export class PdfReport {
     const wrapped = rows.map((row) => {
       if (row.length !== layout.length) throw new Error('Invalid PDF row');
       return layout.map((column, index) => {
-        // A right-aligned column holds figures: their digits take the figure face.
         const style: Style = column.align === 'right' ? 'figure' : 'text';
         return {
           column,
@@ -441,7 +416,6 @@ export class PdfReport {
       (this.bottom - CONTINUATION_TOP - TABLE_HEADER - CELL_Y_PAD * 2) / TABLE_LINE,
     );
     const first = Math.min(Math.max(1, ...(wrapped[0] ?? []).map((cell) => cell.lines.length)), 4);
-    // A header always keeps at least the start of its first row beside it.
     this.ensure(TABLE_HEADER + first * TABLE_LINE + CELL_Y_PAD * 2);
     header();
     wrapped.forEach((cells, rowIndex) => {
@@ -449,7 +423,6 @@ export class PdfReport {
       let start = 0;
       while (start < count) {
         const room = Math.floor((this.bottom - this.y - CELL_Y_PAD * 2) / TABLE_LINE);
-        // Move a row that fits on a page whole; split only a row taller than a page.
         if (room < 1 || (start === 0 && count <= capacity && room < count)) {
           this.newPage();
           header();
@@ -478,7 +451,6 @@ export class PdfReport {
     this.y += 10;
   }
 
-  /** A numbered list: rank, title, a detail line and an optional tag. */
   ranked(items: readonly RankedItem[]): void {
     const tagColumn = 78;
     const textX = MARGIN + 26;
@@ -531,7 +503,6 @@ export class PdfReport {
     this.y += 10;
   }
 
-  /** Labelled facts: paragraphs or chip sets beside a label column. */
   facts(facts: readonly Fact[]): void {
     const labelWidth = 118;
     const valueX = MARGIN + labelWidth;

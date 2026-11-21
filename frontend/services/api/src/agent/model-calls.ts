@@ -20,7 +20,6 @@ export type AgentModel = {
   adapter: string;
   endpointHost: string;
   model: string;
-  /** `listener` sees text, thinking and tool input as they stream; display only. */
   converse: (
     request: ModelRequest,
     signal: AbortSignal,
@@ -165,7 +164,6 @@ export class ModelCalls {
           output_hash: result ? hash(JSON.stringify(result.blocks)) : '',
           error_code: result ? '' : 'provider_error',
           latency_ms: result?.latency_ms ?? null,
-          // How this call used the prompt cache, for cost and cache analysis.
           response_id: result?.response_id.slice(0, 128) ?? '',
           cache_write_1h_input_tokens: usage('cache_write_1h_input_tokens'),
           web_search_requests: usage('web_search_requests'),

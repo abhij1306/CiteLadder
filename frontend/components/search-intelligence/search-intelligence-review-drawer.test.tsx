@@ -149,7 +149,6 @@ describe('SearchIntelligenceReviewDrawer', () => {
         busy={false}
       />,
     );
-    // A depth can be cleared while typing; review waits for a valid number.
     const depth = screen.getByRole('textbox', { name: 'Ranked keywords: number of results' });
     await userEvent.clear(depth);
     expect(screen.getByRole('button', { name: 'Review cost' })).toBeDisabled();
@@ -191,7 +190,6 @@ describe('SearchIntelligenceReviewDrawer', () => {
         busy={false}
       />,
     );
-    // The remembered competitor leads; the other one is still one disclosure away.
     expect(screen.getByRole('group', { name: 'Other' })).toBeInTheDocument();
     expect(screen.getByText('Other competitors (1)')).toBeInTheDocument();
   });

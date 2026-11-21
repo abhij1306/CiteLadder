@@ -1,32 +1,18 @@
-/**
- * Fact-checking against real PostgreSQL: the pilot-gated brand facts API and
- * its revisions, the fact set an audit freezes, claim extraction riding the
- * perception call, the verification executor's persisted outcomes, the
- * accuracy and evidence reads, and workspace isolation. The model gateway is
- * a fake transport.
- */
 import { randomUUID } from 'node:crypto';
 
-import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 
-import { deriveExecution } from '../src/audits/derivation.ts';
-import { createApp } from '../src/app.ts';
 import { policy } from '../src/config.ts';
-import { loadWorkerSettings } from '../src/config/analytics.ts';
-import { createModelGateway, gatewaySettings } from '../src/models/gateway.ts';
-import { admittedFactCheck, admittedPerceptionVersions } from '../src/perception/admission.ts';
+import { admittedFactCheck } from '../src/perception/admission.ts';
 import { answerPerception } from '../src/perception/executor.ts';
 import { factVerification } from '../src/perception/fact-verification.ts';
-import { AnalyticsWorker } from '../src/workers/analytics-worker.ts';
-import { TEST_SESSION_COOKIE, sessionToken, testConfig, testDatabase } from './support.ts';
-import { VisibilityFixtures, type Tenant } from './visibility-fixtures.ts';
+import { ANSWER, factCheckHarness, fakeGateway, perceptionOutput } from './fact-check-support.ts';
+import { TEST_SESSION_COOKIE, sessionToken } from './support.ts';
+import { frozen } from './visibility-read-support.ts';
+import type { Tenant } from './visibility-fixtures.ts';
 
-const config = testConfig();
-const db = testDatabase(config);
-const app = createApp(config, db);
-const fixtures = new VisibilityFixtures(db);
-const settings = loadWorkerSettings({});
-const ANSWER = 'Acme Pro costs $49 per month. Acme integrates with Slack. Rival support is slow.';
+const { db, app, fixtures, call, confirmedFact, pilotConfiguration, analysed, drain, queued } =
+  factCheckHarness();
 
 let tenant: Tenant;
 
@@ -38,151 +24,6 @@ afterAll(async () => {
   await fixtures.cleanup();
   await db.destroy();
 });
-
-async function call(owner: Tenant, method: string, path: string, body?: unknown) {
-  const token = await sessionToken({ sub: owner.userId, ver: 0 });
-  const response = await app.request(`/api/v1/projects/${owner.projectId}${path}`, {
-    method,
-    headers: {
-      cookie: `${TEST_SESSION_COOKIE}=${token}`,
-      'x-workspace-id': owner.workspaceId,
-      'content-type': 'application/json',
-    },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-  });
-  return { status: response.status, body: (await response.json()) as Record<string, unknown> };
-}
-
-async function confirmedFact(owner: Tenant, topic: string, statement: string) {
-  const created = await call(owner, 'POST', '/brand-facts', { topic, statement });
-  const id = String(created.body.id);
-  await call(owner, 'PATCH', `/brand-facts/${id}`, { expected_revision: 1, status: 'confirmed' });
-  return id;
-}
-
-/** A pilot audit's configuration, frozen the way admission freezes it. */
-async function pilotConfiguration(owner: Tenant) {
-  const factCheck = await admittedFactCheck(db, {
-    workspaceId: owner.workspaceId,
-    projectId: owner.projectId,
-    auditScope: 'brand',
-  });
-  return {
-    brand_name: 'Acme',
-    brand_aliases: [],
-    competitors: [{ name: 'Rival', domains: [], aliases: [] }],
-    language_code: 'en',
-    // Frozen with the fake gateway's model, as admission freezes the deployment's.
-    perception: admittedPerceptionVersions({ auditScope: 'brand', factCheck, model: 'test' }),
-    fact_check: factCheck,
-  };
-}
-
-/** A succeeded execution analysed the way the result transaction analyses it. */
-async function analysed(owner: Tenant, auditId: string, answerText = ANSWER) {
-  const { taskId } = await fixtures.execution(owner, {
-    auditId,
-    answerText,
-    promptText: 'best tools?',
-    analysis: null,
-  });
-  const artifactId = randomUUID();
-  await db
-    .insertInto('raw_response_artifacts')
-    .values({
-      id: artifactId,
-      workspace_id: owner.workspaceId,
-      audit_id: auditId,
-      task_id: taskId,
-      logical_engine: 'chatgpt',
-      transport_provider: 'test',
-      transport_model: 'test-model',
-      answer_text: answerText,
-      search_used: false,
-      finish_reason: 'stop',
-      created_at: new Date(),
-    })
-    .execute();
-  const audit = await db
-    .selectFrom('audits')
-    .selectAll()
-    .where('id', '=', auditId)
-    .executeTakeFirstOrThrow();
-  const task = await db
-    .selectFrom('audit_tasks')
-    .selectAll()
-    .where('id', '=', taskId)
-    .executeTakeFirstOrThrow();
-  await db.transaction().execute((trx) => deriveExecution(trx, task, audit, artifactId));
-  return taskId;
-}
-
-function fakeGateway(contents: string[], model = 'test') {
-  const fetch = vi.fn(async (_url: string | URL | Request, _init?: RequestInit) =>
-    Response.json({
-      model: 'returned-model',
-      choices: [{ message: { content: contents.shift() ?? 'not json' }, finish_reason: 'stop' }],
-      usage: { prompt_tokens: 100, completion_tokens: 20 },
-    }),
-  );
-  const gateway = createModelGateway(
-    {
-      ...gatewaySettings({}),
-      apiKey: 'test-only',
-      model,
-      baseUrl: 'https://model.test/v1',
-    },
-    { fetch, sleep: async () => {} },
-  );
-  return { fetch, factory: () => gateway };
-}
-
-const perceptionOutput = JSON.stringify({
-  entities: [
-    { entity_id: 'brand:acme', label: 'neutral', confidence: 0.9, aspects: [] },
-    { entity_id: 'competitor:rival', label: 'negative', confidence: 0.8, aspects: [] },
-  ],
-  claims: [
-    {
-      topic: 'pricing',
-      claim: 'Acme Pro costs $49 a month.',
-      quote: 'Acme Pro costs $49 per month',
-      confidence: 0.9,
-    },
-    {
-      topic: 'integrations',
-      claim: 'Acme integrates with Slack.',
-      quote: 'Acme integrates with Slack',
-      confidence: 0.9,
-    },
-    { topic: 'pricing', claim: 'Rival is cheaper.', quote: 'Rival is cheaper', confidence: 0.9 },
-  ],
-});
-
-async function drain(owner: Tenant, kind: string, executor: ReturnType<typeof answerPerception>) {
-  const ids = (
-    await db
-      .selectFrom('analytics_tasks')
-      .select('id')
-      .where('workspace_id', '=', owner.workspaceId)
-      .where('task_kind', '=', kind)
-      .execute()
-  ).map((row) => row.id);
-  const worker = new AnalyticsWorker(db, settings, {
-    executors: { [kind]: executor },
-    taskScope: { workspaceId: owner.workspaceId, taskIds: ids },
-  });
-  await worker.runUntilIdle();
-  return ids;
-}
-
-const queued = (owner: Tenant, kind: string) =>
-  db
-    .selectFrom('analytics_tasks')
-    .select(['status', 'payload'])
-    .where('workspace_id', '=', owner.workspaceId)
-    .where('task_kind', '=', kind)
-    .execute();
 
 describe('brand facts', () => {
   it('appends a revision on every change and refuses an edit of a stale revision', async () => {
@@ -243,7 +84,10 @@ describe('brand facts', () => {
   it("never reads or edits another workspace's facts", async () => {
     const id = await confirmedFact(tenant, 'pricing', 'Pro costs $59 per month.');
     const other = await fixtures.tenant();
-    expect((await call(other, 'GET', '/brand-facts')).body).toEqual({ enabled: true, facts: [] });
+    expect((await call(other, 'GET', '/brand-facts')).body).toMatchObject({
+      enabled: true,
+      facts: [],
+    });
     const forged = await call(other, 'PATCH', `/brand-facts/${id}`, {
       expected_revision: 2,
       status: 'retired',
@@ -295,6 +139,7 @@ describe('brand facts', () => {
 describe('claim extraction and verification', () => {
   it('extracts brand claims in the perception call, verifies them against the frozen facts and reads the accuracy', async () => {
     await confirmedFact(tenant, 'pricing', 'Pro costs $59 per month.');
+    await confirmedFact(tenant, 'company', 'Founded in 2019.');
     const auditId = await fixtures.audit(tenant, {
       configuration: await pilotConfiguration(tenant),
     });
@@ -335,7 +180,6 @@ describe('claim extraction and verification', () => {
     const verifyRequest = JSON.parse(String(verify.fetch.mock.calls[0]?.[1]?.body)) as {
       messages: { content: string }[];
     };
-    // Only the pricing claim has a fact on its topic; the integration claim is never sent.
     expect(verifyRequest.messages[1]?.content).toContain('Pro costs $59 per month.');
     expect(verifyRequest.messages[1]?.content).not.toContain('Slack');
 
@@ -358,7 +202,6 @@ describe('claim extraction and verification', () => {
       ],
     });
 
-    // Editing the fact afterwards never rewrites this audit's verdict.
     const [fact] = (await call(tenant, 'GET', '/brand-facts')).body.facts as { id: string }[];
     await call(tenant, 'PATCH', `/brand-facts/${fact!.id}`, {
       expected_revision: 2,
@@ -379,6 +222,62 @@ describe('claim extraction and verification', () => {
         ['not_covered', []],
       ],
     );
+
+    const observedAt = (summary.body.contradicted as { observed_at: string }[])[0]!.observed_at;
+    const byFact = await call(tenant, 'GET', `/visibility/accuracy/facts?audit_id=${auditId}`);
+    expect(byFact.body).toMatchObject({
+      enabled: true,
+      facts: [
+        {
+          fact_id: fact!.id,
+          revision: 2,
+          statement: 'Pro costs $59 per month.',
+          counts: {
+            kind: 'raised',
+            claims: 1,
+            supported: 0,
+            contradicted: 1,
+            inconclusive: 0,
+            last_raised_at: observedAt,
+          },
+        },
+        { revision: 2, statement: 'Founded in 2019.', counts: { kind: 'not_raised' } },
+      ],
+    });
+
+    await db
+      .updateTable('projects')
+      .set({ country_code: 'GB' })
+      .where('id', '=', tenant.projectId)
+      .execute();
+    const csv = await app.request(
+      `/api/v1/projects/${tenant.projectId}/visibility/accuracy/claims/export?audit_id=${auditId}`,
+      {
+        headers: {
+          cookie: `${TEST_SESSION_COOKIE}=${token}`,
+          'x-workspace-id': tenant.workspaceId,
+        },
+      },
+    );
+    expect(csv.headers.get('content-disposition')).toBe(
+      'attachment; filename="fact-check-claims.csv"',
+    );
+    const market = 'United States · English';
+    expect(await csv.text()).toBe(
+      'claim,facts,verdict,model_verdict,engine,market,run_date,prompt\r\n' +
+        `Acme Pro costs $49 a month.,Pro costs $59 per month. (revision 2),contradicted,contradicted,ChatGPT API,${market},${observedAt},best tools?\r\n` +
+        `Acme integrates with Slack.,,not_covered,not_covered,ChatGPT API,${market},${observedAt},best tools?\r\n`,
+    );
+
+    const attacker = await fixtures.tenant();
+    const forged = await call(attacker, 'GET', `/visibility/accuracy/facts?audit_id=${auditId}`);
+    expect(forged.status).toBe(404);
+    const forgedCsv = await call(
+      attacker,
+      'GET',
+      `/visibility/accuracy/claims/export?audit_id=${auditId}`,
+    );
+    expect(forgedCsv.status).toBe(404);
   });
 
   it('verifies a claim the extractor filed under a neighbouring topic instead of calling it not covered', async () => {
@@ -497,7 +396,6 @@ describe('claim extraction and verification', () => {
       factVerification(() => null),
     );
     const unconfigured = await call(second, 'GET', `/visibility/accuracy?audit_id=${secondAudit}`);
-    // The integration claim has no fact on its topic, so it is not covered without a call.
     expect(unconfigured.body).toMatchObject({
       state: 'value',
       score: {
@@ -578,5 +476,43 @@ describe('claim extraction and verification', () => {
       .where('workspace_id', '=', tenant.workspaceId)
       .execute();
     expect(written).toEqual([]);
+  });
+});
+
+describe('accuracy reads', () => {
+  it("trends a pooled period's claims over every run in its window, breaking where runs aren't comparable", async () => {
+    await confirmedFact(tenant, 'pricing', 'Pro costs $59 per month.');
+    const configuration = await pilotConfiguration(tenant);
+    const run = async (at: string, panel: string) => {
+      const auditId = await fixtures.audit(tenant, {
+        completedAt: new Date(at),
+        configuration: { ...frozen({ panel_hash: panel }), ...configuration },
+      });
+      await fixtures.metricSnapshot(tenant, auditId, { metrics: { total_completed: 1 } });
+      await analysed(tenant, auditId);
+      return auditId;
+    };
+    await run('2026-03-20T00:00:00Z', 'panel-1');
+    const pooled = await run('2026-04-02T00:00:00Z', 'panel-1');
+    const other = await run('2026-04-05T00:00:00Z', 'panel-2');
+
+    const window = 'from=2026-04-01T00:00:00Z&to=2026-04-08T00:00:00Z';
+    const { status, body } = await call(
+      tenant,
+      'GET',
+      `/visibility/accuracy?audit_ids=${pooled}&${window}`,
+    );
+
+    expect(status).toBe(200);
+    expect(body.source_audit_ids).toEqual([pooled]);
+    expect(
+      (body.trend as { audit_id: string; comparable: boolean }[]).map((point) => [
+        point.audit_id,
+        point.comparable,
+      ]),
+    ).toEqual([
+      [pooled, true],
+      [other, false],
+    ]);
   });
 });

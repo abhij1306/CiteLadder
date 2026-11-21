@@ -81,7 +81,7 @@ export function SessionGuard({
               </Button>
             }
           >
-            <h1 className={textRole('sectionTitle')}>CiteLadder could not reach its API</h1>
+            <h1 className={textRole('heading')}>CiteLadder could not reach its API</h1>
             <p>{humanizeApiError(error, 'Please try again.').message}</p>
           </Callout>
         </div>

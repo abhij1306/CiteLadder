@@ -1,4 +1,3 @@
-/** Page-kind schema expectations: the page's primary entity, its properties and visible match. */
 import { stripTrailing } from '../../text-order.ts';
 import { firstOf, onlyOf } from '../../lists.ts';
 import { passFail } from './delivery-checks.ts';
@@ -12,7 +11,6 @@ type Block = Record<string, unknown>;
 const TOKEN = /[\p{L}\p{N}]+/gu;
 const RELATIONSHIPS = new Set(r.schema_relationship_properties);
 
-/** Normalize only legal suffixes; the rest of the declared company identity must still match. */
 function companyName(value: string) {
   const tokens = value.toLowerCase().match(TOKEN) ?? [];
   for (const suffix of analysisPolicy.facts.company_legal_name_suffixes) {
@@ -45,17 +43,11 @@ const missingPaths = (block: Block, paths: string[]) => {
 
 const tokenSet = (value: string) => new Set(value.toLowerCase().match(TOKEN) ?? []);
 
-/**
- * The share of a schema name's words the visible text shows. A long SEO title
- * holding a short, correct name still names it, so the title's own length is
- * not held against it.
- */
 function claimCoverage(claim: Set<string>, visible: Set<string>) {
   if (!claim.size) return 0;
   return [...claim].filter((token) => visible.has(token)).length / claim.size;
 }
 
-/** A document URL for comparison: http(s), lower-cased host, trailing slash trimmed, no fragment. */
 function documentUrl(value: unknown) {
   const raw = text(value).trim();
   let url: URL;
@@ -74,7 +66,6 @@ function documentUrls(facts: Facts) {
   return new Set([finalUrl, canonical].map(documentUrl).filter(Boolean));
 }
 
-/** What identifies the entity a block describes: its `@id`, else its JSON-LD object. */
 function entityKey(block: Block) {
   const id = text(block.schema_id).trim();
   if (id) return `id:${id}`;
@@ -83,11 +74,6 @@ function entityKey(block: Block) {
 const satisfiesRequired = (block: Block, expectation: Expectation) =>
   !missingPaths(block, propertiesFor(expectation, text(block.type), false)).length;
 
-/**
- * Expected-type blocks, at most one per entity; a satisfied contract wins within
- * an entity. An object nested as another's publisher, author or parent
- * organization describes that relationship, not the page.
- */
 function expectedBlocks(blocks: Block[], expectation: Expectation) {
   const expected = new Set(expectation.expected_types);
   const grouped = new Map<string, Block>();
@@ -134,11 +120,6 @@ function bindings(blocks: Block[], candidates: Block[], urls: Set<string>) {
 
 type Selection = { outcome: string; blocks: Block[]; evidence: Record<string, unknown> };
 
-/**
- * Bound candidates of distinct types name one entity each, so the earliest
- * expected type is the page's primary (a homepage's Organization over its
- * WebSite); two bound candidates of one type stay ambiguous.
- */
 function byExpectedOrder(candidates: Block[], selected: Set<number>, expectedTypes: string[]) {
   const typeOf = (index: number) => text(candidates[index]?.type);
   const types = [...selected].map(typeOf);
@@ -193,7 +174,6 @@ function resolveSelection(
   return { outcome: 'satisfied', blocks: candidates, evidence };
 }
 
-/** The one expected-type entity this page is about, or why there is none. */
 function primarySelection(facts: Facts, expectation: Expectation): Selection {
   const all = records(record(facts.structured_data).blocks);
   const candidates = expectedBlocks(all, expectation);
@@ -248,8 +228,6 @@ function schemaMatchesContent(facts: Facts): CheckResult {
     .slice(0, r.schema_content_match_max_candidates);
   if (!named.length) return ['not_applicable', { reason: 'no_schema_names' }];
   const visible = [text(facts.title), ...textList(record(facts.headings).h1_texts)].map(tokenSet);
-  // Markup conflicts when it names something the page does not show; a name
-  // the title/h1 phrase differently but the page visibly carries is consistent.
   const bodyFacts = record(facts.body);
   const body = tokenSet(text(bodyFacts.text));
   const matched = named.some(({ name, type }) => {
@@ -265,7 +243,6 @@ function schemaMatchesContent(facts: Facts): CheckResult {
     candidates: named.map(({ name }) => name.slice(0, 256)),
     matched_visible_content: matched,
   };
-  // Text past the stored cap was never read, so a missing name is unproven there.
   if (!matched && bodyFacts.truncated === true)
     return ['unknown', { ...evidence, reason: 'body_text_truncated' }];
   return [passFail(matched), evidence];

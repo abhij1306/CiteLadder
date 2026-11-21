@@ -9,8 +9,8 @@ import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 
 export const POLICY_PATH = 'frontend/scripts/token-size-policy.json';
-const GIT_EXECUTABLE =
-  process.platform === 'win32' ? String.raw`C:\Program Files\Git\cmd\git.exe` : '/usr/bin/git';
+// An absolute path, not PATH lookup: a PATH entry cannot substitute git (Sonar S4036).
+const GIT_EXECUTABLE = '/usr/bin/git';
 const REVISION = /^[0-9a-fA-F]{7,40}$|^HEAD$/u;
 
 export const SPLIT_INSTRUCTIONS = [
@@ -42,11 +42,6 @@ export function isChecked(policy, file) {
 
 export const tokensOf = (policy, bytes) => Math.ceil(bytes / policy.bytes_per_token);
 
-/**
- * `sizes` maps each changed path and each baseline path to its byte size in the
- * judged tree, or null when it is absent there. `basePolicy` is null when the
- * base has no policy yet.
- */
 export function tokenSizeFailures({ policy, basePolicy, changed, sizes }) {
   const limit = policy.limit_tokens;
   const oversized = changed
@@ -60,10 +55,15 @@ export function tokenSizeFailures({ policy, basePolicy, changed, sizes }) {
     const bytes = sizes.get(file);
     if (basePolicy && !Object.hasOwn(basePolicy.baseline, file))
       baseline.push(`${file}: new baseline entry; the baseline may only shrink, so split the file`);
+    const recorded = policy.baseline[file];
     if (bytes == null) baseline.push(`${file}: no longer exists; delete its baseline entry`);
     else if (tokensOf(policy, bytes) <= limit)
       baseline.push(
         `${file}: now ${tokensOf(policy, bytes)} tokens, within the ${limit} limit; delete its baseline entry`,
+      );
+    else if (tokensOf(policy, bytes) > recorded)
+      baseline.push(
+        `${file}: now ${tokensOf(policy, bytes)} tokens, over its recorded ${recorded}; split the file`,
       );
   }
   return { oversized, baseline };
@@ -101,7 +101,6 @@ function git(cwd, args, input) {
 
 const splitZ = (output) => output.split('\0').filter(Boolean);
 
-/** Byte sizes of `paths` in the tree `prefix` names (`:` for the index, `<rev>:` for a commit). */
 function blobSizes(cwd, prefix, paths) {
   if (!paths.length) return new Map();
   const output = git(
@@ -122,7 +121,6 @@ function policyAt(cwd, prefix) {
   try {
     return JSON.parse(git(cwd, ['show', `${prefix}${POLICY_PATH}`]));
   } catch (error) {
-    // A policy absent from the base (its first PR) or a repository without commits.
     if (
       /does not exist|exists on disk, but not in|invalid object name/u.test(`${error.stderr ?? ''}`)
     )

@@ -1,10 +1,3 @@
-/**
- * A per-product commerce finding clears in the answers after go-live: the
- * rule's metric, read by the Products read over the executions completed
- * after the declaration and up to the announced run, meets the frozen target.
- * Too few samples keep it waiting; a metric that cannot be read (no catalog
- * price, the product archived) is unavailable, never unmet.
- */
 import { z } from 'zod';
 
 import { ownedHosts } from '../../commerce/discovery-validation.ts';
@@ -30,14 +23,12 @@ const m = policy.opportunity.opportunities.PRODUCT_METRICS;
 
 const productEvidence = z.object({ product_id: z.uuid(), product_name: z.string() });
 
-/** The rule and product a member is measured on; null for any other finding. */
 function productOf(member: MemberFacts) {
   if (!isProductMetricRule(member.rule_id)) return null;
   const parsed = productEvidence.safeParse(member.evidence);
   return parsed.success ? { rule: productMetricRule(member.rule_id), ...parsed.data } : null;
 }
 
-/** The check's executions: every engine and prompt over its window, within `bounds`. */
 const checkWindow = (check: Check, bounds: { after?: Date; until: Date }): ExecutionScope => ({
   windowDays: check.window_days,
   engine: null,
@@ -45,7 +36,6 @@ const checkWindow = (check: Check, bounds: { after?: Date; until: Date }): Execu
   ...bounds,
 });
 
-/** The check's metric over one window of executions. */
 async function reading(
   db: Database,
   scope: Scope,
@@ -66,7 +56,6 @@ export const productMetricCheck: CheckModule<'product_metric'> = {
   leg: policy.opportunity.actions.LEG_VISIBILITY_RUN,
   sources: ['audit'],
   measurable: (member) => productOf(member) !== null,
-  /** The rule's target, and the reading over the window that ended at go-live. */
   async freeze(members, { db, scope, declaredAt }) {
     const owned = await ownedHosts(db, scope);
     const checks: MemberCheck[] = [];

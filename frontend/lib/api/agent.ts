@@ -1,13 +1,3 @@
-/**
- * Agent endpoints + query/mutation options.
- *
- * Chats are the saved work: messages are append-only, a chat owns at most one
- * output with immutable revisions, and reads never execute a turn — the UI
- * shows a run's streamed progress and polls persisted state when no stream is
- * open. Writes that queue a turn carry an idempotency key bound to the full
- * request, so a retried send replays the same run instead of queueing a
- * second one.
- */
 import {
   infiniteQueryOptions,
   mutationOptions,
@@ -40,7 +30,7 @@ import {
   agentSuggestionsDismissedSchema,
   agentSuggestionsPageSchema,
   agentTurnAcceptedSchema,
-  agentWorkflowSchema,
+  type AgentAttachment,
   type AgentChatCreateRequest,
   type AgentMessageRequest,
   type AgentOutputEditRequest,
@@ -53,25 +43,20 @@ import { startLiveTurn } from '@/lib/agent/live-turns';
 export type AgentRun = z.infer<typeof agentRunSchema>;
 export type AgentRevision = z.infer<typeof agentRevisionSchema>;
 export type AgentOutput = z.infer<typeof agentOutputSchema>;
-/** One of a chat's documents, addressed for edits and restores. */
 export type AgentDocumentRef = { chatId: string; outputId: string; number: number };
 export type AgentMessage = z.infer<typeof agentMessageSchema>;
 export type AgentWebSource = AgentMessage['web_sources'][number];
 export type AgentChatSummary = z.infer<typeof agentChatSummarySchema>;
 export type AgentChatDetail = z.infer<typeof agentChatDetailSchema>;
 export type AgentSkill = z.infer<typeof agentSkillSchema>;
-export type AgentWorkflow = z.infer<typeof agentWorkflowSchema>;
 export type AgentCatalog = z.infer<typeof agentSkillCatalogSchema>;
 export type AgentSuggestion = z.infer<typeof agentSuggestionSchema>;
 export type AgentSuggestionsPage = z.infer<typeof agentSuggestionsPageSchema>;
-/** A page chat's finished fetch, with its page-local checks. */
 export type AgentPageFetchDone = Extract<
   NonNullable<AgentChatDetail['page_fetch']>,
   { status: 'done' }
 >;
-/** A change to one suggestion of a page document. */
 export type SuggestionChange = 'apply' | 'dismiss' | 'revert';
-/** One suggestion of one page document, addressed for a change. */
 type SuggestionRef = { chatId: string; outputId: string; suggestionId: string };
 const outputPath = (document: { chatId: string; outputId: string }) =>
   `/agent/chats/${document.chatId}/outputs/${document.outputId}`;
@@ -93,7 +78,6 @@ async function admitTurn(
     await apiClient.post(path, input, withKey(idempotencyKey, options)),
     'agent.turn',
   );
-  // The same interactive request, streamed so the turn is shown as it is written.
   startLiveTurn(accepted.chat_id, accepted.run.id, options?.workspaceId ?? null);
   return accepted;
 }
@@ -118,10 +102,6 @@ const agentApi = {
       ),
       'agent.listChats',
     ),
-  /**
-   * A new chat. A page chat answers with no turn: the server queues it once
-   * the page is read, and the chat screen opens its stream then.
-   */
   createChat: async (
     projectId: string,
     input: AgentChatCreateRequest,
@@ -202,7 +182,6 @@ const agentApi = {
       await apiClient.get(`${outputPath(document)}/suggestions`, options),
       'agent.suggestions',
     ),
-  /** Apply, Dismiss or Revert, against the revision the person saw. */
   changeSuggestion: async (
     target: SuggestionRef,
     change: SuggestionChange,
@@ -246,7 +225,6 @@ const agentApi = {
       ),
       'agent.dismissAllSuggestions',
     ),
-  /** Link a document to the page it names, or keep it with its Action; answers the chat. */
   chooseOutputTarget: async (
     document: { chatId: string; outputId: string },
     input: AgentOutputTargetRequest,
@@ -271,7 +249,6 @@ const agentApi = {
     ),
 };
 
-/** Agent reads: the skill catalog, the project's chats and instructions, one chat. */
 export const agentQueries = {
   skills: (workspaceId: string | null) =>
     queryOptions({
@@ -314,7 +291,6 @@ export const agentQueries = {
       queryKey: queryKeys.agent.revisions(workspaceId, chatId, outputId, latestRevisionId),
       queryFn: ({ signal }) => agentApi.revisions(chatId, outputId, { signal, workspaceId }),
     }),
-  /** A page document's suggestions, read again after each revision or turn. */
   suggestions: (
     workspaceId: string | null,
     document: { chatId: string; outputId: string },
@@ -337,33 +313,24 @@ export const agentQueries = {
     }),
 };
 
-/** One chat's persisted state, after a turn, a cancel or a stream moved it. */
 export const refreshAgentChat = (client: QueryClient, chatId: string) =>
   client.invalidateQueries({ queryKey: queryKeys.agent.chatDetail(chatId) });
 
-/** A chat's output and its revision list, after a new revision was written. */
 const refreshAgentOutput = (client: QueryClient, chatId: string) =>
   Promise.all([
     refreshAgentChat(client, chatId),
     client.invalidateQueries({ queryKey: queryKeys.agent.chatRevisions(chatId) }),
   ]);
 
-/**
- * A page document after a suggestion change, or after one was refused because
- * the page or a suggestion moved on: the chat (its latest revision) and the
- * suggestions both read again.
- */
 const refreshPageDocument = (client: QueryClient, chatId: string) =>
   Promise.all([
     refreshAgentOutput(client, chatId),
     client.invalidateQueries({ queryKey: queryKeys.agent.chatSuggestions(chatId) }),
   ]);
 
-/** Every chat list of the project: a new chat or turn reorders and relabels them. */
 const refreshAgentChatLists = (client: QueryClient, projectId: string) =>
   client.invalidateQueries({ queryKey: queryKeys.agent.chatLists(projectId) });
 
-/** Agent writes; each success refreshes every read it changes. */
 export const agentMutations = {
   /**
    * A new chat. The chat lists refresh in the background; the saved
@@ -380,13 +347,11 @@ export const agentMutations = {
       }) => agentApi.createChat(vars.projectId, vars.input, vars.idempotencyKey, { workspaceId }),
       onSuccess: async (accepted, vars, _result, { client }) => {
         void refreshAgentChatLists(client, vars.projectId);
+        if (vars.input.action_id)
+          void client.invalidateQueries({ queryKey: queryKeys.actions.all });
         await client.prefetchQuery(agentQueries.chat(workspaceId, accepted.chat_id));
       },
     }),
-  /**
-   * A follow-up turn. The accepted run is written into the chat at once so
-   * the thread shows it running before the refetch lands.
-   */
   sendMessage: (scope: ProjectScope) =>
     mutationOptions({
       mutationFn: (vars: {
@@ -394,11 +359,17 @@ export const agentMutations = {
         message: string;
         skillId?: string | null;
         mentions?: string[];
+        attachments?: AgentAttachment[];
         idempotencyKey: string;
       }) =>
         agentApi.sendMessage(
           vars.chatId,
-          { message: vars.message, skill_id: vars.skillId, mentions: vars.mentions },
+          {
+            message: vars.message,
+            skill_id: vars.skillId,
+            mentions: vars.mentions,
+            attachments: vars.attachments,
+          },
           vars.idempotencyKey,
           { workspaceId: scope.workspaceId },
         ),
@@ -441,11 +412,6 @@ export const agentMutations = {
         agentApi.restoreRevision(vars, vars.revisionId, { workspaceId }),
       onSuccess: (_revision, vars, _result, { client }) => refreshAgentOutput(client, vars.chatId),
     }),
-  /**
-   * Link a document to the page it names or keep it with its Action. The
-   * answer is the chat as now saved; a refusal reads the chat again. Either
-   * Action's status may move; the chat keeps its own Action.
-   */
   chooseOutputTarget: (workspaceId: string | null) =>
     mutationOptions({
       mutationFn: (vars: { chatId: string; outputId: string; decision: 'link' | 'keep' }) =>
@@ -457,7 +423,6 @@ export const agentMutations = {
       onSettled: (_result, _error, _vars, _context, { client }) =>
         client.invalidateQueries({ queryKey: queryKeys.actions.all }),
     }),
-  /** Apply, Dismiss or Revert one suggestion; any answer reads the page again. */
   changeSuggestion: (workspaceId: string | null) =>
     mutationOptions({
       mutationFn: (vars: SuggestionRef & { change: SuggestionChange; baseRevisionId: string }) =>
@@ -479,7 +444,6 @@ export const agentMutations = {
       onSettled: (_result, _error, vars, _context, { client }) =>
         refreshPageDocument(client, vars.chatId),
     }),
-  /** The saved instructions become the cached read: no refetch of what was just written. */
   saveInstructions: (scope: ProjectScope) =>
     mutationOptions({
       mutationFn: (text: string) =>

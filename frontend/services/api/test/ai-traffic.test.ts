@@ -1,10 +1,3 @@
-/**
- * The persisted AI Referrals read over HTTP.
- *
- * A preset resolves the snapshot its
- * refresh MARKED, never one of merely the right length; an exact window reads
- * only that window; a bad query is a 422; another workspace sees a 404.
- */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { createApp } from '../src/app.ts';
@@ -71,7 +64,6 @@ describe('GET /projects/{project_id}/ai-traffic', () => {
       analyzer_version: policy.analytics.ai_referral_analyzer_version,
       formula_version: policy.analytics.ai_referral_formula_version,
     });
-    // A requested window no snapshot covers still resolves no window: never synced.
     const window = await referrals(empty, empty.projectId, {
       from: '2026-09-01',
       to: '2026-09-07',
@@ -102,13 +94,11 @@ describe('GET /projects/{project_id}/ai-traffic', () => {
     expect(body.sources).toEqual([{ ai_source: 'chatgpt', sessions: 42, share: null }]);
     expect(body.referral_volume).toEqual([{ date: end, value: 42 }]);
 
-    // The window a client clock would send still matches nothing.
     const clientWindow = await referrals(own, own.projectId, {
       from: isoDaysAgo(29),
       to: isoDaysAgo(0),
     });
     expect(clientWindow.body.sources).toEqual([]);
-    // Another preset's length is a different range.
     expect((await referrals(own, own.projectId, { range: '90d' })).body.sources).toEqual([]);
   });
 
@@ -121,8 +111,11 @@ describe('GET /projects/{project_id}/ai-traffic', () => {
     expect((await referrals(own, own.projectId, { range: '30d' })).body.sources).toEqual([]);
     const exact = await referrals(own, own.projectId, { from: start, to: end });
     expect(exact.body.sources).toEqual([{ ai_source: 'chatgpt', sessions: 11, share: null }]);
-    // With neither, the latest persisted snapshot serves the landing view.
-    expect((await referrals(own, own.projectId)).body.window_end).toBe(end);
+    await fixtures.referralSnapshot(own, { windowStart: end, windowEnd: end, sessions: 2 });
+    expect((await referrals(own, own.projectId)).body).toMatchObject({
+      window_start: start,
+      window_end: end,
+    });
   });
 
   it('rejects a malformed query with 422 and accepts the widest window', async () => {

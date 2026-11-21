@@ -69,7 +69,6 @@ describe('the category review step', () => {
     expect(await products(t)).toEqual([]);
     expect(await categoryTree(t)).toEqual([]);
 
-    // The person leaves "Sale" out.
     const result = await applyImport(db, scope, staged.import_id, ['Sale']);
     expect(result).toEqual({
       import_id: staged.import_id,
@@ -121,7 +120,6 @@ describe('the category review step', () => {
         image_url: 'https://cdn.example/trail.png',
       }),
     ]);
-    // The Products sidebar nests by the parent; every category on a path holds the product.
     const read = await catalog(db, scope);
     const byName = new Map(read.categories.map((row) => [row.name, row]));
     expect(byName.get('Running')).toMatchObject({
@@ -132,7 +130,6 @@ describe('the category review step', () => {
       parent_id: byName.get('Running')!.id,
       product_count: 1,
     });
-    // The new catalog revision queues the 30-day answer backfill.
     const revision = await db
       .selectFrom('commerce_catalog_revisions')
       .select(['id', 'source_kind', 'source_id'])
@@ -163,7 +160,6 @@ describe('re-imports', () => {
     expect(
       (await stageImport(db, scope, { format: 'csv', content: TEMPLATE, label })).result,
     ).toEqual(applied);
-    // The same products in a different file: matched, nothing changes.
     const repeat = await importCatalog(db, scope, `${TEMPLATE}\n`);
     expect(repeat).toMatchObject({ created: 0, updated: 0, unchanged: 2, rejected: 2 });
     const observations = await db
@@ -275,7 +271,6 @@ describe('Shopify storefronts', () => {
       'https://Acme.myshopify.com/',
       storefront(calls),
     );
-    // Two products fill less than a page, so one page is the whole catalog.
     expect(calls).toEqual(['https://acme.myshopify.com/products.json?limit=250&page=1']);
     const staged = await stageImport(db, scope, {
       format: 'shopify',
@@ -331,7 +326,6 @@ describe('workspace boundaries', () => {
     await expect(applyImport(db, scopeOf(other), staged.import_id, [])).rejects.toMatchObject({
       status: 404,
     });
-    // The other project's own project id with the owner's workspace is not the owner's import either.
     await expect(
       applyImport(
         db,
@@ -340,7 +334,6 @@ describe('workspace boundaries', () => {
         [],
       ),
     ).rejects.toMatchObject({ status: 404 });
-    // The same file in another workspace is that workspace's own import.
     const theirs = await stageImport(db, scopeOf(other), {
       format: 'csv',
       content: TEMPLATE,

@@ -1,7 +1,7 @@
 import { QueryClientProvider } from '@tanstack/react-query';
 import { render, type RenderOptions } from '@testing-library/react';
 import type { ReactElement, ReactNode } from 'react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, type MemoryRouterProps } from 'react-router-dom';
 import { vi } from 'vite-plus/test';
 
 import { UserMenuController } from '@/components/layout/user-menu';
@@ -42,11 +42,6 @@ const TEST_SESSION = {
 
 export type TestRole = keyof typeof roles;
 
-/**
- * The test workspace as a member holding `role` sees it: the effective
- * capabilities come from the backend's one role policy, so a screen's role
- * test follows the policy rather than a copy of it.
- */
 export function testWorkspace(role: TestRole): Workspace {
   return {
     id: TEST_WORKSPACE_ID,
@@ -58,43 +53,25 @@ export function testWorkspace(role: TestRole): Workspace {
   };
 }
 
-/** The selection overrides for a test user who holds `role` in the test workspace. */
 export function selectionAs(role: TestRole): Partial<ProjectContextValue> {
   const workspace = testWorkspace(role);
   return { workspaces: [workspace], activeWorkspace: workspace };
 }
 
-/**
- * A resolved, empty workspace — the minimum every authed screen mounts inside.
- *
- * Screens read the workspace to scope their requests and cache keys, so
- * rendering one without this context is a failure mode of the harness rather
- * than of the component (the same reason `TooltipProvider` is here).
- */
 export function testProjectSelection(
   overrides: Partial<ProjectContextValue> = {},
 ): ProjectContextValue {
-  // The Owner by default. Consumers gate controls on the capability names, so
-  // a harness that omitted them would hide exactly what most screens render.
   const workspace = testWorkspace('owner');
   return {
-    // The membership list, the resolved id and the resolved membership agree.
-    // Leaving `activeWorkspace` null while naming an id described a state the
-    // real provider never produces, and hid every consumer that reads the role.
     workspaces: [workspace],
     activeWorkspaceId: TEST_WORKSPACE_ID,
     activeWorkspace: workspace,
     setActiveWorkspaceId: vi.fn(),
     projects: [],
-    // The harness publishes a SETTLED empty list: a screen under test should
-    // render its empty state, not a loading placeholder, unless it opts in.
     projectsSettled: true,
     activeProject: null,
     activeProjectId: null,
     setActiveProjectId: vi.fn(),
-    // A settled workspace with NO project is `empty`, not `ready`. Claiming
-    // `ready` here would let a test skip the very branch a consumer takes when
-    // there is nothing selected.
     status: 'empty',
     errorScope: null,
     retry: vi.fn(),
@@ -104,11 +81,6 @@ export function testProjectSelection(
   };
 }
 
-/**
- * A project route's screen under a REAL `ProjectProvider`: like
- * `OnboardingGate`, it renders nothing until the selection resolves a project,
- * then hands the screen that project's scope.
- */
 export function ResolvedProjectRoute({ children }: Readonly<{ children: ReactNode }>) {
   const { activeProject } = useProjectContext();
   if (!activeProject) return null;
@@ -117,11 +89,6 @@ export function ResolvedProjectRoute({ children }: Readonly<{ children: ReactNod
   );
 }
 
-/**
- * The app's query client as a screen finds it. The authenticated shell reads
- * the engine catalogue before any screen (see `PrivateRouteLayout`), so a
- * screen under test starts with it cached too.
- */
 export function testQueryClient() {
   const queryClient = createAppQueryClient();
   queryClient.setQueryData(queryKeys.providers.catalog(), providerCatalogFixture);
@@ -137,8 +104,7 @@ type ProvidersOptions = Omit<RenderOptions, 'wrapper'> & {
    * what would otherwise hide a consumer that cannot survive without one.
    */
   projectSelection?: Partial<ProjectContextValue> | null;
-  /** Initial in-app location for router-aware component tests. */
-  initialEntries?: string[];
+  initialEntries?: MemoryRouterProps['initialEntries'];
 };
 
 /**
@@ -178,8 +144,6 @@ export function renderWithProviders(ui: ReactElement, options?: ProvidersOptions
               <ProjectSelectionProvider value={selection}>
                 <SessionProvider value={TEST_SESSION}>
                   <UserMenuController>
-                    {/* A selection naming a project is a project route: the
-                        gate hands its screen the scope, so the harness does too. */}
                     {selection.activeProject ? (
                       <ActiveProjectScopeProvider project={selection.activeProject}>
                         {children}

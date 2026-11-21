@@ -1,10 +1,3 @@
-/**
- * Canonical research targets from a project's saved websites.
- *
- * A target is a registrable domain (ICANN public suffix list) or its `www`
- * host; child subdomains are not research targets. Readiness lists them for
- * selection; the review creator freezes the chosen one.
- */
 import type { searchTargetSchema } from '@citeladder/contracts/search-intelligence';
 import { getDomain } from 'tldts';
 
@@ -15,7 +8,6 @@ import { onlyOf } from '../lists.ts';
 
 export type CanonicalTarget = z.output<typeof searchTargetSchema>;
 
-/** The target for one saved website value, or null when it cannot be one. */
 function targetOf(
   identity: string,
   label: string,
@@ -44,7 +36,6 @@ function targetOf(
   };
 }
 
-/** The primary website, then the owned domains in saved order, one per origin. */
 export function ownedTargets(
   project: { name: string; website_url: string },
   ownedDomains: readonly { id: string; domain: string }[],
@@ -61,7 +52,6 @@ export function ownedTargets(
   return [...byOrigin.values()];
 }
 
-/** The research market: the saved preference, else the project's SERP market. */
 export function searchMarket(
   project: { language_code: string; serp_language_code: string; serp_location_code: number },
   saved: { location_code?: number | null; language_code?: string | null },
@@ -72,7 +62,6 @@ export function searchMarket(
   };
 }
 
-/** A competitor's target when it has exactly one valid saved domain. */
 export function competitorTarget(
   competitor: { id: string; name: string },
   domains: readonly string[],

@@ -70,18 +70,24 @@ describe('AiReferralsScreen', () => {
     );
     renderWithProviders(<AiReferralsScreen />, { projectSelection: { activeProject } });
 
-    // GA4 is connected in place rather than through Settings.
     expect(
       await screen.findByRole('region', { name: 'Connect Google Analytics 4' }),
     ).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /^All filters/ })).toBeVisible();
+    expect(screen.getByRole('button', { name: /^Chart interval:/ })).toBeVisible();
   });
 
-  it('renders persisted referral measurement by source', async () => {
-    mswServer.use(http.get(endpoint, () => HttpResponse.json(dashboard)));
+  it('opens on the last 30 days and renders persisted referral measurement by source', async () => {
+    const ranges: (string | null)[] = [];
+    mswServer.use(
+      http.get(endpoint, ({ request }) => {
+        ranges.push(new URL(request.url).searchParams.get('range'));
+        return HttpResponse.json(dashboard);
+      }),
+    );
     renderWithProviders(<AiReferralsScreen />, { projectSelection: { activeProject } });
 
     expect(await screen.findByRole('heading', { name: 'AI-referred sessions' })).toBeVisible();
+    expect(ranges).toEqual(['30d']);
     expect(screen.getByRole('heading', { name: 'Share of GA4 sessions' })).toBeInTheDocument();
     await userEvent.setup().click(screen.getByRole('tab', { name: 'Sources' }));
     expect(screen.getByText('AI referral sources')).toBeInTheDocument();
@@ -126,7 +132,6 @@ describe('AiReferralsScreen', () => {
             ga4_landing_daily: [
               { ...day, day: '2026-07-20', excluded_hosts: 0 },
               { ...day, day: '2026-07-21', excluded_hosts: 0 },
-              // A day never imported carries no count of its own.
               { ...day, day: '2026-07-22', revision: null, excluded_hosts: 0 },
             ],
           },
@@ -162,7 +167,7 @@ describe('AiReferralsScreen', () => {
     expect(
       await screen.findByText(/no sessions matched a known AI source in this window/i),
     ).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /^All filters/ })).toBeVisible();
+    expect(screen.getByRole('button', { name: /^Chart interval:/ })).toBeVisible();
     expect(screen.queryByText('Other')).not.toBeInTheDocument();
   });
 

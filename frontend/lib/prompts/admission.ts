@@ -1,6 +1,5 @@
 import type { PromptAdmissionDropReason } from '@citeladder/contracts/project';
 
-/** Why suggested questions were not admitted, phrased for the person reviewing them. */
 const DROP_REASON_COPY: Record<PromptAdmissionDropReason, string> = {
   unknown_topic: 'filed under a topic that no longer exists',
   unplanned_slot: 'not matched to a planned question',
@@ -21,10 +20,6 @@ const DROP_REASON_COPY: Record<PromptAdmissionDropReason, string> = {
   near_duplicate: 'asking what another question already asks',
 };
 
-/**
- * One sentence listing admission drops by reason, largest first, or '' when
- * nothing (else) was dropped. `exclude` omits reasons reported elsewhere.
- */
 export function admissionDropSummary(
   drops: Partial<Record<PromptAdmissionDropReason, number>>,
   exclude: readonly PromptAdmissionDropReason[] = [],

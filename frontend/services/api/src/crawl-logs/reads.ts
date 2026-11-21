@@ -45,7 +45,6 @@ export function verificationFilter(value?: string | null) {
     throw new ApiError(422, 'Invalid verification filter');
   return [...new Set(items)];
 }
-/** Every crawl read dates its window in the project's reporting timezone. */
 export async function withReportingTimezone<T extends CrawlReadOptions>(
   db: Database,
   scope: CrawlScope,
@@ -64,7 +63,6 @@ export async function withReportingTimezone<T extends CrawlReadOptions>(
     reporting_timezone: state?.reporting_timezone ?? crawlLogs.default_reporting_timezone,
   };
 }
-/** The reporting day in progress; it never makes a window incomplete. */
 export function currentReportingDay(options: CrawlReadOptions, now = new Date()) {
   return reportingDay(now, options.reporting_timezone ?? crawlLogs.default_reporting_timezone);
 }
@@ -74,7 +72,6 @@ export function presetDays(options: CrawlReadOptions) {
   if (!days) throw new ApiError(422, 'Invalid crawl range');
   return days;
 }
-/** A window's first and last instants: local midnights in the reporting timezone. */
 export function windowBounds(w: { start: string; end: string }, options: CrawlReadOptions) {
   const tz = options.reporting_timezone ?? crawlLogs.default_reporting_timezone;
   return {
@@ -82,7 +79,6 @@ export function windowBounds(w: { start: string; end: string }, options: CrawlRe
     to: sql<Date>`(${w.end}::date + 1)::timestamp at time zone ${tz}`,
   };
 }
-/** The reporting window every crawl read and the overview route share. */
 export function crawlWindow(options: CrawlReadOptions, now = new Date()) {
   if (Boolean(options.start_date) !== Boolean(options.end_date))
     throw new ApiError(422, 'Both dates are required');
@@ -157,10 +153,6 @@ export async function crawlerPage(db: Database, scope: CrawlScope, input: CrawlR
         : null,
   });
 }
-/**
- * Every crawler row for one export, in bot order: counted first and refused
- * past the cap, then read in keyset batches whose breakdowns group per batch.
- */
 export async function crawlerExport(db: Database, scope: CrawlScope, input: CrawlReadOptions = {}) {
   const options = await withReportingTimezone(db, scope, input);
   const { count } = await rollups(db, scope, options)
@@ -181,7 +173,6 @@ export async function crawlerExport(db: Database, scope: CrawlScope, input: Craw
   })();
 }
 type CrawlerRow = Awaited<ReturnType<typeof crawlerRows>>[number];
-/** Crawler totals in bot order after a bot id, at most `take` of them. */
 function crawlerRows(
   db: Database,
   scope: CrawlScope,
@@ -235,7 +226,6 @@ async function crawlerItems(
     };
   });
 }
-/** One grouped query per breakdown for a whole crawler page, bucketed by bot. */
 async function crawlerBreakdowns(
   db: Database,
   scope: CrawlScope,
@@ -315,10 +305,6 @@ export async function activityPage(db: Database, scope: CrawlScope, input: Crawl
         : null,
   });
 }
-/**
- * Every request row for one export, in the paged read's order: counted first
- * and refused past the cap, then read in keyset batches.
- */
 export async function activityExport(
   db: Database,
   scope: CrawlScope,
@@ -353,7 +339,6 @@ function activityItem<T extends { occurred: string }>({ occurred, ...row }: T) {
   return { ...row, occurred_at: wireUtc(occurred) };
 }
 type ActivityRow = Awaited<ReturnType<ReturnType<typeof activityQuery>['execute']>>[number];
-/** Retained requests matching the filters, newest first. */
 function activityQuery(
   db: Database,
   scope: CrawlScope,
@@ -388,7 +373,6 @@ function activityQuery(
 function retentionCutoff() {
   return new Date(Date.now() - crawlLogs.retention_days * 86400000);
 }
-/** Requests retained since the cutoff matching the filters, unselected and unordered. */
 function activityRequests(
   db: Database,
   scope: CrawlScope,
@@ -471,10 +455,6 @@ export async function coveragePage(db: Database, scope: CrawlScope, input: Crawl
 }
 type CrawlConnection = z.infer<typeof crawlSummarySchema>['connection'];
 
-/**
- * The project's crawl-log connection: none without an active source, awaiting
- * data until one has delivered, then connected.
- */
 function crawlConnection(
   sources: readonly Readonly<{ status: string; connection: string }>[],
 ): CrawlConnection {
@@ -562,7 +542,6 @@ function purposeSeries(series: { date: string; bot_id: string; requests: number 
   return [...purposes.values()];
 }
 
-/** Judged over closed days: the day in progress counts requests but cannot be complete. */
 function coverageQuality(
   all: { coverage: string; day: string; host: string }[],
   w: { start: string; end: string },
@@ -572,7 +551,6 @@ function coverageQuality(
   const rows = all.filter((row) => row.day <= end);
   const expected = inclusiveDays(w.start, end);
   const hosts = new Set(all.map((row) => row.host));
-  // A window of only the day in progress has no closed day to be complete.
   const judged = expected >= 1 && hosts.size > 0;
   const keys = (row: (typeof rows)[number]) => row.day + ':' + row.host;
   const complete = new Set(rows.filter((row) => row.coverage === 'complete').map(keys));

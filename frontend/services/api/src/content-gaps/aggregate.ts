@@ -1,8 +1,3 @@
-/**
- * An angle's deterministic aggregates over the window's citations (content
- * optimization section 1): counts, prompts, engines and owned coverage. The
- * model never produces any of them. Pure.
- */
 import { compareText } from '../text-order.ts';
 import type { CitedUrl, OwnedCitation } from './load.ts';
 
@@ -12,7 +7,6 @@ export type AngleAggregate = {
   competitorCount: number;
   promptIds: string[];
   engines: string[];
-  /** The matched owned page was cited in an answer to one of the angle's prompts. */
   ownedCited: boolean;
   ownedCitationIds: string[];
 };

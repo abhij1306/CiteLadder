@@ -7,19 +7,16 @@ import { makeProject } from '@/test/fixtures/project';
 import { makeSiteCrawl } from '@/test/fixtures/site-health';
 import { mswServer } from '@/test/msw-server';
 import { renderWithProviders } from '@/test/render';
-import { refreshSiteHealthDashboard } from '@/lib/api/site-health-queries';
+import { refreshSiteHealthDashboard, siteHealthQueries } from '@/lib/api/site-health-queries';
 
 const WORKSPACE = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const PROJECT = '11111111-1111-4111-8111-111111111111';
 const CRAWL = '22222222-2222-4222-8222-222222222222';
 const activeProject = makeProject({ id: PROJECT, workspace_id: WORKSPACE });
 
-/** `/issues` under the gate, which hands the screen the active project. */
 const projectRoute = { projectSelection: { activeProject } };
 
 vi.mock('@/components/site-health/issues-catalog', () => ({
-  // The catalog now carries a refresh failure itself, so the stub has to render
-  // the notice it is handed — the screen no longer draws one beside it.
   IssuesCatalog: ({
     workspaceId,
     crawlId,
@@ -103,5 +100,31 @@ describe('IssuesScreen read recovery', () => {
     expect(await screen.findByText('Refresh failed')).toBeVisible();
     expect(screen.getByTestId('issues-catalog')).toHaveTextContent(`${WORKSPACE}:${CRAWL}`);
     await waitFor(() => expect(screen.getByRole('button', { name: 'Retry' })).toBeEnabled());
+  });
+});
+
+describe('IssuesScreen while a crawl runs', () => {
+  it("labels a running crawl's Issues and refreshes the list when the crawl ends", async () => {
+    let running = true;
+    const runningCrawl = { ...dashboard.crawl, status: 'running', analysis_status: 'running' };
+    mswServer.use(
+      http.get(`/api/v1/projects/${PROJECT}/site-health`, () =>
+        HttpResponse.json(running ? { ...dashboard, crawl: runningCrawl } : dashboard),
+      ),
+      http.get('/api/v1/site-crawls/:id/events', () => HttpResponse.text('', { status: 200 })),
+    );
+
+    const { queryClient } = renderWithProviders(<IssuesScreen />, projectRoute);
+    const inProgress = 'Crawl in progress. Issues update in batches as pages are analyzed.';
+    expect(await screen.findByText(inProgress)).toBeVisible();
+    const { queryKey } = siteHealthQueries.issues(WORKSPACE, CRAWL, {});
+    const firstPage = queryClient.getQueryCache().build(queryClient, { queryKey });
+    expect(firstPage.state.isInvalidated).toBe(false);
+
+    running = false;
+    void refreshSiteHealthDashboard(queryClient, PROJECT);
+
+    await waitFor(() => expect(screen.queryByText(inProgress)).not.toBeInTheDocument());
+    expect(firstPage.state.isInvalidated).toBe(true);
   });
 });

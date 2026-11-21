@@ -1,10 +1,12 @@
 import type { DataTableColumn } from '@/components/ui/data-table';
 import { Pressable } from '@/components/ui/pressable';
 import { TextLink } from '@/components/ui/text-link';
-import { ClampText, TableCell, TableRow } from '@/components/ui/table';
+import { ClampText } from '@/components/ui/clamp-text';
+import { TableCell, TableRow, UrlText } from '@/components/ui/table';
 import type { SearchIntelligenceRow } from '@/lib/api/search-intelligence';
 import { SEARCH_COLUMNS_BY_KIND, type SearchColumn } from '@/lib/config/search-intelligence';
-import { MissingValue } from '@/components/ui/unavailable-value';
+import { Absence } from '@/components/ui/absence';
+import { sharedOrigin } from '@/lib/format';
 import { SearchValue } from './search-intelligence-value';
 
 function cellText(value: unknown): string | null {
@@ -15,45 +17,37 @@ function cellText(value: unknown): string | null {
   return typeof value === 'string' ? value : null;
 }
 
-function displayValue(row: SearchIntelligenceRow, column: SearchColumn) {
+const URL_FIELDS: ReadonlySet<string> = new Set(['url', 'url_from']);
+
+function displayValue(row: SearchIntelligenceRow, column: SearchColumn, origin: string | null) {
   const result = row[column.field];
-  if (column.numeric) return <SearchValue value={result} digits={column.precision ?? 0} />;
-  return cellText(result) ?? <MissingValue />;
+  if (column.currencyField)
+    return <SearchValue value={result} currency={cellText(row[column.currencyField])} />;
+  if (column.numeric) return <SearchValue value={result} />;
+  if (URL_FIELDS.has(column.field) && typeof result === 'string' && result)
+    return <UrlText url={result} origin={origin} />;
+  return cellText(result) ?? <Absence />;
 }
 
 function columnsFor(kind: string) {
   return SEARCH_COLUMNS_BY_KIND[kind] ?? SEARCH_COLUMNS_BY_KIND.footprint;
 }
 
-/** Text columns that hold one short word ("commercial", "Yes"), not a name. */
 const SHORT_TEXT_FIELDS: ReadonlySet<string> = new Set(['intent', 'dofollow']);
 
-/**
- * The width a column takes: the first column is the row's identity (the
- * keyword, query, page or domain) and takes what the others leave; figures
- * take the figure width, a one-word text column the status width, and any
- * other text the name width.
- */
+function columnKind(column: SearchColumn, first: boolean): DataTableColumn['kind'] {
+  if (first) return URL_FIELDS.has(column.field) ? 'url' : 'identity';
+  if (column.numeric) return 'number';
+  if (URL_FIELDS.has(column.field)) return 'url';
+  return SHORT_TEXT_FIELDS.has(column.field) ? 'status' : 'text';
+}
+
 function columnWidth(column: SearchColumn, first: boolean): DataTableColumn['width'] {
-  if (first) return 'flex';
+  if (first || URL_FIELDS.has(column.field)) return 'flex';
   if (column.numeric) return 'figure';
   return SHORT_TEXT_FIELDS.has(column.field) ? 'status' : 'name';
 }
 
-/**
- * Below this width a kind's table scrolls in its frame. Only the two kinds
- * whose fixed columns leave the identity column too little room at the
- * medium floor (ranking keywords: five figures, a page and intent;
- * backlinks: two pages, an anchor, follow and two figures) take the large one.
- */
-export function searchIntelligenceMinWidth(kind: string): 'md' | 'lg' {
-  return kind === 'ranking_keywords' || kind === 'backlinks' ? 'lg' : 'md';
-}
-
-/**
- * A dataset kind's columns for the shared `DataTable`: every column but a
- * detail one sorts on the server.
- */
 export function searchIntelligenceColumns({
   kind,
   order,
@@ -66,8 +60,9 @@ export function searchIntelligenceColumns({
   return columnsFor(kind).map((column, index) => ({
     key: column.field,
     label: column.label,
-    numeric: column.numeric,
+    kind: columnKind(column, index === 0),
     width: columnWidth(column, index === 0),
+    ...(column.low ? { priority: 'low' as const } : {}),
     sort: column.detail
       ? undefined
       : {
@@ -78,7 +73,6 @@ export function searchIntelligenceColumns({
   }));
 }
 
-/** One page of saved rows; the first cell opens the row's evidence. */
 export function SearchIntelligenceRows({
   kind,
   rows,
@@ -89,23 +83,35 @@ export function SearchIntelligenceRows({
   onSelect: (row: SearchIntelligenceRow) => void;
 }>) {
   const columns = columnsFor(kind);
+  const origins = new Map(
+    columns
+      .filter((column) => URL_FIELDS.has(column.field))
+      .map((column) => [
+        column.field,
+        sharedOrigin(rows.flatMap((row) => cellText(row[column.field]) ?? [])),
+      ]),
+  );
   return rows.map((row) => (
     <TableRow key={row.id}>
       {columns.map((column) => (
         <TableCell key={column.field} numeric={column.numeric}>
           {column === columns[0] ? (
-            <TextLink asChild text="body">
+            <TextLink asChild text="body" underline="hover">
               <Pressable
                 type="button"
-                className="block max-w-full text-left"
+                className="flex max-w-full min-w-0 text-left"
                 aria-label={`View evidence for ${row.keyword || row.domain || row.url}`}
                 onClick={() => onSelect(row)}
               >
-                <ClampText>{displayValue(row, column)}</ClampText>
+                {URL_FIELDS.has(column.field) ? (
+                  displayValue(row, column, null)
+                ) : (
+                  <ClampText>{displayValue(row, column, null)}</ClampText>
+                )}
               </Pressable>
             </TextLink>
           ) : (
-            displayValue(row, column)
+            displayValue(row, column, origins.get(column.field) ?? null)
           )}
         </TableCell>
       ))}

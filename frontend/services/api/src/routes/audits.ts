@@ -18,7 +18,7 @@ import {
   runAudit,
 } from '../commands/audits.ts';
 import { routeActor } from '../commands/permission.ts';
-import { auditInput } from '../audits/inputs.ts';
+import { auditRequestInput } from '../audits/inputs.ts';
 import { auditRuntime } from '../audits/config.ts';
 import { estimateAudit, estimateInput } from '../audits/estimate.ts';
 import {
@@ -78,10 +78,15 @@ export const auditRoutes = [
     params: empty,
     status: 201,
     permission: AUDITS_RUN,
-    body: auditInput,
+    body: auditRequestInput,
     response: auditSchema.array(),
     handle: async ({ c, db, config }) =>
-      createQueuedAudit(db, config, routeActor(c, AUDITS_RUN), await readBody(c, auditInput)),
+      createQueuedAudit(
+        db,
+        config,
+        routeActor(c, AUDITS_RUN),
+        await readBody(c, auditRequestInput),
+      ),
   }),
   definePostRoute({
     family,

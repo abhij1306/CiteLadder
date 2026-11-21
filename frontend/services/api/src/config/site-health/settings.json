@@ -114,20 +114,25 @@
     "type": "int",
     "default": 3
   },
+  "max_sitemap_document_urls": {
+    "env": ["SITE_HEALTH_MAX_SITEMAP_DOCUMENT_URLS"],
+    "type": "int",
+    "default": 50000
+  },
   "max_sitemap_urls": {
     "env": ["SITE_HEALTH_MAX_SITEMAP_URLS"],
     "type": "int",
-    "default": 5000
-  },
-  "max_sitemap_decoded_bytes": {
-    "env": ["SITE_HEALTH_MAX_SITEMAP_DECODED_BYTES"],
-    "type": "int",
-    "default": 8000000
+    "default": 500000
   },
   "max_sitemap_documents": {
     "env": ["SITE_HEALTH_MAX_SITEMAP_DOCUMENTS"],
     "type": "int",
-    "default": 32
+    "default": 1000
+  },
+  "max_sitemap_decoded_bytes": {
+    "env": ["SITE_HEALTH_MAX_SITEMAP_DECODED_BYTES"],
+    "type": "int",
+    "default": 52428800
   },
   "sitemap_fetch_concurrency": {
     "env": ["SITE_HEALTH_SITEMAP_FETCH_CONCURRENCY"],
@@ -135,10 +140,17 @@
     "default": 4,
     "minimum": 1
   },
-  "max_sitemap_admitted_urls": {
-    "env": ["SITE_HEALTH_MAX_SITEMAP_ADMITTED_URLS"],
+  "sitemap_walk_retries": {
+    "env": ["SITE_HEALTH_SITEMAP_WALK_RETRIES"],
     "type": "int",
-    "default": 5000
+    "default": 2,
+    "minimum": 0
+  },
+  "sitemap_walk_retry_delay_seconds": {
+    "env": ["SITE_HEALTH_SITEMAP_WALK_RETRY_DELAY_SECONDS"],
+    "type": "float",
+    "default": 120.0,
+    "minimum": 0
   },
   "robots_max_decoded_bytes": {
     "env": ["SITE_HEALTH_ROBOTS_MAX_DECODED_BYTES"],
@@ -325,8 +337,20 @@
   "overdue_crawl_seconds": {
     "env": ["SITE_HEALTH_OVERDUE_CRAWL_SECONDS"],
     "type": "float",
-    "default": 3600.0,
+    "default": 43200.0,
     "minimum": 0
+  },
+  "crawl_no_progress_seconds": {
+    "env": ["SITE_HEALTH_CRAWL_NO_PROGRESS_SECONDS"],
+    "type": "float",
+    "default": 1800.0,
+    "exclusive_minimum": 0
+  },
+  "issue_publication_page_interval": {
+    "env": ["SITE_HEALTH_ISSUE_PUBLICATION_PAGE_INTERVAL"],
+    "type": "int",
+    "default": 500,
+    "minimum": 1
   },
   "live_score_refresh_page_interval": {
     "env": ["SITE_HEALTH_LIVE_SCORE_REFRESH_PAGE_INTERVAL"],
@@ -344,8 +368,26 @@
   "live_score_refresh_min_interval_seconds": {
     "env": ["SITE_HEALTH_LIVE_SCORE_REFRESH_MIN_INTERVAL_SECONDS"],
     "type": "float",
-    "default": 5.0,
+    "default": 30.0,
     "minimum": 0
+  },
+  "live_score_refresh_large_crawl_pages": {
+    "env": ["SITE_HEALTH_LIVE_SCORE_REFRESH_LARGE_CRAWL_PAGES"],
+    "type": "int",
+    "default": 2000,
+    "minimum": 0
+  },
+  "live_score_refresh_large_crawl_interval_seconds": {
+    "env": ["SITE_HEALTH_LIVE_SCORE_REFRESH_LARGE_CRAWL_INTERVAL_SECONDS"],
+    "type": "float",
+    "default": 120.0,
+    "minimum": 0
+  },
+  "live_counters_refresh_seconds": {
+    "env": ["SITE_HEALTH_LIVE_COUNTERS_REFRESH_SECONDS"],
+    "type": "float",
+    "default": 30.0,
+    "exclusive_minimum": 0
   },
   "live_score_refresh_max_tracked_crawls": {
     "env": ["SITE_HEALTH_LIVE_SCORE_REFRESH_MAX_TRACKED_CRAWLS"],

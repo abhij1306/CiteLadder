@@ -63,39 +63,21 @@ export const COMMERCE_BUYER_PROMPT_REQUEST_TIMEOUT_MS = 195_000;
  */
 export const COMMERCE_STORE_IMPORT_REQUEST_TIMEOUT_MS = 135_000;
 
-/**
- * Prompt generation makes sequential structured model calls (offering maps,
- * then generation batches, each bounded by the 180-second model gateway)
- * before a JEV judging pass that is bounded at 30 seconds. A measured local
- * run spent about a minute in the model calls and two seconds in JEV, which
- * the ordinary 30-second limit abandoned while the server went on to stage
- * its candidates.
- */
 export const PROMPT_GENERATION_REQUEST_TIMEOUT_MS = 240_000;
 
-/**
- * "Create project" confirms every selected competitor website before it
- * commits. The checks run concurrently, each bounded at 12 seconds on the
- * backend (two fetch attempts inside that), and the commit follows. The
- * ordinary 30-second limit sat too close to that bound: the browser gave up
- * while the server went on to create the project.
- */
 export const ONBOARDING_COMPLETION_REQUEST_TIMEOUT_MS = 60_000;
 // Interactive research owns a 180-second server budget, plus response overhead.
 export const ONBOARDING_RESEARCH_REQUEST_TIMEOUT_MS = 195_000;
-// Interactive crawl/link work has a 180-second server bound plus settlement overhead.
+// Interactive link analysis has a 180-second server bound plus settlement overhead.
 export const SITE_HEALTH_EXECUTION_REQUEST_TIMEOUT_MS = 195_000;
 export const INTERACTIVE_EXECUTION_REQUEST_TIMEOUT_MS = 255_000;
 
-/**
- * Bounded backoff between the API client's network-failure retries (A3). The
- * delay is multiplied by the attempt number, so attempt 2 waits one unit.
- */
 export const API_RETRY_BACKOFF_MS = 150;
 
-// A blocking workspace precondition should not look frozen indefinitely.
-// This timer changes only the UI from passive loading to an explicit retry;
-// the API client's request timeout remains the network authority.
+export const QUERY_RETRY_DELAY_MS = 500;
+export const QUERY_SERVER_ERROR_RETRIES = 1;
+export const QUERY_NETWORK_ERROR_RETRIES = 2;
+
 export const WORKSPACE_LOADING_STALL_MS = 8_000;
 
 /**
@@ -106,37 +88,24 @@ export const WORKSPACE_LOADING_STALL_MS = 8_000;
  */
 export const LOADING_INDICATOR_DELAY_MS = 300;
 
-/**
- * Browser error reports one tab sends to `/client-errors` before it stops
- * reporting; repeats of one error are dropped per page load before this count.
- */
 export const CLIENT_ERROR_REPORTS_PER_SESSION = 10;
 
-/**
- * The `<meta>` the app build writes into index.html with the commit it was
- * built from; error reports read it so no hashed chunk depends on the commit.
- */
+export const INTERACTION_REPORT_SAMPLE_RATE = 0.1;
+export const SLOW_INTERACTION_MS = 200;
+
 export const RELEASE_META_NAME = 'citeladder-release';
 
-// Evidence request/display bounds.
 export const EVIDENCE_LIMIT = 100;
-export const FANOUT_SEARCH_DEBOUNCE_MS = 300;
+export const TABLE_SEARCH_DEBOUNCE_MS = 300;
 
-// Audit launch default; the accepted range arrives in the prompt-set list's `limits`.
 export const DEFAULT_REPETITIONS = 1;
 
-// Polling cadences and retry ceilings.
 export const ACTIVE_RUN_POLL_MS = 3_000;
 export const SYNC_RUN_POLL_MS = 3_000;
-/** Onboarding's website research: the reader is watching its steps advance. */
 export const BRAND_DISCOVERY_POLL_MS = 1_000;
-/** A Search Intelligence acquisition runs for minutes; its progress line need not tick faster. */
 export const SEARCH_INTELLIGENCE_RUN_POLL_MS = 5_000;
-/** A display-only performance range projection is short work the reader is waiting on. */
 export const RANGE_TASK_POLL_MS = 1_500;
-/** The post-connect readiness ladder: a year's import and its analysis take minutes. */
 export const READINESS_POLL_MS = 15_000;
-/** A young Site Health crawl's cadence; `crawlPollInterval` backs off from it as the crawl ages. */
 export const CRAWL_POLL_MS = 4_000;
-/** How often the Perception tab rechecks while answers are still being classified. */
+export const CRAWL_VIEW_REFRESH_MS = 30_000;
 export const PERCEPTION_PENDING_POLL_MS = 15_000;

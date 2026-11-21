@@ -30,7 +30,6 @@ const atom = (row: RuleEvaluation, name: string) =>
   (
     row.evidence.atoms as { name: string; outcome: string; evidence: Record<string, unknown> }[]
   ).find((item) => item.name === name)!;
-// One copy of each recorded page, shared with the dev seed transports.
 const fixture = (name: string) =>
   readFileSync(new URL(`./fixtures/site-health/${name}`, import.meta.url));
 const fixtureFacts = (name: string, url: string) =>
@@ -60,7 +59,6 @@ describe('page checklist', () => {
       'unknown',
       'client_rendering_required',
     ]);
-    // Before this rule could fail, a shell's determinate checks all passed and it scored 100.
     expect(page.scores.aeo_readiness_score).toBeLessThan(100);
 
     const copy = Array.from({ length: 40 }, (_, i) => `returns detail ${i}`).join(' ');
@@ -181,7 +179,6 @@ describe('page checklist', () => {
       { from: 3, to: 5, text: 'Detail' },
     ]);
     const page = facts('<main><h1>Notes</h1></main>', 'https://example.test/blog/notes');
-    // Main content with no headings has no hierarchy to judge, so it never holds coverage down.
     const headless = byRule(
       analyzePage({ ...page, primary_heading_outline: [] }, context).evaluations,
     ).get('aeo.heading_hierarchy')!;
@@ -293,7 +290,6 @@ describe('page checklist', () => {
       'web.mobile_viewport',
     ])
       expect(rows.get(id)!.score_roles).toContain('web_fundamentals');
-    // Advisory: shown as an issue, never scored.
     const meta = rows.get('technical.meta_description_present')!;
     expect(meta.outcome).toBe('missing');
     expect(meta.score_roles).toEqual([]);
@@ -442,7 +438,6 @@ describe('page checklist', () => {
         reason,
       ]);
     }
-    // A price shown only as text lacks the whole machine-readable Offer, not just its currency.
     const textOnly = byRule(
       evaluatePageRules({
         page_kind: 'product',
@@ -487,7 +482,6 @@ describe('page checklist', () => {
     const missing = root(false, 'not_found', 404);
     expect(missing.outcome).toBe('missing');
     expect(createsIssue(missing)).toBe(true);
-    // Unreadable is not evidence of absence.
     const unreadable = root(false, 'fetch_failed', 503);
     expect(unreadable.outcome).toBe('unknown');
     expect(createsIssue(unreadable)).toBe(false);
@@ -526,7 +520,6 @@ describe('page checklist', () => {
       ).get('search.crawler_access')!;
     const missing = access(404, 'not_found');
     expect([missing.outcome, missing.evidence.blocked]).toEqual(['satisfied', []]);
-    // A server failure is still not evidence either way.
     expect(access(503, 'fetch_failed').outcome).toBe('unknown');
   });
 
@@ -549,7 +542,6 @@ describe('page checklist', () => {
       { hreflang: 'de', url: 'https://cdn.other.test/docs/de/' },
     ]);
     expect(page.client_redirect.meta_refresh_url).toBe('https://cdn.other.test/docs/next');
-    // Without a base, a relative link resolves against the page itself.
     const plain = facts('<main><a href="guide">Guide</a></main>', 'https://example.test/blog/post');
     expect(plain.links.anchors.map((link) => [link.url, link.is_internal])).toEqual([
       ['https://example.test/blog/guide', true],
@@ -565,7 +557,6 @@ describe('page checklist', () => {
       }).robots;
     const separate = robots('otherbot: noindex\nnosnippet');
     expect([separate.noindex, separate.nosnippet]).toEqual([false, true]);
-    // Within one header line, the agent scope still covers the directives after it.
     const scoped = robots('otherbot: noindex, nosnippet');
     expect([scoped.noindex, scoped.nosnippet]).toEqual([false, false]);
     const googlebot = robots('googlebot: noindex\nnofollow');
@@ -974,7 +965,6 @@ describe('site audit regressions', () => {
       ['https://example.test/faq', true],
       ['https://example.org/', false],
     ]);
-    // Tenants of a shared hosting suffix are separate sites.
     const tenant = page(
       `<main><h1>Docs</h1><p><a href="https://docs.acme.github.io/">Docs</a> and
       <a href="https://other.github.io/">another project</a>.</p></main>`,
@@ -1124,7 +1114,6 @@ describe('site audit regressions', () => {
     };
     expect(outcome('Acme Blog')).toBe('satisfied');
     expect(outcome('Garden Supplies Catalog')).toBe('missing');
-    // The name could sit in text past the stored cap, so it stays unproven.
     expect(outcome('Garden Supplies Catalog', true)).toBe('unknown');
   });
 });
@@ -1153,7 +1142,6 @@ describe('unscored visibility checks', () => {
     const audit = '2026-10-07T00:00:00Z';
     expect(recency('2023-01-01', '2026-03-01', audit)).toEqual(['satisfied', undefined]);
     expect(recency('2024-01-01', '', audit)).toEqual(['missing', 'content_not_recent']);
-    // The missing date is the date check's finding, not a stale page.
     expect(recency('', '', audit)).toEqual(['not_applicable', 'no_content_date']);
     expect(recency('someday', '', audit)).toEqual(['unknown', 'content_date_unparseable']);
     expect(recency('2026-01-01', '', null)).toEqual(['unknown', 'audit_time_unavailable']);
@@ -1188,7 +1176,6 @@ describe('unscored visibility checks', () => {
         sitemap_url: listed,
       });
     expect(outcome(sitemap(true, '/guides/setup/?utm_source=x'))).toEqual(['satisfied', undefined]);
-    // A listed URL that redirects to a self-canonical page is the redirect check's finding.
     expect(outcome(sitemap(true, '/guides/setup', 'https://www.example.test/old-setup'))).toEqual([
       'satisfied',
       undefined,
@@ -1196,7 +1183,6 @@ describe('unscored visibility checks', () => {
     expect(outcome(sitemap(false, '/guides/other'))).toEqual(['not_applicable', 'not_in_sitemap']);
     const conflict = sitemap(true, '/guides/other');
     expect(outcome(conflict)).toEqual(['missing', 'sitemap_lists_non_canonical']);
-    // Visible as an issue, never part of a score.
     expect([createsIssue(conflict), conflict.score_applicability]).toEqual([true, false]);
   });
 
@@ -1216,7 +1202,6 @@ describe('unscored visibility checks', () => {
       'missing',
       undefined,
     ]);
-    // The sitemap conflict stays visible as its own unscored issue.
     const listed = rule('technical.sitemap_noindex', facts(true));
     expect(outcome(listed)).toEqual(['missing', 'sitemap_lists_noindex']);
     expect([createsIssue(listed), listed.score_applicability]).toEqual([true, false]);
@@ -1290,7 +1275,6 @@ describe('unscored visibility checks', () => {
     expect(
       redirect('<html><head><meta http-equiv="Refresh" content="0; URL=\'/new\'"></head></html>'),
     ).toEqual(['missing', 'meta_refresh_redirect', 'https://example.test/new']);
-    // A refresh with no target, or to the page itself, only reloads it.
     expect(redirect('<html><head><meta http-equiv="refresh" content="300"></head></html>')).toEqual(
       ['satisfied', undefined, undefined],
     );
@@ -1300,7 +1284,6 @@ describe('unscored visibility checks', () => {
     expect(
       redirect('<html><body><script>window.location.href = "/app";</script></body></html>'),
     ).toEqual(['missing', 'script_redirect', undefined]);
-    // Script navigation on a page with real content is a click handler, not a redirect.
     const article = `<html><body><p>${'Useful words about setup. '.repeat(20)}</p><script>
       button.onclick = () => { location.assign('/next'); };</script></body></html>`;
     expect(redirect(article)).toEqual(['satisfied', undefined, undefined]);

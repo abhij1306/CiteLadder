@@ -1,4 +1,3 @@
-/** Excludes metadata (bylines, dates, badges) and calls to action from page prose. */
 import {
   attribute,
   elements,
@@ -34,7 +33,6 @@ const METADATA_TOKENS = new Set([
 export const CTA_TOKENS = new Set(analysisPolicy.facts.cta_button_role_tokens);
 const GENERIC_ITEM_LABELS = new Set(analysisPolicy.facts.generic_item_link_labels);
 
-/** A navigation action does not establish the linked item's identity. */
 export const isGenericItemLabel = (value: string) =>
   GENERIC_ITEM_LABELS.has(squash(value).toLowerCase());
 
@@ -78,7 +76,6 @@ function hasShortCtaDescendant(node: HtmlElement, text: string) {
   return controls.some((item) => NEXT_ACTION.test(textContent(item)));
 }
 
-/** Whether a node's copy is metadata or a call to action rather than page prose. */
 export function isMetadataOrCta(node: HtmlElement) {
   const text = squash(textContent(node));
   if (!text || isMetadataCopy(text)) return true;

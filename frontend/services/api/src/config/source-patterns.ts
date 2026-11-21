@@ -1,8 +1,3 @@
-/** Descriptive citation taxonomy, never a causal claim or authority score.
- * Identity is resolved before third-party classification; unknown stays unknown.
- * Bump SOURCE_TAXONOMY_VERSION with classification changes. The classes are
- * the contract's `sourceClassSchema`, the vocabulary the evidence view reads.
- */
 import { sourceClassSchema, type SourceClass } from '@citeladder/contracts/opportunities';
 
 const sourceClass = sourceClassSchema.enum;

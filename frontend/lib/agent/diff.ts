@@ -1,16 +1,7 @@
-/**
- * A line diff between two revisions of an output, for a reader comparing
- * what changed. Longest-common-subsequence over lines, bounded so a very long
- * output cannot freeze the page; beyond the bound it reports null and the
- * caller shows both versions instead.
- */
-
 export type DiffLine = { kind: 'same' | 'added' | 'removed'; text: string };
 
-/** Lines-squared cells the table may hold (a ~2,000-line pair). */
 const MAX_CELLS = 4_000_000;
 
-/** Lengths of the common head and tail, which cost nothing to diff. */
 function commonEnds(a: string[], b: string[]): [number, number] {
   let head = 0;
   while (head < a.length && head < b.length && a[head] === b[head]) head++;
@@ -20,7 +11,6 @@ function commonEnds(a: string[], b: string[]): [number, number] {
   return [head, tail];
 }
 
-/** Suffix LCS lengths: cell (i, j) is the LCS of a[i..] and b[j..]. */
 function lcsTable(a: string[], b: string[]): (i: number, j: number) => number {
   const width = b.length + 1;
   const table = new Uint32Array((a.length + 1) * width);

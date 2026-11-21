@@ -188,7 +188,6 @@ function isSettingSpec(value: object): value is SettingSpec {
   );
 }
 
-/** Every setting the policy declares, with the key it is declared under. */
 function settingCatalog(): [string, SettingSpec][] {
   const catalog: [string, SettingSpec][] = [];
   const seen = new Set<object>();
@@ -204,12 +203,10 @@ function settingCatalog(): [string, SettingSpec][] {
 }
 const catalog = settingCatalog();
 
-/** Resolve and validate every catalogued setting once from `env`. */
 function resolveSettings(env: Env): Settings {
   return new Settings(catalog, env);
 }
 
-/** Pool, timeout and TLS settings shared by the service and terminal operators. */
 export function databaseSettings(source: SettingSource) {
   const setting = (name: keyof typeof policy.settings) => resolveSetting(name, source);
   return {
@@ -241,7 +238,6 @@ function resolveSetting(name: keyof typeof policy.settings, source: SettingSourc
   return resolveSpec(name, policy.settings[name], source);
 }
 
-/** The deployment environment (AR-1): only these names start the service. */
 type AppEnv = 'development' | 'test' | 'production';
 
 export type ServiceConfig = {
@@ -342,12 +338,10 @@ const placeholderPatterns = policy.secret_policy.placeholder_patterns.map(
   (pattern) => new RegExp(pattern, 'iu'),
 );
 
-/** A template value by its shape ("replace-with-…", "<your-…>"), not by an exact-match list. */
 function secretIsPlaceholder(value: string): boolean {
   return placeholderPatterns.some((pattern) => pattern.test(value.trim()));
 }
 
-/** Deployment secret-strength admission. */
 export function secretIsWeak(value: string): boolean {
   const rules = policy.secret_policy;
   return (

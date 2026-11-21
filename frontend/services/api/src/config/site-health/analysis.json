@@ -33,7 +33,8 @@
         "jsonld_depth": 12,
         "name_chars": 256,
         "same_as_entries": 8,
-        "same_as_chars": 256
+        "same_as_chars": 256,
+        "paragraphs_kept": 200
       },
       "reference_snippet_kept_attributes": [
         "aria-describedby",
@@ -644,6 +645,7 @@
         "no_recommended_properties",
         "no_required_properties",
         "no_schema_names",
+        "no_question_headings",
         "no_section_headings",
         "no_sitemap",
         "no_sitemap_lastmod",
@@ -651,6 +653,9 @@
         "not_site_root",
         "other_page_kind",
         "quote_led_offer",
+        "root_not_https",
+        "sitemap_invalid",
+        "structured_data_invalid",
         "trait_not_observed"
       ],
       "unavailable_reasons": [
@@ -684,6 +689,12 @@
         "min_words": 50,
         "shingle_words": 3,
         "max_hamming_distance": 3
+      },
+      "on_page_advisories": {
+        "title_length": { "min_chars": 30, "max_chars": 60 },
+        "meta_description_length": { "min_chars": 70, "max_chars": 160 },
+        "thin_content_min_words": 300,
+        "long_paragraph_max_words": 150
       }
     },
     "acquisition": {
@@ -705,6 +716,22 @@
         "bot_blocked": "bot_blocked",
         "access_blocked": "access_blocked",
         "crawl_overdue": "crawl_overdue"
+      },
+      "tls_certificate_error_codes": {
+        "CERT_HAS_EXPIRED": "tls_cert_expired",
+        "CERT_NOT_YET_VALID": "tls_cert_not_yet_valid",
+        "DEPTH_ZERO_SELF_SIGNED_CERT": "tls_cert_self_signed",
+        "SELF_SIGNED_CERT_IN_CHAIN": "tls_cert_self_signed",
+        "ERR_TLS_CERT_ALTNAME_INVALID": "tls_cert_hostname_mismatch",
+        "HOSTNAME_MISMATCH": "tls_cert_hostname_mismatch",
+        "UNABLE_TO_VERIFY_LEAF_SIGNATURE": "tls_cert_untrusted",
+        "UNABLE_TO_GET_ISSUER_CERT": "tls_cert_untrusted",
+        "UNABLE_TO_GET_ISSUER_CERT_LOCALLY": "tls_cert_untrusted",
+        "CERT_UNTRUSTED": "tls_cert_untrusted",
+        "CERT_REVOKED": "tls_cert_revoked",
+        "CERT_SIGNATURE_FAILURE": "tls_cert_invalid",
+        "CERT_REJECTED": "tls_cert_invalid",
+        "INVALID_CA": "tls_cert_invalid"
       },
       "provenance": {
         "transport_node": "node",

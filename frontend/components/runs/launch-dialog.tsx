@@ -10,10 +10,11 @@ import { useProjectMarkets } from '@/lib/project/use-project-markets';
 import {
   auditablePrompts,
   buildLaunchPayload,
-  canLaunch,
+  launchBlocker,
   DEFAULT_REPETITIONS,
   promptBatches,
 } from '@/lib/runs/launch';
+import { mainPromptSet } from '@/lib/prompts/prompt-sets';
 import { useConfiguredEngines } from '@/lib/runs/use-configured-engines';
 
 import { LaunchDialogView } from './launch-dialog-view';
@@ -40,7 +41,7 @@ function batchSelection(
   locked: boolean,
 ) {
   const effectivePromptSetId =
-    fixedPromptSetId ?? selectedPromptSetId ?? promptSets?.[0]?.id ?? null;
+    fixedPromptSetId ?? selectedPromptSetId ?? mainPromptSet(promptSets ?? [])?.id ?? null;
   const set = promptSets?.find((item) => item.id === effectivePromptSetId);
   const batches = locked ? [] : promptBatches(auditablePrompts(set));
   const selectedBatch = batchIndex === null ? undefined : batches[batchIndex];
@@ -53,7 +54,6 @@ function batchSelection(
   };
 }
 
-/** Launch controller: queries, mutations, and form selection stay here; UI is in the view. */
 export function LaunchDialog({
   open,
   onOpenChange,
@@ -78,10 +78,7 @@ export function LaunchDialog({
     ...promptsQueries.sets({ workspaceId, projectId }),
     enabled: open,
   });
-  const { configuredEngines, unverifiedEngines, enginesReady, catalog } = useConfiguredEngines(
-    open,
-    workspaceId,
-  );
+  const { configuredEngines, enginesReady, catalog } = useConfiguredEngines(open, workspaceId);
   // One contract, derived from the same values the payload is built from:
   // `fixedPromptIds` wins in `buildLaunchPayload`, so it must also lock the
   // field and name the selection. Locking only on `fixedPromptSetId` left the
@@ -107,20 +104,13 @@ export function LaunchDialog({
   }, [open, enginesReady, configuredEngines, catalog]);
   const [repetitions, setRepetitions] = useState(DEFAULT_REPETITIONS);
   const markets = useProjectMarkets(projectId, workspaceId, open);
-  // The default market alone until the reader picks more.
   const [marketIds, setMarketIds] = useState<(string | null)[]>([null]);
-  // The inline provider setup: closed, open on no particular provider, or
-  // open on the provider that measures the engine the user clicked.
   const [connecting, setConnecting] = useState<LogicalEngine | 'any' | null>(null);
-  // Closed here, whoever closed it (the user, or the owner after a launch), so
-  // the next open never lands on a stale setup panel.
   const [wasOpen, setWasOpen] = useState(open);
   if (open !== wasOpen) {
     setWasOpen(open);
     if (!open) setConnecting(null);
   }
-  // `null` means the whole set. A caller that already fixed the prompts owns
-  // the selection outright, so batching is not offered there.
   const [batchIndex, setBatchIndex] = useState<number | null>(null);
   const promptSelection = useMemo(
     () =>
@@ -141,8 +131,6 @@ export function LaunchDialog({
       fixedSelection.locked,
     ],
   );
-  // An engine whose route went inactive leaves the picker and the payload
-  // together; both render from this one reconciled selection.
   const selectedEngines = useMemo(
     () => engines.filter((engine) => configuredEngines.includes(engine)),
     [engines, configuredEngines],
@@ -156,9 +144,9 @@ export function LaunchDialog({
     repetitions,
     auditScope,
   };
-  // The accepted repetition range arrives with the prompt-set list; no payload is built before it.
   const limits = promptSetsQuery.data?.limits ?? null;
-  const ready = limits !== null && canLaunch(selection);
+  const blocker = limits === null ? 'Checking the run limits…' : launchBlocker(selection);
+  const ready = blocker === null;
   const estimateQuery = useQuery({
     ...runsQueries.estimate(
       workspaceId,
@@ -196,10 +184,8 @@ export function LaunchDialog({
       repetitionLimits={limits}
       promptSetsRead={promptSetsQuery}
       configuredEngines={configuredEngines}
-      unverifiedEngines={unverifiedEngines}
       promptSetId={promptSelection.effectivePromptSetId}
       setPromptSetId={(id) => {
-        // A batch index means nothing against a different set's prompts.
         setPromptSetId(id);
         setBatchIndex(null);
       }}
@@ -223,7 +209,7 @@ export function LaunchDialog({
       setConnecting={setConnecting}
       promptSetLocked={fixedSelection.locked}
       promptSelectionLabel={fixedSelection.label}
-      selectionReady={ready}
+      blocker={blocker}
     />
   );
 }

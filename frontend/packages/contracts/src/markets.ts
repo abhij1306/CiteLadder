@@ -1,12 +1,5 @@
 import { z } from 'zod';
 
-/**
- * Measurement markets: the countries and languages a project can be measured
- * from. One list feeds the setup and project pickers, the market editor and
- * the API's validation, so the UI never offers a market the API rejects.
- * Which search surfaces support each country is the API's reviewed DataForSEO
- * locations file, not this list.
- */
 export type MarketOption = { value: string; label: string };
 
 export const MARKET_COUNTRIES: readonly MarketOption[] = [
@@ -72,7 +65,6 @@ export const MARKET_LANGUAGES: readonly MarketOption[] = [
 const labelOf = (options: readonly MarketOption[], value: string) =>
   options.find((option) => option.value === value)?.label ?? value;
 
-/** "Germany · German": a market's display name from its country and language. */
 export function marketLabel(market: { country_code: string; language_code: string }): string {
   const parts = [
     market.country_code && labelOf(MARKET_COUNTRIES, market.country_code.toUpperCase()),
@@ -95,7 +87,6 @@ const marketLanguageSchema = z
   .trim()
   .refine((value) => languages.has(value), 'Unsupported market language');
 
-/** A project's measurement market; the project default has `id: null`. */
 export const projectMarketSchema = z.object({
   id: z.uuid().nullable(),
   label: z.string(),
@@ -113,7 +104,6 @@ export const projectMarketCreateSchema = z.object({
 });
 export type ProjectMarketCreate = z.input<typeof projectMarketCreateSchema>;
 
-/** The market a run measured, frozen at admission. */
 export const auditMarketSchema = z.object({
   id: z.uuid().nullable(),
   country_code: z.string(),

@@ -37,7 +37,6 @@ import {
 
 const logger = getLogger('app.connectors.agent.client');
 
-/** Anthropic's own API; any other destination speaks OpenAI-compatible chat completions. */
 export function isAnthropicEndpoint(endpoint: URL) {
   return endpoint.hostname === 'api.anthropic.com';
 }
@@ -47,10 +46,6 @@ type Settings = Pick<
   'apiKey' | 'model' | 'timeoutSeconds' | 'maxOutputTokens' | 'attempts'
 >;
 
-/**
- * The SDK's failures as the gateway's own codes: no provider body or credential enters them.
- * A passed deadline is a timeout, distinct from a dropped connection or a caller's cancellation.
- */
 function modelError(error: unknown, signal: AbortSignal) {
   if (error instanceof ModelError) return error;
   if (error instanceof APIConnectionTimeoutError) return new ModelError('timeout');
@@ -67,15 +62,9 @@ function modelError(error: unknown, signal: AbortSignal) {
       retryAfterHeader(error.headers?.get('retry-after')),
     );
   }
-  // A stream that ends in an error event, or a response the SDK cannot read.
   return new ModelError(error instanceof APIError ? 'connection' : 'parse');
 }
 
-/**
- * Messages API calls through the official SDK. A schema is enforced as a
- * structured output; the reply always streams so a long answer never meets the
- * SDK's non-streaming time guard, and a listener sees the text as it arrives.
- */
 function anthropicClient(settings: Settings, transport: Transport, endpoint: URL) {
   return new Anthropic({
     apiKey: settings.apiKey,
@@ -87,7 +76,6 @@ function anthropicClient(settings: Settings, transport: Transport, endpoint: URL
   });
 }
 
-/** One deadline across the SDK's retries, as the OpenAI-compatible path keeps. */
 const deadline = (settings: Settings, signal?: AbortSignal) =>
   callDeadline(settings.timeoutSeconds, signal);
 
@@ -125,12 +113,10 @@ export function anthropicCompletion(
     const content = message.content
       .flatMap((block) => (block.type === 'text' ? [block.text] : []))
       .join('');
-    // A refusal or an empty turn carries no answer to read.
     if (!content.trim()) throw new ModelError('parse');
     const latency = Math.round(performance.now() - started);
     logger.info('default agent call ok', { latency_ms: latency, model: settings.model });
     const { usage } = message;
-    // An omitted cache count is unknown, not zero; so is any total built from it.
     const cached = usage.cache_read_input_tokens ?? null;
     const written = usage.cache_creation_input_tokens ?? null;
     return {
@@ -162,19 +148,10 @@ const ANTHROPIC_STOPS: Record<string, ConversationStop> = {
   pause_turn: 'pause_turn',
 };
 
-/** Searches the provider ran for this call; it bills each beside the tokens. */
 function webSearchRequests(usage: BetaUsage) {
   return usage.server_tool_use?.web_search_requests ?? 0;
 }
 
-/**
- * Prompt tokens by class. Input counts every prompt token, cached or not, as
- * OpenAI-compatible usage does; a compaction's own tokens are billed too but
- * are not in the top-level counts, so they are added from its iteration.
- * One-hour cache writes are billed above five-minute ones, so they are counted
- * apart; every breakpoint this adapter sends lives an hour, so a count without
- * the TTL breakdown is all one-hour writes.
- */
 function conversationUsage(usage: BetaUsage): Record<string, number | null> {
   const compactions = (usage.iterations ?? []).flatMap((entry) =>
     entry.type === 'compaction' ? [entry] : [],
@@ -183,7 +160,6 @@ function conversationUsage(usage: BetaUsage): Record<string, number | null> {
     compactions.reduce((total, entry) => total + pick(entry), 0);
   const cached = usage.cache_read_input_tokens;
   const written = usage.cache_creation_input_tokens;
-  // An omitted cache count is unknown, not zero; so is any total built from it.
   if (cached === null || written === null)
     return {
       input_tokens: null,
@@ -206,13 +182,11 @@ function conversationUsage(usage: BetaUsage): Record<string, number | null> {
     cache_write_input_tokens: write,
     // The breakdown arrives at stream start; a later total never makes it the larger.
     cache_write_1h_input_tokens: Math.min(hourWrites, write),
-    // Thinking is billed inside output; its share is recorded for the audit.
     reasoning_tokens: usage.output_tokens_details?.thinking_tokens ?? null,
     web_search_requests: webSearchRequests(usage),
   };
 }
 
-/** Each sampling step's own counts, so compaction cost and cache use can be read apart. */
 function usageIterations(usage: BetaUsage): UsageIteration[] {
   return (usage.iterations ?? []).flatMap((entry) =>
     'input_tokens' in entry
@@ -229,7 +203,6 @@ function usageIterations(usage: BetaUsage): UsageIteration[] {
   );
 }
 
-/** The response's cache diagnosis; without a previous response there was nothing to compare. */
 function cacheDiagnosis(
   previousResponseId: string | null,
   diagnostics: BetaMessage['diagnostics'],
@@ -256,20 +229,10 @@ function cacheDiagnosis(
 
 const HOUR_CACHE = { type: 'ephemeral', ttl: '1h' } as const;
 
-/** Provider-hosted web search, at most `maxUses` searches in this call. */
 function webSearchTool(maxUses: number): BetaWebSearchTool20250305 {
   return { type: 'web_search_20250305', name: WEB_SEARCH, max_uses: maxUses };
 }
 
-/**
- * The messages as sent: stored blocks unchanged, plus two cache breakpoints
- * (a marker is not part of the cached prefix, so adding one keeps the bytes
- * the cache compares). One sits where the previous call's automatic breakpoint
- * wrote, the end of the message before the newest answer, so a step that adds
- * more blocks than the cache looks back over still reads the whole history.
- * The other sits on the newest compaction block, which replaces everything
- * before it; a breakpoint before that block would mark ignored content.
- */
 export function cachedMessages(messages: readonly ConversationMessage[]): BetaMessageParam[] {
   const compactedAt = messages.findLastIndex((message) =>
     message.content.some((block) => block.type === 'compaction'),
@@ -286,23 +249,10 @@ export function cachedMessages(messages: readonly ConversationMessage[]): BetaMe
         position === message.content.findLastIndex((item) => item.type === 'compaction');
       return atBoundary || compaction ? { ...block, cache_control: HOUR_CACHE } : block;
     });
-    // Stored provider blocks are replayed verbatim; the API validates them.
     return { role: message.role, content: marked } as BetaMessageParam;
   });
 }
 
-/**
- * Native tool calling. The stable system prefix carries one cache breakpoint;
- * top-level automatic caching covers the growing conversation; server-side
- * compaction bounds a long chat. Every breakpoint lives an hour, so a person
- * who pauses between turns still reads the chat from cache. Messages are sent
- * exactly as stored, so a replayed transcript keeps its thinking blocks and
- * its cache; each call names the chat's previous response so the API reports
- * why any cache read fell short. Effort and thinking stay fixed per call shape,
- * since a change to either misses the message cache. A call with a web search
- * allowance declares Anthropic's hosted search last, capped at that allowance;
- * its blocks, including encrypted results, are stored and replayed unchanged.
- */
 export function anthropicConversation(
   settings: Settings,
   transport: Transport,

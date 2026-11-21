@@ -1,4 +1,3 @@
-/** One deterministic interpretation of immutable page facts: kind, traits, evaluations, scores. */
 import { classify } from './page-kinds.ts';
 import { record, text, type Facts } from './read-facts.ts';
 import { evaluatePageRules } from './rules.ts';
@@ -8,9 +7,7 @@ import { deriveTraits } from './traits.ts';
 export type PageContext = {
   sitemapMember: boolean;
   sitemapUrl?: string | null;
-  /** The `<lastmod>` the sitemap declares for `sitemapUrl`, as written. */
   sitemapLastmod?: string | null;
-  /** Only the crawl root carries site-level facts (robots.txt, llms.txt). */
   siteFacts: Facts | null;
   auditTime: string | null;
   sources?: {

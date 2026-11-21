@@ -1,23 +1,18 @@
 import type { PromptCandidate } from '@citeladder/contracts';
 
-export function qualityStatusLabel(candidate: PromptCandidate): string {
+export function qualityStatusLabel(candidate: PromptCandidate): string | null {
   switch (candidate.quality_status) {
     case 'judged':
-      return candidate.quality_flags.length ? 'Needs your review' : 'Quality checked';
+      return candidate.quality_flags.length ? 'Needs your review' : null;
     case 'off':
       return 'Quality checking was off for this batch';
     case 'unavailable':
-      return 'Quality check unavailable — review carefully';
+      return 'Quality check unavailable. Review carefully.';
     case 'not_judged':
       return 'Not quality checked';
   }
 }
 
-/**
- * Review copy for the quality judge's flags on a generated candidate.
- * Flags are signals about the question asked, never a score for the business;
- * an unknown flag code falls back to a generic prompt to double-check.
- */
 const QUALITY_FLAG_COPY: Record<string, string> = {
   decision_value: 'May be too generic to guide a buying decision',
   fits_business: 'May not fit your business',

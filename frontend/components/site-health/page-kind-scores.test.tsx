@@ -45,18 +45,12 @@ describe('PageKindScores', () => {
   it('keeps its section with an empty state before any score summary exists', () => {
     render(<PageKindScores crawl={null} dashboard={undefined} />);
     expect(screen.getByRole('heading', { name: 'Scores by page kind' })).toBeInTheDocument();
-    expect(
-      screen.getByRole('heading', { name: 'Scores by page kind appear after the first analysis' }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'No analysis yet' })).toBeInTheDocument();
   });
 
   it('says the pages are not classified yet, distinct from no summary', () => {
     render(<PageKindScores crawl={null} dashboard={dashboard(summary())} />);
-    expect(
-      screen.getByRole('heading', {
-        name: 'Per-page-kind scores appear once the analysis classifies your pages',
-      }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Pages not classified yet' })).toBeInTheDocument();
   });
 
   it('renders one row per classified type with analyzed count + mean scores', () => {
@@ -91,17 +85,12 @@ describe('PageKindScores', () => {
         )}
       />,
     );
-    // Humanized type badges.
     expect(screen.getByText('Homepage')).toBeInTheDocument();
     expect(screen.getByText('Article')).toBeInTheDocument();
-    // Analyzed counts.
     expect(screen.getByText('3')).toBeInTheDocument();
     expect(screen.getByText('1')).toBeInTheDocument();
-    // Mean scores formatted like every other score cell.
     expect(screen.getByText('80')).toBeInTheDocument();
-    // Scores render as whole numbers everywhere.
     expect(screen.getByText('91')).toBeInTheDocument();
-    // PAGE_KINDS display order: Homepage row precedes the Article row.
     const homepage = screen.getByText('Homepage');
     const article = screen.getByText('Article');
     expect(

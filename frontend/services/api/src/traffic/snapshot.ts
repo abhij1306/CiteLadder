@@ -1,4 +1,3 @@
-/** Traffic refresh and display-only range projection. No provider I/O. */
 import { randomUUID } from 'node:crypto';
 
 import { blake2b } from '@noble/hashes/blake2.js';
@@ -42,11 +41,6 @@ type TargetWindow = {
 };
 type Target = TargetWindow & { builder: TrafficProjectionBuilder };
 
-/**
- * The Demand handoff revision: an order-independent digest (XOR of BLAKE2b-128
- * row-ID hashes) of the selected rows in the Demand window, so an unchanged
- * window dedupes however the refresh was triggered.
- */
 class DemandRevision {
   private count = 0;
   private digest = 0n;
@@ -152,7 +146,6 @@ async function replaceStats(
       .where('project_id', '=', projectId)
       .where('snapshot_id', '=', snapshotId)
       .execute();
-  // Bound lookup and insert parameter counts as well as evidence reads.
   const size = p.TRAFFIC_METRIC_ROW_BATCH_SIZE;
   const ids = new Map<string, string>();
   for (let i = 0; i < projection.pages.length; i += size)
@@ -251,7 +244,6 @@ async function scan(
 
 type PersistedWindow = { start: string; end: string; granularity: string };
 
-/** Every preset window ending at the Search Console anchor, at every granularity. */
 function presetTargets(anchor: string): TargetWindow[] {
   return p.PERFORMANCE_SNAPSHOT_WINDOW_DAYS.flatMap((days) =>
     p.TRAFFIC_SNAPSHOT_GRANULARITIES.map((grain) => ({
@@ -264,13 +256,6 @@ function presetTargets(anchor: string): TargetWindow[] {
   );
 }
 
-/**
- * The snapshots one refresh writes: the trigger window (display ranges only
- * where a granularity is missing), the presets ending at the Search Console
- * anchor, the Demand policy window ending there too, and every other
- * persisted non-preset window overlapping the trigger window, so a revised
- * day never leaves an earlier custom range stale.
- */
 function planTargets(input: {
   displayOnly: boolean;
   windowStart: string;
@@ -340,7 +325,6 @@ function executor(displayOnly: boolean): Executor {
           .where('window_end', '=', sql<Date>`${windowEnd}::date`)
           .execute()
       : [];
-    // Earlier preset windows are never read again; every other window is.
     const overlapping = displayOnly
       ? []
       : await scope
@@ -366,7 +350,6 @@ function executor(displayOnly: boolean): Executor {
     });
     const { demandWindow } = plan;
     if (!isNonEmpty(plan.targets)) return;
-    // AI referrals come from the persisted classifications the headline reads (OD3).
     const referrals = await readReferralClassifications(db, {
       ...partitionScope,
       ...textSpan(plan.targets),
@@ -440,7 +423,6 @@ function executor(displayOnly: boolean): Executor {
             trx,
             { workspaceId: task.workspace_id, projectId },
             { kind: 'traffic_snapshot', id: snapshotId },
-            // Demand re-interprets the window first and carries the refresh.
             { refresh: null, revision: task.id, maxAttempts },
           ),
         ),

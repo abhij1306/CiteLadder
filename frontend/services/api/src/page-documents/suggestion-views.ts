@@ -1,10 +1,3 @@
-/**
- * A page document's suggestions as the person and the model see them against
- * its latest revision: each one's status, where its text is now, and whether
- * it competes with another open suggestion. Reads compute this from the
- * persisted revisions and events and never write; a suggestion that no longer
- * holds is marked stale only by the next write.
- */
 import { z } from 'zod';
 import {
   agentSuggestionGuidanceSchema,
@@ -34,7 +27,6 @@ const p = policy.content_optimization.suggestions;
 const iso = (date: Date) => date.toISOString();
 const guidanceSchema = agentSuggestionGuidanceSchema.nullable();
 
-/** One suggestion against the latest revision. `located` is set for an open one only. */
 export type Entry = {
   suggestion: Suggestion;
   status: ReturnType<typeof statusOf>;
@@ -44,7 +36,6 @@ export type Entry = {
 };
 
 const FIELD_ORDER = ['title', 'meta_description', 'json_ld'];
-/** Body spans in position order, then SEO fields, then page-wide suggestions; ties by creation. */
 function rank(entry: Entry): [number, number] {
   const { anchor } = entry.suggestion;
   if (entry.position) return [0, entry.position.start];
@@ -63,7 +54,6 @@ function byPosition(left: Entry, right: Entry) {
 
 const holds = (entry: Entry) => entry.status === 'open' && entry.located?.ok === true;
 
-/** Every suggestion of the document against the chain's latest revision, in position order. */
 function board(suggestions: readonly Suggestion[], chain: RevisionChain): Entry[] {
   const entries = suggestions.map((suggestion): Entry => {
     const status = statusOf(suggestion);
@@ -82,7 +72,6 @@ function board(suggestions: readonly Suggestion[], chain: RevisionChain): Entry[
   return entries.toSorted(byPosition);
 }
 
-/** One entry as the API returns it. */
 export function suggestionView(entry: Entry): z.infer<typeof agentSuggestionSchema> {
   const { row, anchor, dependsOn, events } = entry.suggestion;
   return agentSuggestionSchema.parse({
@@ -92,7 +81,6 @@ export function suggestionView(entry: Entry): z.infer<typeof agentSuggestionSche
     source: row.source,
     category: row.category,
     rule_id: row.rule_id,
-    // As stored when it was made; a later catalog change never rewrites it.
     guidance: guidanceSchema.parse(row.rule_guidance),
     rationale: row.rationale,
     anchor,
@@ -114,7 +102,6 @@ export function suggestionView(entry: Entry): z.infer<typeof agentSuggestionSche
   });
 }
 
-/** Counts per status, open needs-input ones, and open ones per category in catalog order. */
 function countsOf(entries: readonly Entry[]) {
   const status = (value: Entry['status']) => entries.filter((entry) => entry.status === value);
   const open = status('open');
@@ -131,14 +118,12 @@ function countsOf(entries: readonly Entry[]) {
   };
 }
 
-/** A document's suggestions with the chain they were judged against. */
 export async function documentBoard(db: Database, workspaceId: string, outputId: string) {
   const suggestions = await loadSuggestions(db, workspaceId, outputId);
   const chain = await loadChain(db, workspaceId, outputId, suggestions);
   return { chain, entries: board(suggestions, chain) };
 }
 
-/** `GET …/outputs/{output_id}/suggestions`: open, applied and dismissed ones, and the counts. */
 export async function listSuggestions(
   db: Database,
   workspace: Pick<Scope, 'workspaceId'>,
@@ -168,30 +153,23 @@ const clip = (text: string) =>
     text.length > p.turn_list_quote_chars ? `${text.slice(0, p.turn_list_quote_chars)}…` : text,
   );
 
-/** What a suggestion targets, as the model reads it. */
 function digestTarget(anchor: Entry['suggestion']['anchor']) {
   if (anchor.kind === 'span') return `text ${clip(anchor.quote.exact)}`;
   if (anchor.kind === 'field') return `${anchor.field} ${clip(anchor.expected)}`;
   return 'the page';
 }
 
-/** What a suggestion offers: its text, the input it needs, else advice only. */
 function digestOffer(row: Entry['suggestion']['row']) {
   if (row.replacement !== null) return `→ ${clip(row.replacement)}`;
   if (row.needs_input !== null) return `asks ${clip(row.needs_input)}`;
   return 'advice';
 }
 
-/** One suggestion as a line the model reads: its id, status, what it targets and what it offers. */
 function digestLine(entry: Entry) {
   const { row, anchor } = entry.suggestion;
   return `- ${row.id} [${entry.status}] ${row.category}, ${row.rule_id}, ${row.source}: ${digestTarget(anchor)} ${digestOffer(row)}`;
 }
 
-/**
- * The document's suggestions for the model at the start of a turn, open ones
- * first, bounded by config; null when it has none.
- */
 export function turnDigest(entries: readonly Entry[]) {
   if (!entries.length) return null;
   const ordered = [

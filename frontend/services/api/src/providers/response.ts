@@ -1,4 +1,3 @@
-/** Drain a credentialed provider response under its request deadline and byte budget. */
 export async function boundedJson(
   response: Response,
   maxBytes: number,

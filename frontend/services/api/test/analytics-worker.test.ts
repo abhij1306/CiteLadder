@@ -1,9 +1,3 @@
-/**
- * The TypeScript analytics worker against real PostgreSQL: the referral chain
- * from a queued ingest to persisted snapshots, workspace isolation of the
- * artifact it reads, the retention horizon, and the terminal accounting of
- * the one finalize (retry, exhaustion, not wired, cancelled, lost lease).
- */
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { policy } from '../src/config.ts';
@@ -42,11 +36,9 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
-  // The worker claims across workspaces: clear what earlier tests here left.
   if (created.length > 0) {
     await db.deleteFrom('analytics_tasks').where('workspace_id', 'in', created).execute();
   }
-  // Grants and property mappings are unique per workspace: one per test.
   workspaceId = await fixtures.joinedWorkspace(owner);
   otherWorkspaceId = await fixtures.joinedWorkspace(owner);
   created.push(workspaceId, otherWorkspaceId);
@@ -68,7 +60,6 @@ const tasks = (kind: string) =>
 
 const worker = (executors?: Record<string, Executor>) =>
   new AnalyticsWorker(db, settings, { owner: 'worker-test', executors });
-/** Held to this test's tasks. */
 const scoped = (
   taskIds: string[],
   executors?: Record<string, Executor>,
@@ -95,7 +86,6 @@ it('reports a retry as the runner lane next due time, so the drain waits for it'
     .where('id', '=', id)
     .execute();
   const due = await worker().nextDue();
-  // Other tenants may hold earlier work; none of it may hide this retry.
   expect(due!.getTime()).toBeLessThanOrEqual(soon.getTime());
 });
 
@@ -189,7 +179,6 @@ describe('referral chain', () => {
       payload: { import_artifact_id: seed.artifactId },
     });
 
-    // ingest -> classify -> ai_referrals_snapshot_refresh.
     expect(await drain()).toBe(3);
 
     const classifications = await db
@@ -219,7 +208,6 @@ describe('referral chain', () => {
     ]);
     const [refresh] = await tasks('ai_referrals_snapshot_refresh');
     expect(refresh?.status).toBe('succeeded');
-    // The refresh rebuilds this import's revision.
     expect(refresh?.payload).toMatchObject({ source_revision: seed.syncRunId });
 
     const snapshot = await db
@@ -242,7 +230,6 @@ describe('referral chain', () => {
       ],
       sources: [{ ai_source: 'chatgpt', sessions: 5, share: 0.625 }],
     });
-    // The 30/90/365-day family exists at every granularity a preset read can ask for.
     const presets = await db
       .selectFrom('ai_referrals_snapshots')
       .select(['preset_window_days', 'granularity'])
@@ -526,7 +513,6 @@ describe('finalize', () => {
   it('fails a kind with no executor without retrying it', async () => {
     const { ingest_referrals: _removed, ...rest } = EXECUTORS;
     const id = await enqueue(db, { workspaceId, projectId, kind: 'ingest_referrals', payload: {} });
-    // A scoped worker claims only kinds it has executors for; this needs the global claim.
     await worker(rest).runOnce();
     expect(await read(id)).toMatchObject({
       status: 'failed',

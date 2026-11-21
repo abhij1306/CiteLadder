@@ -14,7 +14,6 @@ const PROJECT = '11111111-1111-4111-8111-111111111111';
 const OLD = '22222222-2222-4222-8222-222222222222';
 const NEW = '33333333-3333-4333-8333-333333333333';
 
-/** Picks the observation at `index` in one side's options (0 is the placeholder). */
 async function pickObservation(
   user: ReturnType<typeof userEvent.setup>,
   side: 'Before' | 'After',
@@ -74,7 +73,6 @@ it('keeps the observations and the pager on screen while the next page loads', a
   renderWithProviders(<RobotsHistory workspaceId={WORKSPACE} projectId={PROJECT} />);
   const table = await screen.findByRole('table', { name: 'robots.txt observation sequence' });
   expect(await within(table).findByRole('cell', { name: '13 characters' })).toBeVisible();
-  // A snapshot is named by what it holds, never by its stored ID.
   expect(table).not.toHaveTextContent(NEW);
 
   await user.click(screen.getByRole('button', { name: 'Next page' }));
@@ -104,8 +102,7 @@ it('diffs two observations line by line across line-ending styles', async () => 
   );
   renderWithProviders(<RobotsHistory workspaceId={WORKSPACE} projectId={PROJECT} />);
 
-  // Options list the placeholder, then observations newest first.
-  await screen.findByRole('button', { name: 'All filters' });
+  await screen.findByRole('button', { name: /^Before:/ });
   await pickObservation(user, 'Before', 2);
   await pickObservation(user, 'After', 1);
 
@@ -117,7 +114,6 @@ it('diffs two observations line by line across line-ending styles', async () => 
     ' # end',
   ]);
 
-  // The same observation on both sides has nothing to compare.
   await pickObservation(user, 'Before', 1);
   expect(screen.queryByRole('list', { name: 'robots.txt line diff' })).not.toBeInTheDocument();
 });

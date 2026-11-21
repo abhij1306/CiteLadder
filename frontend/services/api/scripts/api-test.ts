@@ -8,7 +8,7 @@
  *   pnpm --filter @citeladder/api test:local test/projects.test.ts
  *   pnpm --filter @citeladder/api test:local --types
  */
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync, spawnSync, type SpawnSyncOptions } from 'node:child_process';
 import { closeSync, openSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -48,16 +48,12 @@ const command = types ? ['db:types'] : ['exec', 'vitest', 'run', ...files];
 const output = openSync(log, 'w');
 let status: number | null;
 try {
-  const [program, programArgs] =
-    process.platform === 'win32'
-      ? [process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', 'pnpm', ...command]]
-      : ['pnpm', command];
-  status = spawnSync(program, programArgs, {
+  const options = {
     cwd: apiRoot,
     env,
     stdio: ['ignore', output, output],
-    windowsHide: true,
-  }).status; // NOSONAR: trusted PATH.
+  } satisfies SpawnSyncOptions;
+  status = spawnSync('pnpm', command, options).status; // NOSONAR: trusted PATH.
 } finally {
   closeSync(output);
 }

@@ -34,9 +34,7 @@ describe('SiteHealthScreen — the one crawl action', () => {
     const options = screen.getByRole('button', { name: 'More crawl options' });
     await waitFor(() => expect(options).toBeEnabled());
     await user.click(options);
-    await user.click(
-      await screen.findByRole('menuitem', { name: 'Run new crawl respecting robots.txt' }),
-    );
+    await user.click(await screen.findByRole('menuitem', { name: 'Respect robots.txt' }));
     await waitFor(() => expect(bodies).toEqual([{ project_id: PROJECT, robots: 'respect' }]));
   });
 
@@ -55,17 +53,13 @@ describe('SiteHealthScreen — the one crawl action', () => {
     const options = await screen.findByRole('button', { name: 'More crawl options' });
     await waitFor(() => expect(options).toBeEnabled());
     await user.click(options);
-    await user.click(
-      await screen.findByRole('menuitem', { name: 'Run new crawl ignoring robots.txt…' }),
-    );
+    await user.click(await screen.findByRole('menuitem', { name: 'Ignore robots.txt' }));
     const dialog = await screen.findByRole('dialog', { name: 'Ignore robots.txt for this crawl?' });
     await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
     expect(started).toEqual([]);
 
     await user.click(options);
-    await user.click(
-      await screen.findByRole('menuitem', { name: 'Run new crawl ignoring robots.txt…' }),
-    );
+    await user.click(await screen.findByRole('menuitem', { name: 'Ignore robots.txt' }));
     await user.click(
       within(await screen.findByRole('dialog')).getByRole('button', {
         name: 'I am authorized, run crawl',
@@ -91,9 +85,7 @@ describe('SiteHealthScreen — the one crawl action', () => {
     const options = await screen.findByRole('button', { name: 'More crawl options' });
     await waitFor(() => expect(options).toBeEnabled());
     await user.click(options);
-    await user.click(
-      await screen.findByRole('menuitem', { name: 'Run new crawl ignoring robots.txt…' }),
-    );
+    await user.click(await screen.findByRole('menuitem', { name: 'Ignore robots.txt' }));
     await user.click(
       within(await screen.findByRole('dialog')).getByRole('button', {
         name: 'I am authorized, run crawl',

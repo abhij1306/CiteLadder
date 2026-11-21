@@ -3,8 +3,6 @@ import { describe, expect, it } from 'vite-plus/test';
 import { evidenceFacts, evidenceLead } from './issue-evidence';
 import { siteLevelEvidence } from './site-level-evidence';
 
-// Every evidence blob below is a verbatim row from a real persisted crawl
-// (hiutdenim.co.uk, 200 pages) — the shapes these formatters have to survive.
 describe('evidenceFacts', () => {
   it('names the absent notations rather than restating the title', () => {
     expect(
@@ -35,7 +33,6 @@ describe('evidenceFacts', () => {
     expect(evidenceFacts('technical.sitemap_url_unreachable', evidence)).toEqual([
       'https://example.test/gone → 404',
     ]);
-    // A link on the page reads as its path, under a lead naming where it is.
     expect(evidenceFacts('technical.broken_internal_link', evidence)).toEqual(['/gone → 404']);
     expect(evidenceLead('technical.broken_internal_link')).toBe('Broken links on this page:');
   });
@@ -118,6 +115,24 @@ describe('evidenceFacts', () => {
     ).toEqual(['noindex, nofollow']);
   });
 
+  it('names each duplicate set by its shared text and its page count', () => {
+    const set = (text: string, pageCount: number) => ({ text, page_count: pageCount, pages: [] });
+    const evidence = {
+      count: 5,
+      page_kind_counts: { about_contact: 3, article: 2 },
+      coverage_state: 'complete',
+      duplicate_set_count: 2,
+      duplicate_sets: [set('Contact us | Acme', 3), set('About Acme', 2)],
+    };
+    expect(evidenceFacts('architecture.duplicate_titles', evidence)).toEqual([
+      '“Contact us | Acme” (3 pages)',
+      '“About Acme” (2 pages)',
+    ]);
+    expect(evidenceFacts('architecture.duplicate_meta_descriptions', evidence)).toEqual([
+      '“Contact us | Acme” (3 pages)',
+      '“About Acme” (2 pages)',
+    ]);
+  });
   it('reads a site-level architecture finding as the pages it names', () => {
     const evidence = {
       count: 11,
@@ -156,11 +171,37 @@ describe('evidenceFacts', () => {
     expect(
       siteLevelEvidence('architecture.unhubbed_page_kind', {
         count: 1,
-        page_kinds: [{ page_kind: 'product', page_count: 40, duplicate_metadata_count: 2 }],
+        page_kinds: [
+          {
+            page_kind: 'product',
+            page_count: 40,
+            pages: [
+              {
+                site_url_id: 'a80abae1-a069-4f97-a5bd-76d3fc7d041b',
+                url: 'https://www.thenetreturn.com/products/net',
+                title: 'Net',
+                page_kind: 'product',
+              },
+            ],
+          },
+        ],
         page_kind_counts: { product: 40 },
         coverage_state: 'complete',
       }),
-    ).toEqual({ kind: 'page_kinds', pageKinds: [{ pageKind: 'product', pageCount: 40 }] });
+    ).toEqual({
+      kind: 'pages',
+      total: 40,
+      pages: [
+        {
+          siteUrlId: 'a80abae1-a069-4f97-a5bd-76d3fc7d041b',
+          url: 'https://www.thenetreturn.com/products/net',
+          title: 'Net',
+          pageKind: 'product',
+          clicksFromHome: null,
+        },
+      ],
+      sections: [],
+    });
     expect(siteLevelEvidence('technical.indexable', { noindex: true })).toBeNull();
   });
 
@@ -219,7 +260,6 @@ describe('evidenceFacts', () => {
     expect(evidenceFacts('technical.sitewide_link_redirect', evidence)).toEqual([
       '/collections/trail-shoes → /collections/running/ (on 438 pages)',
     ]);
-    // An unanswered link is named unreachable, not dropped.
     expect(
       evidenceFacts('technical.sitewide_broken_link', {
         ...shared,
@@ -332,7 +372,6 @@ describe('evidenceFacts', () => {
         reason: 'offer_state_missing',
       }),
     ).toEqual(['Offer']);
-    // A price shown only as text still lacks the Offer markup itself.
     expect(
       evidenceFacts('aeo.offer_freshness_signal', {
         offer: true,

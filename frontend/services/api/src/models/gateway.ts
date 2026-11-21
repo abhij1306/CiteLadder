@@ -54,7 +54,6 @@ const completionChoice = z.object({
 });
 const completion = z.object({
   model: z.string().optional(),
-  // At least one choice: the first is the answer.
   choices: z.tuple([completionChoice], completionChoice),
   usage: z.record(z.string(), z.unknown()).optional(),
 });
@@ -72,10 +71,6 @@ const streamChunk = z.object({
 });
 type Completion = z.infer<typeof completion>;
 
-/**
- * An OpenAI-compatible event stream folded into the buffered completion shape,
- * so settlement and parsing never depend on how the text arrived.
- */
 async function streamedCompletion(
   response: Response,
   onText: (content: string) => void,
@@ -121,7 +116,6 @@ async function streamedCompletion(
 
 const logger = getLogger('app.connectors.agent.client');
 
-/** The provider's answer, folded from its stream when a listener asked for one. */
 async function readCompletion(
   response: Response,
   onText?: (content: string) => void,
@@ -132,7 +126,6 @@ async function readCompletion(
       return await streamedCompletion(response, onText);
     } catch (error) {
       if (error instanceof ModelError) throw error;
-      // A dropped stream is a connection failure, which the caller may retry.
       throw new ModelError('connection');
     }
   }
@@ -152,7 +145,6 @@ function isPrivateHost(hostname: string) {
   return LOOPBACK_HOSTS.has(hostname) || PRIVATE_IPV4.test(hostname) || !hostname.includes('.');
 }
 
-/** The start of a rejection's body, read without buffering an oversized one. */
 async function errorExcerpt(response: Response, limit = 8192) {
   const reader = response.clone().body?.getReader();
   if (!reader) return '';
@@ -167,12 +159,10 @@ async function errorExcerpt(response: Response, limit = 8192) {
   return text.slice(0, limit);
 }
 
-/** The prompt-only form of a schema, for destinations without strict structured outputs. */
 function withSchema(user: string, schema: unknown) {
   return `${user}\n\nReturn only JSON matching this schema:\n${JSON.stringify(schema)}`;
 }
 
-/** Model text without a leading ``` / ```json fence or a trailing ``` fence. */
 function unfenced(content: string) {
   let text = content.trim();
   if (text.startsWith('```')) {
@@ -212,7 +202,6 @@ export function createModelGateway(
     assertMetered('model_gateway');
     return send(...args);
   };
-  /** Native tool calling for the Agent; a sibling of `complete`, never a widening of it. */
   const converse: Converse = async (...args) => {
     assertMetered('model_gateway');
     return talk(...args);
@@ -227,7 +216,6 @@ export function createModelGateway(
   };
 }
 
-/** The structured-call surface over one `complete`, metered or raw. */
 export function gatewayCalls(complete: Complete) {
   return {
     complete,
@@ -255,22 +243,18 @@ export function gatewayCalls(complete: Complete) {
 }
 export type ModelGateway = ReturnType<typeof createModelGateway>;
 
-/** OpenAI-compatible chat completions, learning per destination what it refuses. */
 function openAICompletion(
   settings: GatewaySettings,
   transport: Transport,
   endpoint: URL,
 ): Complete {
-  // Learned per destination: an older output-cap name, and no strict structured outputs.
   let legacyCap = false;
   let promptSchema = false;
   const retry = { ...settings, retryStatus: transientStatus, retryConnection: true };
   const url = chatCompletionsUrl(endpoint);
   return async (system, user, signal, onText, schema) => {
-    // A listener asks for a stream; the caller gives one only to transports that pass it through.
     const stream = Boolean(onText);
     const started = performance.now();
-    // Retries share one call's timeout, the envelope of a single provider call.
     const deadline = callDeadline(settings.timeoutSeconds, signal);
     const send = (legacy: boolean, strict: boolean) =>
       postModel(

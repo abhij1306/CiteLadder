@@ -23,7 +23,6 @@ describe('a document naming another page than its Action, on PostgreSQL', () => 
       'Content-Type': 'application/json',
     };
   }
-  /** A chat whose first document made `Buyer guide` its Action, then three more documents. */
   async function chatWithNamedDocuments() {
     const scope = await fixtures.scope();
     const first = await fixtures.claimed(scope, { skillId: 'content' });
@@ -95,7 +94,6 @@ describe('a document naming another page than its Action, on PostgreSQL', () => 
         'https://acme.example/pricing',
         { kind: 'page', target: 'https://acme.example/pricing' },
       ],
-      // The same Action, named again with spacing, settles at once.
       [3, true, 'Buyer guide', null],
       [4, true, 'https://acme.example/docs', { kind: 'page', target: 'https://acme.example/docs' }],
     ]);
@@ -112,9 +110,8 @@ describe('a document naming another page than its Action, on PostgreSQL', () => 
     expect(await actionOf(pricingOutput.action_id!)).toEqual({
       target_kind: 'page',
       target_label: 'https://acme.example/pricing',
-      effective_status: 'in_progress',
+      effective_status: 'open',
     });
-    // The chat keeps the Action it was opened for.
     expect(afterLink.chat.action_id).toBe(guideAction);
 
     const kept = await choose(chatId, docs, 'keep', headers);
@@ -126,10 +123,8 @@ describe('a document naming another page than its Action, on PostgreSQL', () => 
       named_target: null,
     });
 
-    // A settled document has nothing left to choose.
     expect((await choose(chatId, docs, 'link', headers)).status).toBe(409);
     expect((await choose(chatId, chat.outputs[0]!.id, 'keep', headers)).status).toBe(409);
-    // A later revision naming another page again does not reopen the choice.
     const again = await fixtures.claimed(scope, { chatId });
     await fixtures
       .runtime(
@@ -166,7 +161,6 @@ describe('a document naming another page than its Action, on PostgreSQL', () => 
       action_id: chat.chat.action_id,
       target_label: 'https://acme.example/pricing',
     });
-    // No Action was created for the named page in either workspace.
     expect(
       await db
         .selectFrom('actions')

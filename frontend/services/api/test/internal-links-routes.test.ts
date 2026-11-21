@@ -60,7 +60,6 @@ describe('internal link analysis admission', () => {
     ]);
     expect(responses.map((response) => response.status)).toEqual([200, 200]);
     const result = internalLinksReadSchema.parse(await (await request(seed)).json());
-    // With no provider configured, execution publishes honest unavailability immediately.
     expect(result.analysis).toMatchObject({ id, state: 'unavailable' });
     expect(result.analysis!.diagnostics!.pending).toBe(0);
     const tasks = await db
@@ -167,7 +166,6 @@ describe('internal link analysis admission', () => {
       { skipIfCurrent: true },
     );
     const result = internalLinksReadSchema.parse(await (await request(seed)).json());
-    // Overlap filtering can retain a different candidate from the same source.
     const link = result.analysis!.recommendations.find((item) => selectedIds.has(item.id))!;
     expect(link).toBeDefined();
     expect(link.action_id).not.toBeNull();
@@ -178,21 +176,38 @@ describe('internal link analysis admission', () => {
       .where('rule_id', '=', 'site_contextual_links')
       .where('superseded_at', 'is', null)
       .executeTakeFirstOrThrow();
+    const orphanMemberId = randomUUID();
     await db
       .insertInto('opportunities')
       .values({
         ...contextualMember,
-        id: randomUUID(),
-        rule_id: 'missing_structured_data',
-        target_key: 'fixture:unrelated',
-        evidence: JSON.stringify({ site_url_id: link.source.site_url_id }),
+        id: orphanMemberId,
+        rule_id: 'site_link_near_orphan',
+        evidence: JSON.stringify({
+          site_url_id: link.source.site_url_id,
+          issues: [
+            {
+              issue_id: randomUUID(),
+              rule_id: 'site_link_near_orphan',
+              severity: 'medium',
+              category: 'links',
+              evidence: {},
+            },
+          ],
+        }),
         source_analysis_ids: JSON.stringify([]),
         source_issue_ids: JSON.stringify([]),
         source_metric_ids: JSON.stringify([]),
       })
       .execute();
+    await db
+      .updateTable('actions')
+      .set({
+        member_opportunity_ids: sql`member_opportunity_ids || ${JSON.stringify([orphanMemberId])}::jsonb`,
+      })
+      .where('id', '=', link.action_id!)
+      .execute();
     const key = randomUUID();
-    // Declarations must fall inside the verification window, so stay relative to now.
     const declaredAt = new Date(Date.now() - 86_400_000).toISOString();
     const declare = (ids: string[]) =>
       app.request(`/api/v1/actions/${link.action_id}/declaration`, {
@@ -221,10 +236,12 @@ describe('internal link analysis admission', () => {
     expect(checks.filter((check) => check.kind === 'contextual_link')).toEqual([
       expect.objectContaining({ recommendation_id: link.id }),
     ]);
-    expect(checks.some((check) => check.kind !== 'contextual_link')).toBe(true);
-    const declaredMembers = saved.member_opportunity_ids as string[];
-    expect(declaredMembers).toContain(contextualMember.id);
-    expect(declaredMembers.length).toBeGreaterThan(1);
+    expect(checks.filter((check) => check.kind !== 'contextual_link')).toEqual([
+      expect.objectContaining({ kind: 'site_rule', rule_id: 'site_link_near_orphan' }),
+    ]);
+    expect((saved.member_opportunity_ids as string[]).toSorted()).toEqual(
+      [contextualMember.id, orphanMemberId].toSorted(),
+    );
     expect((await declare([link.id])).status).toBe(200);
     expect((await declare(selected.map((candidate) => candidate.id))).status).toBe(409);
   });
@@ -258,7 +275,6 @@ describe('internal link analysis admission', () => {
       .where('id', '=', first!.analysis!.id)
       .executeTakeFirstOrThrow();
     expect(saved.manifest).toMatchObject({ page_count: 3 });
-    // The cancelled run's judgment task has not settled, so the slot stays occupied.
     const replacement = { crawl_id: seed.crawl_id, idempotency_key: randomUUID() };
     expect((await request(seed, '/analyses', replacement)).status).toBe(409);
     await db
@@ -279,7 +295,6 @@ describe('internal link analysis admission', () => {
       const input = { crawl_id: seed.crawl_id, idempotency_key: randomUUID() };
       expect((await request(seed, '/analyses', input)).status).toBe(202);
       expect((await request(seed, '/analyses', input)).status).toBe(202);
-      // Free the active slot so only the daily window can refuse the next run.
       await db
         .updateTable('site_internal_link_runs')
         .set({ state: 'cancelled' })

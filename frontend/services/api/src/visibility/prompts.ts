@@ -1,22 +1,10 @@
-/**
- * Prompt scores for one run, or pooled over a period, with their outcomes.
- *
- * Scores are the persisted
- * `PromptMetricSnapshot` rows, strongest first; outcome counts come from the
- * persisted answers and tasks, never a rescore. A pooled period keeps counts
- * and rates and drops every single-run score.
- */
-import type {
-  AnswerStates,
-  measurementCountsSchema,
-  promptMetricItemSchema,
-} from '@citeladder/contracts/visibility';
+import type { promptMetricItemSchema } from '@citeladder/contracts/visibility';
 import { sql } from 'kysely';
 import type { z } from 'zod';
 
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
-import { jsonObject, numberRecord, record, strings } from '../db/json.ts';
+import { jsonObject, numberRecord } from '../db/json.ts';
 import { wireUtc, storedInstant, utcText, utcTextOf } from '../db/timestamps.ts';
 import { compareText } from '../text-order.ts';
 import { groupBy } from '../lists.ts';
@@ -27,9 +15,25 @@ import {
   sharesCellContext,
   type ComparisonCell,
 } from './comparison.ts';
-import { answerCounts, answerRates } from '../analysis/aggregate.ts';
-import { brandIdentities, leadingBrands, type BrandCount } from './brand-identities.ts';
+import { brandWinCounts } from '../analysis/win-rate.ts';
+import {
+  brandIdentities,
+  leadingBrands,
+  namedBrands,
+  type BrandCount,
+} from './brand-identities.ts';
 import { round2 } from './metrics.ts';
+import { brandMentionsByAudit } from './perception.ts';
+import {
+  answerStates,
+  countRates,
+  emptyCounts,
+  outcome,
+  outcomeCounts,
+  poolStates,
+  type Counts,
+} from './prompt-outcomes.ts';
+import { pooledSignals, promptSignals } from './prompt-signals.ts';
 import { runSetComparisonStatus } from './run-sets.ts';
 import { marketOf, type RunScope } from './runs.ts';
 import {
@@ -37,25 +41,17 @@ import {
   authorizeRunSet,
   latestBrandRunId,
   selectedCohorts,
-  validateCohort,
   validateEngineAndRange,
+  validatePromptCohort,
 } from './selection.ts';
 
 const visibility = policy.visibility;
-const { succeeded: SUCCEEDED, failed: FAILED } = policy.task_queue.statuses;
 
 export type PromptMetricItem = z.input<typeof promptMetricItemSchema>;
-type Counts = z.input<typeof measurementCountsSchema>;
-type Outcome = NonNullable<PromptMetricItem['outcomes']>[number];
-/**
- * An item with its creation instant as sortable UTC text, and every brand its
- * answers named (the item carries only the leading few, once marks resolve).
- */
-type PromptRow = { item: PromptMetricItem; createdAt: string; named: BrandCount[] };
+export type PromptRow = { item: PromptMetricItem; createdAt: string; named: BrandCount[] };
 
 export type PromptQuery = {
   auditId: string | null;
-  /** Read only this tracked prompt's row; omitted reads every prompt. */
   promptId?: string;
   auditIds: string[] | null;
   baselineAuditIds: string[] | null;
@@ -70,16 +66,23 @@ export async function getPromptMetrics(
   query: PromptQuery,
 ): Promise<PromptMetricItem[]> {
   validateEngineAndRange({ logicalEngine: query.logicalEngine, fromAt: null, toAt: null });
-  validateCohort(query.cohort);
+  validatePromptCohort(query.cohort);
   const rows = query.auditIds?.length
     ? await periodRows(db, scope, query, query.auditIds)
     : await runRows(db, scope, query);
+  return promptItems(db, scope, rows);
+}
+
+export async function promptItems(
+  db: Database,
+  scope: RunScope,
+  rows: readonly PromptRow[],
+): Promise<PromptMetricItem[]> {
   const items = rows.map((row) => row.item);
   await Promise.all([attachActions(db, scope, items), attachBrands(db, scope, rows)]);
   return items;
 }
 
-/** Each row's named brands as the leading few with their marks, in place. */
 async function attachBrands(
   db: Database,
   scope: RunScope,
@@ -90,7 +93,6 @@ async function attachBrands(
   for (const row of rows) Object.assign(row.item, leadingBrands(row.named, identities));
 }
 
-/** Each row's Action: the live one the refresh opened on that prompt, if any. */
 async function attachActions(
   db: Database,
   scope: RunScope,
@@ -104,7 +106,6 @@ async function attachActions(
         .where('workspace_id', '=', scope.workspaceId)
         .where('project_id', '=', scope.projectId)
         .where('target_prompt_id', 'in', promptIds)
-        // An Action whose evidence vanished has nothing left to act on here.
         .where('evidence_cleared_at', 'is', null)
         .execute()
     : [];
@@ -117,7 +118,6 @@ function latestRunId(db: Database, scope: RunScope): Promise<string | null> {
   return latestBrandRunId(db, { ...scope, marketId: marketOf(scope) });
 }
 
-/** One run's prompts, strongest first; no run yet is an empty list. */
 async function runRows(
   db: Database,
   scope: RunScope,
@@ -222,111 +222,6 @@ function nullableNumbers(value: Record<string, unknown>): Record<string, number 
   );
 }
 
-function emptyCounts(): Counts {
-  return {
-    state: 'unavailable',
-    responses: 0,
-    brand_responses: null,
-    owned_citation_responses: null,
-    entity_presences: null,
-    expected: null,
-    failed: null,
-    not_run: null,
-  };
-}
-
-type Response = {
-  logical_engine: string;
-  transport_model: string;
-  brand_mentioned: boolean;
-  owned_domain_cited: boolean;
-  avg_position: number | null;
-  score: unknown;
-};
-type Task = { status: string; logical_engine: string; transport_model: string };
-
-/** Each answer once, by whether it named the brand and cited an owned page. */
-export function answerStates(
-  responses: readonly Pick<Response, 'brand_mentioned' | 'owned_domain_cited'>[],
-): AnswerStates | null {
-  if (responses.length === 0) return null;
-  const count = (mentioned: boolean, cited: boolean) =>
-    responses.filter((row) => row.brand_mentioned === mentioned && row.owned_domain_cited === cited)
-      .length;
-  return {
-    mentioned_and_cited: count(true, true),
-    mentioned_only: count(true, false),
-    cited_only: count(false, true),
-    neither: count(false, false),
-  };
-}
-
-/** Summed states; null only when no part answered. */
-function poolStates(parts: readonly (AnswerStates | null | undefined)[]): AnswerStates | null {
-  const present = parts.filter((part) => part != null);
-  if (present.length === 0) return null;
-  const total = (key: keyof AnswerStates) => present.reduce((sum, part) => sum + part[key], 0);
-  return {
-    mentioned_and_cited: total('mentioned_and_cited'),
-    mentioned_only: total('mentioned_only'),
-    cited_only: total('cited_only'),
-    neither: total('neither'),
-  };
-}
-
-/** A row's rates from its counts, through the one rate owner (`answerRates`). */
-function countRates(
-  counts: Pick<Counts, 'responses' | 'brand_responses' | 'owned_citation_responses'>,
-) {
-  const rates = answerRates({
-    answers: counts.responses,
-    mentioned: counts.brand_responses,
-    cited: counts.owned_citation_responses,
-  });
-  return {
-    visibility_rate: rates.brand_mention_rate,
-    owned_citation_rate: rates.owned_citation_rate,
-  };
-}
-
-export function outcomeCounts(
-  responses: readonly Pick<Response, 'brand_mentioned' | 'owned_domain_cited'>[],
-  tasks: readonly Pick<Task, 'status'>[],
-): Counts {
-  const answered = answerCounts(responses);
-  return {
-    state: responses.length ? 'measured' : 'no_observations',
-    responses: responses.length,
-    expected: tasks.length,
-    failed: tasks.filter((task) => task.status === FAILED).length,
-    // Anything that neither succeeded nor failed has not run.
-    not_run: tasks.filter((task) => task.status !== SUCCEEDED && task.status !== FAILED).length,
-    brand_responses: answered.mentioned,
-    owned_citation_responses: answered.cited,
-    entity_presences: null,
-  };
-}
-
-function outcome(engine: string, model: string, responses: Response[], tasks: Task[]): Outcome {
-  const counts = outcomeCounts(responses, tasks);
-  const gaps: Record<string, number> = {};
-  for (const row of responses) {
-    if (row.brand_mentioned) continue;
-    for (const name of strings(record(row.score).competitors_mentioned)) {
-      gaps[name] = (gaps[name] ?? 0) + 1;
-    }
-  }
-  return {
-    logical_engine: engine,
-    transport_model: model,
-    counts,
-    ...countRates(counts),
-    answer_states: answerStates(responses),
-    gap_counts: gaps,
-  };
-}
-
-/** The explicitly named earlier baseline, when its frozen context matches. */
 async function baselineRun(
   db: Database,
   scope: RunScope,
@@ -340,7 +235,6 @@ async function baselineRun(
     .where('id', '=', baselineId)
     .where('workspace_id', '=', scope.workspaceId)
     .where('project_id', '=', scope.projectId)
-    // Only a dashboard-ready brand run can be a baseline.
     .where('audit_scope', '=', visibility.brand_audit_scope)
     .where('status', 'in', visibility.dashboard_audit_statuses)
     .where('completed_at', '<', storedInstant(audit.completed_at))
@@ -350,7 +244,6 @@ async function baselineRun(
     : null;
 }
 
-/** Frozen prompts, answers and tasks for a set of runs, loaded once. */
 async function loadOutcomes(
   db: Database,
   scope: RunScope,
@@ -376,14 +269,20 @@ async function loadOutcomes(
   let answers = db
     .selectFrom('response_analyses')
     .select([
+      'id',
       'audit_id',
       'prompt_index',
       'logical_engine',
       'transport_model',
+      'search_used',
+      'fanout_state',
+      'entity_assessments',
       'brand_mentioned',
       'owned_domain_cited',
       'avg_position',
       'score',
+      'first_named_kind',
+      'first_named_name',
     ])
     .where('workspace_id', '=', scope.workspaceId)
     .where('audit_id', 'in', auditIds)
@@ -413,54 +312,39 @@ async function loadOutcomes(
   return { prompts, answers: answerRows, tasks, mentions };
 }
 
-/**
- * The brands each prompt's answers named, over the same answers its rates
- * count: the tracked brand and every competitor, by distinct answers.
- */
-async function namedBrands(
+async function withBrandMentions(
   db: Database,
-  scope: RunScope,
-  query: { auditIds: readonly string[]; cohort: string; engine: string | null },
+  input: {
+    workspaceId: string;
+    audits: readonly { id: string; configuration: unknown }[];
+    outcomes: Awaited<ReturnType<typeof loadOutcomes>>;
+  },
 ) {
-  const engine = query.engine ? sql`and answer.logical_engine = ${query.engine}` : sql``;
-  const answers = sql`
-    select answer.id, answer.audit_id, answer.prompt_index
-    from response_analyses answer
-    where answer.workspace_id = ${scope.workspaceId}
-      and answer.audit_id in (${sql.join(query.auditIds)})
-      and answer.cohort in (${sql.join([...selectedCohorts(query.cohort)])})
-      ${engine}`;
-  const { rows } = await sql<BrandCount & { audit_id: string; prompt_index: number }>`
-    with answer as (${answers})
-    select answer.audit_id, answer.prompt_index, 'brand' as kind, mention.brand_name as name,
-      count(distinct answer.id)::int as responses
-    from answer join brand_mentions mention on mention.analysis_id = answer.id
-      and mention.workspace_id = ${scope.workspaceId}
-    where mention.brand_name <> ''
-    group by answer.audit_id, answer.prompt_index, mention.brand_name
-    union all
-    select answer.audit_id, answer.prompt_index, 'competitor' as kind,
-      mention.competitor_name as name, count(distinct answer.id)::int as responses
-    from answer join competitor_mentions mention on mention.analysis_id = answer.id
-      and mention.workspace_id = ${scope.workspaceId}
-    where mention.competitor_name <> ''
-    group by answer.audit_id, answer.prompt_index, mention.competitor_name
-  `.execute(db);
-  return rows;
+  const { workspaceId, audits, outcomes } = input;
+  const brandMentions = await brandMentionsByAudit(db, {
+    workspaceId,
+    audits,
+    analyses: outcomes.answers,
+  });
+  return { ...outcomes, brandMentions };
 }
 
-/** Fill each row's frozen prompt facts, outcome counts and baseline change, in place. */
 async function enrichOutcomes(
   db: Database,
   scope: RunScope,
   rows: readonly PromptRow[],
   audit: { id: string; configuration: unknown; completed_at: string | null; cohort: string },
   query: { logicalEngine: string | null; baselineId: string | null },
-  preloaded?: Awaited<ReturnType<typeof loadOutcomes>>,
+  preloaded?: Awaited<ReturnType<typeof withBrandMentions>>,
 ): Promise<void> {
   if (rows.length === 0) return;
   const data =
-    preloaded ?? (await loadOutcomes(db, scope, [audit.id], audit.cohort, query.logicalEngine));
+    preloaded ??
+    (await withBrandMentions(db, {
+      workspaceId: scope.workspaceId,
+      audits: [audit],
+      outcomes: await loadOutcomes(db, scope, [audit.id], audit.cohort, query.logicalEngine),
+    }));
   const prompts = new Map(
     data.prompts.filter((row) => row.audit_id === audit.id).map((row) => [row.prompt_index, row]),
   );
@@ -477,6 +361,7 @@ async function enrichOutcomes(
     (row) => row.prompt_index,
   );
   const previous = await baselineRun(db, scope, audit, query.baselineId);
+  const brandMentions = data.brandMentions.get(audit.id);
   const runs = previous && {
     current: {
       auditId: audit.id,
@@ -510,7 +395,8 @@ async function enrichOutcomes(
     item.counts = outcomeCounts(answered, promptTasks);
     Object.assign(item, countRates(item.counts));
     item.answer_states = answerStates(answered);
-    // Over the answers that named the brand: an unnamed answer has no rank.
+    Object.assign(item, brandWinCounts(answered));
+    Object.assign(item, promptSignals({ answered, named: row.named, brandMentions }));
     const ranked = answered.flatMap((row) => (row.avg_position === null ? [] : [row.avg_position]));
     item.avg_position = ranked.length
       ? round2(ranked.reduce((total, value) => total + value, 0) / ranked.length)
@@ -550,9 +436,6 @@ async function enrichOutcomes(
   }
 }
 
-// --- A period: prompts pooled across a selected run set --------------------
-
-/** A prompt is the same across runs when its identity, text, cohort, theme and intent match. */
 function promptIdentity(item: PromptMetricItem): string {
   return JSON.stringify([
     item.prompt_id ?? item.prompt_text,
@@ -579,7 +462,6 @@ const COUNT_FIELDS: readonly CountField[] = [
   'not_run',
 ];
 
-/** Summed counts; a field unknown in any run is unknown in the pool. */
 function poolCounts(rows: readonly Counts[]): Counts {
   const responses = rows.reduce((total, row) => total + row.responses, 0);
   const pooled: Counts = {
@@ -618,7 +500,10 @@ function poolPrompt(rows: readonly PromptRow[]): PromptRow {
       counts,
       ...countRates(counts),
       answer_states: poolStates(rows.map((row) => row.item.answer_states)),
-      // A single run's score and movement mean nothing across a pool.
+      ...pooledSignals(
+        rows.map((row) => row.item),
+        [...named.values()],
+      ),
       composite_score: null,
       previous_score: null,
       immediate_delta: null,
@@ -661,9 +546,17 @@ async function setRows(
   auditIds: readonly string[],
 ): Promise<PromptRow[]> {
   await authorizeRunSet(db, scope, auditIds);
-  const ids = [...new Set(auditIds)];
+  return enrichedRows(db, scope, query, [...new Set(auditIds)]);
+}
+
+export async function enrichedRows(
+  db: Database,
+  scope: RunScope,
+  query: Pick<PromptQuery, 'cohort' | 'logicalEngine' | 'promptId'>,
+  ids: readonly string[],
+): Promise<PromptRow[]> {
   if (!ids.length) return [];
-  const [audits, rows, data] = await Promise.all([
+  const [audits, rows, outcomes] = await Promise.all([
     db
       .selectFrom('audits')
       .select(['id', 'configuration', utcText(sql.ref('completed_at')).as('completed_at')])
@@ -674,6 +567,11 @@ async function setRows(
     scoreRows(db, scope, query, ids),
     loadOutcomes(db, scope, ids, query.cohort, query.logicalEngine),
   ]);
+  const data = await withBrandMentions(db, {
+    workspaceId: scope.workspaceId,
+    audits,
+    outcomes,
+  });
   const byAudit = groupBy(rows, (row) => row.item.audit_id);
   await Promise.all(
     audits.map((audit) =>

@@ -23,7 +23,6 @@ function repository() {
   git('init', '-q');
   git('config', 'user.email', 'test@example.com');
   git('config', 'user.name', 'Test');
-  git('config', 'core.autocrlf', 'false');
   const write = (file, content) => {
     mkdirSync(dirname(join(root, file)), { recursive: true });
     writeFileSync(join(root, file), content);
@@ -56,7 +55,6 @@ test('the hook judges the staged blob at 6,000 tokens and prints the split instr
     assert.match(stderr, /^ {2}frontend\/a\.ts: 6001 tokens \(limit 6000\)$/mu);
     for (const step of SPLIT_INSTRUCTIONS) assert.ok(stderr.includes(step), step);
 
-    // CI judges the commits since the base, so a --no-verify commit still fails.
     const base = repo.git('rev-parse', 'HEAD').trim();
     repo.git('commit', '-qm', 'oversized', '--no-verify');
     assert.equal(repo.check('--base', base).status, 1);
@@ -94,7 +92,7 @@ test('tests, codegen, config and registries are ignored; authored source is not'
   );
 });
 
-test('the baseline exempts its files and may only shrink', () => {
+test('the baseline exempts its files up to their recorded size and may only shrink', () => {
   const repo = repository();
   try {
     repo.policy({ 'frontend/big.ts': 7000 });
@@ -102,9 +100,23 @@ test('the baseline exempts its files and may only shrink', () => {
     repo.git('add', '.');
     repo.git('commit', '-qm', 'baseline');
 
-    repo.write('frontend/big.ts', 'x'.repeat(28_004));
+    repo.write('frontend/big.ts', 'x'.repeat(27_996));
     repo.git('add', 'frontend/big.ts');
     assert.deepEqual(repo.check('--staged'), { status: 0, stderr: '' });
+
+    repo.write('frontend/big.ts', 'x'.repeat(28_001));
+    repo.git('add', 'frontend/big.ts');
+    const grown = repo.check('--staged');
+    assert.equal(grown.status, 1);
+    assert.match(
+      grown.stderr,
+      /frontend\/big\.ts: now 7001 tokens, over its recorded 7000; split the file/u,
+    );
+    repo.git('commit', '-qm', 'grown', '--no-verify');
+    const grownInCi = repo.check('--base', 'HEAD');
+    assert.equal(grownInCi.status, 1);
+    assert.match(grownInCi.stderr, /now 7001 tokens, over its recorded 7000/u);
+    repo.git('reset', '-q', '--hard', 'HEAD~1');
 
     repo.policy({ 'frontend/big.ts': 7000, 'frontend/new.ts': 6500 });
     repo.write('frontend/new.ts', 'x'.repeat(26_000));

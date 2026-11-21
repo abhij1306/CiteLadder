@@ -110,8 +110,6 @@ describe('OnboardingGate', () => {
       </OnboardingGate>,
     );
 
-    // The workspace travels with the redirect: refreshing the creation route
-    // must not silently change which workspace the project is created in.
     await waitFor(() =>
       expect(replace).toHaveBeenCalledWith(`/onboarding?workspace=${WORKSPACE}`, { replace: true }),
     );
@@ -119,8 +117,6 @@ describe('OnboardingGate', () => {
   });
 
   it('does not redirect while the context is still resolving', () => {
-    // An unsettled read is indistinguishable from "no projects" on length
-    // alone. Redirecting here bounced existing users to onboarding for a frame.
     setContext('resolving');
     render(
       <OnboardingGate>
@@ -140,9 +136,6 @@ describe('OnboardingGate', () => {
       </OnboardingGate>,
     );
 
-    // An empty error result is never evidence that the account needs
-    // onboarding — sending them there is what let a transient network failure
-    // present as a brand new account.
     expect(replace).not.toHaveBeenCalled();
     expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
     expect(
@@ -151,9 +144,6 @@ describe('OnboardingGate', () => {
   });
 
   it('names the projects read when that is what failed', () => {
-    // The workspace resolved; only the project list did not. Reporting a
-    // workspace failure sends the reader after an access problem that is not
-    // there.
     setContext('error', 'owner', 'projects');
     render(
       <OnboardingGate>
@@ -274,8 +264,6 @@ describe('OnboardingGate', () => {
     );
 
     expect(screen.getByText('workspace')).toBeInTheDocument();
-    // A loading indicator announces itself only after its reveal delay, so wait
-    // that out before checking none was drawn.
     await act(
       () =>
         new Promise<void>((resolve) => {

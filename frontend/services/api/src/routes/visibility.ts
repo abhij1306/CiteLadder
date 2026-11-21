@@ -1,17 +1,7 @@
-/**
- * `visibility`: every persisted visibility read for one measurement
- * selection: the dashboard, prompt scores and one prompt's history, trends,
- * query fanout, Sources (table, series and one URL), per-answer evidence, answer perception
- * (summary and quotes), fact-check accuracy (summary and claims), ads in AI
- * answers and the observed AI Overview rates.
- *
- * Reads of persisted projections; nothing is
- * fetched. An unknown or out-of-scope run is `Audit not found`, and a
- * malformed selection is a 422 carrying the reader's message.
- */
 import { surfaceRatesSchema } from '@citeladder/contracts/audits';
 import {
   accuracyClaimPageSchema,
+  accuracyFactListSchema,
   accuracyResponseSchema,
   claimVerdictSchema,
 } from '@citeladder/contracts/fact-checking';
@@ -21,147 +11,117 @@ import {
   visibilityMarketsSchema,
   visibilitySchema,
 } from '@citeladder/contracts/visibility';
-import {
-  visibilityEvidenceResponseSchema,
-  visibilityFanoutSummarySchema,
-  visibilitySourceMoversSchema,
-  visibilitySourceNearMissesSchema,
-  visibilitySourceSeriesSchema,
-  visibilitySourcesSchema,
-  visibilitySourceUrlSchema,
-} from '@citeladder/contracts/visibility-evidence';
+import { visibilityFanoutSummarySchema } from '@citeladder/contracts/visibility-evidence';
 import {
   perceptionQuotePageSchema,
   perceptionResponseSchema,
 } from '@citeladder/contracts/visibility-perception';
+import { visibilityMatrixSchema } from '@citeladder/contracts/visibility-matrix';
+import { visibilityTopicsSchema } from '@citeladder/contracts/visibility-topics';
 import { visibilityTrendListSchema } from '@citeladder/contracts/visibility-trends';
 import { visibilityAdsResponseSchema } from '@citeladder/contracts/visibility-ads';
 import { z } from 'zod';
 
 import { policy } from '../config.ts';
-import { ApiError, notFound } from '../errors.ts';
-import type { ParamSpecs } from '../http/params.ts';
-import { InvalidCursorError } from '../http/keyset-cursor.ts';
-import { getAccuracy, getAccuracyClaims } from '../visibility/accuracy.ts';
+import { csvDownload } from '../http/table-export.ts';
+import {
+  accuracyClaimRows,
+  CLAIM_EXPORT_COLUMNS,
+  getAccuracy,
+  getAccuracyClaims,
+  getAccuracyFacts,
+} from '../visibility/accuracy.ts';
 import { getAds } from '../visibility/ads.ts';
-import { getVisibility } from '../visibility/dashboard.ts';
-import { getVisibilityEvidence } from '../visibility/evidence.ts';
+import { getRankedVisibility } from '../visibility/ranking-sentiment.ts';
 import { getVisibilityFanout } from '../visibility/fanout.ts';
 import { getMarketVisibility } from '../visibility/markets.ts';
 import { getPerception, getPerceptionQuotes } from '../visibility/perception.ts';
 import { getPromptHistory } from '../visibility/prompt-history.ts';
+import { getLatestPromptMetrics } from '../visibility/prompt-latest.ts';
 import { getPromptMetrics } from '../visibility/prompts.ts';
-import {
-  AnalysisNotFoundError,
-  TrendQueryError,
-  type RunSelection,
-} from '../visibility/selection.ts';
-import { getSourceMovers } from '../visibility/source-movers.ts';
-import { getSourceNearMisses } from '../visibility/source-retrieval.ts';
-import { getSourceSeries, SOURCE_SERIES_MAX_SERIES } from '../visibility/source-series.ts';
-import { getSourceUrlDetail } from '../visibility/source-url.ts';
-import { getVisibilitySources } from '../visibility/sources.ts';
 import { surfaceRates } from '../visibility/surface.ts';
+import { getVisibilityMatrix } from '../visibility/matrix.ts';
+import { getVisibilityTopics } from '../visibility/topics.ts';
 import { getVisibilityTrends } from '../visibility/trends.ts';
 import { defineGetRoute } from './define.ts';
+import { competitorFocusRoute } from './visibility-competitor.ts';
+import {
+  BASELINE_ID,
+  BASELINE_RUNS,
+  COHORT,
+  cohortFilter,
+  CURSOR,
+  ENGINE,
+  EVIDENCE_FILTERS,
+  family,
+  LIMIT,
+  MARKET,
+  marketScope,
+  PERCEPTION_SELECTION,
+  PROJECT_PATH,
+  RUNS,
+  runSelection,
+  selectionErrors,
+  TOPIC,
+  WINDOW,
+} from './visibility-selection.ts';
+import { visibilitySourceRoutes } from './visibility-sources.ts';
 
-const PROJECT_PATH = { project_id: { scalar: { kind: 'uuid' }, required: true } } as const;
-const COHORT = {
-  scalar: { kind: 'literal', values: ['core', 'comparison', 'all'] },
-  default: 'core',
-} as const;
-/** The measurement market; omitted is the project default. Named runs imply their own. */
-const MARKET = { market: { scalar: { kind: 'uuid' } } } as const satisfies ParamSpecs;
-const RUNS = {
-  audit_id: { scalar: { kind: 'uuid' } },
-  audit_ids: { scalar: { kind: 'uuid' }, list: true },
+const DASHBOARD_SELECTION = {
+  audit_id: RUNS.audit_id,
   ...MARKET,
-} as const satisfies ParamSpecs;
-const WINDOW = {
-  from_at: { scalar: { kind: 'datetime' }, alias: 'from' },
-  to_at: { scalar: { kind: 'datetime' }, alias: 'to' },
-} as const satisfies ParamSpecs;
-const LIMIT = {
-  scalar: { kind: 'int', ge: 1, le: policy.visibility.evidence_max_limit },
-  default: policy.visibility.evidence_default_limit,
-} as const;
-const BASELINE_RUNS = { scalar: { kind: 'uuid' }, list: true } as const;
-// `citations.url` is unbounded text, so this cap decides which pages have a
-// detail view at all: the practical ceiling a query string survives.
-const MAX_URL_LENGTH = 8192;
-
-/**
- * A selection with nothing measured yet and one whose metrics are still being
- * written are their own answers, each with its own code, so a client never
- * shows one as the other or as something that does not exist.
- */
-const UNMEASURED_CODES = {
-  not_measured: 'visibility_not_measured',
-  metrics_pending: 'visibility_metrics_pending',
+  ...TOPIC,
+  engine: ENGINE,
+  selection_mode: {
+    scalar: { kind: 'literal', values: ['latest', 'run', 'range'] },
+    default: 'latest',
+    description:
+      "`latest`: the market's newest finished run. `run`: the run named by `audit_id`. `range`: the runs of one configuration between `from` and `to`.",
+  },
+  ...WINDOW,
+  configuration_key: {
+    scalar: { kind: 'str' },
+    description:
+      'With `range`: which measurement configuration to read when the period mixes several. Omitted: the one measured most recently, preferring whole prompt sets.',
+  },
+  cohort: COHORT,
 } as const;
 
-/**
- * Translate the readers' selection errors: an unservable selection is a 404
- * (`Audit not found` unless the route names what is missing, or a code saying
- * it is not measured yet) and a malformed one a 422 carrying the reader's message.
- */
-async function selectionErrors<T>(
-  read: () => Promise<T>,
-  missing: () => ApiError = () => notFound('Audit'),
-): Promise<T> {
-  try {
-    return await read();
-  } catch (error) {
-    if (error instanceof AnalysisNotFoundError) {
-      if (error.reason === 'not_found') throw missing();
-      throw new ApiError(404, error.message, { code: UNMEASURED_CODES[error.reason] });
-    }
-    if (error instanceof TrendQueryError || error instanceof InvalidCursorError)
-      throw new ApiError(422, error.message);
-    throw error;
-  }
-}
-
-type SelectionQuery = {
-  market: string | null;
+type DashboardParams = {
   audit_id: string | null;
-  audit_ids: string[] | null;
   engine: string | null;
+  selection_mode: 'latest' | 'run' | 'range';
+  from_at: Parameters<typeof getRankedVisibility>[2]['fromAt'];
+  to_at: Parameters<typeof getRankedVisibility>[2]['toAt'];
+  configuration_key: string | null;
   cohort: string;
-  from_at: RunSelection['fromAt'];
-  to_at: RunSelection['toAt'];
 };
 
-/** A project's runs in the requested market (omitted: the default). */
-const marketScope = (workspaceId: string, projectId: string, marketId: string | null) => ({
-  workspaceId,
-  projectId,
-  marketId,
+const dashboardQuery = (query: DashboardParams) => ({
+  auditId: query.audit_id,
+  logicalEngine: query.engine,
+  selectionMode: query.selection_mode,
+  fromAt: query.from_at,
+  toAt: query.to_at,
+  configurationKey: query.configuration_key,
+  cohort: query.cohort,
 });
 
-function runSelection(workspaceId: string, projectId: string, query: SelectionQuery): RunSelection {
-  return {
-    workspaceId,
-    projectId,
-    marketId: query.market,
-    auditId: query.audit_id,
-    auditIds: query.audit_ids,
-    logicalEngine: query.engine,
-    cohort: query.cohort,
-    fromAt: query.from_at,
-    toAt: query.to_at,
-  };
-}
+const GRANULARITY_NAMES = policy.visibility.trend_granularities
+  .map((value) => `\`${value}\``)
+  .join(', ');
 
-const PERCEPTION_SELECTION = {
-  ...RUNS,
-  engine: { scalar: { kind: 'str' } },
-  cohort: COHORT,
-  ...WINDOW,
-} as const satisfies ParamSpecs;
+const CLAIM_FILTERS = {
+  ...PERCEPTION_SELECTION,
+  topic: { scalar: { kind: 'literal', values: policy.perception.fact_check.topics } },
+  verdict: { scalar: { kind: 'literal', values: claimVerdictSchema.options } },
+} as const;
 
-/** Every route here reads the path project inside the active workspace. */
-const family = { family: 'visibility', authorize: 'active-project' } as const;
+const claimSelection = (
+  workspaceId: string,
+  projectId: string,
+  query: Parameters<typeof runSelection>[2],
+) => runSelection(workspaceId, projectId, { ...query, topic: null });
 
 export const visibilityRoutes = [
   defineGetRoute({
@@ -172,7 +132,8 @@ export const visibilityRoutes = [
       path: PROJECT_PATH,
       query: {
         ...PERCEPTION_SELECTION,
-        cursor: { scalar: { kind: 'str', maxLength: 2048 } },
+        ...TOPIC,
+        cursor: CURSOR,
         limit: {
           scalar: { kind: 'int', ge: 1, le: policy.visibility.ads_creatives_max_limit },
           default: policy.visibility.ads_creatives_default_limit,
@@ -211,9 +172,11 @@ export const visibilityRoutes = [
       query: {
         ...PERCEPTION_SELECTION,
         entity: { scalar: { kind: 'str', maxLength: 255 } },
-        theme: { scalar: { kind: 'literal', values: policy.perception.themes } },
+        theme: {
+          scalar: { kind: 'str', maxLength: policy.perception.project_themes.name_max_chars },
+        },
         polarity: { scalar: { kind: 'literal', values: ['positive', 'negative'] } },
-        cursor: { scalar: { kind: 'str', maxLength: 2048 } },
+        cursor: CURSOR,
         limit: {
           scalar: { kind: 'int', ge: 1, le: policy.perception.quotes_max_limit },
           default: policy.perception.quotes_default_limit,
@@ -252,10 +215,8 @@ export const visibilityRoutes = [
     params: {
       path: PROJECT_PATH,
       query: {
-        ...PERCEPTION_SELECTION,
-        topic: { scalar: { kind: 'literal', values: policy.perception.fact_check.topics } },
-        verdict: { scalar: { kind: 'literal', values: claimVerdictSchema.options } },
-        cursor: { scalar: { kind: 'str', maxLength: 2048 } },
+        ...CLAIM_FILTERS,
+        cursor: CURSOR,
         limit: {
           scalar: { kind: 'int', ge: 1, le: policy.perception.fact_check.claims_max_limit },
           default: policy.perception.fact_check.claims_default_limit,
@@ -266,7 +227,7 @@ export const visibilityRoutes = [
     async handle({ c, db }, { path, query }) {
       const workspace = c.get('workspace');
       return selectionErrors(() =>
-        getAccuracyClaims(db, runSelection(workspace.workspaceId, path.project_id, query), {
+        getAccuracyClaims(db, claimSelection(workspace.workspaceId, path.project_id, query), {
           topic: query.topic,
           verdict: query.verdict,
           cursor: query.cursor,
@@ -277,38 +238,81 @@ export const visibilityRoutes = [
   }),
   defineGetRoute({
     ...family,
+    path: '/api/v1/projects/{project_id}/visibility/accuracy/claims/export',
+    params: { path: PROJECT_PATH, query: CLAIM_FILTERS },
+    raw: true,
+    response: z.string().meta({ format: 'binary' }),
+    async handle({ c, db }, { path, query }) {
+      const workspace = c.get('workspace');
+      const rows = await selectionErrors(() =>
+        accuracyClaimRows(db, claimSelection(workspace.workspaceId, path.project_id, query), {
+          topic: query.topic,
+          verdict: query.verdict,
+        }),
+      );
+      return csvDownload('fact-check-claims.csv', CLAIM_EXPORT_COLUMNS, [rows]);
+    },
+  }),
+  defineGetRoute({
+    ...family,
+    path: '/api/v1/projects/{project_id}/visibility/accuracy/facts',
+    params: { path: PROJECT_PATH, query: PERCEPTION_SELECTION },
+    response: accuracyFactListSchema,
+    async handle({ c, db }, { path, query }) {
+      const workspace = c.get('workspace');
+      return selectionErrors(() =>
+        getAccuracyFacts(db, runSelection(workspace.workspaceId, path.project_id, query)),
+      );
+    },
+  }),
+  defineGetRoute({
+    ...family,
     exposure: 'both',
     path: '/api/v1/projects/{project_id}/visibility',
     params: {
       path: PROJECT_PATH,
-      query: {
-        audit_id: { scalar: { kind: 'uuid' } },
-        ...MARKET,
-        engine: { scalar: { kind: 'str' } },
-        baseline_id: { scalar: { kind: 'uuid' } },
-        selection_mode: {
-          scalar: { kind: 'literal', values: ['latest', 'run', 'range'] },
-          default: 'latest',
-        },
-        ...WINDOW,
-        configuration_key: { scalar: { kind: 'str' } },
-        cohort: COHORT,
-      },
+      query: { ...DASHBOARD_SELECTION, baseline_id: BASELINE_ID },
     },
     response: visibilitySchema,
     async handle({ c, db }, { path, query }) {
       const workspace = c.get('workspace');
       return selectionErrors(() =>
-        getVisibility(db, marketScope(workspace.workspaceId, path.project_id, query.market), {
-          auditId: query.audit_id,
-          logicalEngine: query.engine,
+        getRankedVisibility(db, marketScope(workspace.workspaceId, path.project_id, query), {
+          ...dashboardQuery(query),
           baselineId: query.baseline_id,
-          selectionMode: query.selection_mode,
-          fromAt: query.from_at,
-          toAt: query.to_at,
-          configurationKey: query.configuration_key,
-          cohort: query.cohort,
         }),
+      );
+    },
+  }),
+  defineGetRoute({
+    ...family,
+    path: '/api/v1/projects/{project_id}/visibility/topics',
+    params: { path: PROJECT_PATH, query: DASHBOARD_SELECTION },
+    response: visibilityTopicsSchema,
+    async handle({ c, db }, { path, query }) {
+      const workspace = c.get('workspace');
+      return selectionErrors(() =>
+        getVisibilityTopics(
+          db,
+          marketScope(workspace.workspaceId, path.project_id, query),
+          dashboardQuery(query),
+        ),
+      );
+    },
+  }),
+  defineGetRoute({
+    ...family,
+    path: '/api/v1/projects/{project_id}/visibility/matrix',
+    params: { path: PROJECT_PATH, query: DASHBOARD_SELECTION },
+    response: visibilityMatrixSchema,
+    async handle({ c, db }, { path, query }) {
+      const workspace = c.get('workspace');
+      return selectionErrors(() =>
+        getVisibilityMatrix(
+          db,
+          marketScope(workspace.workspaceId, path.project_id, query),
+          dashboardQuery(query),
+        ),
       );
     },
   }),
@@ -321,23 +325,38 @@ export const visibilityRoutes = [
       query: {
         ...RUNS,
         baseline_audit_ids: BASELINE_RUNS,
-        engine: { scalar: { kind: 'str' } },
-        baseline_id: { scalar: { kind: 'uuid' } },
-        cohort: COHORT,
+        engine: ENGINE,
+        baseline_id: BASELINE_ID,
+        cohort: cohortFilter('Omitted: `core`. `latest=prompt` takes no cohort.'),
+        latest: {
+          scalar: { kind: 'literal', values: ['run', 'prompt'] },
+          default: 'run',
+          description:
+            "`run`: every prompt of the selected run. `prompt`: each tracked prompt's own latest run, taking no other selection.",
+        },
       },
     },
     response: z.array(promptMetricItemSchema),
     async handle({ c, db }, { path, query }) {
-      const workspace = c.get('workspace');
+      const scope = marketScope(c.get('workspace').workspaceId, path.project_id, query);
+      const runs = {
+        auditId: query.audit_id,
+        auditIds: query.audit_ids,
+        baselineAuditIds: query.baseline_audit_ids,
+        baselineId: query.baseline_id,
+      };
       return selectionErrors(() =>
-        getPromptMetrics(db, marketScope(workspace.workspaceId, path.project_id, query.market), {
-          auditId: query.audit_id,
-          auditIds: query.audit_ids,
-          baselineAuditIds: query.baseline_audit_ids,
-          logicalEngine: query.engine,
-          baselineId: query.baseline_id,
-          cohort: query.cohort,
-        }),
+        query.latest === 'prompt'
+          ? getLatestPromptMetrics(db, scope, {
+              narrowed: [query.engine, query.cohort, ...Object.values(runs)].some(
+                (value) => value != null,
+              ),
+            })
+          : getPromptMetrics(db, scope, {
+              ...runs,
+              logicalEngine: query.engine,
+              cohort: query.cohort ?? 'core',
+            }),
       );
     },
   }),
@@ -347,14 +366,13 @@ export const visibilityRoutes = [
     path: '/api/v1/projects/{project_id}/visibility/prompts/{prompt_id}/history',
     params: {
       path: { ...PROJECT_PATH, prompt_id: { scalar: { kind: 'uuid' }, required: true } },
-      // No cohort reads the prompt's own.
-      query: { ...MARKET, engine: { scalar: { kind: 'str' } }, cohort: { scalar: COHORT.scalar } },
+      query: { ...MARKET, engine: ENGINE, cohort: cohortFilter("Omitted: the prompt's own.") },
     },
     response: promptHistorySchema,
     async handle({ c, db }, { path, query }) {
       const workspace = c.get('workspace');
       return selectionErrors(() =>
-        getPromptHistory(db, marketScope(workspace.workspaceId, path.project_id, query.market), {
+        getPromptHistory(db, marketScope(workspace.workspaceId, path.project_id, query), {
           promptId: path.prompt_id,
           logicalEngine: query.engine,
           cohort: query.cohort,
@@ -370,14 +388,22 @@ export const visibilityRoutes = [
       path: PROJECT_PATH,
       query: {
         ...MARKET,
-        engine: { scalar: { kind: 'str' } },
+        ...TOPIC,
+        engine: ENGINE,
         ...WINDOW,
         granularity: {
           scalar: { kind: 'str' },
           default: policy.visibility.trend_default_granularity,
+          description: `The length of each series point: ${GRANULARITY_NAMES}. \`run\` plots one point per run.`,
         },
-        transport_model: { scalar: { kind: 'str' } },
-        retrieval_enabled: { scalar: { kind: 'bool' } },
+        transport_model: {
+          scalar: { kind: 'str' },
+          description: 'Only runs answered by this exact provider model.',
+        },
+        retrieval_enabled: {
+          scalar: { kind: 'bool' },
+          description: 'Only runs with web retrieval on (`true`) or off (`false`).',
+        },
         cohort: COHORT,
       },
     },
@@ -385,7 +411,7 @@ export const visibilityRoutes = [
     async handle({ c, db }, { path, query }) {
       const workspace = c.get('workspace');
       return selectionErrors(() =>
-        getVisibilityTrends(db, marketScope(workspace.workspaceId, path.project_id, query.market), {
+        getVisibilityTrends(db, marketScope(workspace.workspaceId, path.project_id, query), {
           logicalEngine: query.engine,
           fromAt: query.from_at,
           toAt: query.to_at,
@@ -405,11 +431,25 @@ export const visibilityRoutes = [
       path: PROJECT_PATH,
       query: {
         ...RUNS,
-        engine: { scalar: { kind: 'str' } },
+        ...TOPIC,
+        engine: ENGINE,
         cohort: COHORT,
-        query: { scalar: { kind: 'str', maxLength: 8192 } },
-        search: { scalar: { kind: 'str', maxLength: 512 } },
-        cursor: { scalar: { kind: 'str', maxLength: 2048 } },
+        ...EVIDENCE_FILTERS,
+        query: {
+          scalar: { kind: 'str', maxLength: 8192 },
+          description: 'One fanout query, exactly: pages the answers that searched it instead.',
+        },
+        search: {
+          scalar: { kind: 'str', maxLength: 512 },
+          description: 'Only queries containing this text, ignoring case.',
+        },
+        order: {
+          scalar: { kind: 'literal', values: ['top', 'rising', 'falling'] },
+          default: 'top',
+          description:
+            '`top`: most answers first, paged. `rising` and `falling`: one page by share change against the previous comparable run.',
+        },
+        cursor: CURSOR,
         limit: LIMIT,
       },
     },
@@ -424,206 +464,25 @@ export const visibilityRoutes = [
             from_at: null,
             to_at: null,
           }),
-          { query: query.query, search: query.search, cursor: query.cursor, limit: query.limit },
+          {
+            query: query.query,
+            search: query.search,
+            order: query.order,
+            cursor: query.cursor,
+            limit: query.limit,
+            filters: {
+              outcome: query.outcome,
+              competitor: query.competitor,
+              domain: query.domain,
+              url: query.url,
+              promptId: query.prompt_id,
+            },
+          },
         ),
       );
     },
   }),
-  defineGetRoute({
-    ...family,
-    exposure: 'both',
-    path: '/api/v1/projects/{project_id}/visibility/sources',
-    params: {
-      path: PROJECT_PATH,
-      query: {
-        ...RUNS,
-        baseline_audit_ids: BASELINE_RUNS,
-        engine: { scalar: { kind: 'str' } },
-        cohort: COHORT,
-        domain: { scalar: { kind: 'str', maxLength: 255 } },
-        source_type: { scalar: { kind: 'str', maxLength: 64 } },
-        standing: { scalar: { kind: 'literal', values: ['gap'] } },
-        dimension: { scalar: { kind: 'literal', values: ['domain', 'url'] }, default: 'domain' },
-        ...WINDOW,
-        as_of: { scalar: { kind: 'datetime' } },
-        cursor: { scalar: { kind: 'str', maxLength: 2048 } },
-        limit: LIMIT,
-      },
-    },
-    response: visibilitySourcesSchema,
-    async handle({ c, db }, { path, query }) {
-      const workspace = c.get('workspace');
-      return selectionErrors(() =>
-        getVisibilitySources(db, runSelection(workspace.workspaceId, path.project_id, query), {
-          domain: query.domain,
-          sourceClass: query.source_type,
-          standing: query.standing,
-          dimension: query.dimension,
-          asOf: query.as_of,
-          cursor: query.cursor,
-          limit: query.limit,
-          baselineAuditIds: query.baseline_audit_ids,
-        }),
-      );
-    },
-  }),
-  defineGetRoute({
-    ...family,
-    path: '/api/v1/projects/{project_id}/visibility/evidence',
-    params: {
-      path: PROJECT_PATH,
-      query: {
-        ...RUNS,
-        cursor: { scalar: { kind: 'str', maxLength: 2048 } },
-        as_of: { scalar: { kind: 'datetime' } },
-        outcome: {
-          scalar: { kind: 'literal', values: ['brand_absent', 'uncited', 'competitor_gap'] },
-        },
-        competitor: { scalar: { kind: 'str', maxLength: 255 } },
-        domain: { scalar: { kind: 'str', maxLength: 255 } },
-        url: { scalar: { kind: 'str', maxLength: MAX_URL_LENGTH } },
-        prompt_id: { scalar: { kind: 'uuid' } },
-        engine: { scalar: { kind: 'str' } },
-        ...WINDOW,
-        limit: LIMIT,
-        cohort: COHORT,
-      },
-    },
-    response: visibilityEvidenceResponseSchema,
-    async handle({ c, db }, { path, query }) {
-      const workspace = c.get('workspace');
-      return selectionErrors(() =>
-        getVisibilityEvidence(db, runSelection(workspace.workspaceId, path.project_id, query), {
-          cursor: query.cursor,
-          asOf: query.as_of,
-          outcome: query.outcome,
-          competitor: query.competitor,
-          domain: query.domain,
-          url: query.url,
-          promptId: query.prompt_id,
-          limit: query.limit,
-        }),
-      );
-    },
-  }),
-  defineGetRoute({
-    ...family,
-    path: '/api/v1/projects/{project_id}/visibility/sources/series',
-    params: {
-      path: PROJECT_PATH,
-      query: {
-        dimension: { scalar: { kind: 'literal', values: ['domain', 'url'] }, default: 'domain' },
-        granularity: {
-          scalar: { kind: 'literal', values: ['day', 'week', 'month'] },
-          default: 'day',
-        },
-        ...RUNS,
-        engine: { scalar: { kind: 'str' } },
-        cohort: COHORT,
-        domain: { scalar: { kind: 'str', maxLength: 255 } },
-        url: { scalar: { kind: 'str', minLength: 1, maxLength: MAX_URL_LENGTH } },
-        source_type: { scalar: { kind: 'str', maxLength: 64 } },
-        ...WINDOW,
-        limit: {
-          scalar: { kind: 'int', ge: 1, le: SOURCE_SERIES_MAX_SERIES },
-          default: SOURCE_SERIES_MAX_SERIES,
-        },
-      },
-    },
-    response: visibilitySourceSeriesSchema,
-    async handle({ c, db }, { path, query }) {
-      const workspace = c.get('workspace');
-      return selectionErrors(() =>
-        getSourceSeries(db, runSelection(workspace.workspaceId, path.project_id, query), {
-          dimension: query.dimension,
-          granularity: query.granularity,
-          domain: query.domain,
-          url: query.url,
-          sourceClass: query.source_type,
-          limit: query.limit,
-        }),
-      );
-    },
-  }),
-  defineGetRoute({
-    ...family,
-    path: '/api/v1/projects/{project_id}/visibility/sources/near-misses',
-    params: {
-      path: PROJECT_PATH,
-      query: {
-        ...RUNS,
-        engine: { scalar: { kind: 'str' } },
-        cohort: COHORT,
-        ...WINDOW,
-        limit: LIMIT,
-      },
-    },
-    response: visibilitySourceNearMissesSchema,
-    async handle({ c, db }, { path, query }) {
-      const workspace = c.get('workspace');
-      return selectionErrors(() =>
-        getSourceNearMisses(db, runSelection(workspace.workspaceId, path.project_id, query), {
-          asOf: new Date().toISOString(),
-          limit: query.limit,
-        }),
-      );
-    },
-  }),
-  defineGetRoute({
-    ...family,
-    path: '/api/v1/projects/{project_id}/visibility/sources/movers',
-    params: {
-      path: PROJECT_PATH,
-      query: {
-        ...RUNS,
-        baseline_audit_ids: BASELINE_RUNS,
-        engine: { scalar: { kind: 'str' } },
-        cohort: COHORT,
-        dimension: { scalar: { kind: 'literal', values: ['domain', 'url'] }, default: 'domain' },
-        ...WINDOW,
-        limit: {
-          scalar: { kind: 'int', ge: 1, le: policy.visibility.source_movers_max_limit },
-          default: policy.visibility.source_movers_default_limit,
-        },
-      },
-    },
-    response: visibilitySourceMoversSchema,
-    async handle({ c, db }, { path, query }) {
-      const workspace = c.get('workspace');
-      return selectionErrors(() =>
-        getSourceMovers(db, runSelection(workspace.workspaceId, path.project_id, query), {
-          dimension: query.dimension,
-          baselineAuditIds: query.baseline_audit_ids ?? [],
-          limit: query.limit,
-        }),
-      );
-    },
-  }),
-  defineGetRoute({
-    ...family,
-    path: '/api/v1/projects/{project_id}/visibility/sources/url',
-    params: {
-      path: PROJECT_PATH,
-      query: {
-        url: { scalar: { kind: 'str', minLength: 1, maxLength: MAX_URL_LENGTH }, required: true },
-        ...RUNS,
-        engine: { scalar: { kind: 'str' } },
-        cohort: COHORT,
-        ...WINDOW,
-      },
-    },
-    response: visibilitySourceUrlSchema,
-    async handle({ c, db }, { path, query }) {
-      const workspace = c.get('workspace');
-      return selectionErrors(() =>
-        getSourceUrlDetail(
-          db,
-          runSelection(workspace.workspaceId, path.project_id, query),
-          query.url,
-        ),
-      );
-    },
-  }),
+  ...visibilitySourceRoutes,
   defineGetRoute({
     ...family,
     path: '/api/v1/projects/{project_id}/visibility/surface-rates',
@@ -655,17 +514,18 @@ export const visibilityRoutes = [
     ...family,
     exposure: 'both',
     path: '/api/v1/projects/{project_id}/visibility/markets',
-    params: { path: PROJECT_PATH, query: { cohort: COHORT } },
+    params: { path: PROJECT_PATH, query: { cohort: COHORT, ...TOPIC } },
     response: visibilityMarketsSchema,
     async handle({ c, db }, { path, query }) {
       const workspace = c.get('workspace');
       return selectionErrors(() =>
         getMarketVisibility(
           db,
-          { workspaceId: workspace.workspaceId, projectId: path.project_id },
+          { workspaceId: workspace.workspaceId, projectId: path.project_id, topicId: query.topic },
           query.cohort,
         ),
       );
     },
   }),
+  competitorFocusRoute,
 ];

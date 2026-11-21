@@ -1,17 +1,18 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
-import { Inbox } from 'lucide-react';
+import { Inbox } from '@/lib/icons';
 import { useState, type ComponentProps } from 'react';
 import { describe, expect, it, vi } from 'vite-plus/test';
 
+import { Absence } from './absence';
 import { Button } from './button';
 import { DataTable } from './data-table';
+import { FilterBar } from './filter-bar';
 
 type DataTableProps = ComponentProps<typeof DataTable>;
 import { TableActionsCell, TableCell, TableCellLines, TableRow, TableSelectCell } from './table';
 
 const PROMPTS = ['Best CRM for startups', 'Cheapest CRM for agencies'];
 
-/** A selectable table as a page builds one: the page owns which rows are selected. */
 function SelectablePrompts() {
   const [selected, setSelected] = useState<readonly string[]>([]);
   let all: boolean | 'indeterminate' = false;
@@ -46,6 +47,55 @@ function SelectablePrompts() {
 }
 
 describe('DataTable', () => {
+  it("lays every head and cell out by its column's kind, counting the selection column", () => {
+    const { container } = render(
+      <DataTable
+        label="Pages"
+        columns={[
+          { key: 'page', label: 'Page', kind: 'identity' },
+          { key: 'visits', label: 'Visits', kind: 'number' },
+          { key: 'seen', label: 'Last seen', kind: 'date' },
+          { key: 'open', label: 'Open', kind: 'actions' },
+        ]}
+        selection={{ all: false, noun: 'pages', onAllChange: () => undefined }}
+      >
+        <TableRow>
+          <TableCell>/pricing</TableCell>
+          <TableCell>12</TableCell>
+          <TableCell>Nov 14, 2026</TableCell>
+          <TableCell>Open</TableCell>
+        </TableRow>
+      </DataTable>,
+    );
+    const frame = container.querySelector<HTMLElement>('[data-data-table-frame]')!;
+    const scope = frame.dataset.tableScope!;
+    const rules = frame.querySelector('style')!.textContent!.replaceAll(scope, 'S');
+    const rule = (position: number) =>
+      new RegExp(
+        String.raw`\[data-table-scope="S"\] tr:not\(\[data-table-state\]\) > :nth-child\(${position}\)\{([^}]*)\}`,
+        'u',
+      ).exec(rules)?.[1];
+    expect(rule(2)).toBe(
+      'text-align:start;width:100.000%;max-width:0;min-width:var(--data-table-identity-min);',
+    );
+    expect(rule(3)).toBe(
+      'text-align:end;width:1px;white-space:nowrap;min-width:calc(var(--spacing) * 16);',
+    );
+    expect(rule(4)).toContain('padding-inline-start:calc(var(--table-cell-padding-x) + 12px);');
+    expect(rule(5)).toContain('text-align:end;');
+    expect(rules).toContain(':nth-child(3){font-variant-numeric:tabular-nums}');
+    expect(rules).toContain(':nth-child(4){font-variant-numeric:tabular-nums}');
+    expect(frame).toHaveAttribute('data-pinned', '2');
+    expect(screen.getByRole('columnheader', { name: 'Open' })).toBeInTheDocument();
+    expect(screen.getAllByRole('columnheader').map((head) => head.getAttribute('scope'))).toEqual([
+      'col',
+      'col',
+      'col',
+      'col',
+      'col',
+    ]);
+  });
+
   it('selects every row from the header box and shows a partial selection as mixed', () => {
     render(<SelectablePrompts />);
     const all = screen.getByRole('checkbox', { name: 'Select all suggested prompts' });
@@ -67,7 +117,7 @@ describe('DataTable', () => {
         description="Shares use all GA4 source-report sessions."
         columns={[
           { key: 'source', label: 'Source' },
-          { key: 'comparison', label: 'Sessions', numeric: true, sublabel: 'Previous period' },
+          { key: 'comparison', label: 'Sessions', kind: 'number', sublabel: 'Previous period' },
         ]}
       >
         <TableRow>
@@ -87,28 +137,33 @@ describe('DataTable', () => {
     ).toBeVisible();
   });
 
-  it('pads a short page of two-line rows with hidden blank rows of the same anatomy', () => {
-    const { container } = render(
+  it('draws no blank rows after a short page; a reserved view holds the rest as one blank space', () => {
+    const table = (reserveRows: boolean) => (
       <DataTable
         label="Signals"
         columns={[{ key: 'query', label: 'Query' }]}
         pageSize={3}
         rowCount={1}
-        rowLines={2}
+        reserveRows={reserveRows}
       >
         <TableRow>
           <TableCell>
             <TableCellLines title primary="crm software" secondary="/pricing" />
           </TableCell>
         </TableRow>
-      </DataTable>,
+      </DataTable>
     );
-    const blanks = [...container.querySelectorAll('tbody tr[aria-hidden="true"]')];
-    expect(blanks).toHaveLength(2);
-    expect(blanks.map((row) => row.textContent)).toEqual(['  ', '  ']);
+    const { container, rerender } = render(table(false));
+    expect(container.querySelectorAll('tbody tr')).toHaveLength(1);
+
+    rerender(table(true));
+    const rows = [...container.querySelectorAll<HTMLElement>('tbody tr')];
+    expect(rows.map((row) => row.dataset.tableSpacer ?? 'row')).toEqual(['row', '']);
+    expect(rows[1]?.style.getPropertyValue('--data-table-rows')).toBe('2');
+    expect(rows[1]?.textContent).toBe('');
   });
 
-  it('draws the pager and blank rows only once the rows run past one page', () => {
+  it('draws the pager only once the rows run past one page, and never blank rows', () => {
     const table = (total: number) => (
       <DataTable
         label="Runs"
@@ -135,7 +190,7 @@ describe('DataTable', () => {
 
     rerender(table(11));
     expect(screen.getByRole('button', { name: 'Next page' })).toBeInTheDocument();
-    expect(container.querySelectorAll('tbody tr')).toHaveLength(10);
+    expect(container.querySelectorAll('tbody tr')).toHaveLength(1);
   });
 
   it('keeps the pager for a reader who picked a bigger page, even when no total is known', () => {
@@ -169,31 +224,94 @@ describe('DataTable', () => {
     expect(screen.getByRole('button', { name: 'Next page' })).toBeDisabled();
   });
 
-  it('draws an inline empty state as one table row, and a block one under an h3', () => {
+  it('gives an empty table over to its empty state, head included, but keeps the head for a filter', () => {
     const table = (state: DataTableProps['state']) => (
       <DataTable
         title="Referrers"
         columns={[
           { key: 'host', label: 'Host' },
-          { key: 'sessions', label: 'Sessions', width: 'figure', numeric: true },
+          { key: 'sessions', label: 'Sessions', kind: 'number' },
         ]}
         state={state}
       />
     );
-    const { container, rerender } = render(
+    const { rerender } = render(
       table({ kind: 'empty', inline: true, message: 'No referrers in this period.' }),
     );
-    expect(container.querySelectorAll('tbody tr')).toHaveLength(1);
-    expect(screen.getByRole('cell', { name: 'No referrers in this period.' })).toBeVisible();
-    expect(screen.getAllByRole('heading').map((heading) => heading.textContent)).toEqual([
-      'Referrers',
-    ]);
+    expect(screen.getByText('No referrers in this period.')).toBeVisible();
+    expect(screen.queryByRole('columnheader')).toBeNull();
 
     rerender(table({ kind: 'empty', icon: Inbox, heading: 'No referrers yet' }));
+    expect(screen.getByRole('heading', { name: 'Referrers' }).tagName).toBe('H2');
     expect(screen.getByRole('heading', { name: 'No referrers yet' }).tagName).toBe('H3');
+    expect(screen.queryByRole('columnheader')).toBeNull();
+
+    rerender(table({ kind: 'filtered', onClear: () => undefined }));
+    expect(screen.getAllByRole('columnheader').map((head) => head.textContent)).toEqual([
+      'Host',
+      'Sessions',
+    ]);
+    expect(screen.getByRole('button', { name: 'Clear filters' })).toBeVisible();
   });
 
-  it('fades the edge that hides columns only while the table scrolls sideways', () => {
+  it('keeps rows whose every value is absent, with their actions and the pager', () => {
+    render(
+      <DataTable
+        title="Pages"
+        columns={[
+          { key: 'page', label: 'Page', kind: 'identity' },
+          { key: 'visits', label: 'Visits', kind: 'number' },
+          { key: 'actions', label: 'Actions', kind: 'actions' },
+        ]}
+        pager={{
+          range: { from: 1, to: 1, total: 2, noun: 'pages' },
+          canPrev: false,
+          canNext: true,
+          onPrev: () => undefined,
+          onNext: () => undefined,
+        }}
+      >
+        <TableRow>
+          <TableCell>/pricing</TableCell>
+          <TableCell numeric>
+            <Absence state="not_measured" />
+          </TableCell>
+          <TableActionsCell>
+            <Button>Open /pricing</Button>
+          </TableActionsCell>
+        </TableRow>
+      </DataTable>,
+    );
+    expect(screen.getAllByRole('columnheader').map((head) => head.textContent)).toEqual([
+      'Page',
+      'Visits',
+      'Actions',
+    ]);
+    expect(screen.getByRole('button', { name: 'Open /pricing' })).toBeVisible();
+    expect(screen.getByRole('button', { name: /next/i })).toBeEnabled();
+    expect(screen.queryByRole('heading', { name: 'No measurements yet' })).toBeNull();
+  });
+
+  it('loads as rows of blocks under the real head and announces its verb', async () => {
+    const { container } = render(
+      <DataTable
+        label="Runs"
+        columns={[
+          { key: 'run', label: 'Run' },
+          { key: 'prompts', label: 'Prompts', kind: 'number' },
+          { key: 'started', label: 'Started', kind: 'date' },
+        ]}
+        pageSize={4}
+        state={{ kind: 'loading', label: 'Loading runs…' }}
+      />,
+    );
+    expect(screen.getAllByRole('columnheader')).toHaveLength(3);
+    expect(container.querySelectorAll('tbody tr')).toHaveLength(4);
+    expect(container.querySelectorAll('tbody [data-skeleton-block]')).toHaveLength(12);
+    expect(await screen.findByRole('status', { name: 'Loading runs…' })).toBeInTheDocument();
+  });
+
+  it('cues the edge that hides columns and becomes a tab stop only while the table scrolls sideways', () => {
     const { container } = render(
       <DataTable label="Wide" columns={[{ key: 'url', label: 'URL' }]}>
         <TableRow>
@@ -201,11 +319,10 @@ describe('DataTable', () => {
         </TableRow>
       </DataTable>,
     );
-    const frame = container.querySelector<HTMLElement>('.table-frame')!;
+    const frame = container.querySelector<HTMLElement>('[data-scroll-content]')!;
+    const cue = container.querySelector<HTMLElement>('[data-scroll-frame]')!;
     const fades = () =>
-      [...container.querySelectorAll('[data-scroll-edge]')].map((fade) =>
-        fade.getAttribute('data-scroll-edge'),
-      );
+      (['start', 'end'] as const).filter((edge) => cue.hasAttribute(`data-scroll-${edge}`));
     const layout = (scrollWidth: number, scrollLeft: number) => {
       Object.defineProperty(frame, 'clientWidth', { configurable: true, value: 400 });
       Object.defineProperty(frame, 'scrollWidth', { configurable: true, value: scrollWidth });
@@ -215,12 +332,32 @@ describe('DataTable', () => {
 
     layout(400, 0);
     expect(fades()).toEqual([]);
+    expect(frame).not.toHaveAttribute('tabindex');
     layout(900, 0);
     expect(fades()).toEqual(['end']);
+    expect(frame).toHaveAttribute('tabindex', '0');
+    expect(frame).toHaveAttribute('aria-label', 'Wide');
+    expect(container.querySelector('[data-scroll-step]')).toBeNull();
     layout(900, 200);
-    expect(fades()).toEqual(['start', 'end']);
+    expect(fades()).toEqual(['end']);
     layout(900, 500);
-    expect(fades()).toEqual(['start']);
+    expect(fades()).toEqual([]);
+  });
+
+  it('splits the spare width between flexible columns and hides a low column with its cells', () => {
+    const { container } = render(
+      <DataTable
+        label="Crawlers"
+        columns={[
+          { key: 'name', label: 'Crawler' },
+          { key: 'seen', label: 'Seen', kind: 'number', priority: 'low' },
+          { key: 'breakdown', label: 'Folder and resource breakdown' },
+        ]}
+      />,
+    );
+    const rules = container.querySelector('[data-data-table-frame] style')!.textContent!;
+    expect(rules.match(/width:50\.000%/gu)).toHaveLength(2);
+    expect(rules).not.toContain('display:none');
   });
 
   it('warns in development when no column can absorb the width', () => {
@@ -230,7 +367,7 @@ describe('DataTable', () => {
         title="Fixed figures"
         columns={[
           { key: 'engine', label: 'Engine', width: 'name' },
-          { key: 'share', label: 'Share', width: 'figure', numeric: true },
+          { key: 'share', label: 'Share', kind: 'number' },
         ]}
       />,
     );
@@ -239,14 +376,23 @@ describe('DataTable', () => {
         title="Flexible figures"
         columns={[
           { key: 'engine', label: 'Engine' },
-          { key: 'share', label: 'Share', width: 'figure', numeric: true },
+          { key: 'share', label: 'Share', kind: 'number' },
         ]}
       />,
     );
     expect(warn.mock.calls.map(([message]) => message)).toEqual([
-      'DataTable "Fixed figures" has no flexible column (width "flex" or "lead"): its text truncates while its fixed columns leave space unused.',
+      'DataTable "Fixed figures" has no flexible column (width "flex"): its spare width spreads over its figures.',
     ]);
     warn.mockRestore();
+  });
+
+  it('announces the filtered result count in a polite live region', () => {
+    const { rerender } = render(<FilterBar status="312 prompts" />);
+    const count = screen.getByRole('status');
+    expect(count).toHaveAttribute('aria-live', 'polite');
+    rerender(<FilterBar status="12 prompts" />);
+    expect(screen.getByRole('status')).toBe(count);
+    expect(count).toHaveTextContent('12 prompts');
   });
 
   it('keeps a row’s actions together in its trailing cell', () => {

@@ -4,9 +4,8 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { StatusStrip } from './status-strip';
 import type { SiteCrawl } from '@citeladder/contracts';
 import { COMPLETE_CLASSIFICATION_PROJECTION } from '@/test/site-health-fixtures';
-import { makePageSummary as page, makeSiteCrawl } from '@/test/fixtures/site-health';
+import { makeSiteCrawl } from '@/test/fixtures/site-health';
 
-/** Mid-analysis: one of three selected pages scored, two still queued. */
 function crawl(overrides: Partial<SiteCrawl> = {}): SiteCrawl {
   return makeSiteCrawl({
     project_id: '44444444-4444-4444-8444-444444444444',
@@ -66,47 +65,10 @@ function renderStrip(props: Partial<Parameters<typeof StatusStrip>[0]> = {}) {
       phase="analyzing"
       cancelPending={false}
       startPending={false}
-      pages={[]}
-      selectedTotal={null}
-      selectedError={false}
       {...props}
     />,
   );
 }
-
-describe('StatusStrip — analysis counters', () => {
-  // The per-state breakdown — analyzed, in progress, queued — was removed from
-  // this row: five numbers where two carry the story. What still matters is
-  // that the totals come from the authoritative aggregate rather than the
-  // bounded `pages` window, which is what these now guard.
-  it('derives "Pages selected" from the server aggregate, not a truncated pages window', () => {
-    // Only ONE monitored page is present in this (deliberately truncated)
-    // `pages` prop, but the selected total says 3.
-    renderStrip({
-      pages: [page({ analysis_status: 'completed' })],
-      selectedTotal: 3,
-    });
-
-    const totalLabel = screen.getByText('Pages selected');
-    expect(totalLabel.parentElement?.textContent).toContain('3');
-  });
-
-  it('falls back to the persisted selected total while the monitored query loads', () => {
-    renderStrip({
-      crawl: crawl({ score_summary: null, analyzed_count: 0 }),
-      selectedTotal: null,
-    });
-
-    const totalLabel = screen.getByText('Pages selected');
-    expect(totalLabel.parentElement?.textContent).toContain('3');
-  });
-
-  it('surfaces a monitored-count fetch error instead of silently approximating', () => {
-    renderStrip({ crawl: crawl({ score_summary: null }), selectedError: true });
-
-    expect(screen.getByText(/Could not load the monitored-page count/)).toBeInTheDocument();
-  });
-});
 
 describe('StatusStrip — analysis activity', () => {
   it('keeps the audit copy and live pulse while analysis is genuinely running', () => {
@@ -116,7 +78,6 @@ describe('StatusStrip — analysis activity', () => {
         analysis_status: 'running',
         score_summary: null,
       }),
-      selectedTotal: 3,
     });
 
     expect(screen.getByText(/Auditing monitored pages/i)).toBeInTheDocument();
@@ -142,8 +103,8 @@ describe('StatusStrip — analysis activity', () => {
     });
 
     expect(screen.getByText('Blocked by robots.txt').parentElement?.textContent).toContain('36');
-    expect(screen.getByText('HTTP 4XX').parentElement?.textContent).toContain('1');
-    expect(screen.getByText('HTTP 5XX').parentElement?.textContent).toContain('2');
+    expect(screen.getByText('HTTP 4xx').parentElement?.textContent).toContain('1');
+    expect(screen.getByText('HTTP 5xx').parentElement?.textContent).toContain('2');
   });
 
   it('explains a persisted host-gate wait without calling it stalled', () => {
@@ -162,14 +123,13 @@ describe('StatusStrip — analysis activity', () => {
       }),
     });
 
-    expect(screen.getByText(/Waiting for the site host gate/i)).toBeInTheDocument();
+    expect(screen.getByText('Waiting for the site host')).toBeInTheDocument();
   });
 
   it('prefers the cancelling narration over the link-check copy', () => {
     renderStrip({
       crawl: crawl({ status: 'running', analysis_status: 'completed' }),
       cancelPending: true,
-      selectedTotal: 3,
     });
 
     expect(screen.getByText(/Cancelling/i)).toBeInTheDocument();
@@ -195,8 +155,6 @@ describe('StatusStrip — lifecycle content', () => {
   });
 
   it('freezes behind a starting notice while a fresh crawl create is in flight', () => {
-    // The old crawl's phase must not stay in view while a new crawl is being
-    // created — a single notice covers the in-flight window.
     renderStrip({
       startPending: true,
       phase: 'terminal',
@@ -217,17 +175,7 @@ describe('StatusStrip — lifecycle content', () => {
       ['dashboard', crawl({ status: 'completed' })],
       ['terminal', crawl({ status: 'failed', score_summary: null })],
     ] as const) {
-      rerender(
-        <StatusStrip
-          crawl={c}
-          phase={phase}
-          cancelPending={false}
-          startPending={false}
-          pages={[]}
-          selectedTotal={null}
-          selectedError={false}
-        />,
-      );
+      rerender(<StatusStrip crawl={c} phase={phase} cancelPending={false} startPending={false} />);
       expect(screen.getByTestId('status-strip')).toBe(strip);
     }
   });

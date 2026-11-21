@@ -4,10 +4,16 @@ import type { SearchIntelligenceDataset } from '../lib/api/search-intelligence';
 
 const id = (value: number) => `33333333-3333-4333-8333-${String(value).padStart(12, '0')}`;
 
-/** Picks a saved scope or market from the control row's All filters. */
 async function chooseSaved(page: Page, label: string, option: string) {
-  await page.getByRole('button', { name: /^All filters/ }).click();
-  await page.getByRole('menuitem', { name: new RegExp(`^${label}:`) }).click();
+  const name = new RegExp(`^${label}:`);
+  const all = page.getByRole('button', { name: /^Filters/ });
+  await expect(all.or(page.getByRole('button', { name })).first()).toBeVisible();
+  if (await all.isVisible()) {
+    await all.click();
+    await page.getByRole('menuitem', { name }).click();
+  } else {
+    await page.getByRole('button', { name }).click();
+  }
   await page.getByRole('menuitemradio', { name: option }).click();
 }
 const target = {
@@ -180,7 +186,7 @@ for (const viewport of [
       if (request.method() === 'POST' && request.url().includes('/search-intelligence'))
         writes.push(request.url());
     });
-    await page.goto(fixtureProjectPath('/search-intelligence'));
+    await page.goto(fixtureProjectPath('/search-intelligence?tab=overview'));
     await expect(page.getByText('8,633', { exact: true })).toBeVisible();
     await expect(page.getByText('United States · en', { exact: true }).first()).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
@@ -193,8 +199,10 @@ for (const viewport of [
     await expect(page.getByRole('radio', { name: 'Top pages', exact: true })).toBeVisible();
     await chooseSaved(page, 'Saved scope', 'Exact host');
     await chooseSaved(page, 'Saved market', 'United States · en');
-    await page.getByRole('tab', { name: 'Competitors', exact: true }).click();
-    await page.getByRole('button', { name: 'Summit Gear: Keywords you both rank for' }).click();
+    await page.getByRole('tab', { name: 'Organic competitors', exact: true }).click();
+    await page
+      .getByRole('button', { name: 'No results Keywords you both rank for: Summit Gear' })
+      .click();
     await expect(
       page.getByText('The provider returned no data for this saved scope.'),
     ).toBeVisible();
@@ -210,14 +218,19 @@ for (const viewport of [
     await expect(page.getByText('https://publisher.test/story', { exact: true })).toBeVisible();
     await expect(page.getByText('400', { exact: true })).toBeVisible();
     await expect(page.getByText('250', { exact: true })).toBeVisible();
-    await expect(page.getByRole('region', { name: 'Saved backlink history' })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Backlink history' })).toBeVisible();
     await page.getByRole('tab', { name: 'Keywords', exact: true }).click();
     await page.getByRole('radio', { name: 'Top pages', exact: true }).click();
     await expect(page.getByRole('cell', { name: '22', exact: true })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
       viewport.width,
     );
-    await page.getByRole('button', { name: 'New analysis' }).click();
+    if (viewport.width < 900) {
+      await page.getByRole('button', { name: 'More', exact: true }).click();
+      await page.getByRole('menuitem', { name: 'New analysis' }).click();
+    } else {
+      await page.getByRole('button', { name: 'New analysis' }).click();
+    }
     await expect(page.getByRole('combobox', { name: 'Market' })).toHaveText('Australia');
     expect(writes).toEqual([]);
   });

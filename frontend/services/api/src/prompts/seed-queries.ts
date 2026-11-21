@@ -1,11 +1,3 @@
-/**
- * The Prompt Builder's seed-query read: for each search data source the
- * project has persisted, the non-branded, question-like searches a run that
- * names that source would ground on, each bound to a topic. It reads stored
- * rows through the same loader and source filter generation uses, so a ticked
- * query is one generation can actually use. It never fetches, and it carries
- * no impression or volume weight.
- */
 import type { seedQueriesResponseSchema } from '@citeladder/contracts/project';
 import type { z } from 'zod';
 
@@ -69,8 +61,6 @@ export function readSeedQueries(
         .where('workspace_id', '=', workspaceId)
         .execute()
     ).map((row) => ({ name: row.name, aliases: strings(row.aliases) }));
-    // The same mention rules generation applies, so a query naming a
-    // competitor is left out here exactly as it is there.
     const matching = projectEntityMatching(
       record(profile?.business_context),
       strings(profile?.products_services),

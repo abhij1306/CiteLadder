@@ -8,23 +8,12 @@ import { useActiveWorkspaceId } from '@/lib/project/project-context';
 
 type Tasks = readonly CompetitorDiscoveryTask[];
 
-/**
- * How often to re-read discovery tasks, or `false` once none are running.
- *
- * Pure and exported so the rule is testable without mounting the panel.
- */
 export function discoveryPollInterval(tasks: Tasks | undefined): number | false {
   return (tasks ?? []).some((task) => !task.terminal) ? ACTIVE_RUN_POLL_MS : false;
 }
 
-/** Track competitor discovery for one project, from launch to terminal state. */
 export function useCompetitorDiscovery(projectId: string) {
   const workspaceId = useActiveWorkspaceId();
-  // Every id this screen launched, so a second discovery does not drop the
-  // first one's progress. They do not survive a reload, so an empty set falls
-  // back to asking the server what is still in flight — the only form reload
-  // recovery can take.
-  // Keyed by project, so switching projects never polls another project's IDs.
   const [tracked, setTracked] = useState<{ projectId: string; ids: string[] }>({
     projectId,
     ids: [],

@@ -7,16 +7,13 @@ const directory = new URL('../../../public/templates/', import.meta.url);
 
 export async function writeTemplate(name: string, source: string, command: string) {
   const path = new URL(name, directory);
-  // The committed template passes the repository formatter, so the generator emits
-  // formatted code and the check compares like with like.
   const { ignorePatterns: _ignored, ...formatOptions } = fmtConfig;
   const formatted = await format(path.pathname, source, formatOptions);
   if (formatted.errors.length) throw new Error(`${name} does not parse`);
   const contents = formatted.code;
   if (process.argv.includes('--check')) {
-    // A checkout may convert line endings; the template's text is what must match.
     const current = await readFile(path, 'utf8').catch(() => '');
-    if (current.replaceAll('\r\n', '\n') !== contents)
+    if (current !== contents)
       throw new Error(`${name} is stale; run pnpm --filter @citeladder/api ${command}`);
   } else {
     await mkdir(directory, { recursive: true });

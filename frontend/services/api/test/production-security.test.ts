@@ -4,7 +4,6 @@ import { describe, expect, it } from 'vitest';
 import { ConfigError, loadConfig, secretIsWeak } from '../src/config.ts';
 import { productionEnv } from './production-config.ts';
 
-/** Every non-empty secret-named value `.env.example` ships, commented examples included. */
 function exampleSecrets(): Record<string, string> {
   const secretName = /(?:SECRET|PASSWORD|PEPPER|SALT|TOKEN|_KEY)(?:_PREVIOUS)?$/u;
   const text = readFileSync(new URL('../../../../.env.example', import.meta.url), 'utf8');

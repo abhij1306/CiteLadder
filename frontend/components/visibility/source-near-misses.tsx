@@ -1,29 +1,28 @@
 import { useQuery } from '@tanstack/react-query';
-import { Link2Off } from 'lucide-react';
 import type { z } from 'zod';
 
 import { DataTable, type DataTableColumn, type DataTableState } from '@/components/ui/data-table';
+import { readErrorProps } from '@/components/ui/notice';
 import type { FilterBarProps } from '@/components/ui/filter-bar';
-import { Pressable } from '@/components/ui/pressable';
 import { TableCell, TableRow } from '@/components/ui/table';
 import { NumericCell, SourceName } from '@/components/visibility/source-cells';
-import type { SourceFilters } from '@/components/visibility/source-rows';
+import { OpenSource, type SourceFilters } from '@/components/visibility/source-rows';
+import { Link2Off } from '@/lib/icons';
 import { retainPreviousDataForScope } from '@/lib/api/query-client';
 import { visibilityQueries } from '@/lib/api/visibility-queries';
 import { useEngineCatalog } from '@/lib/providers/engines';
 import { count, hostOf, pathOf, sinceLabel } from '@/lib/visibility/sources';
-import { selectionParams, type SourceQueries } from '@/lib/visibility/use-source-analysis';
+import { topicSelectionParams, type SourceQueries } from '@/lib/visibility/use-source-analysis';
 import type { visibilitySourceNearMissesSchema } from '@citeladder/contracts/visibility-evidence';
 
 type NearMisses = z.infer<typeof visibilitySourceNearMissesSchema>;
 
-/** Your pages an engine read and did not cite, over the same selection as the table. */
 export function useSourceNearMisses(
   filters: SourceFilters,
   queries: SourceQueries,
   input: { enabled: boolean; limit: number },
 ) {
-  const params = { ...selectionParams(filters, queries), limit: input.limit };
+  const params = { ...topicSelectionParams(filters, queries), limit: input.limit };
   const enabled = input.enabled && Boolean(queries.activeRunId);
   return useQuery({
     ...visibilityQueries.sourceNearMisses(
@@ -31,9 +30,6 @@ export function useSourceNearMisses(
       params,
     ),
     enabled,
-    // A filter or page-size change keeps the rows until the next ones land,
-    // so the table never drops to a loading state; a selection with no run
-    // has nothing to keep.
     placeholderData: enabled
       ? (data, previous) => retainPreviousDataForScope(queries.projectId, data, previous)
       : undefined,
@@ -61,12 +57,12 @@ function nearMissColumns(
       key: 'read',
       label: 'Read in',
       width: 'figure',
-      numeric: true,
+      kind: 'number',
       hint: readHint(data, engineLabel),
     },
-    { key: 'cited', label: 'Cited in', width: 'figure', numeric: true },
-    { key: 'missed', label: 'Not cited in', width: 'figure', numeric: true },
-    { key: 'last', label: 'Last read', width: 'figure', numeric: true, desktopOnly: true },
+    { key: 'cited', label: 'Cited in', width: 'figure', kind: 'number' },
+    { key: 'missed', label: 'Not cited in', width: 'figure', kind: 'number' },
+    { key: 'last', label: 'Last read', width: 'figure', kind: 'date', desktopOnly: true },
   ];
 }
 
@@ -77,14 +73,12 @@ function nearMissState(
   if (query.isError) {
     return {
       kind: 'error',
-      error: query.error,
-      fallback: 'Could not load your pages read but not cited. Try again.',
-      onRetry: () => void query.refetch(),
-      pending: query.isFetching,
+      ...readErrorProps(query),
+      title: "Couldn't load your pages read but not cited",
+      fallback: 'The request failed or timed out.',
     };
   }
   const data = query.data;
-  // No data yet is a read on its way, never "every page was cited".
   if (!data) return { kind: 'loading', label: 'Loading your pages read but not cited…' };
   if (data.items.length) return undefined;
   if (data.responses === 0)
@@ -94,7 +88,6 @@ function nearMissState(
       icon: Link2Off,
       heading: 'No engine in this selection exposes the pages it read',
     };
-  // The verdict covers only engines that expose what they read; the rest are unknown.
   const unavailable = data.unavailable_engines;
   return {
     kind: 'empty',
@@ -102,18 +95,11 @@ function nearMissState(
     icon: Link2Off,
     heading: 'Every page of yours that an engine read, it also cited',
     description: unavailable.length
-      ? `Not known for ${unavailable.map(engineLabel).join(', ')}, which do not expose what they read.`
+      ? `Unknown for ${unavailable.map(engineLabel).join(', ')}`
       : undefined,
   };
 }
 
-/**
- * The near-miss table, in the source table's place under the same toolbar:
- * a page that reached the engine and still lost the citation. Read and Cited
- * count answers whose engine exposes what it read. The list is the
- * most-missed pages up to the page size; it does not page further, but keeps
- * the same pager footer so switching to this view moves nothing.
- */
 export function NearMissTable({
   query,
   pageSize,
@@ -156,16 +142,13 @@ export function NearMissTable({
       {items.map((row) => (
         <TableRow key={row.url_hash ?? row.url}>
           <TableCell>
-            <Pressable
-              onClick={() => onOpenUrl(row.url)}
-              className="hover:text-accent-ink flex max-w-full min-w-0 items-center transition-colors"
-            >
+            <OpenSource onOpen={() => onOpenUrl(row.url)}>
               <SourceName
                 name={row.title.trim() || pathOf(row.url)}
                 host={hostOf(row.url)}
                 secondary={row.title.trim() ? pathOf(row.url) : null}
               />
-            </Pressable>
+            </OpenSource>
           </TableCell>
           <NumericCell value={count(row.retrieved)} />
           <NumericCell value={count(row.cited)} />

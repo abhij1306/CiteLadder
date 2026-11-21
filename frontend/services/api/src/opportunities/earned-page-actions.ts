@@ -1,8 +1,3 @@
-/**
- * The earned Opportunity and Action for each cited page, by url hash: what
- * Visibility reads to offer "get listed" on a page. Opportunities owns how an
- * earned page is keyed, so no reader rebuilds the target key.
- */
 import { sql } from 'kysely';
 import { earnedTargetKey } from '../analysis/opportunities/targets.ts';
 import type { Database } from '../db/database.ts';
@@ -10,10 +5,6 @@ import type { Scope } from './sources.ts';
 
 type EarnedPageAction = { opportunity_id: string; action_id: string | null };
 
-/**
- * The page's live earned Opportunity, highest priority first should there be
- * two, and the Action grouping it (null before one does).
- */
 export async function earnedPageActions(
   db: Database,
   scope: Scope,

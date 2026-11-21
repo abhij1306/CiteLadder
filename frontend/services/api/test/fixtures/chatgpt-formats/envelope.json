@@ -1,0 +1,77 @@
+{
+  "status_code": 20000,
+  "tasks": [
+    {
+      "id": "ours",
+      "status_code": 20000,
+      "cost": 0.004,
+      "result": [
+        {
+          "model": "gpt-5",
+          "markdown": "",
+          "fan_out_queries": ["best invoicing software for agencies"],
+          "item_types": [
+            "chat_gpt_text",
+            "chat_gpt_table",
+            "chat_gpt_local_businesses",
+            "chat_gpt_images",
+            "chat_gpt_ad"
+          ],
+          "sources": [{ "url": "https://reviews.example/invoicing", "title": "Review" }],
+          "items": [
+            {
+              "type": "chat_gpt_text",
+              "rank_group": 1,
+              "rank_absolute": 1,
+              "markdown": "Acme has the deepest billing ([acme.example](https://acme.example/agencies?utm_source=chatgpt.com)), see [Acme](https://acme.example/agencies). Rival is simpler [Rival](https://rival.example/pricing) and [again](https://rival.example/pricing).",
+              "sources": [{ "url": "https://reviews.example/invoicing", "title": "Review" }]
+            },
+            {
+              "type": "chat_gpt_table",
+              "rank_group": 1,
+              "rank_absolute": 2,
+              "markdown": "| Tool | Price |\n|---|---|\n| Acme | $10 |",
+              "table": { "table_header": ["Tool", "Price"], "table_content": [["Acme", "$10"]] }
+            },
+            {
+              "type": "chat_gpt_local_businesses",
+              "rank_group": 1,
+              "rank_absolute": 3,
+              "markdown": "**[Acme Office](https://maps.example/acme)**",
+              "items": [
+                {
+                  "type": "chat_gpt_local_businesses_element",
+                  "title": "Acme Office",
+                  "url": "https://maps.example/acme"
+                }
+              ]
+            },
+            {
+              "type": "chat_gpt_images",
+              "rank_group": 1,
+              "rank_absolute": 4,
+              "markdown": "[![Dashboard](https://cdn.example/dash.png)](https://acme.example/dash)",
+              "items": [
+                {
+                  "type": "chat_gpt_images_element",
+                  "alt": "Dashboard",
+                  "url": "https://acme.example/dash",
+                  "image_url": "https://cdn.example/dash.png"
+                }
+              ]
+            },
+            {
+              "type": "chat_gpt_ad",
+              "rank_group": 1,
+              "rank_absolute": 5,
+              "title": "Rival Invoicing",
+              "url": "https://rival.example/ad",
+              "markdown": "[Sponsored](https://rival.example/ad)",
+              "items": [{ "type": "chat_gpt_products", "items": [] }]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

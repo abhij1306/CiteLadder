@@ -2,12 +2,6 @@ import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
 import { hardNavigate } from './hard-navigate';
 
-/**
- * `lib/navigation` had no tests. The module's own docstring says it exists so
- * that "this click navigated instead of posting" is assertable — this is that
- * assertion, and it also pins the indirection in place: inlining
- * `window.location.assign` back into a component would make these fail.
- */
 describe('hardNavigate', () => {
   afterEach(() => {
     vi.restoreAllMocks();

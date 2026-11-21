@@ -1,4 +1,3 @@
-/** Every product route the TypeScript service serves, by family. */
 import { aiTrafficRoutes } from './ai-traffic.ts';
 import { crawlLogRoutes } from './crawl-logs.ts';
 import type { ProductRoute } from './define.ts';
@@ -29,10 +28,6 @@ import { providerRoutes } from './providers.ts';
 import { agentRoutes } from './agent.ts';
 import { clientErrorRoutes } from './client-errors.ts';
 
-/**
- * The route modules, keyed by their path below `src/`, in registration order.
- * The route-ownership gate reads this to refuse a family served by two modules.
- */
 export const ROUTE_MODULES: Readonly<Record<string, readonly ProductRoute[]>> = {
   'routes/agent.ts': agentRoutes,
   'routes/providers.ts': providerRoutes,

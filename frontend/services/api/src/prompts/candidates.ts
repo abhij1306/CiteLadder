@@ -1,14 +1,3 @@
-/**
- * Generated-prompt candidates: the review list and accept/reject.
- *
- * Generation stages candidates (and purges expired ones) under the
- * project and prompt-set locks; review takes the same locks in the same
- * order, then the candidate rows (`FOR UPDATE`), then the account capacity
- * lock when it accepts. Only an accept creates a Prompt, carrying the run's
- * provenance as `generation_evidence`. A rejected candidate with a quality
- * judgment becomes a text-free outcome record for judge calibration; any
- * other rejected or redundant candidate is deleted.
- */
 import { promptCohortSchema } from '@citeladder/contracts/project';
 import { promptCandidateReviewRequestSchema } from '@citeladder/contracts/prompt-requests';
 import { sql, type Kysely } from 'kysely';
@@ -37,7 +26,6 @@ const P = policy.prompts;
 const C = P.candidate;
 const HOUR_MS = 3_600_000;
 
-/** The audience the generation plan wrote the prompt for, from its planned cell. */
 function plannedPersona(refs: unknown[]): string {
   const cell = refs.map(record).find((ref) => ref.kind === 'business_map_cell');
   const audience = cell?.audience;
@@ -55,7 +43,6 @@ export type CandidateReview = {
   unavailable_count: number;
 };
 
-/** Newest first; within one instant, judge-flagged rows last, then by rank score. */
 function reviewOrder(left: CandidateRow, right: CandidateRow): number {
   const byTime = right.created_at.getTime() - left.created_at.getTime();
   if (byTime !== 0) return byTime;
@@ -70,7 +57,6 @@ function reviewOrder(left: CandidateRow, right: CandidateRow): number {
   return byScore === 0 ? compareText(left.text, right.text) : byScore;
 }
 
-/** Each run's recorded quality gate (null for runs from before the judge). */
 async function runGates(
   db: Kysely<DB>,
   workspaceId: string,
@@ -124,7 +110,6 @@ function validateIds(acceptIds: readonly string[], rejectIds: readonly string[])
   }
 }
 
-/** The prompts an accept inserts; the candidate's run provenance comes along. */
 async function acceptedDrafts(
   db: Kysely<DB>,
   set: { id: string; project_id: string; workspaceId: string },
@@ -216,7 +201,6 @@ export function reviewCandidates(
     const toAccept = found.filter((row) => acceptSet.has(row.id));
     const toReject = found.filter((row) => !acceptSet.has(row.id));
 
-    // The first candidate per text hash that is not already a prompt inserts.
     const insertable = toAccept.filter((candidate) => candidate.normalized_text_hash !== '');
     const redundant = toAccept
       .filter((candidate) => candidate.normalized_text_hash === '')

@@ -1,10 +1,3 @@
-/**
- * Topic preview: the Prompt Builder's buyer-facing topic proposals for a
- * project, beside the topics it already has. One metered model call, spent
- * from the same topic-call reservation generation's recovery uses; nothing is
- * written. Confirming a proposal creates it through the topic owner
- * (`confirmTopics`), which records the offerings it covers.
- */
 import type { topicPreviewResponseSchema } from '@citeladder/contracts/project';
 import type { z } from 'zod';
 

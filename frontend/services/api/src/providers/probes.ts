@@ -57,7 +57,6 @@ type ProbeItem = {
 };
 type ProbeOutcome = { status: 'ok' | 'failed'; errorCode: string; model: string };
 
-/** One bounded probe request against the connection's route; returns the model that answered. */
 async function attemptProbe(o: {
   connection: Connection;
   item: ProbeItem;
@@ -81,7 +80,6 @@ async function attemptProbe(o: {
   return model;
 }
 
-/** Persists one probe result unless the connection or route changed while it ran. */
 function recordProbe(
   db: Database,
   workspaceId: string,

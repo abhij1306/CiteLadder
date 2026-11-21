@@ -1,18 +1,9 @@
-/**
- * Durable, deterministic frontier admission. A batch of candidates is ordered
- * by value tier then URL hash and persisted to the crawl's frontier. A full
- * crawl admits from it only while it walks HTML links (its site has no
- * sitemap), up to the walk bound, queueing each admission's discover task; a
- * sample admits directly and selects within its allowance. Callers hold the
- * workspace runtime lock (the first rung of the Site Health lock order) and
- * own the transaction.
- */
-import { randomUUID } from 'node:crypto';
 import { sql, type Selectable } from 'kysely';
 
 import { policy } from '../config.ts';
 import { resolveSettingSpec, type SettingSource } from '../config/settings.ts';
 import type { Database } from '../db/database.ts';
+import { timeOrderedId } from '../db/ids.ts';
 import { record } from '../db/json.ts';
 import type { WorkspaceSiteHealthRuntime } from '../generated/db-schema.ts';
 import { classifyUrlAdmission, hardExcluded, type Admission, type Scope } from './url-admission.ts';
@@ -61,11 +52,9 @@ export type Candidate = {
   itemKind: string;
   rewriteReason: string;
   rewriteVersion: string;
-  /** The page whose link found this URL; null for the root and sitemap entries. */
   referrerId: string | null;
 };
 
-/** A candidate carrying one admission decision's whole verdict, so priority and disposition never drift. */
 export function candidate(
   admission: Admission,
   fields: Pick<
@@ -95,12 +84,6 @@ export function crawlScope(crawl: Crawl): Scope {
   };
 }
 
-/**
- * The page fetch's `admit` for this crawl: the page and every redirect hop pass
- * the same admission and scope as a link, so neither discovery nor analysis
- * follows a redirect off the site. Without a recorded scope only the hard
- * exclusions apply.
- */
 export function crawlAdmit(crawl: Crawl): (hop: URL) => boolean {
   const scope = crawlScope(crawl);
   if (!scope.domain) return (hop) => !hardExcluded(hop);
@@ -128,7 +111,6 @@ export function lockRuntime(trx: Database, workspaceId: string) {
     .executeTakeFirst();
 }
 
-/** Explicit admission seeds root analysis independently of the root discover. */
 export async function addAutomaticRoot(trx: Database, crawl: Crawl, runtime: Runtime) {
   const remaining = await automaticRemaining(trx, crawl, runtime);
   if (remaining === null || remaining <= 0) return;
@@ -148,7 +130,6 @@ export async function addAutomaticRoot(trx: Database, crawl: Crawl, runtime: Run
   await enqueueCrawlTasks(trx, crawl, [analyzeSeed(siteUrlId, item)], 'admit');
 }
 
-/** An admitted page's analysis, boosted above the discovery that found it. */
 export function analyzeSeed(
   siteUrlId: string,
   page: Pick<Candidate, 'url' | 'hash' | 'depth' | 'priority' | 'referrerId'>,
@@ -175,12 +156,6 @@ async function sampleRemaining(trx: Database, crawl: Crawl, runtime: Runtime | u
   return Math.max(0, (runtime?.sample_url_limit ?? 0) - Number(used.count));
 }
 
-/**
- * How many more URLs a sample crawl may select for analysis. A full crawl
- * selects nothing at admission (null): its tracked set fills from the sitemap,
- * or after a walked page's discovery. Counted from this crawl's membership
- * admissions, not its analyze tasks, since a sample's task arrives with them.
- */
 async function automaticRemaining(trx: Database, crawl: Crawl, runtime: Runtime | undefined) {
   if (!crawl.sample_mode) return null;
   const requested =
@@ -210,14 +185,12 @@ async function automaticRemaining(trx: Database, crawl: Crawl, runtime: Runtime 
   return Math.max(0, Math.min(requested - Number(used.count), limit - Number(active.count)));
 }
 
-/** Persist admissible candidates to the frontier, under its capacity, before budgeting this batch. */
 async function storeFrontier(
   trx: Database,
   crawl: Crawl,
   candidates: Candidate[],
   settings: Settings,
 ) {
-  // Filter before choosing a twin, so a too-deep twin never displaces an admissible one.
   const eligible = orderedUnique(candidates.filter((item) => allowed(item, crawl, settings)));
   if (!eligible.length) return;
   const existing = await trx
@@ -257,7 +230,7 @@ async function storeFrontier(
       .insertInto('site_discovery_frontier')
       .values(
         fresh.slice(offset, offset + settings.batch).map((item) => ({
-          id: randomUUID(),
+          id: timeOrderedId(),
           workspace_id: crawl.workspace_id,
           crawl_id: crawl.id,
           normalized_url: item.url,
@@ -279,10 +252,6 @@ async function storeFrontier(
       .execute();
 }
 
-/**
- * Another page links a URL the frontier already holds: remember that page too,
- * up to the policy's bound, so a failing URL can name the pages that link it.
- */
 async function addReferrers(trx: Database, crawl: Crawl, seen: Candidate[]) {
   const byReferrer = new Map<string, string[]>();
   for (const item of seen) {
@@ -291,7 +260,6 @@ async function addReferrers(trx: Database, crawl: Crawl, seen: Candidate[]) {
     hashes.push(item.hash, hostTwinHash(item.url) ?? '');
     byReferrer.set(item.referrerId, hashes);
   }
-  // A discovered page's links share one referrer, so this is one statement per page.
   for (const [referrer, hashes] of byReferrer)
     await trx // NOSONAR: one statement per referring page, in order in one transaction.
       .updateTable('site_discovery_frontier')
@@ -308,10 +276,6 @@ async function addReferrers(trx: Database, crawl: Crawl, seen: Candidate[]) {
       .execute();
 }
 
-/**
- * The next pending frontier rows under the remaining walk bound, rebuilt as
- * candidates, in the stable order the pending index already holds.
- */
 async function pendingFrontier(trx: Database, crawl: Crawl, settings: Settings, target: number) {
   const remaining = Math.max(0, target - crawl.admitted_url_count);
   if (!remaining) return [];
@@ -327,7 +291,6 @@ async function pendingFrontier(trx: Database, crawl: Crawl, settings: Settings, 
     .forUpdate()
     .skipLocked()
     .execute();
-  // Disposition is a pure function of the path; the value kind was decided under the crawl's scope.
   return rows.map((row) => ({
     frontierId: row.id,
     item: candidate(
@@ -363,11 +326,6 @@ type AdmissionOptions = {
 };
 type Entry = { frontierId: string | null; item: Candidate };
 
-/**
- * A sample admits its candidates directly. A full crawl discovers only when it
- * walks HTML links (site setup found no sitemap): it persists the candidates
- * and takes the frontier's best.
- */
 async function admissionBatch(
   trx: Database,
   crawl: Crawl,
@@ -383,19 +341,15 @@ async function admissionBatch(
   return pendingFrontier(trx, crawl, settings, target);
 }
 
-/** One admitted URL and the writes its admission implies. */
 type Planned = Entry & {
   position: number;
-  /** Selected for analysis: membership, crawl observation and (unless discovery follows) analysis. */
   selected: boolean;
   observe: boolean;
   analyze: boolean;
   discover: boolean;
-  /** Already observed in this crawl, as a recrawl's monitored pages are from its start. */
   seen: boolean;
 };
 
-/** The batch's known state, in URL-hash space, updated as each admission is decided. */
 class AdmissionLedger {
   readonly active: Set<string>;
   readonly observed: Set<string>;
@@ -410,7 +364,6 @@ class AdmissionLedger {
     this.discovering = new Set(known.discovering);
     this.remaining = remaining;
   }
-  /** Select for analysis while the allowance lasts; only a new activation spends it. */
   select(item: Candidate) {
     const selected = item.disposition === 'analyze' && (this.remaining ?? 0) > 0;
     if (!selected) return false;
@@ -418,21 +371,12 @@ class AdmissionLedger {
     this.active.add(item.hash);
     return true;
   }
-  /**
-   * Count toward the ceiling only what is new: a sample's observation, otherwise
-   * its discover task, unless the crawl already observed (and so counted) it.
-   */
   count(hash: string, seen: boolean, sample: boolean, discover: boolean) {
     const known = sample ? seen : discover && (seen || this.discovering.has(hash));
     if (!known) this.admitted++;
   }
 }
 
-/**
- * Decide admissions in order, as the budgets require: a URL spends the
- * automatic allowance only when its membership newly activates, and counts
- * toward the ceiling only when its observation (sample) or discover task is new.
- */
 function planAdmission(
   crawl: Crawl,
   batch: Entry[],
@@ -446,7 +390,6 @@ function planAdmission(
   for (const [position, entry] of batch.entries()) {
     if (crawl.admitted_url_count + ledger.admitted >= options.ceiling) break;
     const { hash } = entry.item;
-    // A sample has no stored frontier to dedupe against: an observed twin is the same page.
     const twin = hostTwinHash(entry.item.url);
     if (sample && twin && ledger.observed.has(twin)) continue;
     const selected = ledger.select(entry.item);
@@ -468,7 +411,6 @@ function planAdmission(
   return { planned, remaining: ledger.remaining };
 }
 
-/** Apply a plan in a fixed number of statements; counts come from what the writes changed. */
 async function writeAdmission(
   trx: Database,
   crawl: Crawl,
@@ -517,7 +459,6 @@ async function writeAdmission(
       })),
     'admit',
   );
-  // The crawl's observation counter already holds the pages it had observed.
   const seen = new Set(planned.flatMap((entry) => (entry.seen ? [entry.item.hash] : [])));
   const discoverNew = discovering.filter((row) => !seen.has(row.url_hash)).length;
   await markFrontierAdmitted(
@@ -529,13 +470,6 @@ async function writeAdmission(
   return { ids, admitted: crawl.sample_mode ? observedNew : discoverNew };
 }
 
-/**
- * Admit one batch. A walking full crawl persists it to the frontier and admits
- * the frontier's best pending rows up to its walk bound, queueing child
- * discovery; a sample crawl admits directly until its workspace-wide allowance
- * is spent. Callers hold the workspace runtime lock and add `admitted` to the
- * crawl's count.
- */
 export async function admitCandidates(
   trx: Database,
   crawl: Crawl,
@@ -577,12 +511,6 @@ export async function admitCandidates(
   };
 }
 
-/**
- * Queue analysis for a URL whose discover artifact shows a page, if it is an
- * active member. A walking full crawl first adds the page to the tracked set
- * while the set is below the crawl's target, so only a fetched page, never a
- * dead link, a document or an alias, joins it.
- */
 export async function enqueueDiscoveredAnalysis(
   trx: Database,
   crawl: Crawl,
@@ -626,7 +554,6 @@ export async function enqueueDiscoveredAnalysis(
   return row?.id ?? null;
 }
 
-/** A fetched document is inventory only: it frees any sample analysis allowance. */
 export async function markInventoryDocument(trx: Database, crawl: Crawl, hash: string) {
   const url = await trx
     .updateTable('site_urls')
@@ -689,7 +616,6 @@ export async function releaseNonPage(
   return true;
 }
 
-/** Release sample memberships; a tracked page (one with a fill position) never leaves this way. */
 export async function deactivateSystemMemberships(
   trx: Database,
   crawl: Crawl,

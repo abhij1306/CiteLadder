@@ -1,8 +1,3 @@
-/**
- * The integrations import graph the referral chain projects: grant ->
- * connection -> property mapping -> sync run -> import artifact -> metric
- * rows, seeded directly (no provider I/O). Rows go away with their workspace.
- */
 import { randomUUID } from 'node:crypto';
 
 import type { Database } from '../src/db/database.ts';
@@ -47,10 +42,6 @@ export async function seedProject(db: Database, workspaceId: string): Promise<st
   return id;
 }
 
-/**
- * One completed sync run and its artifact. Pass `previous` to re-sync on the
- * same connection and mapping at a higher `resyncSeq`.
- */
 export async function seedImport(
   db: Database,
   options: {
@@ -152,7 +143,6 @@ export async function seedImport(
   return { ...run, artifactId: await seedArtifact(db, run, options.dataset, options.provider) };
 }
 
-/** Another artifact on `seed`'s sync run, as one run imports several datasets. */
 async function seedArtifact(
   db: Database,
   seed: Pick<ImportSeed, 'workspaceId' | 'syncRunId' | 'connectionId'>,
@@ -181,7 +171,6 @@ async function seedArtifact(
   return artifactId;
 }
 
-/** One derived row; `values` are the dimension values in template order, date last. */
 export async function seedMetricRow(
   db: Database,
   seed: ImportSeed,
@@ -209,11 +198,6 @@ export async function seedMetricRow(
   return id;
 }
 
-/**
- * Persisted AI referral classifications for GA4 (source, medium) pairs on
- * `date`: a source/medium artifact on `run`'s sync run whose rows go through
- * the real ingest and classify executors, as a sync's referral chain does.
- */
 export async function seedClassifiedPairs(
   db: Database,
   run: ImportSeed,
@@ -250,7 +234,6 @@ export async function seedClassifiedPairs(
   return seed;
 }
 
-/** A queued analytics task, as the post-sync projection enqueues one. */
 export async function enqueue(
   db: Database,
   task: { workspaceId: string; projectId: string | null; kind: string; payload: object },

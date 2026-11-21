@@ -15,7 +15,6 @@ it('settles fixture work but never ends the local app crawl that shares the data
   const rename = (name: string) =>
     db.updateTable('workspaces').set({ name }).where('id', '=', app.workspaceId).execute();
   await rename('Local app');
-  // Whatever the outcome, the workspace is a fixture again for later files to settle.
   onTestFinished(() => rename(fixtureWorkspaceName(app.workspaceId)).then(() => undefined));
   const fixtureTask = await fixtures.task(fixture, 'discover');
   const appTask = await fixtures.task(app, 'discover');

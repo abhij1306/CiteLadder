@@ -11,6 +11,7 @@ import {
 } from 'vite-plus/test';
 import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { ReactNode } from 'react';
 
 import { makeProject } from '@/test/fixtures/project';
 import { mswServer } from '@/test/msw-server';
@@ -25,12 +26,13 @@ const TASK = '33333333-3333-4333-8333-333333333333';
 const activeProject = makeProject({ id: PROJECT, workspace_id: WORKSPACE });
 
 vi.mock('@/components/integrations/data-source-setup', () => ({
-  DataSourceSetup: ({ title }: { title: string }) => <section aria-label={title} />,
+  DataSourceSetup: ({ title, whenReady }: { title: string; whenReady?: ReactNode }) => (
+    <section aria-label={title}>{whenReady}</section>
+  ),
 }));
 vi.mock('@/lib/project/project-context', () => ({
   useActiveWorkspaceId: () => WORKSPACE,
   useProjectContext: () => ({ activeProject, isLoading: false }),
-  // A Member, who may sync.
   useWorkspaceCapability: (capability: string) =>
     (['read', 'run', 'write'] as const).some((granted) => granted === capability),
 }));
@@ -48,7 +50,6 @@ vi.mock('./use-performance-sync', () => ({
 
 import { PerformanceScreen } from './performance-screen';
 
-/** `/performance` under the gate, which hands the screen the active project. */
 function renderPerformance() {
   return renderWithProviders(<PerformanceScreen />, { projectSelection: { activeProject } });
 }
@@ -129,7 +130,6 @@ const readiness = {
 beforeEach(() =>
   mswServer.use(
     http.get(`/api/v1/projects/${PROJECT}/readiness`, () => HttpResponse.json(readiness)),
-    // No data source is connected.
     http.get('/api/v1/integrations', () => HttpResponse.json([])),
   ),
 );
@@ -220,32 +220,75 @@ describe('PerformanceScreen evidence states', () => {
     );
     renderPerformance();
     await waitFor(() => expect(dashboardRead && readinessRead).toBe(true));
-    // The `status` announcement is held back until the spinner becomes visible.
-    expect(await screen.findByRole('status', { name: 'Loading performance…' })).toBeInTheDocument();
-    expect(screen.queryByText('No imported history')).not.toBeInTheDocument();
+    expect(await screen.findByRole('status', { name: 'Loading performance' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'No Search Console history yet' })).toBeNull();
     act(() => release());
-    expect(await screen.findByText('No imported history')).toBeVisible();
+    expect(
+      await screen.findByRole('heading', { name: 'No Search Console history yet' }),
+    ).toBeVisible();
     expect(screen.queryAllByRole('alert')).toHaveLength(0);
   });
 
-  it('disables Sync now only when the connections read answered with none', async () => {
+  it('draws no range controls and no Sync now before any history, then both once it exists', async () => {
     mswServer.use(
       http.get(`/api/v1/projects/${PROJECT}/performance`, () => HttpResponse.json(dashboard())),
     );
     const { unmount } = renderPerformance();
-    expect(await screen.findByText('No imported history')).toBeVisible();
+    expect(
+      await screen.findByRole('heading', { name: 'No Search Console history yet' }),
+    ).toBeVisible();
+    expect(screen.queryByRole('radiogroup', { name: 'Date range' })).toBeNull();
+    expect(
+      within(screen.getByRole('region', { name: 'Connect Search Console' })).getByTestId(
+        'sync-now-button',
+      ),
+    ).toBeVisible();
+    expect(screen.getAllByTestId('sync-now-button')).toHaveLength(1);
+    unmount();
+
+    mswServer.use(
+      http.get(`/api/v1/projects/${PROJECT}/performance`, () =>
+        HttpResponse.json(
+          dashboard({
+            coverage: {
+              earliest_date: '2026-08-01',
+              latest_date: '2026-08-28',
+              covered_days: 28,
+              analytics_quality: {},
+            },
+          }),
+        ),
+      ),
+    );
+    renderPerformance();
+    expect(await screen.findByText('Data through Aug 28, 2026')).toBeVisible();
+    expect(screen.getByTestId('sync-now-button')).toBeInTheDocument();
+  });
+
+  it('disables Sync now only when the connections read answered with none', async () => {
+    const covered = dashboard({
+      coverage: {
+        earliest_date: '2026-08-01',
+        latest_date: '2026-08-28',
+        covered_days: 28,
+        analytics_quality: {},
+      },
+    });
+    mswServer.use(
+      http.get(`/api/v1/projects/${PROJECT}/performance`, () => HttpResponse.json(covered)),
+    );
+    const { unmount } = renderPerformance();
+    expect(await screen.findByText('Data through Aug 28, 2026')).toBeVisible();
     await waitFor(() => expect(screen.getByTestId('sync-now-button')).toBeDisabled());
     unmount();
 
-    // A failed read is unknown, not "no connections": the sync itself reports
-    // when there is nothing to sync.
     mswServer.use(
       http.get('/api/v1/integrations', () =>
         HttpResponse.json({ detail: 'Bad request' }, { status: 400 }),
       ),
     );
     renderPerformance();
-    expect(await screen.findByText('No imported history')).toBeVisible();
+    expect(await screen.findByText('Data through Aug 28, 2026')).toBeVisible();
     expect(screen.getByTestId('sync-now-button')).toBeEnabled();
   });
 
@@ -258,23 +301,21 @@ describe('PerformanceScreen evidence states', () => {
       http.get(`/api/v1/projects/${PROJECT}/performance`, () => HttpResponse.json(dashboard())),
       http.get(`/api/v1/projects/${PROJECT}/readiness`, async () => {
         await pending;
-        // A settled stage the ladder renders visibly, so the final assertion
-        // can only pass once the released response has updated the screen.
         return HttpResponse.json({ ...readiness, stage: 'importing' });
       }),
     );
     renderPerformance();
 
-    // The dashboard alone controls first paint: the advisory readiness ladder
-    // must not hold the whole surface on the slowest of two independent reads.
-    expect(await screen.findByText('No imported history')).toBeVisible();
+    expect(
+      await screen.findByRole('heading', { name: 'No Search Console history yet' }),
+    ).toBeVisible();
     expect(screen.queryByTestId('readiness-ladder')).not.toBeInTheDocument();
 
     act(() => release());
     expect(await screen.findByTestId('readiness-ladder')).toBeVisible();
   });
 
-  it('says everything in one status line: the covered history at rest, a notice in its place', async () => {
+  it('states the covered history on the Google Search card, and a notice only when there is one', async () => {
     const covered = {
       earliest_date: '2026-08-01',
       latest_date: '2026-08-28',
@@ -301,10 +342,10 @@ describe('PerformanceScreen evidence states', () => {
     );
 
     const { unmount } = renderPerformance();
-    expect(await screen.findByTestId('performance-status')).toHaveTextContent(
-      'Imported history Aug 1, 2026 – Aug 28, 2026 · 28 days',
+    expect(await screen.findByTestId('performance-coverage')).toHaveTextContent(
+      'Aug 1, 2026 – Aug 28, 2026 · 28 days',
     );
-    // The freshness note reads in the same date style, not as an ISO key.
+    expect(screen.queryByTestId('performance-status')).toBeNull();
     expect(screen.getByText('Data through Aug 28, 2026')).toBeVisible();
     expect(screen.queryAllByRole('alert')).toHaveLength(0);
     unmount();
@@ -329,7 +370,9 @@ describe('PerformanceScreen evidence states', () => {
 
     renderPerformance();
 
-    expect(await screen.findByText('No imported history')).toBeVisible();
+    expect(
+      await screen.findByRole('heading', { name: 'No Search Console history yet' }),
+    ).toBeVisible();
     expect(screen.queryByTestId('metric-card-strip')).not.toBeInTheDocument();
     expect(
       screen.queryByRole('tablist', { name: 'Performance breakdowns' }),
@@ -439,7 +482,9 @@ describe('PerformanceScreen evidence states', () => {
 
     renderPerformance();
 
-    expect(await screen.findByText('No imported history')).toBeVisible();
+    expect(
+      await screen.findByRole('heading', { name: 'No Search Console history yet' }),
+    ).toBeVisible();
     expect(screen.queryByTestId('bing-panel')).not.toBeInTheDocument();
   });
 
@@ -594,14 +639,13 @@ function tableRows(prefix: string, from: number, to: number) {
   }));
 }
 
-/** The pager's announced range, e.g. "1–10 of 30 pages", whose noun is set muted. */
 function pagerRange(text: string) {
   return (_: string, element: Element | null) =>
     element?.tagName === 'OUTPUT' && element.textContent === text;
 }
 
 describe('PerformanceScreen table interactions', () => {
-  const measured = () =>
+  const measuredBody = () =>
     dashboard({
       selected: measuredWindow({ ...emptyTotals, clicks: 12, impressions: 120 }),
       dimension_counts: { ...dimensionCounts, query: 12, page: 30 },
@@ -615,7 +659,7 @@ describe('PerformanceScreen table interactions', () => {
       releaseSecondPage = resolve;
     });
     mswServer.use(
-      http.get(`/api/v1/projects/${PROJECT}/performance`, () => HttpResponse.json(measured())),
+      http.get(`/api/v1/projects/${PROJECT}/performance`, () => HttpResponse.json(measuredBody())),
       http.get(`/api/v1/projects/${PROJECT}/performance/table`, async ({ request }) => {
         const params = new URL(request.url).searchParams;
         const dimension = params.get('dimension')!;
@@ -643,7 +687,6 @@ describe('PerformanceScreen table interactions', () => {
 
     await user.click(screen.getByRole('button', { name: 'Next page' }));
 
-    // The first page stays on screen, under the same pager, until the second lands.
     expect(within(table).getByText('query 1')).toBeVisible();
     expect(screen.getByRole('button', { name: 'Previous page' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Next page' })).toBeDisabled();
@@ -654,15 +697,16 @@ describe('PerformanceScreen table interactions', () => {
     expect(await within(table).findByText('query 11')).toBeVisible();
     expect(within(table).queryByText('query 1')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Previous page' })).toBeEnabled();
-    // Two rows of data, padded to the full page the first page took.
-    expect(within(table).getAllByRole('row', { hidden: true })).toHaveLength(11);
+    const rows = within(table).getAllByRole('row', { hidden: true });
+    expect(rows).toHaveLength(4);
+    expect(rows[3]?.style.getPropertyValue('--data-table-rows')).toBe('8');
   });
 
   it('starts from the first page when the sorted metric is hidden', async () => {
     const user = userEvent.setup();
     const asked: string[] = [];
     mswServer.use(
-      http.get(`/api/v1/projects/${PROJECT}/performance`, () => HttpResponse.json(measured())),
+      http.get(`/api/v1/projects/${PROJECT}/performance`, () => HttpResponse.json(measuredBody())),
       http.get(`/api/v1/projects/${PROJECT}/performance/table`, ({ request }) => {
         const params = new URL(request.url).searchParams;
         const dimension = params.get('dimension')!;
@@ -670,7 +714,6 @@ describe('PerformanceScreen table interactions', () => {
         const sort = params.get('sort');
         const cursor = params.get('cursor');
         asked.push(`${sort} ${cursor ?? 'first'}`);
-        // The server binds a cursor to the order it was cut from.
         if (cursor && cursor !== `next:${sort}`)
           return HttpResponse.json({ error: { message: 'Cursor mismatch' } }, { status: 400 });
         return HttpResponse.json({
@@ -691,10 +734,8 @@ describe('PerformanceScreen table interactions', () => {
     expect(await within(table).findByText('query 11')).toBeVisible();
     const sortedBy = asked.at(-1)!.split(' ')[0];
 
-    // Hiding the sorted metric falls back to the default order.
     await user.click(screen.getByRole('button', { name: 'Plot impressions' }));
 
-    // The first page of the default order (already cached from the landing view).
     expect(await within(table).findByText('query 1')).toBeVisible();
     expect(sortedBy).toBe('-impressions');
     expect(asked).not.toContain('-clicks next:-impressions');
@@ -708,7 +749,7 @@ describe('PerformanceScreen table interactions', () => {
       releasePages = resolve;
     });
     mswServer.use(
-      http.get(`/api/v1/projects/${PROJECT}/performance`, () => HttpResponse.json(measured())),
+      http.get(`/api/v1/projects/${PROJECT}/performance`, () => HttpResponse.json(measuredBody())),
       http.get(`/api/v1/projects/${PROJECT}/performance/table`, async ({ request }) => {
         const dimension = new URL(request.url).searchParams.get('dimension')!;
         if (dimension === 'page') await pages;
@@ -727,7 +768,6 @@ describe('PerformanceScreen table interactions', () => {
 
     await user.click(screen.getByRole('tab', { name: 'Pages' }));
 
-    // The pager is already where the loaded table puts it, naming the page to come.
     expect(screen.getByText(pagerRange('1–10 of 30 pages'))).toBeVisible();
     expect(screen.getByRole('button', { name: 'Next page' })).toBeDisabled();
 

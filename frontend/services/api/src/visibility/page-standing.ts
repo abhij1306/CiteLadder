@@ -1,19 +1,15 @@
-/**
- * Where the business stands on cited pages, and the Action to get listed.
- *
- * Shared by the Sources URL table (per row, and its `gap` filter) and one
- * URL's own page. Standing comes from the latest SUCCESSFUL reading only, so
- * a later failed attempt never erases what was learned, and a page nobody read
- * carries no verdict. Reads persisted rows only; nothing here fetches.
- */
 import type { pageStandingSchema } from '@citeladder/contracts/visibility-evidence';
 import { sql } from 'kysely';
 import type { z } from 'zod';
 
 import { policy } from '../config.ts';
 import { isListingGap } from '../analysis/listing-gap.ts';
+import type { Database } from '../db/database.ts';
+import type { ProjectScope } from '../projects/brand-profile.ts';
 import {
   judgedUnderCurrentRoster,
+  latestReadings,
+  readingPresences,
   type Reading,
   type ReadingPresence,
 } from '../source-pages/reading.ts';
@@ -23,14 +19,9 @@ export type PageStanding = z.infer<typeof pageStandingSchema>;
 
 const s = policy.opportunity.source_pages;
 const classes = policy.opportunity.source_patterns;
-// Pages that belong to the business or a competitor can never list the business.
 const OWN_PAGE_CLASSES = policy.opportunity.earned_actions.EARNED_EXCLUDED_SOURCE_CLASSES;
 const INSPECTED = s.INSPECTION_INSPECTED;
 
-/**
- * One page's standing. A page that belongs to the business or to a
- * competitor can never list it, so it is named as such rather than judged.
- */
 export function pageStanding(
   page: { source_class: string | null; inspection_state: string },
   reading: Reading | undefined,
@@ -48,14 +39,44 @@ export function pageStanding(
   return isListingGap(page, presences) ? 'gap' : 'read';
 }
 
-/**
- * The url hashes of this project's `gap` pages, as an uncorrelated SQL
- * subquery: `isListingGap` over each page's latest successful reading under
- * the roster in force (`latestReadings` reads the same one), so the
- * filter pages through exactly the rows that show the gap standing (and that
- * the earned-page detector makes Actions of). Evaluated once per read, not
- * once per citation.
- */
+export async function pageStandings(db: Database, scope: ProjectScope, hashes: readonly string[]) {
+  const pages = await db
+    .selectFrom('source_pages as page')
+    .leftJoin('source_page_snapshots as snapshot', (join) =>
+      join
+        .onRef('snapshot.id', '=', 'page.latest_snapshot_id')
+        .onRef('snapshot.workspace_id', '=', 'page.workspace_id'),
+    )
+    .select([
+      'page.id',
+      'page.url_hash',
+      'page.source_class',
+      'page.inspection_state',
+      'page.page_format',
+      'page.page_format_method',
+      'snapshot.page_facts',
+    ])
+    .where('page.workspace_id', '=', scope.workspaceId)
+    .where('page.project_id', '=', scope.projectId)
+    .where('page.url_hash', 'in', hashes)
+    .orderBy('page.url_hash')
+    .execute();
+  const readings = await latestReadings(db, scope, [...new Set(pages.map((page) => page.id))]);
+  const presences = await readingPresences(
+    db,
+    scope,
+    [...readings.values()].map((reading) => reading.id),
+  );
+  const byHash = new Map<string, (typeof pages)[number] & { standing: PageStanding }>();
+  for (const page of pages) {
+    if (byHash.has(page.url_hash)) continue;
+    const reading = readings.get(page.id);
+    const standing = pageStanding(page, reading, reading ? (presences.get(reading.id) ?? []) : []);
+    byHash.set(page.url_hash, { ...page, standing });
+  }
+  return byHash;
+}
+
 export function gapPageHashes(selection: RunSelection) {
   const scope = { workspaceId: selection.workspaceId, projectId: selection.projectId };
   return sql<string>`

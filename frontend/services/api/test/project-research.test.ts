@@ -140,12 +140,19 @@ it('preserves recorded research metadata and enforces a shared call budget befor
         source_id: 'recorded-page',
         url: 'https://acme.com/company',
         title: 'Company',
-        markdown: 'Recorded full page',
+        content: 'Recorded full page',
         acquired_at: '2026-03-02T00:00:00Z',
       },
     },
   ];
-  const transport = vi.fn(async () => Response.json(replies.shift()));
+  // Keenable answers 400 to a fetch parameter it does not document.
+  const fetchParameters = new Set(['url', 'max_chars', 'live']);
+  const transport = vi.fn<ResearchTransport>(async (target) => {
+    const { pathname, searchParams } = new URL(String(target));
+    if (pathname === '/v1/fetch' && [...searchParams.keys()].some((k) => !fetchParameters.has(k)))
+      return Response.json({ error: 'Unknown parameter(s)' }, { status: 400 });
+    return Response.json(replies.shift());
+  });
   const client = createResearchClient(settings, budget, transport, keenable);
   const items = await client.search('Acme company', 'acme.com', 10, 'recorded-query');
   expect(items).toHaveLength(1);
@@ -203,6 +210,24 @@ it('keeps identity fixed while retrying malformed provisional competitors', asyn
       profile: { category: 'Analytics', description: 'Recorded business evidence' },
       signature: { category: 'Analytics' },
       field_evidence_refs: { description: [ref] },
+      themes: [
+        ['Price', 'buyer_choice', 0.95],
+        ['Funding and valuation', 'buyer_choice', 0.9],
+        ['Company history', 'company_fact', 0.9],
+        ['Ownership', 'buyer_choice', 0.9],
+        ['Delivery  speed', 'buyer_choice', 0.9],
+        ['Best value for families on a budget', 'buyer_choice', 0.9],
+        ['Other', 'buyer_choice', 0.9],
+        ['Product range', 'buyer_choice', 0.85],
+        ['price', 'buyer_choice', 0.8],
+        ['Returns', 'buyer_choice', 0.8],
+        ['Store locations', 'buyer_choice', 0.8],
+        ['Ease of use', 'buyer_choice', 0.8],
+        ['Customer support', 'buyer_choice', 0.8],
+        ['Quality', 'buyer_choice', 0.75],
+        ['Sizing', 'buyer_choice', 0.75],
+        ['Packaging', 'buyer_choice', 0.4],
+      ].map(([name, kind, confidence]) => ({ name, kind, confidence })),
     },
     { competitors: 'invalid' },
     { competitors: [{ name: 'Globex', domains: ['globex.com'], aliases: [] }] },
@@ -230,6 +255,16 @@ it('keeps identity fixed while retrying malformed provisional competitors', asyn
     ['competitor_suggestions', 'succeeded'],
   ]);
   expect(result.snapshot.field_evidence_refs).toEqual({ description: [ref] });
+  expect(result.snapshot.themes).toEqual([
+    'Price',
+    'Delivery speed',
+    'Product range',
+    'Returns',
+    'Store locations',
+    'Ease of use',
+    'Customer support',
+    'Quality',
+  ]);
 });
 it.each(['ready', 'failed'] as const)(
   'reports competitor search %s while retaining successful model suggestions',
@@ -356,6 +391,44 @@ it('extracts visible text and ranks offering navigation while dropping active su
   expect(rasterType(Buffer.from('<svg>script</svg>'))).toBeNull();
   expect(rasterType(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))).toBe('image/png');
 });
+it("ranks a retailer's departments above customer-service pages under services or store", () => {
+  const labels = (nav: string[][]) =>
+    offeringLinks([
+      extractPage(
+        Buffer.from(
+          `<html><body>${nav.map(([href, label]) => `<a href="${href}">${label}</a>`).join('')}</body></html>`,
+        ),
+        'https://shop.example/',
+      ),
+    ]).map((item) => item.label);
+  expect(
+    labels([
+      ['/services/gift-cards', 'Gift Cards'],
+      ['/services/buy-now-pay-later', 'Buy Now Pay Later'],
+      ['/store/finder', 'Store Finder'],
+      ['/services/click-collect', 'Click & Collect'],
+      ['/womens', 'Women'],
+      ['/kids', 'Kids'],
+      ['/baby', 'Baby'],
+      ['/gift-hampers', 'Gift hampers'],
+    ]),
+  ).toEqual([
+    'Women',
+    'Kids',
+    'Baby',
+    'Gift hampers',
+    'Gift Cards',
+    'Buy Now Pay Later',
+    'Store Finder',
+    'Click & Collect',
+  ]);
+  expect(
+    labels([
+      ['/products/gift-cards', 'Gift Cards'],
+      ['/products/employee-rewards', 'Employee rewards'],
+    ]),
+  ).toEqual(['Employee rewards', 'Gift Cards']);
+});
 it('retains supported field citations but refuses a field citing only unknown evidence', () => {
   const evidence = [{ evidence_ref: 'fp-1' }] as ResearchEvidence[];
   const identity = identityEnvelope.parse({
@@ -429,11 +502,16 @@ it('records the identity model finding too little evidence and warns the reviewe
   expect(result.warnings).toContain('insufficient_evidence');
 });
 it.each([
-  ['an unusable answer', new Error('invalid output'), true],
-  ['a gateway refusal', new ApiError(403, 'The model gateway refused the request'), false],
+  ['an unusable answer', new Error('invalid output'), 'brand_identity_unavailable', true],
+  [
+    'a gateway refusal',
+    new ApiError(403, 'The model gateway refused the request'),
+    'brand_identity_unavailable',
+    false,
+  ],
 ])(
   'fails research on %s from the identity request instead of an empty review',
-  async (_label, failure, retryable) => {
+  async (_label, failure, code, retryable) => {
     const structured = vi.fn(async () => {
       throw failure;
     });
@@ -457,7 +535,7 @@ it.each([
         { url: 'https://acme.com/', domain: 'acme.com', page: null, warning: 'research_degraded' },
         { meter, gateway, env: {} },
       ),
-    ).rejects.toMatchObject({ code: 'brand_identity_unavailable', retryable });
+    ).rejects.toMatchObject({ code, retryable });
     expect(structured).toHaveBeenCalledTimes(1);
   },
 );
@@ -476,7 +554,6 @@ describe('identity deadline', () => {
             { title: 'Acme', url: 'https://acme.com/about', snippet: 'Analytics services' },
           ],
         });
-  /** The real gateway over a provider whose identity answer takes `identityMs` on the fake clock. */
   function slowIdentityGateway(identityMs: number) {
     const replies = [
       { status: 'ready', profile: { category: 'Analytics' }, signature: { category: 'Analytics' } },

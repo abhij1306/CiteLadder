@@ -132,7 +132,6 @@ describe('audit HTTP family cutover', () => {
     const [header, ...rows] = (await csv.text()).trim().split('\r\n');
     const columns = header!.split(',');
     const cells = (row: string) => {
-      // No cell in these rows holds a comma.
       const values = row.split(',');
       return Object.fromEntries(
         [
@@ -267,7 +266,6 @@ describe('audit HTTP family cutover', () => {
 
   it('closes an open stream once its caller is removed from the workspace', async () => {
     const t = await seed();
-    // A running audit's stream would otherwise stay open for its full duration.
     const recheckingApp = createApp(
       testConfig({ AUDIT_SSE_POLL_SECONDS: '0.05', ABUSE_SSE_ACCESS_RECHECK_SECONDS: '1' }),
       db,
@@ -314,7 +312,6 @@ describe('audit HTTP family cutover', () => {
 
   it('ends a running audit stream at its maximum duration', async () => {
     const t = await seed();
-    // A poll interval longer than the stream may live: the wait itself must stop at the deadline.
     const bounded = auditRuntime({
       AUDIT_SSE_MAX_DURATION_SECONDS: '1',
       AUDIT_SSE_POLL_SECONDS: '5',

@@ -29,7 +29,6 @@ export const DUPLICATE_PROMPT = 'An equivalent prompt already exists in this set
 
 type Cohort = z.infer<typeof promptCohortSchema>;
 
-/** What a caller decides about one prompt; the rest is derived here. */
 export type PromptDraft = {
   text: string;
   topic_id: string | null;
@@ -45,18 +44,11 @@ export type PromptDraft = {
 
 type InsertOptions = {
   origin: keyof typeof P.origins;
-  /** `reject` refuses the whole batch with a 409; `skip` leaves that row out. */
   onDuplicate: 'reject' | 'skip';
 };
 
-/** Branded follows the cohort: a prompt naming the business is never organic. */
 export const brandedCohort = (cohort: Cohort): boolean => BRANDED.has(cohort);
 
-/**
- * Insert `drafts` into the set; the result is aligned with `drafts`, `null`
- * for a row left out as a duplicate. Rows are created a millisecond apart so
- * creation-ordered lists keep the caller's order.
- */
 export async function insertPrompts(
   trx: Kysely<DB>,
   set: { id: string; project_id: string; workspace_id: string },
@@ -119,7 +111,6 @@ export async function insertPrompts(
     .onConflict((conflict) => conflict.constraint(UNIQUE_TEXT).doNothing())
     .returningAll()
     .execute();
-  // A racing writer that slipped past the screen above: the unique index decides.
   if (options.onDuplicate === 'reject' && rows.length !== insertable.length) {
     throw new ApiError(409, DUPLICATE_PROMPT);
   }

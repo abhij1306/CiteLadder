@@ -1,4 +1,3 @@
-/** The perception model request: rendered templates and the structured output it must return. */
 import { z } from 'zod';
 import { perceptionLabelSchema } from '@citeladder/contracts/visibility-perception';
 
@@ -25,6 +24,9 @@ export const perceptionOutputSchema = z.object({
       ),
     }),
   ),
+  // Names only (AV-11); code verifies and dedupes them. Absent means the
+  // answer's untracked names are unknown, never that it named none.
+  untracked_businesses: z.array(z.string()).optional(),
 });
 export type PerceptionOutput = z.infer<typeof perceptionOutputSchema>;
 
@@ -44,21 +46,16 @@ export const claimsOutputSchema = perceptionOutputSchema.extend({
 type ClaimsOutput = z.infer<typeof claimsOutputSchema>;
 export type ExtractedClaim = ClaimsOutput['claims'][number];
 
-/** The claims addendum a fact-checked audit appends to the perception templates. */
 type ClaimsRequest = Pick<
   FactCheckPolicy,
   'topics' | 'max_claims_per_answer' | 'claims_system_addendum' | 'claims_user_addendum'
 >;
 
-/**
- * The system and user messages for one package; with `claims`, the configured
- * templates followed by the claims addendum, whatever template is in force.
- */
 export function perceptionPrompt(
   pkg: PerceptionPackage,
   policy: Pick<
     PerceptionPolicy,
-    'system_template' | 'user_template' | 'themes' | 'max_aspects_per_entity'
+    'system_template' | 'user_template' | 'project_themes' | 'max_aspects_per_entity'
   >,
   claims: ClaimsRequest | null = null,
 ) {
@@ -71,7 +68,9 @@ export function perceptionPrompt(
   const slots: Record<string, string> = {
     '{prompt}': pkg.prompt,
     '{language}': pkg.language || 'unknown',
-    '{themes}': policy.themes.join(', '),
+    '{themes}': [...pkg.themes.map((theme) => theme.name), policy.project_themes.fallback].join(
+      ', ',
+    ),
     '{max_aspects}': String(policy.max_aspects_per_entity),
     '{entities}': JSON.stringify(entities, null, 2),
   };

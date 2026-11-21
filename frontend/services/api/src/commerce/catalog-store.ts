@@ -7,15 +7,6 @@ import type { CommerceProducts, CommerceProductObservations } from '../generated
 import { categoryKey, isCategoryName, UNCATEGORIZED_KEY } from './projection-facts.ts';
 import { commerceMissing, type CommerceScope } from './reads.ts';
 
-/**
- * Catalog writers serialize at the project, before touching catalog rows.
- *
- * `FOR NO KEY UPDATE`, not `FOR UPDATE`: every insert into a table that
- * references `projects` takes a key-share lock on the row, so a full update
- * lock would stall the project's audits, crawls and queue writes for as long
- * as a large import runs. This still excludes other catalog writers and a
- * concurrent project delete.
- */
 export async function lockCatalog(db: Database, scope: CommerceScope) {
   const project = await db
     .selectFrom('projects')
@@ -92,12 +83,6 @@ export async function categoryByName(db: Database, scope: CommerceScope, name: s
     .executeTakeFirstOrThrow();
 }
 
-/**
- * Name `parentId` the category one level up of `childId`, both of this
- * project. A parent that would close a cycle is never written. Crawl
- * projection only fills a category that has no parent (`replace: false`); an
- * applied import, an explicit decision, replaces it.
- */
 export async function setCategoryParent(
   db: Database,
   scope: CommerceScope,
@@ -133,10 +118,6 @@ export async function setCategoryParent(
     .execute();
 }
 
-/**
- * A product's category memberships joined to their categories (`m`, `c`),
- * the platform's "Uncategorized" left out; the caller selects and orders.
- */
 export function productCategories(db: Database, scope: CommerceScope, productId: string) {
   return db
     .selectFrom('commerce_product_categories as m')
@@ -168,7 +149,6 @@ export async function addMembership(
       created_at: new Date(),
     })
     .onConflict((oc) =>
-      // A shelf link records no observation; later product evidence supplies one.
       oc
         .columns(['product_id', 'category_id'])
         .doUpdateSet({ source_observation_id: (eb) => eb.ref('excluded.source_observation_id') })
@@ -193,7 +173,6 @@ type Evidence = Pick<Insertable<CommerceProductObservations>, 'source_kind' | 'o
     >
   >;
 
-/** Whether an in-app edit owns this field now: crawl never replaces it. */
 export function editedField(sources: Record<string, unknown>, field: string) {
   const source = sources[field];
   return (

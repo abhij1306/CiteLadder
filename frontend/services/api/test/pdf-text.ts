@@ -3,11 +3,6 @@ import { expect } from 'vitest';
 
 type TextItem = { str: string; transform: number[]; width: number };
 
-/**
- * A page's text as a reader copies it: runs drawn edge to edge on one line
- * (one string set in two faces, such as a figure's digits and its suffix)
- * join without a space; separate strings are separated by one.
- */
 function pageText(items: readonly TextItem[]) {
   let text = '';
   let end: { x: number; y: number } | null = null;
@@ -20,7 +15,6 @@ function pageText(items: readonly TextItem[]) {
   return text;
 }
 
-/** Each page's extracted text; also checks every text run stays inside the page margins. */
 export async function pdfText(bytes: Uint8Array) {
   const task = getDocument({ data: new Uint8Array(bytes), useSystemFonts: false });
   const document = await task.promise;

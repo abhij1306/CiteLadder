@@ -1,7 +1,5 @@
-/** RFC 9562 name-based (version 5) UUIDs. */
 import { createHash } from 'node:crypto';
 
-/** The v5 UUID of `name` in the `namespace` UUID. */
 export function uuidV5(namespace: string, name: string): string {
   const bytes = createHash('sha1') // NOSONAR -- Version 5 is defined over SHA-1; the result is an identifier, not a secret.
     .update(Buffer.from(namespace.replaceAll('-', ''), 'hex'))

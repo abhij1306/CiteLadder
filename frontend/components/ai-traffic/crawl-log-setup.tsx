@@ -17,15 +17,14 @@ import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Field } from '@/components/ui/field';
 import { Stack } from '@/components/ui/layout';
-import { panelClasses } from '@/components/ui/panel';
 import { RadioGroup } from '@/components/ui/radio-group';
-import { Callout } from '@/components/ui/callout';
-import { MutationNotice } from '@/components/ui/mutation-notice';
 import { mutationNoticeForError } from '@/lib/api/mutation-notice';
 import { CopyButton } from '@/components/ui/copy-button';
 import { TextLink } from '@/components/ui/text-link';
 import { Checkbox } from '@/components/ui/checkbox';
 import { GcpFields, GcpSourceSetup, GcpSteps } from './gcp-pull-setup';
+import { Notice } from '@/components/ui/notice';
+import { wellClasses } from '@/components/ui/slip';
 const SETUP_STEPS: Partial<Record<(typeof CRAWL_LOG_SETUPS)[number]['value'], string>> = {
   cloudflare_worker:
     'Deploy the downloadable template yourself. Store the token as a Worker secret, use a fail-open route, and expect partial coverage. Every routed request uses your Workers quota.',
@@ -35,11 +34,9 @@ const SETUP_STEPS: Partial<Record<(typeof CRAWL_LOG_SETUPS)[number]['value'], st
     'Map timestamp, host, path, method, status and user_agent to the documented JSON fields. Batch at least 60 seconds apart; send empty heartbeat batches when no crawler requests occur.',
 };
 const UPLOAD_PROCESSING_COPY: Record<UploadProcessing, string> = {
-  processing:
-    'Upload complete. Results appear here once processing finishes, usually within a few minutes.',
-  delayed:
-    'Upload complete. Processing is taking longer than usual; reload this page later to see the results.',
-  processed: 'Upload processed. Coverage for these days is declared by the file.',
+  processing: 'Upload complete. Processing…',
+  delayed: 'Upload complete. Processing is taking longer than usual.',
+  processed: 'Upload processed.',
 };
 export function CrawlLogSetup({
   model,
@@ -48,7 +45,6 @@ export function CrawlLogSetup({
   const steps = SETUP_STEPS[setup];
   const firehose = setup === 'aws_firehose';
   const gcp = setup === 'gcp_pubsub_pull';
-  // Without a reader service account (local development) the pull connector cannot run.
   const pullUnavailable = model.sources.data?.gcp_pull.availability !== 'available';
   let fields = <DeclaredFields model={model} />;
   if (firehose) fields = <FirehoseFields model={model} />;
@@ -75,7 +71,7 @@ export function CrawlLogSetup({
             disabled: unavailable,
             label: (
               <span className="grid">
-                <span className="type-control text-ink">{s.label}</span>
+                <span className="type-body text-ink">{s.label}</span>
                 <span className="type-caption">
                   {unavailable ? 'Not available in this environment.' : s.description}
                 </span>
@@ -84,8 +80,8 @@ export function CrawlLogSetup({
           };
         })}
       />
-      <Stack className={panelClasses()}>
-        {steps ? <p className="type-body text-ink-secondary">{steps}</p> : null}
+      <Stack className={wellClasses()}>
+        {steps ? <p className="type-body text-ink-2">{steps}</p> : null}
         {firehose ? <FirehoseSteps interval={model.bufferInterval} /> : null}
         {gcp ? <GcpSteps /> : null}
       </Stack>
@@ -98,7 +94,8 @@ export function CrawlLogSetup({
         {fields}
       </Stack>
       {mutation.isError && mutation.variables.kind === 'create' ? (
-        <MutationNotice
+        <Notice
+          kind="mutation"
           notice={mutationNoticeForError(mutation.error, { action: 'set up the crawl-log source' })}
         />
       ) : null}
@@ -106,7 +103,6 @@ export function CrawlLogSetup({
     </Stack>
   );
 }
-/** Format, collection point and sampling a custom sender declares; Firehose fixes all three. */
 function DeclaredFields({ model }: Readonly<{ model: ReturnType<typeof useCrawlConnections> }>) {
   const { format, setFormat, point, setPoint, sampling, setSampling, rate, setRate } = model;
   const { filter, setFilter } = model;
@@ -167,7 +163,6 @@ function DeclaredFields({ model }: Readonly<{ model: ReturnType<typeof useCrawlC
     </>
   );
 }
-/** The stream's declared buffer interval and whether it runs the filter Lambda. */
 function FirehoseFields({ model }: Readonly<{ model: ReturnType<typeof useCrawlConnections> }>) {
   const { bufferInterval, setBufferInterval, declaredFiltered, setDeclaredFiltered } = model;
   return (
@@ -194,10 +189,9 @@ function FirehoseFields({ model }: Readonly<{ model: ReturnType<typeof useCrawlC
     </>
   );
 }
-/** Generated AWS console steps; the endpoint and token appear once the source exists. */
 function FirehoseSteps({ interval }: Readonly<{ interval: string }>) {
   return (
-    <Stack as="ol" gap="tight" className="type-body text-ink-secondary list-inside list-decimal">
+    <Stack as="ol" gap="tight" className="type-body text-ink-2 list-inside list-decimal">
       <li>
         In us-east-1, create an Amazon Data Firehose stream: source Direct PUT, destination HTTP
         endpoint. Use the endpoint URL and the token (as the access key) shown after you create the
@@ -243,7 +237,6 @@ export function CrawlLogCredential({
     );
   return issued ? <IssuedToken issued={issued} /> : null;
 }
-/** A newly issued or rotated token with the endpoint its setup sends to. */
 export function IssuedToken({
   issued,
 }: Readonly<{
@@ -252,21 +245,20 @@ export function IssuedToken({
   const route = issued.setup === 'aws_firehose' ? 'firehose' : 'ingest';
   const endpoint = `${CRAWL_INGEST_ORIGIN}/v1/crawl-logs/${route}/${issued.id}`;
   return (
-    <Callout tone="info">
+    <Notice tone="info">
       <Stack>
         {issued.token ? (
           <>
             <p>Copy this token now. It is shown once.</p>
             <CopyButton value={issued.token}>Copy token</CopyButton>
-            <p className="type-caption break-all">{endpoint}</p>
+            <code className="type-code break-all">{endpoint}</code>
             <CopyButton value={endpoint}>Copy endpoint</CopyButton>
           </>
         ) : null}
       </Stack>
-    </Callout>
+    </Notice>
   );
 }
-/** The dialog's one committing action, held in its footer. */
 export function CrawlLogSetupSubmit({
   model,
 }: Readonly<{ model: ReturnType<typeof useCrawlConnections> }>) {
@@ -300,12 +292,7 @@ function UploadForm({ model }: Readonly<{ model: ReturnType<typeof useCrawlConne
     (s) => s.kind === 'upload' && s.status === 'active',
   );
   if (!uploadSources.length) {
-    return (
-      <Callout tone="info">
-        First, create an upload source using the settings above and Create source below. Then choose
-        your log file here to upload recognized requests.
-      </Callout>
-    );
+    return <Notice tone="info">Create an upload source first.</Notice>;
   }
   return (
     <Stack gap="workspace">
@@ -346,17 +333,18 @@ function UploadForm({ model }: Readonly<{ model: ReturnType<typeof useCrawlConne
         Upload recognized requests
       </Button>
       {progress ? (
-        <output className="type-body">
+        <output className="type-body text-ink-2">
           {progress.scanned} lines scanned · {progress.matched} recognized crawler requests sent.
         </output>
       ) : null}
       {upload.isSuccess ? (
-        <Callout tone={processing === 'processed' ? 'positive' : 'info'}>
+        <Notice tone={processing === 'processed' ? 'positive' : 'info'}>
           {UPLOAD_PROCESSING_COPY[processing ?? 'processed']}
-        </Callout>
+        </Notice>
       ) : null}
       {upload.isError ? (
-        <MutationNotice
+        <Notice
+          kind="mutation"
           notice={mutationNoticeForError(upload.error, { action: 'upload the log file' })}
           recovery={
             progress ? (

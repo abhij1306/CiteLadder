@@ -1,20 +1,14 @@
 import type { DemandDetectorPolicy } from '@citeladder/contracts';
+import { queryRelevanceSchema } from '@citeladder/contracts/opportunity-evidence';
 import type { DemandSignal } from '@/lib/api/demand';
 import { numericMetric, signalDefinition } from '@/lib/demand/signals';
-import { availabilityLabel, formatCount } from '@/lib/format';
+import { formatCount, formatMean, formatPercent } from '@/lib/format';
+import { Absence } from '@/components/ui/absence';
 import { AppGrid } from '@/components/ui/app-grid';
 import { Stack } from '@/components/ui/layout';
-import { panelClasses } from '@/components/ui/panel';
 import { textRole } from '@/components/ui/typography';
+import { wellClasses } from '@/components/ui/slip';
 
-/**
- * The plain-language reading of one signal, for its evidence drawer.
- *
- * Every figure quoted here must come from `signal.metrics`/`signal.evidence`.
- * When a metric was not observed the sentence drops it rather than
- * substituting a default — a page whose whole premise is "versioned GSC
- * evidence" cannot print a count it did not measure.
- */
 export function SignalInsight({
   signal,
   policy,
@@ -22,7 +16,9 @@ export function SignalInsight({
   const detail = (DETAIL[signal.signal_type] ?? (() => null))(signal, policy);
   return (
     <Stack as="section" aria-label="Reading">
-      <p className={textRole('body')}>{detail ?? signalDefinition(signal.signal_type, policy)}</p>
+      <p className={textRole('body', 'text-ink-2')}>
+        {detail ?? signalDefinition(signal.signal_type, policy)}
+      </p>
       <QueryRelevanceEvidence signal={signal} />
     </Stack>
   );
@@ -42,59 +38,39 @@ function strikingDistanceDetail(signal: DemandSignal): string | null {
   const position = numericMetric(signal, 'position');
   const impressions = numericMetric(signal, 'impressions');
   const observed = [
-    position === null ? null : `ranks #${position.toFixed(1)}`,
+    position === null ? null : `ranks #${formatMean(position)}`,
     impressions === null ? null : `${formatCount(impressions)} impressions`,
   ].filter(Boolean);
   if (!observed.length) return null;
-  return `This query ${observed.join(' with ')} — close enough that better coverage can lift it into the positions that earn clicks.`;
+  return `This query ${observed.join(' with ')}, close enough that better coverage can lift it into the positions that earn clicks.`;
 }
 
 function ctrGapDetail(signal: DemandSignal): string | null {
   const median = numericMetric(signal, 'cohort_median_ctr');
   const ctr = numericMetric(signal, 'ctr');
   if (median === null || ctr === null) return null;
-  return `A ${(ctr * 100).toFixed(1)}% click-through rate against a ${(median * 100).toFixed(1)}% median for this position band. The ranking is fine; the result is not being clicked.`;
+  return `A ${formatPercent(ctr)} click-through rate against a ${formatPercent(median)} median for this position band. The ranking is fine; the result is not being clicked.`;
 }
 
 function emergingDetail(signal: DemandSignal, { trends }: DemandDetectorPolicy): string | null {
   const prior = numericMetric(signal, 'prior_impressions');
   const recent = numericMetric(signal, 'recent_impressions');
   if (prior === null || recent === null || prior <= 0) return null;
-  return `Impressions grew ${Math.round(((recent - prior) / prior) * 100)}% (+${formatCount(recent - prior)}) across the last two ${trends.window_days}-day windows.`;
-}
-
-type QueryRelevance = {
-  state: string;
-  reason?: string;
-  title_coverage?: number;
-  h1_coverage?: number;
-  primary_content_coverage?: number;
-  absent_from_title?: string[];
-  absent_from_h1?: string[];
-  statement?: string | null;
-};
-
-function queryRelevance(signal: DemandSignal): QueryRelevance | null {
-  const value = signal.evidence.query_relevance;
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const relevance = value as Record<string, unknown>;
-  if (typeof relevance.state !== 'string') return null;
-  return relevance as QueryRelevance;
+  return `Impressions grew ${formatPercent((recent - prior) / prior)} (+${formatCount(recent - prior)}) across the last two ${trends.window_days}-day windows.`;
 }
 
 function coverageLabel(value: number | undefined) {
-  return typeof value === 'number'
-    ? `${Math.round(value * 100)}%`
-    : availabilityLabel('not_measured');
+  return value === undefined ? <Absence state="not_measured" /> : formatPercent(value);
 }
 
 function QueryRelevanceEvidence({ signal }: Readonly<{ signal: DemandSignal }>) {
-  const relevance = queryRelevance(signal);
-  if (!relevance) return null;
-  if (relevance.state !== 'measured') {
+  const parsed = queryRelevanceSchema.safeParse(signal.evidence.query_relevance);
+  if (!parsed.success) return null;
+  const relevance = parsed.data;
+  if (relevance.state === 'unknown') {
     return (
-      <Stack gap="tight" className={panelClasses()}>
-        <span className={textRole('label')}>Query relevance unavailable</span>
+      <Stack gap="tight" className={wellClasses()}>
+        <span className={textRole('body', 'text-ink-2')}>Query relevance unavailable</span>
         <p className="type-caption">
           {relevance.reason === 'page_content_unavailable'
             ? 'The resolved page had no usable inspected content.'
@@ -107,30 +83,27 @@ function QueryRelevanceEvidence({ signal }: Readonly<{ signal: DemandSignal }>) 
     new Set([...(relevance.absent_from_title ?? []), ...(relevance.absent_from_h1 ?? [])]),
   );
   return (
-    <section className={panelClasses()} aria-label="Query relevance">
+    <section className={wellClasses()} aria-label="Query relevance">
       <Stack>
         <Stack gap="tight">
-          <span className={textRole('label')}>Query relevance</span>
-          <p className="type-caption">
-            {relevance.statement ??
-              'Query-term coverage measured against the currently inspected page.'}
-          </p>
+          <span className={textRole('body', 'text-ink-2')}>Query relevance</span>
+          {relevance.statement ? <p className="type-caption">{relevance.statement}</p> : null}
         </Stack>
         <AppGrid as="dl" layout="thirds" className="type-caption">
           <div>
-            <dt className="text-ink-muted">Title</dt>
+            <dt className="text-ink-2">Title</dt>
             <dd className={textRole('emphasis', 'tabular-nums')}>
               {coverageLabel(relevance.title_coverage)}
             </dd>
           </div>
           <div>
-            <dt className="text-ink-muted">H1</dt>
+            <dt className="text-ink-2">H1</dt>
             <dd className={textRole('emphasis', 'tabular-nums')}>
               {coverageLabel(relevance.h1_coverage)}
             </dd>
           </div>
           <div>
-            <dt className="text-ink-muted">Page text</dt>
+            <dt className="text-ink-2">Page text</dt>
             <dd className={textRole('emphasis', 'tabular-nums')}>
               {coverageLabel(relevance.primary_content_coverage)}
             </dd>
@@ -138,7 +111,7 @@ function QueryRelevanceEvidence({ signal }: Readonly<{ signal: DemandSignal }>) 
         </AppGrid>
         {missing.length > 0 ? (
           <p className="type-caption">
-            <span className={textRole('label')}>Missing from title or H1:</span>{' '}
+            <span className={textRole('body', 'text-ink-2')}>Missing from title or H1:</span>{' '}
             {missing.join(', ')}
           </p>
         ) : null}

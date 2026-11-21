@@ -12,14 +12,6 @@ const TABS = [
   { value: 'prompts', label: 'Prompts' },
 ] as const;
 
-/**
- * One domain's own page: its cited URLs, and the prompts that reached it.
- *
- * The URLs tab is the same inventory component the tab above renders, narrowed
- * to this publisher. Reusing it rather than writing a second table is what
- * keeps "citation rate" meaning the same thing on both screens — two
- * implementations of one column is how two screens start disagreeing.
- */
 export function SourceDomainDetail({
   domain,
   filters,

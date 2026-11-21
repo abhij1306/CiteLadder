@@ -40,7 +40,9 @@ type Source = Awaited<ReturnType<typeof sourceOf>>;
 async function sourceOf(db: Database, scope: CommerceScope, id: string) {
   const source = await db
     .selectFrom('site_page_analyses as a')
-    .innerJoin('site_fetch_artifacts as f', 'f.id', 'a.artifact_id')
+    .innerJoin('site_fetch_artifacts as f', (join) =>
+      join.onRef('f.id', '=', 'a.artifact_id').onRef('f.crawl_id', '=', 'a.crawl_id'),
+    )
     .innerJoin('site_urls as u', 'u.id', 'a.site_url_id')
     .select([
       'a.id',
@@ -78,20 +80,19 @@ async function projectCategory(
   url: string,
 ) {
   const name = categoryTitle(facts, source.latest_title);
-  // A listing with no name of its own cannot be told apart from another shelf.
   if (!name) return null;
   const key = categoryKey(name);
   // The category owning this name wins over one matched by URL, so the rename
-  // below can never collide with the (project_id, normalized_name) key.
-  const existing = await db
+  // below can never collide with the (project_id, normalized_name) key. Two
+  // lookups, not an OR, so each one is an index scan.
+  const scoped = db
     .selectFrom('commerce_categories')
     .selectAll()
     .where('workspace_id', '=', scope.workspaceId)
-    .where('project_id', '=', scope.projectId)
-    .where((eb) => eb.or([eb('normalized_name', '=', key), eb('canonical_url', '=', url)]))
-    .orderBy(sql`normalized_name = ${key}`, 'desc')
-    .orderBy('id')
-    .executeTakeFirst();
+    .where('project_id', '=', scope.projectId);
+  const existing =
+    (await scoped.where('normalized_name', '=', key).executeTakeFirst()) ??
+    (await scoped.where('canonical_url', '=', url).orderBy('id').limit(1).executeTakeFirst());
   const category = existing ?? (await categoryByName(db, scope, name));
   const provenance = {
     kind: 'site_health',
@@ -120,7 +121,6 @@ async function projectCategory(
     .where('workspace_id', '=', scope.workspaceId)
     .where('project_id', '=', scope.projectId)
     .execute();
-  // The listing's breadcrumb names its parent, where it has none yet.
   const parent = breadcrumbParent(facts, name);
   if (parent) {
     const parentId = (await categoryByName(db, scope, parent)).id;
@@ -129,13 +129,8 @@ async function projectCategory(
   return { shelfId: category.id };
 }
 
-/** What a projection may newly link: its own shelf, or its own product. */
 type Linkable = { shelfId: string } | { productId: string };
 
-/**
- * The crawled values a product projection writes, recording their provenance
- * in `sources`: never over a CSV or edited field, and never an empty value.
- */
 function crawledValues(
   projection: ReturnType<typeof productFacts>,
   sources: Record<string, unknown>,
@@ -204,8 +199,6 @@ async function projectProduct(
   const product = existing ?? (await newProduct(db, scope, url));
   const sources = jsonObject(product.field_sources, 'commerce_products.field_sources');
   const values = crawledValues(projection, sources, source);
-  // Values are selected from one typed product projection. JSON columns are
-  // serialized explicitly for pg; no ORM defaults.
   const { variants, attributes, ...scalarValues } = values;
   const update: Updateable<CommerceProducts> = {
     ...scalarValues,
@@ -233,7 +226,6 @@ async function projectProduct(
     classifier_version: source.classifier_version,
     projector_version: policy.commerce.projector_version,
   });
-  // An edited category set wins over the page's breadcrumbs, as edited fields do.
   if (editedField(sources, 'categories')) return { productId: product.id };
   const categories = productCategories(facts, url, [source.final_url, source.requested_url]);
   const ids = new Map<string, string>();
@@ -242,7 +234,6 @@ async function projectProduct(
     ids.set(categoryKey(name), category.id);
     await addMembership(db, scope, product.id, category.id, observation); // NOSONAR -- One projection transaction: statements run in order.
   }
-  // The breadcrumb path nests its categories, where none has a parent yet.
   for (const [index, name] of categories.path.entries()) {
     const childId = ids.get(categoryKey(name));
     const parentId = index ? ids.get(categoryKey(categories.path[index - 1]!)) : undefined;
@@ -252,7 +243,6 @@ async function projectProduct(
   return { productId: product.id };
 }
 
-/** Crawled URL -> the identities its own stored facts declare, for these URLs only. */
 async function declaredIdentities(
   db: Database,
   scope: CommerceScope,
@@ -262,7 +252,9 @@ async function declaredIdentities(
   const rows = await db
     .selectFrom('site_urls as u')
     .innerJoin('site_crawl_tasks as t', 't.site_url_id', 'u.id')
-    .innerJoin('site_fetch_artifacts as f', 'f.task_id', 't.id')
+    .innerJoin('site_fetch_artifacts as f', (join) =>
+      join.onRef('f.task_id', '=', 't.id').onRef('f.crawl_id', '=', 't.crawl_id'),
+    )
     .select(['u.normalized_url', 'f.final_url', 'f.normalized_facts'])
     .where('u.workspace_id', '=', scope.workspaceId)
     .where('u.project_id', '=', scope.projectId)
@@ -285,7 +277,6 @@ async function declaredIdentities(
   return identities;
 }
 
-/** A shelf lists a product through its URL, a declared identity, or a collection alias. */
 function listedProducts(
   links: string[],
   identities: Map<string, string[]>,
@@ -300,15 +291,13 @@ function listedProducts(
   return ids;
 }
 
-/**
- * Link shelves and products in either task order. A shelf source reconciles
- * only its own links; a product source only itself against the projected shelves.
- */
 async function linkShelves(db: Database, scope: CommerceScope, crawlId: string, from: Linkable) {
   let shelfQuery = db
     .selectFrom('commerce_categories as c')
     .innerJoin('site_page_analyses as a', 'a.id', 'c.source_analysis_id')
-    .innerJoin('site_fetch_artifacts as f', 'f.id', 'a.artifact_id')
+    .innerJoin('site_fetch_artifacts as f', (join) =>
+      join.onRef('f.id', '=', 'a.artifact_id').onRef('f.crawl_id', '=', 'a.crawl_id'),
+    )
     .select(['c.id', 'f.normalized_facts', 'f.final_url', 'f.requested_url'])
     .where('c.workspace_id', '=', scope.workspaceId)
     .where('c.project_id', '=', scope.projectId)
@@ -328,7 +317,6 @@ async function linkShelves(db: Database, scope: CommerceScope, crawlId: string, 
     .select(['id', 'canonical_url'])
     .where('workspace_id', '=', scope.workspaceId)
     .where('project_id', '=', scope.projectId)
-    // A shelf never adds itself to a product whose category set was edited.
     .where(sql<boolean>`coalesce(field_sources->'categories'->>'kind', '') <> 'edit'`);
   if ('productId' in from) productQuery = productQuery.where('id', '=', from.productId);
   const productsByUrl = new Map(
@@ -348,8 +336,6 @@ export const projectCatalog: Executor = async (task, { db, checkCancelled }) => 
     await lockCatalog(trx, scope);
     const source = await sourceOf(trx, scope, analysisId);
     if (source.page_kind !== 'product' && source.page_kind !== 'category') return;
-    // A source that cannot be read or has no URL fails the same way on every
-    // retry, so it ends the task at once.
     let facts: CatalogFacts;
     try {
       facts = readFacts(source.normalized_facts);
@@ -372,11 +358,6 @@ export const projectCatalog: Executor = async (task, { db, checkCancelled }) => 
   });
 };
 
-/**
- * Queue projection of a catalog page's analysis, once per analysis and
- * projector version. Only a brand whose confirmed business model, primary or
- * secondary, sells a catalog is projected; unknown context fails closed.
- */
 export async function enqueueCatalogProjection(
   db: Database,
   scope: CommerceScope,

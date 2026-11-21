@@ -1,13 +1,11 @@
-import { Sparkles } from 'lucide-react';
 import { useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { isDeclarable, MarkImplementedButton } from '@/components/agent/action-declaration';
 import { useChatThread } from '@/components/agent/chat-thread';
 import { contentGapMembers } from '@/components/agent/content-gap-evidence';
-import { ListScreen } from '@/components/layout/page-shell';
-import { Badge } from '@/components/ui/badge';
+import { WorkbenchPage } from '@/components/templates/workbench-page';
+import { StatusMark } from '@/components/ui/status-mark';
 import { Button } from '@/components/ui/button';
-import { Callout } from '@/components/ui/callout';
 import {
   EditorPane,
   EditorRail,
@@ -16,8 +14,6 @@ import {
 } from '@/components/ui/editor-workspace';
 import { Icon } from '@/components/ui/icon';
 import { Inline } from '@/components/ui/layout';
-import { MutationNotice } from '@/components/ui/mutation-notice';
-import { QueryState } from '@/components/ui/query-state';
 import { TabPanel, TabRow, TabsRoot } from '@/components/ui/tabs';
 import { textRole } from '@/components/ui/typography';
 import { UnsavedChangesGuard } from '@/components/ui/unsaved-changes-guard';
@@ -26,6 +22,7 @@ import {
   withQuotedReference,
   type SuggestionHighlight,
 } from '@/lib/agent/page-workspace';
+import { Sparkles, Undo2 } from '@/lib/icons';
 import { suggestionCategoryLabel } from '@/lib/agent/vocabulary';
 import type { ActionDetail } from '@/lib/api/actions';
 import type { AgentChatDetail, AgentOutput, AgentRevision, AgentSuggestion } from '@/lib/api/agent';
@@ -48,6 +45,10 @@ import {
   type StackTab,
 } from './use-page-workspace';
 import { WorkspaceChat } from './workspace-chat';
+import { Notice, readErrorProps } from '@/components/ui/notice';
+import { StateBlock } from '@/components/ui/state-block';
+
+import './page-workspace.css';
 
 const ASK_REQUEST = 'Suggest how to improve this passage.';
 
@@ -71,7 +72,7 @@ function WorkspaceDeclaration({
 }>) {
   const mayWrite = useWorkspaceCapability('write');
   if (!action) return null;
-  if (action.declaration) return <Badge tone="positive">Marked implemented</Badge>;
+  if (action.declaration) return <StatusMark tone="positive">Marked implemented</StatusMark>;
   if (!isDeclarable(action) || !mayWrite) return null;
   return (
     <MarkImplementedButton
@@ -89,15 +90,15 @@ function lockedReason(canEdit: boolean, runActive: boolean, editing: boolean): s
   return editing ? 'Save or discard your edits to the page first.' : null;
 }
 
-/** The header: the page named under Actions, and the way back to its Action. */
 function workspaceHeader(detail: AgentChatDetail, output: AgentOutput) {
   const label = output.target_label ?? detail.chat.target_label ?? output.latest_revision.title;
   const actionId = detail.chat.action_id;
   return {
-    title: `Actions › ${shortUrlTitle(label)}`,
-    back: actionId
-      ? { href: `/agent/actions/${actionId}`, label: 'Back to the Action' }
-      : { href: '/agent/actions', label: 'Back to Actions' },
+    title: shortUrlTitle(label),
+    trail: [
+      { label: 'Actions', href: '/actions' },
+      ...(actionId ? [{ label: 'Action', href: `/actions/${actionId}` }] : []),
+    ],
   };
 }
 
@@ -112,24 +113,18 @@ function SuggestionsTab({
 >) {
   const { query, page } = suggestions;
   if (page) return <SuggestionsPanel page={page} {...props} />;
+  if (!query.isError)
+    return <StateBlock kind="loading" label="Loading suggestions…" shape={{ kind: 'list' }} />;
   return (
-    <QueryState
-      kind={query.isError ? 'error' : 'loading'}
-      error={query.error}
+    <StateBlock
+      kind="error"
+      {...readErrorProps(query)}
+      title="Couldn't load the suggestions"
       fallback="The suggestions could not be loaded."
-      onRetry={() => void query.refetch()}
-      pending={query.isFetching}
     />
   );
 }
 
-/**
- * A page chat's workspace (E1): the page on the left in the live-preview
- * editor, and on the right Suggestions, Outline and SEO with the chat docked
- * under them; below 1024px the rail becomes tabs under the page. The page is
- * the chat's `page` document; every write goes through the server's
- * compare-and-set on the revision on screen.
- */
 export function PageWorkspace({
   detail,
   output,
@@ -221,9 +216,9 @@ export function PageWorkspace({
   const header = workspaceHeader(detail, output);
 
   return (
-    <ListScreen
+    <WorkbenchPage
       title={header.title}
-      back={header.back}
+      trail={header.trail}
       actions={
         <>
           <WorkspaceDeclaration
@@ -269,7 +264,7 @@ export function PageWorkspace({
           }
         />
       )}
-    </ListScreen>
+    </WorkbenchPage>
   );
 }
 
@@ -345,13 +340,14 @@ function PageHead({
           {status}
         </span>
         <Inline className="flex-wrap">
-          <Button variant="ghost" disabled={!canAsk} onClick={onAsk}>
+          <Button variant="quiet" disabled={!canAsk} onClick={onAsk}>
             <Icon icon={Sparkles} />
             Ask AI
           </Button>
           {draft.draft ? (
             <>
-              <Button variant="ghost" disabled={draft.saving} onClick={draft.discard}>
+              <Button variant="quiet" disabled={draft.saving} onClick={draft.discard}>
+                <Icon icon={Undo2} />
                 Discard
               </Button>
               <Button
@@ -367,12 +363,11 @@ function PageHead({
         </Inline>
       </Inline>
       {draft.moved && !draft.failure ? (
-        <Callout tone="warning">
-          The page changed since you started editing. Saving will be refused; discard your edits to
-          see the latest version.
-        </Callout>
+        <Notice tone="warning">
+          The page changed since you started editing. Saving will be refused.
+        </Notice>
       ) : null}
-      {draft.failure ? <MutationNotice notice={draft.failure} /> : null}
+      {draft.failure ? <Notice kind="mutation" notice={draft.failure} /> : null}
     </>
   );
 }

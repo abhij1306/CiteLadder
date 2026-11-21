@@ -1,4 +1,3 @@
-/** Fresh SQL-baseline schema for bootstrap/seed tests. Never reset a supplied database. */
 import { randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';

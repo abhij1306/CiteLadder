@@ -18,7 +18,6 @@ const original = { ...crawlLogs };
 const now = new Date();
 const scope = (t: Tenant) => ({ workspaceId: t.workspaceId, projectId: t.projectId });
 
-/** One CloudFront standard logging (v2) JSON record. */
 const log = (changes: Record<string, unknown> = {}) =>
   JSON.stringify({
     'timestamp(ms)': String(now.getTime()),
@@ -138,7 +137,6 @@ describe('Firehose delivery', () => {
       ])
       .where('source_id', '=', id)
       .execute();
-    // The whole decompressed request counts toward the daily volume, bad records included.
     expect(receipt).toEqual({
       lines_received: 3,
       lines_matched: 1,
@@ -155,7 +153,6 @@ describe('Firehose delivery', () => {
       for (let attempt = 0; attempt < 3; attempt++)
         expect((await deliver(id, token, body, { requestId: 'req-retry' })).status).toBe(200);
       expect(await receipts(id)).toHaveLength(1);
-      // A delivered request ID is answered before its body is read or decoded.
       const garbled = await deliver(id, token, 'not a Firehose request', {
         requestId: 'req-retry',
       });

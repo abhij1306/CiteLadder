@@ -1,7 +1,5 @@
-/** ISO request timestamps retain PostgreSQL microsecond precision. */
 import { z } from 'zod';
 
-/** A parsed `datetime`: wall-clock fields plus the UTC offset, if any. */
 export type ParsedDatetime = {
   year: number;
   month: number;
@@ -10,7 +8,6 @@ export type ParsedDatetime = {
   minute: number;
   second: number;
   microsecond: number;
-  /** Offset from UTC in seconds, or null for a naive value. */
   offsetSeconds: number | null;
 };
 
@@ -22,12 +19,10 @@ const dateSchema = z.iso.date().refine((value) => !value.startsWith('0000-'));
 const datetimeSchema = z.iso
   .datetime({ offset: true, local: true })
   .refine((value) => !value.startsWith('0000-'));
-// `date[Ttime[offset]]`, matched part by part; the schemas above validate ranges.
 const DATE_PART = /^(\d{4})-(\d{2})-(\d{2})/u;
 const TIME_PART = /^T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?/u;
 const OFFSET_PART = /^(?:(Z)|([+-])(\d{2}):(\d{2}))?$/u;
 
-/** The date, time and offset captures of an ISO value, or null when malformed. */
 function datetimeParts(text: string) {
   const date = DATE_PART.exec(text);
   if (!date) return null;
@@ -38,12 +33,10 @@ function datetimeParts(text: string) {
   return zone ? { date, time, zone } : null;
 }
 
-/** `YYYY-MM-DD` for a real calendar date, or null. */
 export function parseDate(text: string): string | null {
   return dateSchema.safeParse(text).success ? text : null;
 }
 
-/** Date inputs may carry an ISO midnight; a nonzero time cannot be discarded. */
 export function parseRequestDate(text: string): string | null {
   const day = parseDate(text);
   if (day) return day;
@@ -56,7 +49,6 @@ export function parseRequestDate(text: string): string | null {
     : null;
 }
 
-/** An ISO date or datetime, or null when it is malformed or out of range. */
 export function parseDatetime(text: string): ParsedDatetime | null {
   if (!dateSchema.safeParse(text).success && !datetimeSchema.safeParse(text).success) return null;
   const parts = datetimeParts(text);
@@ -83,7 +75,6 @@ function pad(value: number, width = 2): string {
   return String(value).padStart(width, '0');
 }
 
-/** ISO serialization without losing sub-millisecond precision. */
 export function isoformat(value: ParsedDatetime): string {
   const date = `${pad(value.year, 4)}-${pad(value.month)}-${pad(value.day)}`;
   const time = `${pad(value.hour)}:${pad(value.minute)}:${pad(value.second)}`;
@@ -94,7 +85,6 @@ export function isoformat(value: ParsedDatetime): string {
   return `${date}T${time}${micro}${sign}${pad(Math.floor(minutes / 60))}:${pad(minutes % 60)}`;
 }
 
-/** Microseconds since the epoch in UTC; a naive value reads as UTC. */
 export function epochMicros(value: ParsedDatetime): bigint {
   // `setUTCFullYear`, because `Date.UTC` reads years 0-99 as 1900-1999.
   const wall = new Date(0);
@@ -104,7 +94,6 @@ export function epochMicros(value: ParsedDatetime): bigint {
   return shifted - BigInt(value.offsetSeconds ?? 0) * MICROSECONDS_PER_SECOND;
 }
 
-/** The UTC instant `micros` microseconds after the epoch. */
 export function fromEpochMicros(micros: bigint): ParsedDatetime {
   const seconds =
     micros / MICROSECONDS_PER_SECOND - (micros % MICROSECONDS_PER_SECOND < 0n ? 1n : 0n);
@@ -121,7 +110,6 @@ export function fromEpochMicros(micros: bigint): ParsedDatetime {
   };
 }
 
-/** The value converted to UTC, preserving microseconds. */
 export function toUtc(value: ParsedDatetime): ParsedDatetime {
   return fromEpochMicros(epochMicros(value));
 }

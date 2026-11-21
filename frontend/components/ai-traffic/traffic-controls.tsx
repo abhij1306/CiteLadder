@@ -1,16 +1,21 @@
-import { Download, Folder } from 'lucide-react';
 import { crawlerResourceClassSchema } from '@citeladder/contracts/site-health';
+import { Download, Folder } from '@/lib/icons';
 import { trafficStatusCode, type useTrafficData } from '@/lib/ai-traffic/use-traffic-data';
 import { words } from '@/lib/ai-traffic/vocabulary';
+import type { TrafficFilters } from '@/lib/api/ai-traffic';
 import { TRAFFIC_RANGES, VERIFICATION_OPTIONS } from '@/lib/config/crawl-logs';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { choiceFilter, menuFieldKeys, type FilterDefinition } from '@/components/ui/all-filters';
-import { MenuItem } from '@/components/ui/menu';
+import {
+  choiceFilter,
+  rangeFilter,
+  singleFilter,
+  type FilterDefinition,
+} from '@/components/ui/all-filters';
+import { menuFieldKeys } from '@/components/ui/filter-options';
 import { Icon } from '@/components/ui/icon';
 type ControlProps = Readonly<{ model: ReturnType<typeof useTrafficData> }>;
 type TrafficControlsProps = ControlProps & Readonly<{ crawlAvailable: boolean }>;
-/** Export for the tabs that list rows, in the page header's actions. */
 export function TrafficExport({ model }: ControlProps) {
   return (
     <Button
@@ -24,12 +29,28 @@ export function TrafficExport({ model }: ControlProps) {
   );
 }
 
-/** One filter of All filters, or none where the tab does not offer it. */
+const NOT_NARROWING: ReadonlySet<string> = new Set(['range', 'sort']);
+
+export function trafficNarrowed(filters: TrafficFilters): boolean {
+  return Object.entries(filters).some(
+    ([key, value]) => !NOT_NARROWING.has(key) && value !== undefined && value !== null,
+  );
+}
+
+export function clearTrafficFilters({ selection }: ControlProps['model']) {
+  selection.setVerification('default');
+  selection.setPurpose(null, 'replace');
+  selection.setBot(null, 'replace');
+  selection.setStatus(null, 'replace');
+  selection.setFolder(null, 'replace');
+  selection.setResource(null, 'replace');
+  selection.setPattern(null, 'replace');
+}
+
 type FilterBuilder = (props: TrafficControlsProps) => FilterDefinition | null;
 
-/** In menu order. */
 const FILTER_BUILDERS: readonly FilterBuilder[] = [
-  rangeFilter,
+  trafficRangeFilter,
   verificationFilter,
   purposeFilter,
   botFilter,
@@ -39,54 +60,19 @@ const FILTER_BUILDERS: readonly FilterBuilder[] = [
   insightFilter,
 ];
 
-/**
- * Every narrowing the tab offers, for its control row's All filters: the
- * reporting range, verification, resource class, crawler purpose, bot, the
- * typed folder and status code, and an insight's filter.
- */
 export function trafficFilters(props: TrafficControlsProps): FilterDefinition[] {
   return FILTER_BUILDERS.flatMap((build) => build(props) ?? []);
 }
 
-/** A choice filter whose unset value is `null` in the URL and "All …" in the menu. */
-function optionalChoice({
-  id,
-  label,
-  allLabel,
-  value,
-  options,
-  onChange,
-}: Readonly<{
-  id: string;
-  label: string;
-  allLabel: string;
-  value: string | null;
-  options: readonly { value: string; label: string }[];
-  onChange: (value: string | null) => void;
-}>): FilterDefinition {
-  return choiceFilter({
-    id,
-    label,
-    value: value ?? '',
-    defaultValue: '',
-    groups: [{ options: [{ value: '', label: allLabel }, ...options] }],
-    onChange: (picked) => onChange(picked || null),
-  });
-}
-
-/** The reporting window every tab reads. */
-function rangeFilter({ model }: TrafficControlsProps) {
-  return choiceFilter({
-    id: 'range',
-    label: 'Reporting range',
+function trafficRangeFilter({ model }: TrafficControlsProps) {
+  return rangeFilter({
     value: model.selection.range,
     defaultValue: TRAFFIC_RANGES[0].value,
-    groups: [{ options: TRAFFIC_RANGES }],
+    options: TRAFFIC_RANGES,
     onChange: model.selection.setRange,
   });
 }
 
-// Verification filters crawler requests only.
 function verificationFilter({ model, crawlAvailable }: TrafficControlsProps) {
   if (!crawlAvailable) return null;
   return choiceFilter({
@@ -102,7 +88,7 @@ function verificationFilter({ model, crawlAvailable }: TrafficControlsProps) {
 function purposeFilter({ model }: TrafficControlsProps) {
   if (model.tab !== 'crawlers') return null;
   const purposes = new Set(model.catalog.data?.bots.map((bot) => bot.purpose));
-  return optionalChoice({
+  return singleFilter({
     id: 'purpose',
     label: 'Crawler purpose',
     allLabel: 'All purposes',
@@ -114,7 +100,7 @@ function purposeFilter({ model }: TrafficControlsProps) {
 
 function botFilter({ model }: TrafficControlsProps) {
   if (model.tab !== 'activity') return null;
-  return optionalChoice({
+  return singleFilter({
     id: 'bot',
     label: 'Bot',
     allLabel: 'All bots',
@@ -126,7 +112,7 @@ function botFilter({ model }: TrafficControlsProps) {
 
 function resourceFilter({ model }: TrafficControlsProps) {
   if (model.tab === 'overview') return null;
-  return optionalChoice({
+  return singleFilter({
     id: 'resource',
     label: 'Resource class',
     allLabel: 'All resources',
@@ -145,13 +131,14 @@ function folderFilter({ model }: TrafficControlsProps): FilterDefinition | null 
     label: 'Folder',
     valueLabel: folder || 'Any folder',
     isDefault: !folder,
+    defaultLabel: 'Any folder',
+    reset: () => model.selection.setFolder(null),
     content: <FolderField model={model} />,
   };
 }
 
 function statusFilter({ model }: TrafficControlsProps): FilterDefinition | null {
   if (model.tab !== 'activity') return null;
-  // A partly typed code ("40") narrows nothing yet, so it is neither shown nor counted.
   const code = trafficStatusCode(model.selection.status);
   return {
     kind: 'custom',
@@ -159,6 +146,8 @@ function statusFilter({ model }: TrafficControlsProps): FilterDefinition | null 
     label: 'Status code',
     valueLabel: code === undefined ? 'Any status' : String(code),
     isDefault: code === undefined,
+    defaultLabel: 'Any status',
+    reset: () => model.selection.setStatus(null),
     content: <StatusField model={model} />,
   };
 }
@@ -172,7 +161,9 @@ function insightFilter({ model }: TrafficControlsProps): FilterDefinition | null
     label: 'Insight',
     valueLabel: 'Filtered',
     isDefault: false,
-    content: <MenuItem onSelect={() => setPattern(null)}>Clear insight filter</MenuItem>,
+    defaultLabel: 'every page',
+    reset: () => setPattern(null),
+    content: null,
   };
 }
 

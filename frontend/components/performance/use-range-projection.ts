@@ -10,14 +10,6 @@ import {
 import { pollRangeTask, RANGE_TASK_STATES } from '@/lib/performance/status';
 import type { ActiveProjectScope } from '@/lib/project/active-project-scope';
 
-/**
- * Materialize any window the dashboard reported as unprojected.
- *
- * A read never builds a projection, so when the selected or comparison window
- * has no snapshot the screen queues the display-only range task and refetches
- * once it completes. The task is idempotent on the window, so a re-render or
- * a second viewer joins the same work rather than duplicating it.
- */
 export function useRangeProjection(
   scope: Pick<ActiveProjectScope, 'workspaceId' | 'projectId'>,
   data: PerformanceDashboard | undefined,
@@ -30,15 +22,11 @@ export function useRangeProjection(
     taskId: string;
     window: RangeWindow;
   } | null>(null);
-  // The window whose enqueue was refused. A task that ended failed or
-  // cancelled is read from the task itself. Both stay apart from "never
-  // imported", so the screen reports the failure and offers Retry (invariant 7).
   const [refused, setRefused] = useState<{
     scopeKey: string;
     window: RangeWindow;
     error: unknown;
   } | null>(null);
-  // Read inside `onSuccess`, which runs long after the mutation was fired.
   const scopeKeyRef = useRef(scopeKey);
   const dataRef = useRef(data);
   useLayoutEffect(() => {
@@ -57,8 +45,6 @@ export function useRangeProjection(
   const terminal = status !== undefined && !RANGE_TASK_STATES[status].active;
 
   const missing = missingWindow(data);
-  // A newly missing window starts clean: an earlier refusal and a task that
-  // already ended belong to the window that was on screen before.
   const missingKey = missing && `${scopeKey}|${missing.from}|${missing.to}`;
   const [shownKey, setShownKey] = useState(missingKey);
   if (shownKey !== missingKey) {
@@ -69,11 +55,6 @@ export function useRangeProjection(
 
   const request = (window: RangeWindow) => {
     const requested = scopeKey;
-    // Two enqueues can be in flight when the selection moves while the first
-    // is still open, and they can land in either order. A response only
-    // counts if it is still the window this screen wants — otherwise the
-    // later selection's poll would be replaced by the earlier one's task, and
-    // the dashboard would never be refreshed for the window actually on screen.
     const superseded = () => {
       const wanted = missingWindow(dataRef.current);
       return requested !== scopeKeyRef.current || (wanted !== null && !sameWindow(wanted, window));
@@ -96,8 +77,6 @@ export function useRangeProjection(
     }
   }, [workspaceId, projectId, missingFrom, missingTo]);
 
-  // Only a success changed a projection, so only a success invalidates, and
-  // only once per task.
   const refreshedTask = useRef<string | null>(null);
   useEffect(() => {
     if (status !== 'succeeded' || pending === null || refreshedTask.current === pending) return;
@@ -105,8 +84,6 @@ export function useRangeProjection(
     void refreshPerformance(queryClient, projectId);
   }, [status, pending, queryClient, projectId]);
 
-  // EVERY terminal status ends `projecting`, not only a success; a failed or
-  // cancelled task is reported for its window.
   const taskError = useMemo(() => {
     if (!terminal || status === 'succeeded') return null;
     return new Error(
@@ -123,7 +100,6 @@ export function useRangeProjection(
   ]);
   return {
     projecting: Boolean(pending) && !terminal,
-    /** The current window's projection failed: what happened, and Retry for exactly it. */
     failure: failure
       ? {
           error: failure.error,
@@ -146,12 +122,6 @@ function sameWindow(a: RangeWindow, b: RangeWindow) {
   return a.from === b.from && a.to === b.to;
 }
 
-/**
- * The failure that belongs to the window on screen. A task can end after the
- * reader moved on, so each candidate is matched to that window on its own: an
- * older window's ended task must not hide the refusal of the window that
- * replaced it.
- */
 function failureOnScreen(
   missing: RangeWindow | null,
   candidates: readonly (RangeFailure | null)[],
@@ -160,7 +130,6 @@ function failureOnScreen(
   return candidates.find((failed) => failed !== null && sameWindow(failed.window, missing)) ?? null;
 }
 
-/** The first window the response reported as unprojected, if any. */
 function missingWindow(data: PerformanceDashboard | undefined): RangeWindow | null {
   if (!data) return null;
   for (const window of [data.selected, data.comparison]) {

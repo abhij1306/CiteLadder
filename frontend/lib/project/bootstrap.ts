@@ -13,7 +13,6 @@
  */
 import type { SelectionStatus } from '@/lib/project/selection';
 
-/** Which standing notice, if any, this state owes the reader. */
 export type NoticeKind = 'failed' | 'missing-project' | 'no-projects';
 export type GateState = NoticeKind | 'ready' | 'loading' | 'redirecting';
 
@@ -22,7 +21,6 @@ export type GateInputs = {
   mayCreate: boolean;
 };
 
-/** Resolve routing, loading and recovery together so their precedence cannot drift. */
 export function resolveGate(
   status: SelectionStatus,
   { projectRequired, mayCreate }: GateInputs,

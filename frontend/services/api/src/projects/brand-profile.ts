@@ -1,14 +1,3 @@
-/**
- * The brand profile: a project's reviewed brand knowledge.
- *
- * Onboarding creates the profile and prompt generation records
- * business-map suggestions in its `business_context`; people edit the four
- * knowledge fields, the identity facets (category, buyer type, market scope,
- * business model) and the business-context lists onboarding resolved (service
- * areas, buyer roles, category terms, jobs to be done) here. Every TypeScript
- * writer takes the project advisory
- * lock before the profile row, shared with generation.
- */
 import { randomUUID } from 'node:crypto';
 
 import {
@@ -50,13 +39,11 @@ type Field = keyof z.infer<typeof brandProfileSchema.shape.sources>;
 
 const text = z.string().max(TEXT_MAX).nullish();
 
-/** One business-context list: short phrases, one per entry; an empty list clears it. */
 const contextList = z
   .array(z.string().trim().min(1).max(policy.brand_identity.map_value_max_chars))
   .max(policy.brand_identity.context_list_max_entries)
   .nullish();
 
-/** A partial edit: an absent or null field is left untouched. */
 export const brandProfileUpdate = brandProfileUpdateRequestSchema.extend({
   description: text,
   positioning: text,
@@ -69,30 +56,20 @@ export const brandProfileUpdate = brandProfileUpdateRequestSchema.extend({
   jobs_to_be_done: contextList,
 });
 const IDENTITY_FACETS = ['category', 'buyer_type', 'market_scope', 'business_model'] as const;
-/** Business-context lists onboarding resolved, editable here as reviewed facts. */
 const CONTEXT_LISTS = [
   'service_areas',
   'buyer_roles',
   'category_terms',
   'jobs_to_be_done',
 ] as const;
-// Inferred from the onboarding category; they describe a replaced category.
 const CATEGORY_DERIVED = ['category_terms', 'category_aliases', 'category_options'] as const;
 export type BrandProfileUpdate = z.infer<typeof brandProfileUpdate>;
 
 const contractProvenance = brandProfileSchema.shape.sources.shape.description.unwrap();
-// Rows written before the onboarding writer carried the reviewer keys store
-// provenance entries without them; absent there means no reviewer and no
-// review time, so null is their truthful reading, not a fabricated one.
-const storedProvenance = contractProvenance.extend({
-  reviewed_by: contractProvenance.shape.reviewed_by.default(null),
-  reviewed_at: contractProvenance.shape.reviewed_at.default(null),
-});
-const storedSources = z.record(z.string(), storedProvenance);
-// Review times are stored as ISO text; the view renders them as ISO instants.
+const storedSources = z.record(z.string(), contractProvenance);
 const viewedSources = z.record(
   z.string(),
-  storedProvenance.transform((entry) => ({
+  contractProvenance.transform((entry) => ({
     ...entry,
     reviewed_at: entry.reviewed_at === null ? null : new Date(entry.reviewed_at).toISOString(),
   })),
@@ -100,7 +77,6 @@ const viewedSources = z.record(
 const storedArtifacts = z.record(z.string(), z.uuid());
 const storedProducts = z.array(z.string());
 
-/** Trim, drop blanks and case-insensitive duplicates (first spelling wins). */
 function cleanProducts(values: readonly string[]): string[] {
   const seen = new Set<string>();
   const cleaned: string[] = [];
@@ -126,11 +102,6 @@ function byField<T>(stored: Record<string, T>): Record<Field, T | null> {
   >;
 }
 
-/**
- * Older contexts name the buyer facet `business_type`. Fold it into
- * `buyer_type` (a reviewed `business_type` value wins over an unreviewed current one) so
- * every reader and writer sees one key.
- */
 function withBuyerType(stored: Record<string, unknown>): Record<string, unknown> {
   if (!('business_type' in stored)) return stored;
   const { business_type: older, ...business } = stored;
@@ -168,7 +139,6 @@ function view(row: ProfileRow): BrandProfile {
   };
 }
 
-/** The project's profile row, locked when `forUpdate`, or 404. */
 export async function loadProfile(
   db: Database,
   scope: ProjectScope,
@@ -188,7 +158,6 @@ export async function loadProfile(
 export async function readBrandProfile(db: Database, scope: ProjectScope): Promise<BrandProfile> {
   return view(await loadProfile(db, scope));
 }
-/** Optional grounding projection; missing memory stays unavailable and provenance stays attached. */
 export async function readBrandMemory(db: Database, scope: ProjectScope) {
   const row = await db
     .selectFrom('brand_profiles')
@@ -206,7 +175,6 @@ export async function readBrandMemory(db: Database, scope: ProjectScope) {
 type StoredSources = z.infer<typeof storedSources>;
 type StoredArtifacts = z.infer<typeof storedArtifacts>;
 
-/** Writes each supplied field's value and reviewed provenance; mutates `sources` and `artifacts`. */
 function applyFieldEdits(
   update: BrandProfileUpdate,
   sources: StoredSources,
@@ -233,15 +201,9 @@ function applyFieldEdits(
 
 type ContextField = (typeof IDENTITY_FACETS)[number] | (typeof CONTEXT_LISTS)[number];
 
-/** The supplied identity facets and business-context lists, in the order they apply. */
 const contextEdits = (update: BrandProfileUpdate): ContextField[] =>
   [...IDENTITY_FACETS, ...CONTEXT_LISTS].filter((field) => update[field] != null);
 
-/**
- * Records reviewed identity facets and business-context lists in `context`.
- * A changed category drops what derived from it, before any supplied list
- * (such as new category terms) is written.
- */
 function applyContextEdits(
   context: Record<string, unknown>,
   update: BrandProfileUpdate,
@@ -263,11 +225,6 @@ function applyContextEdits(
   context.field_sources = fieldSources;
 }
 
-/**
- * Apply a person's edits. Each supplied field keeps its original origin, is
- * confirmed (first review) or edited (a later one) by this reviewer, and
- * drops the suggestion artifact it no longer matches.
- */
 export function updateBrandProfile(
   db: Database,
   scope: ProjectScope,

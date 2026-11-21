@@ -1,13 +1,3 @@
-/**
- * The Agent's four built-in tools. They are not reads: `load_skill` supplies a
- * methodology, `save_document` stages a whole document, `edit_document`
- * stages exact replacements in one and `suggest_edits` stages suggestions on
- * a page document for the person to apply. A chat holds several documents,
- * each named by its number ("Document 2"); the runtime commits every staged
- * document and suggestion with the reply in one transaction (F14). Each
- * refusal says how to correct the call, so the model fixes it instead of the
- * turn ending.
- */
 import { z } from 'zod';
 import { policy } from '../config.ts';
 import { argumentProblem } from '../mcp/tools.ts';
@@ -20,6 +10,11 @@ import {
   type Skill,
   type SkillCatalog,
 } from './contracts.ts';
+import {
+  PROPOSE_DECLARATION,
+  PROPOSE_DESCRIPTION,
+  proposeDeclarationArguments,
+} from './proposals.ts';
 import { fetchesPage, usesFormats } from './skills.ts';
 import { scrubRecordRefs } from './sources.ts';
 import {
@@ -37,14 +32,11 @@ export const EDIT_DOCUMENT = 'edit_document';
 export const SUGGEST_EDITS = 'suggest_edits';
 const suggestionPolicy = policy.content_optimization.suggestions;
 
-/** The short label a document is named by, for the model and the person. */
 export function documentLabel(number: number) {
   return `Document ${number}`;
 }
-/** A built-in's result about one document starts with its label, so a replayed turn says which. */
 export const DOCUMENT_RESULT = /^Document (\d+)\b/u;
 
-/** One of the chat's saved documents, as the turn read it. */
 export type SavedDocument = {
   number: number;
   kind: string;
@@ -53,26 +45,17 @@ export type SavedDocument = {
   title: string;
   body: string;
 };
-/** A document this turn staged: a new one or a revision of a saved one. */
 type StagedDocument = { kind: string; skillId: string; payload: OutputPayload };
 
-/** What the built-ins read and change during one turn. */
 export type DocumentState = {
   skill: Skill | undefined;
   skillSource: string | null;
-  /** The pinned format, else the latest document's, used when a new document names none. */
   formatId: string | null;
-  /** The chat's saved documents, in number order. */
   documents: SavedDocument[];
-  /** This turn's staged documents by number; committed only with the reply. */
   staged: Map<number, StagedDocument>;
-  /** UUIDs the person wrote (`writtenIds`): a staged document keeps them. */
   personIds: ReadonlySet<string>;
-  /** Each page document's SEO fields and stored suggestions, by number. */
   pages: ReadonlyMap<number, PageState>;
-  /** The rules this turn's `content_rules` section offers, Site Health findings on the page included. */
   rules: ReadonlySet<string>;
-  /** This turn's staged suggestions; committed only with the reply. */
   suggestions: StagedSuggestion[];
 };
 export type BuiltinOutcome = { ok: boolean; text: string; document?: number };
@@ -174,6 +157,11 @@ export function agentToolList(
     { name: SAVE_DOCUMENT, description: SAVE_DESCRIPTION, arguments: save },
     { name: EDIT_DOCUMENT, description: EDIT_DESCRIPTION, arguments: edit },
     { name: SUGGEST_EDITS, description: SUGGEST_DESCRIPTION, arguments: suggest },
+    {
+      name: PROPOSE_DECLARATION,
+      description: PROPOSE_DESCRIPTION,
+      arguments: proposeDeclarationArguments,
+    },
   ]).map((tool) => (tool.name === SAVE_DOCUMENT ? { ...tool, stream_input: true } : tool));
   return [...registry.catalog(), ...builtins].toSorted((a, b) => compareText(a.name, b.name));
 }
@@ -183,12 +171,12 @@ const BUILTINS: ReadonlySet<string> = new Set([
   SAVE_DOCUMENT,
   EDIT_DOCUMENT,
   SUGGEST_EDITS,
+  PROPOSE_DECLARATION,
 ]);
 export function isBuiltin(name: string) {
   return BUILTINS.has(name);
 }
 
-/** The method plus the rules for saving it, as `load_skill` returns and a pinned skill is supplied. */
 export function methodology(
   skill: Skill,
   state: Pick<DocumentState, 'formatId'>,
@@ -210,7 +198,6 @@ export function methodology(
     .join('\n\n');
 }
 
-/** Any methodology may be loaded: a document of another kind is saved as a new document. */
 export function loadSkill(
   catalog: SkillCatalog,
   state: DocumentState,
@@ -229,13 +216,11 @@ export function loadSkill(
   return { ok: true, text: methodology(skill, state, bounds) };
 }
 
-/** Every number in use: the saved documents and this turn's new ones. */
 function numbers(state: DocumentState) {
   return [
     ...new Set([...state.documents.map((document) => document.number), ...state.staged.keys()]),
   ];
 }
-/** A document as the turn now holds it: staged this turn, else as saved. */
 function current(state: DocumentState, number: number) {
   const staged = state.staged.get(number);
   const saved = state.documents.find((document) => document.number === number);
@@ -259,12 +244,11 @@ function unknownDocument(state: DocumentState, number: number) {
 }
 
 function staged(
-  catalog: SkillCatalog,
   state: DocumentState,
   number: number,
   document: Omit<StagedDocument, 'payload'> & { payload: unknown },
   bounds: OutputBounds,
-  done: string,
+  done: (title: string) => string,
 ): BuiltinOutcome {
   const checked = outputSchema(bounds).safeParse(document.payload);
   if (!checked.success)
@@ -277,26 +261,31 @@ function staged(
     skillId: document.skillId,
     payload: checked.data,
   });
-  const format = checked.data.format_id;
-  const label = format ? ` in ${catalog.formats?.get(format)?.label ?? format} format` : '';
   return {
     ok: true,
     document: number,
-    text: `${documentLabel(number)}: ${done}${label}; it is saved with your reply, and the app tells the person so. Now reply briefly; do not repeat the document or announce the save.`,
+    text: `${documentLabel(number)}${done(checked.data.title)}`,
   };
 }
 
-/**
- * Stages a whole document. A number replaces that document and must match the
- * loaded methodology's kind; without one the document is new. `step` holds the
- * documents already saved whole in this response: the first save of each is kept.
- */
+const saved = (title: string) => ` saved ('${title}'). Reply now.`;
+const sameTitle = (left: string, right: string) =>
+  left.trim().toLocaleLowerCase() === right.trim().toLocaleLowerCase();
+
+function repeatedSave(state: DocumentState, requested: number | null | undefined, title: string) {
+  const repeat =
+    requested && state.staged.has(requested)
+      ? requested
+      : [...state.staged].find(([, { payload }]) => sameTitle(payload.title, title))?.[0];
+  if (repeat === undefined) return null;
+  return `${documentLabel(repeat)} was already saved in this turn and that save was kept. Change it with edit_document, or reply now.`;
+}
+
 export function saveDocument(
   catalog: SkillCatalog,
   state: DocumentState,
   input: unknown,
   bounds: OutputBounds,
-  step: ReadonlySet<number> = new Set(),
 ): BuiltinOutcome {
   const { skill } = state;
   if (!skill)
@@ -319,11 +308,8 @@ export function saveDocument(
       ok: false,
       text: `${documentLabel(requested!)} is a “${existing.kind}” document and this methodology writes “${skill.outputKind}”. Omit document to save this as a new document, or load a “${existing.kind}” methodology to replace it.`,
     };
-  if (requested && step.has(requested))
-    return {
-      ok: false,
-      text: `Save ${documentLabel(requested)} once per step. The first save in this step was kept.`,
-    };
+  const repeat = repeatedSave(state, requested, fields.title);
+  if (repeat) return { ok: false, text: repeat };
   const number = requested ?? Math.max(0, ...numbers(state)) + 1;
   const formats = catalog.formats;
   const format = usesFormats(skill)
@@ -332,7 +318,6 @@ export function saveDocument(
   if (formats && usesFormats(skill) && !formats.has(format ?? ''))
     return { ok: false, text: `Set format_id to one of: ${[...formats.keys()].join(', ')}.` };
   return staged(
-    catalog,
     state,
     number,
     {
@@ -346,11 +331,10 @@ export function saveDocument(
       },
     },
     bounds,
-    requested ? 'staged the new version' : 'staged as a new document',
+    saved,
   );
 }
 
-/** Applies every replacement in order, or none: each must match exactly once. */
 function replaced(
   body: string,
   edits: { old_string: string; new_string: string }[],
@@ -378,7 +362,6 @@ function editLabel(count: number) {
   return count === 1 ? 'the edit' : `${count} edits`;
 }
 
-/** Stages exact replacements in one document; it keeps its kind, methodology and format. */
 export function editDocument(
   catalog: SkillCatalog,
   state: DocumentState,
@@ -403,7 +386,6 @@ export function editDocument(
   if (!result.ok) return result;
   const count = parsed.data.edits.length;
   const outcome = staged(
-    catalog,
     state,
     number,
     {
@@ -418,12 +400,12 @@ export function editDocument(
       },
     },
     bounds,
-    `applied ${editLabel(count)}`,
+    () =>
+      `: applied ${editLabel(count)}; it is saved with your reply, and the app tells the person so. Now reply briefly; do not repeat the document or announce the save.`,
   );
   return outcome.ok ? followedBy(state, number, base.body, outcome) : outcome;
 }
 
-/** Suggestions staged earlier in the turn follow a staged edit; one it changed is dropped and the reply says so. */
 function followedBy(
   state: DocumentState,
   number: number,
@@ -440,7 +422,6 @@ function followedBy(
   };
 }
 
-/** The page document a suggestion call names, with its text as the turn holds it. */
 function pageFor(
   state: DocumentState,
   requested: number | null | undefined,
@@ -464,11 +445,6 @@ function pageFor(
   return { ok: true, number, body, state: page };
 }
 
-/**
- * Stages suggestions on a page document, all or none: each must name text
- * that matches once, an SEO field, or the whole page, and is resolved to the
- * stored finding's anchor here. They commit with the reply.
- */
 export function suggestEdits(
   catalog: SkillCatalog,
   state: DocumentState,

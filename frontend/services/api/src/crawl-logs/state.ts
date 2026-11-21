@@ -41,10 +41,6 @@ export async function lockCrawlState(db: Database, scope: CrawlScope) {
     .forUpdate()
     .executeTakeFirstOrThrow();
 }
-/**
- * Adopt the reporting timezone a GA4 property reports in. A change re-rolls
- * every retained day in the new timezone; the same timezone is a no-op.
- */
 export async function adoptReportingTimezone(
   db: Database,
   scope: CrawlScope,

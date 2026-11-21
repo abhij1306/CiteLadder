@@ -1,20 +1,9 @@
-/**
- * Evidence-screen handoffs into the Agent.
- *
- * **Work with the agent** opens New chat attached to an Action, which writes
- * the Action's message once it reads it. **Ask agent** opens
- * New chat with typed evidence references and an optional prefilled question.
- * The URL carries identifiers only: the server resolves and authorizes each
- * one when the chat is created, so a tampered or stale id fails there, never
- * here. Parsing drops anything malformed rather than guessing.
- */
 import type { ActionHandoff } from '@citeladder/contracts/actions';
-import type { AgentContextRefs } from '@citeladder/contracts/agent';
+import type { AgentChatOrigin, AgentContextRefs } from '@citeladder/contracts/agent';
 
 import type { DatedEvidence } from '@/lib/agent/evidence';
 import { checkKindLabel, checkStateLabel, measurementLegLabel } from '@/lib/agent/vocabulary';
 import type { ActionDetail } from '@/lib/api/actions';
-import { DEVELOPER_TICKET_PAGES_MAX } from '@/lib/config/agent';
 import { pluralCount } from '@/lib/format';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -36,7 +25,12 @@ const PARAM = {
   factsCrawl: 'facts_crawl_id',
   output: 'output_id',
   revision: 'revision_id',
+  actionUrls: 'action_url_id',
+  urlActions: 'url_actions_id',
+  objection: 'objection_id',
 } as const;
+
+export const HANDOFF_URLS_MAX = 50;
 
 export type AgentHandoff = {
   actionId?: string;
@@ -56,12 +50,14 @@ export type HandoffInput = {
   issueGroup?: { crawlId: string; groupId: string; siteUrlId?: string };
   siteFacts?: { crawlId: string };
   outputRevision?: { outputId: string; revisionId: string };
+  actionUrlIds?: readonly string[];
+  urlActionsSiteUrlId?: string;
+  objectionGroupId?: string;
   prompt?: string | null;
   skillId?: string | null;
   workflowId?: string | null;
 };
 
-/** `/agent` with the typed references a new chat should start from. */
 export function agentHandoffHref(input: HandoffInput): string {
   const params = new URLSearchParams();
   const set = (key: string, value: string | null | undefined) => {
@@ -78,6 +74,10 @@ export function agentHandoffHref(input: HandoffInput): string {
   set(PARAM.factsCrawl, input.siteFacts?.crawlId);
   set(PARAM.output, input.outputRevision?.outputId);
   set(PARAM.revision, input.outputRevision?.revisionId);
+  for (const id of input.actionUrlIds?.slice(0, HANDOFF_URLS_MAX) ?? [])
+    params.append(PARAM.actionUrls, id);
+  set(PARAM.urlActions, input.urlActionsSiteUrlId);
+  set(PARAM.objection, input.objectionGroupId);
   if (input.searchIntelligence && input.searchIntelligence.rowIds.length > 0) {
     params.set(PARAM.dataset, input.searchIntelligence.datasetId);
     for (const row of input.searchIntelligence.rowIds) params.append(PARAM.rows, row);
@@ -89,18 +89,8 @@ export function agentHandoffHref(input: HandoffInput): string {
   return query ? `/agent?${query}` : '/agent';
 }
 
-/** The workflow that fetches a page into a page document and opens its workspace. */
 const PAGE_WORKFLOW = 'optimize_page';
 
-/**
- * New chat on an Action (AS3): the Action attached, and the workflow its
- * diagnosis names with the finding's Opportunity or the Action's page. An
- * Action on one of the latest crawl's content pages (`editable_page`, as the
- * Action detail reads it) opens that page in the page workspace instead
- * (phase 2, E3). The message stays out of the URL (it names evidence history
- * and logs must not keep); New chat reads it from the attached Action, so it
- * is the same either way.
- */
 export function actionHandoffHref(
   action: Readonly<{
     id: string;
@@ -108,29 +98,27 @@ export function actionHandoffHref(
     handoff: ActionHandoff;
     editable_page?: boolean;
   }>,
+  actionUrlIds: readonly string[] = [],
 ): string {
   const { handoff } = action;
+  const base = { actionId: action.id, actionUrlIds };
   if (action.editable_page && action.target_url)
-    return agentHandoffHref({
-      actionId: action.id,
-      targetUrl: action.target_url,
-      workflowId: PAGE_WORKFLOW,
-    });
+    return agentHandoffHref({ ...base, targetUrl: action.target_url, workflowId: PAGE_WORKFLOW });
   switch (handoff.context) {
     case 'opportunity':
       return agentHandoffHref({
-        actionId: action.id,
+        ...base,
         opportunityId: handoff.opportunity_id,
         workflowId: handoff.workflow_id,
       });
     case 'page_url':
       return agentHandoffHref({
-        actionId: action.id,
+        ...base,
         targetUrl: action.target_url,
         workflowId: handoff.workflow_id,
       });
     case 'action':
-      return agentHandoffHref({ actionId: action.id });
+      return agentHandoffHref(base);
     default: {
       const unknownHandoff: never = handoff;
       throw new Error(`Unknown Action handoff: ${JSON.stringify(unknownHandoff)}`);
@@ -138,11 +126,6 @@ export function actionHandoffHref(
   }
 }
 
-/**
- * The same references as a typed handoff, for the global agent panel. The
- * caller's values come from persisted reads, and the server still resolves and
- * authorizes each one when the chat is created.
- */
 export function agentHandoff(input: HandoffInput): AgentHandoff {
   const context = originContext(input);
   if (input.opportunityId) context.opportunity_id = input.opportunityId;
@@ -182,6 +165,11 @@ function originContext(input: HandoffInput): AgentContextRefs {
       output_id: input.outputRevision.outputId,
       revision_id: input.outputRevision.revisionId,
     };
+  const ticked = [...new Set(input.actionUrlIds ?? [])].slice(0, HANDOFF_URLS_MAX);
+  if (input.actionId && ticked.length > 0) context.action_url_ids = ticked;
+  if (input.urlActionsSiteUrlId)
+    context.url_actions_reference = { site_url_id: input.urlActionsSiteUrlId };
+  if (input.objectionGroupId) context.objection_group_id = input.objectionGroupId;
   return context;
 }
 function parsedOriginContext(params: URLSearchParams): AgentContextRefs {
@@ -201,6 +189,13 @@ function parsedOriginContext(params: URLSearchParams): AgentContextRefs {
     revision = uuidParam(params, PARAM.revision);
   if (output && revision)
     context.output_revision_reference = { output_id: output, revision_id: revision };
+  const ticked = [...new Set(params.getAll(PARAM.actionUrls).filter((id) => UUID.test(id)))];
+  if (ticked.length > 0 && uuidParam(params, PARAM.action))
+    context.action_url_ids = ticked.slice(0, HANDOFF_URLS_MAX);
+  const urlActions = uuidParam(params, PARAM.urlActions);
+  if (urlActions) context.url_actions_reference = { site_url_id: urlActions };
+  const objection = uuidParam(params, PARAM.objection);
+  if (objection) context.objection_group_id = objection;
   return context;
 }
 
@@ -215,13 +210,11 @@ function httpUrlParam(params: URLSearchParams, key: string): string | undefined 
   }
 }
 
-/** A skill or workflow id; the server catalog validates membership. */
 function catalogIdParam(params: URLSearchParams, key: string) {
   const value = params.get(key);
   return value && /^[a-z][a-z0-9_]{0,63}$/.test(value) ? value : undefined;
 }
 
-/** The handoff a New chat URL carries, with malformed values dropped. */
 export function parseAgentHandoff(params: URLSearchParams): AgentHandoff {
   const context = parsedOriginContext(params);
   const opportunity = uuidParam(params, PARAM.opportunity);
@@ -238,7 +231,6 @@ export function parseAgentHandoff(params: URLSearchParams): AgentHandoff {
     context.search_intelligence_reference = { dataset_id: dataset, row_ids: rows };
   }
   const prompt = params.get(PARAM.prompt)?.trim() || undefined;
-  // The server catalog validates membership; preserve explicit skill selections.
   const skillId = catalogIdParam(params, PARAM.skill);
   const workflowId = catalogIdParam(params, PARAM.workflow);
   return {
@@ -250,36 +242,62 @@ export function parseAgentHandoff(params: URLSearchParams): AgentHandoff {
   };
 }
 
-/** Human labels for the references a composer shows as removable chips. */
 export type ContextChip = { key: keyof AgentContextRefs; label: string };
 
-export function contextChips(context: AgentContextRefs): ContextChip[] {
-  const chips: ContextChip[] = [];
-  if (context.issue_group_reference)
-    chips.push({
-      key: 'issue_group_reference',
-      label: context.issue_group_reference.site_url_id
-        ? 'Selected page issue'
-        : 'Selected issue group',
-    });
-  if (context.site_facts_reference)
-    chips.push({ key: 'site_facts_reference', label: 'Selected crawl robots policy' });
-  if (context.output_revision_reference)
-    chips.push({ key: 'output_revision_reference', label: 'Selected document revision' });
-  if (context.target_url) chips.push({ key: 'target_url', label: context.target_url });
-  else if (context.target_site_url_id)
-    chips.push({ key: 'target_site_url_id', label: 'Selected page' });
-  if (context.opportunity_id) chips.push({ key: 'opportunity_id', label: 'Recommendation' });
-  if (context.demand_signal_id) chips.push({ key: 'demand_signal_id', label: 'Demand signal' });
-  if (context.search_intelligence_reference) {
-    const count = context.search_intelligence_reference.row_ids.length;
-    chips.push({
-      key: 'search_intelligence_reference',
-      label: `${count} Keyword Research ${count === 1 ? 'row' : 'rows'}`,
-    });
-  }
-  return chips;
+type ChipLabels = Partial<Record<keyof AgentContextRefs, string>>;
+
+const CHIPS: readonly [
+  keyof AgentContextRefs,
+  (context: AgentContextRefs, labels: ChipLabels) => string | null | undefined,
+][] = [
+  [
+    'url_actions_reference',
+    (c, labels) =>
+      c.url_actions_reference && (labels.url_actions_reference ?? 'Selected URL and its actions'),
+  ],
+  [
+    'action_url_ids',
+    (c) => c.action_url_ids && pluralCount(c.action_url_ids.length, 'selected URL'),
+  ],
+  [
+    'issue_group_reference',
+    (c) =>
+      c.issue_group_reference &&
+      (c.issue_group_reference.site_url_id ? 'Selected page issue' : 'Selected issue group'),
+  ],
+  ['site_facts_reference', (c) => c.site_facts_reference && 'Selected crawl robots policy'],
+  ['output_revision_reference', (c) => c.output_revision_reference && 'Selected document revision'],
+  ['target_url', (c) => c.target_url],
+  ['target_site_url_id', (c) => (c.target_url ? null : c.target_site_url_id && 'Selected page')],
+  ['opportunity_id', (c) => c.opportunity_id && 'Recommendation'],
+  ['demand_signal_id', (c) => c.demand_signal_id && 'Demand signal'],
+  ['objection_group_id', (c) => c.objection_group_id && 'Objection'],
+  [
+    'search_intelligence_reference',
+    (c) =>
+      c.search_intelligence_reference &&
+      pluralCount(c.search_intelligence_reference.row_ids.length, 'Keyword research row'),
+  ],
+];
+
+export function contextChips(context: AgentContextRefs, labels: ChipLabels = {}): ContextChip[] {
+  return CHIPS.flatMap(([key, chip]) => {
+    const label = chip(context, labels);
+    return label ? [{ key, label }] : [];
+  });
 }
+
+export const CHAT_ORIGIN_LABELS = {
+  site_health: 'Website',
+  page: 'Page',
+  recommendation: 'Recommendation',
+  demand: 'Demand signal',
+  keyword_research: 'Keyword research',
+  prompts: 'Prompts',
+  objection: 'Objection',
+  action: 'Action',
+  chat: 'Chat',
+} as const satisfies Record<AgentChatOrigin, string>;
 
 export function withoutContext(
   context: AgentContextRefs,
@@ -287,7 +305,6 @@ export function withoutContext(
 ): AgentContextRefs {
   const next = { ...context };
   delete next[key];
-  // A URL chip and its page id describe one target; removing either drops both.
   if (key === 'target_url' || key === 'target_site_url_id') {
     delete next.target_url;
     delete next.target_site_url_id;
@@ -297,54 +314,22 @@ export function withoutContext(
 
 type Declaration = NonNullable<ActionDetail['declaration']>;
 
-/** What a developer ticket reads from an Action's detail. */
 type TicketAction = Pick<ActionDetail, 'target_label' | 'target_url' | 'member_measurement'> & {
   handoff: Pick<ActionDetail['handoff'], 'message'>;
   members: readonly Pick<ActionDetail['members'][number], 'id' | 'title' | 'remediation'>[];
   diagnosis: Pick<ActionDetail['diagnosis'], 'donts'>;
-  cohort: Pick<
-    NonNullable<ActionDetail['cohort']>,
-    'rule_label' | 'page_count' | 'pages' | 'crawl_completed_at'
-  > | null;
   declaration:
     | (Pick<Declaration, 'declared_implemented_at' | 'deployed_by' | 'deployment_reference'> & {
-        checks: readonly Pick<Declaration['checks'][number], 'kind' | 'state' | 'reason'>[];
+        checks: readonly Pick<Declaration['checks'][number], 'kind' | 'state'>[];
       })
     | null;
 };
 
-/** Stored text on one line, so it never breaks the Markdown around it. */
 const oneLine = (text: string) => text.replaceAll(/\s+/g, ' ').trim();
-/** One Markdown list line. */
 const line = (text: string) => `- ${oneLine(text)}`;
-/** A Markdown list of `items`, or one line saying there are `none`. */
 const list = (items: readonly string[], none: string) =>
   items.length ? items.map((item) => line(item)) : [line(none)];
 const unique = (values: readonly string[]) => [...new Set(values.filter(Boolean))];
-
-function affectedPages(action: TicketAction, formatDate: (iso: string) => string): string[] {
-  const { cohort } = action;
-  if (!cohort) return [line(action.target_url ?? action.target_label)];
-  const read = cohort.crawl_completed_at
-    ? `crawl completed ${formatDate(cohort.crawl_completed_at)}`
-    : 'crawl completion not recorded';
-  const shown = cohort.pages.slice(0, DEVELOPER_TICKET_PAGES_MAX);
-  // The Action lists the cohort's stored pages; a large family stores only the
-  // first of its affected pages, so the rest are listed nowhere.
-  const onAction = cohort.pages.length - shown.length;
-  const unlisted = cohort.page_count - cohort.pages.length;
-  return [
-    `${cohort.rule_label} on ${pluralCount(cohort.page_count, 'page')} (${read}):`,
-    '',
-    ...shown.map((page) => line(page.url)),
-    ...(onAction > 0
-      ? [line(`and ${pluralCount(onAction, 'more page')}, listed on the Action in CiteLadder`)]
-      : []),
-    ...(unlisted > 0
-      ? [line(`and ${pluralCount(unlisted, 'more page')} with this issue, not listed`)]
-      : []),
-  ];
-}
 
 function verification(action: TicketAction, formatDate: (iso: string) => string): string[] {
   const { declaration } = action;
@@ -368,7 +353,7 @@ function verification(action: TicketAction, formatDate: (iso: string) => string)
     ...action.members.map((member) => {
       const leg = action.member_measurement[member.id];
       const by = leg ? measurementLegLabel(leg) : null;
-      const how = by ? 'checked by ' + by.toLowerCase() : 'not measured automatically';
+      const how = by ? 'checked by ' + by.toLowerCase() : 'no automatic check';
       return line(`${member.title}: ${how}`);
     }),
     '',
@@ -376,13 +361,6 @@ function verification(action: TicketAction, formatDate: (iso: string) => string)
   ];
 }
 
-/**
- * "Prepare developer ticket": the Action as Markdown a developer can paste
- * into an issue tracker. The issue, the affected page or issue family, the
- * dated evidence, the minimal patch and how CiteLadder will verify it, all
- * from the Action's persisted read. `formatDate` renders a stored timestamp
- * in the reader's display time zone.
- */
 export function developerTicket(
   action: TicketAction,
   evidence: readonly DatedEvidence[],
@@ -394,7 +372,7 @@ export function developerTicket(
   const sections: string[][] = [
     [`# ${oneLine(action.target_label)}`, '', action.handoff.message],
     ['## Issue', '', ...list(findings, 'No current finding targets this Action.')],
-    ['## Affected pages', '', ...affectedPages(action, formatDate)],
+    ['## Affected pages', '', line(action.target_url ?? action.target_label)],
     [
       '## Evidence',
       '',

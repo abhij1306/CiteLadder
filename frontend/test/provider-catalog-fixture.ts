@@ -1,21 +1,10 @@
 import { http, HttpResponse } from 'msw';
 
-/**
- * The provider catalog plus the MSW handlers and connection builder that every
- * provider-facing suite needs.
- *
- * `connection()` and `catalogHandler()` used to be hand-rolled in more than
- * one provider suite. The copies disagreed about `transport_model` for no asserted reason (one file even
- * disagreed with itself between its connection and its test-result handler),
- * so the value is pinned here to the model the catalog actually routes
- * `chatgpt` to.
- */
 export const CONNECTION_ID = '11111111-1111-4111-8111-111111111111';
 export const WORKSPACE_ID = '22222222-2222-4222-8222-222222222222';
 const ROUTE_ID = '33333333-3333-4333-8333-333333333333';
 export const CHATGPT_MODEL = 'gpt-6.1-terra';
 
-/** A consumer-app surface observed through DataForSEO's LLM scraper. */
 const scraped = (logical_engine: string, label: string, model: string) => ({
   logical_engine,
   label,
@@ -30,7 +19,6 @@ const scraped = (logical_engine: string, label: string, model: string) => ({
   ],
 });
 
-/** The catalogue as the backend serves it: every engine, in display order, labelled. */
 export const providerCatalogFixture = {
   transports: ['openai', 'anthropic', 'google', 'dataforseo'],
   engines: [
@@ -76,9 +64,6 @@ export const providerCatalogFixture = {
       ],
     },
     {
-      // An OBSERVED surface. The LLM request fields are null because there is
-      // no request to pin them on, and the fixture keeps them null so a test
-      // cannot pass against a shape the backend never sends.
       logical_engine: 'google_ai_overview',
       label: 'Google AI Overview',
       routes: [
@@ -125,7 +110,6 @@ export function catalogHandler() {
   return http.get('/api/v1/provider-catalog', () => HttpResponse.json(providerCatalogFixture));
 }
 
-/** The `/test` probe rejecting the stored key. */
 export function failedTestHandler() {
   return http.post(`/api/v1/provider-connections/${CONNECTION_ID}/test`, () =>
     HttpResponse.json({

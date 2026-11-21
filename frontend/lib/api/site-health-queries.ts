@@ -1,8 +1,3 @@
-/**
- * Site Health query and mutation descriptors: screens, the route prefetchers
- * and cursor tables read through these, and each write refreshes every read it
- * changes.
- */
 import { mutationOptions, queryOptions, type QueryClient } from '@tanstack/react-query';
 import { isTerminalCrawl, type IssueFixes, type PageDetail } from '@citeladder/contracts';
 import type { CrawlScheduleUpdateRequest } from '@citeladder/contracts/site-health-requests';
@@ -40,31 +35,17 @@ const ISSUE_KEY_PARAMS = [
   'page_kind',
   'section',
   'sort',
+  'finding_class',
 ] as const satisfies ReadonlyArray<keyof IssuesParams>;
 
-/**
- * An issues read's key: every param named, an absent one as null, so a read
- * that spells "unset" as undefined shares the entry of one that leaves it out.
- */
 function issueKeyFilters(params: IssuesParams = {}) {
-  return {
-    ...Object.fromEntries(ISSUE_KEY_PARAMS.map((name) => [name, params[name] ?? null])),
-    finding_class: params.finding_class ?? 'defect',
-  };
+  return Object.fromEntries(ISSUE_KEY_PARAMS.map((name) => [name, params[name] ?? null]));
 }
 
-/**
- * React Query option factories. Screens, the route prefetchers and cursor
- * tables pass these straight to `useQuery`, so the query key ↔ endpoint
- * pairing lives in one place. Project reads take the project scope; a
- * crawl's reads take the workspace and the crawl. Every `queryFn` forwards
- * the abort signal.
- */
 export const siteHealthQueries = {
   robotsHistory: (scope: ProjectScope, page: RobotsPage) =>
     queryOptions({
       queryKey: queryKeys.siteHealth.robotsHistory(scope, page),
-      // Opening history refreshes the project's observation sequence, irrespective of selected crawl.
       refetchOnMount: 'always',
       queryFn: ({ signal }) =>
         siteHealthApi.getRobotsHistory(scope.projectId, page, scoped(scope, signal)),
@@ -99,7 +80,6 @@ export const siteHealthQueries = {
       queryFn: ({ signal }) =>
         siteHealthApi.getChangesSummary(scope.projectId, scoped(scope, signal)),
     }),
-  /** One page of a compared pair's changes; the summary names the pair. */
   changes: (scope: ProjectScope, page: ChangesPageRequest) =>
     queryOptions({
       queryKey: queryKeys.siteHealth.changes(scope, page),
@@ -167,9 +147,6 @@ export const siteHealthQueries = {
         monitored: params?.monitored ?? null,
         page_kind: params?.page_kind ?? null,
         query: params?.query ?? null,
-        // The sort changes the server's ordering, so it must be part of the
-        // cache identity — otherwise two sorts share one entry and the table
-        // renders the previous ordering's rows.
         sort: params?.sort ?? null,
       }),
       queryFn: ({ signal }) => siteHealthApi.getPages(crawlId, params, { signal, workspaceId }),
@@ -228,26 +205,6 @@ export const siteHealthQueries = {
     }),
 };
 
-/*
- * ONE definition of "what a crawl change refreshes".
- *
- * The Site Health screen used to run five independent 4s polls over the same
- * crawl (dashboard, pages, and three list views), each owning its own timer,
- * while the SSE hook invalidated a hand-listed set of keys on every frame.
- * Overlapping refetches then resolved out of order and panels rendered state
- * from different moments — counts ticking backwards, a score appearing then
- * vanishing. Now there is a single subscription (the dashboard query's timer)
- * plus the stream, and BOTH refresh the derived views through these helpers,
- * so the two paths can never drift apart.
- */
-
-/**
- * Refresh every list view derived from a crawl: the crawl row and the first
- * page of the pages / inventory / issues lists, across all filter
- * combinations. Deeper cursor pages are deliberately left alone: the reader is
- * looking at a fixed window of rows, and refetching it as new URLs stream in
- * shifts the rows under their cursor.
- */
 export function refreshCrawlViews(client: QueryClient, crawlId: string) {
   return Promise.all([
     client.invalidateQueries({ queryKey: queryKeys.siteHealth.crawlRow(crawlId) }),
@@ -272,12 +229,6 @@ export function refreshCrawlViews(client: QueryClient, crawlId: string) {
 export const refreshSiteHealthDashboard = (client: QueryClient, projectId: string) =>
   client.invalidateQueries({ queryKey: queryKeys.siteHealth.resource(projectId, 'dashboard') });
 
-/**
- * The project-level monitored projection, while automatic admission is still
- * growing it. It is not crawl-owned data, so it stays out of
- * `refreshCrawlViews`: callers decide when a crawl progress change can also
- * have changed the persistent monitored set.
- */
 export const refreshMonitoredUrls = (client: QueryClient, projectId: string) =>
   client.invalidateQueries({ queryKey: queryKeys.siteHealth.resource(projectId, 'monitored') });
 
@@ -286,13 +237,6 @@ export const refreshMonitoredUrls = (client: QueryClient, projectId: string) =>
  * set automatic admission adds the root to. Any in-flight dashboard read stops
  * first, so a pre-create answer cannot commit after creation and read as the
  * acknowledgement.
- */
-/**
- * Watch an issue's re-audit (`rerunCrawlId`) until it ends, within
- * `ISSUE_RERUN_MAX_POLLS`, then refresh what its landing moved in the crawl
- * that shows it: the issue list, each issue's pages and fix progress, its
- * pages, and the Overview's open-issue trend. A read that fails is asked again
- * on the next poll; a re-audit still running at the bound refreshes nothing.
  */
 async function refreshWhenRerunLands(
   client: QueryClient,
@@ -314,7 +258,7 @@ async function refreshWhenRerunLands(
       ]);
       return;
     }
-    await new Promise<void>((resolve) => {
+    await /* NOSONAR -- Poll interval between rerun checks. */ new Promise<void>((resolve) => {
       setTimeout(resolve, RERUN_POLL_INTERVAL_MS);
     });
   }
@@ -328,15 +272,8 @@ async function refreshCrawlStart(client: QueryClient, projectId: string) {
   ]);
 }
 
-/**
- * A crawl start's projection refresh. The mutation settles at the POST, so a
- * slow projection read can neither hold the control pending nor report a
- * failure for a crawl that already exists; a caller that waits for the
- * refreshed projection awaits `refreshed` from its own `onSuccess`.
- */
 export type CrawlStart = { refreshed: Promise<void> | null };
 
-/** Site Health writes; each success refreshes every read it changes. */
 export const siteHealthMutations = {
   createCrawl: (workspaceId: string | null) =>
     mutationOptions({
@@ -346,7 +283,6 @@ export const siteHealthMutations = {
         start.refreshed = refreshCrawlStart(client, input.project_id);
       },
     }),
-  /** The answer is the saved schedule, so it replaces the cached read. */
   updateCrawlSchedule: (scope: ProjectScope) =>
     mutationOptions({
       mutationFn: (input: CrawlScheduleUpdateRequest) =>
@@ -354,18 +290,12 @@ export const siteHealthMutations = {
       onSuccess: (schedule, _input, _result, { client }) =>
         client.setQueryData(queryKeys.siteHealth.crawlSchedule(scope), schedule),
     }),
-  /**
-   * Cancellation also changes the server-owned phase, so the whole projection
-   * refreshes at once instead of pairing the terminal crawl row with an
-   * active phase in the cache.
-   */
   cancelCrawl: (scope: ProjectScope) =>
     mutationOptions({
       mutationFn: (crawlId: string) => siteHealthApi.cancelCrawl(crawlId, scoped(scope)),
       onSuccess: (_crawl, _crawlId, _result, { client }) =>
         refreshSiteHealthDashboard(client, scope.projectId),
     }),
-  /** Mark fixed: the answer is the issue's new progress, so it replaces its cached row. */
   markIssueFixed: (workspaceId: string | null, crawlId: string) =>
     mutationOptions({
       mutationFn: (groupId: string) =>
@@ -382,11 +312,6 @@ export const siteHealthMutations = {
             },
         ),
     }),
-  /**
-   * Re-run all: one re-audit crawl of the issue's open tracked pages. It lands
-   * later, and the dashboard never shows a page rerun, so the re-audit is
-   * watched until it ends and then what it moved refreshes.
-   */
   rerunIssue: (scope: ProjectScope, crawlId: string) =>
     mutationOptions({
       mutationFn: (groupId: string) => siteHealthApi.rerunIssue(crawlId, groupId, scoped(scope)),
@@ -394,10 +319,6 @@ export const siteHealthMutations = {
         void refreshWhenRerunLands(client, scope, crawlId, rerun.crawl_id);
       },
     }),
-  /**
-   * A per-URL re-audit. It always runs as its own one-page crawl (a running
-   * crawl refuses it), so the new crawl's entry is seeded with its identity.
-   */
   rerunPage: (workspaceId: string | null) =>
     mutationOptions({
       mutationFn: (vars: { crawlId: string; siteUrlId: string }) =>

@@ -1,4 +1,3 @@
-/** What several target kinds share: the declared pages a finding's evidence names. */
 import type { ActionTargetKind } from '@citeladder/contracts/actions';
 
 import { policy } from '../../config.ts';
@@ -15,7 +14,6 @@ import {
 
 const o = policy.opportunity.opportunities;
 
-/** The ids among `pages`, deduplicated and in order, that are the project's own crawled pages. */
 export async function ownedPages(
   db: Database,
   action: TargetAction,
@@ -34,22 +32,15 @@ export async function ownedPages(
   return ids.filter((id) => allowed.has(id));
 }
 
-/** The page each finding's evidence names (`site_url_id`). */
 export const evidencePages = (members: readonly DeclaredMember[]) =>
   members.map((member) => record(member.evidence).site_url_id);
 
-/** Owned pages, at most `IMPLEMENTATION_TARGETS_MAX` of them. */
 export function cappedPages(selected: string[]): DeclarationTargets {
   if (selected.length > o.IMPLEMENTATION_TARGETS_MAX)
     return { resolved: false, reason: 'Too many implementation targets' };
   return { resolved: true, target_site_url_ids: selected, target_external_url: null };
 }
 
-/**
- * A kind with no behaviour of its own (a product, category, prompt or query):
- * a declaration covers the owned pages its findings name, the read adds
- * nothing and the Agent is given only the row.
- */
 export function plainTarget<K extends ActionTargetKind>(kind: K): ActionTargetModule<K> {
   return {
     kind,

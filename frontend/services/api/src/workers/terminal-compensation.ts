@@ -1,4 +1,3 @@
-/** Durable recovery of failed work, including sweeper-terminalized tasks. */
 import { sql } from 'kysely';
 
 import { policy } from '../config.ts';
@@ -18,11 +17,6 @@ function mark(db: Database, task: QueueTask, fields: Record<string, unknown>) {
     .execute();
 }
 
-/**
- * Retries a failing compensator, rotated behind untried rows, until it has
- * failed `terminal_compensation_max_failures` times; then the task is
- * abandoned as compensated so it stops recurring.
- */
 export async function compensateTerminalTasks(db: Database, scope?: ClaimScope) {
   if (scope && !scope.taskIds.length) return;
   const { terminal_compensation_batch: batch, terminal_compensation_max_failures: maxFailures } =

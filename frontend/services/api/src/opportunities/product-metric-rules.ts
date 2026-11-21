@@ -1,14 +1,3 @@
-/**
- * Commerce Actions from the per-product metrics (commerce improvement PR 9).
- * Each rule reads one metric of the Products read (`commerce/products.ts`)
- * for an owned catalog product: the refresh raises a finding when a reading
- * with enough samples does not clear the rule's target, and a declared
- * Action's check reads the same metric over the answers after go-live.
- *
- * A reading is `measured`, `insufficient` (fewer samples than the rule needs:
- * no finding, a waiting check) or `unknown` (the metric cannot be read, such
- * as a price gap without a catalog price). None of them becomes a zero.
- */
 import type { CommerceProductPage } from '@citeladder/contracts/commerce-suite';
 import type { ExpectedCheck } from '@citeladder/contracts/opportunities';
 import { sql } from 'kysely';
@@ -42,29 +31,22 @@ export type MetricReading =
   | {
       state: 'insufficient';
       samples: number;
-      /** Only quotes in other currencies, which are not converted, or too few samples. */
       reason: 'quotes_in_other_currencies' | 'too_few_samples';
     }
   | { state: 'unknown'; reason: 'no_catalog_price' };
 
-/** A value and its samples; `excluded` counts readings left out (quotes in other currencies). */
 type Raw =
   | { value: number | null; samples: number; excluded: number }
   | { unknown: 'no_catalog_price' };
 
 const sum = (values: number[]) => values.reduce((total, value) => total + value, 0);
 
-/**
- * How far a quoted price sits outside the catalog price (or its variant
- * range), as a share of the nearest bound; 0 inside the range.
- */
 function priceGap(price: number, catalog: { min: number; max: number }) {
   if (price < catalog.min) return (catalog.min - price) / catalog.min;
   if (price > catalog.max) return (price - catalog.max) / catalog.max;
   return 0;
 }
 
-/** The metric's value and sample count on one row, before the rule's minimum. */
 function raw(
   metric: ProductMetricRule['metric'],
   row: ProductRow,
@@ -79,7 +61,6 @@ function raw(
     case 'price_gap_share': {
       const catalog = row.catalog_price;
       if (!catalog?.currency || catalog.min <= 0) return { unknown: 'no_catalog_price' };
-      // The read medians quotes in the catalog currency; others are not converted.
       const { median, currency, quoted, other_currency: excluded } = row.mentioned_price;
       if (median === null || currency !== catalog.currency)
         return { value: null, samples: 0, excluded };
@@ -100,7 +81,6 @@ function raw(
   }
 }
 
-/** One rule's reading of one product row. */
 export function readMetric(
   rule: ProductMetricRule,
   row: ProductRow,
@@ -121,11 +101,9 @@ export function readMetric(
   return { state: 'measured', value: found.value, samples: found.samples };
 }
 
-/** Whether a value clears the rule: the finding's condition no longer holds. */
 export const clears = (rule: ProductMetricRule, value: number) =>
   rule.comparison === 'at_least' ? value >= rule.target : value <= rule.target;
 
-/** The Products read for owned products, every merchant included. */
 function catalogQuery(scope: ExecutionScope, holder?: string) {
   return {
     ...scope,
@@ -138,7 +116,6 @@ function catalogQuery(scope: ExecutionScope, holder?: string) {
   };
 }
 
-/** One owned product's row and the executions in scope; null when it is not an active product. */
 export async function productRow(
   db: Database,
   scope: CommerceScope,
@@ -154,7 +131,6 @@ export async function productRow(
   return row ? { row, executions: page.executions } : null;
 }
 
-/** Every owned product's row, page by page, and the executions in scope. */
 async function catalogRows(db: Database, scope: CommerceScope, executions: ExecutionScope) {
   const rows: ProductRow[] = [];
   let total = 0;
@@ -169,7 +145,6 @@ async function catalogRows(db: Database, scope: CommerceScope, executions: Execu
   return { rows, executions: total };
 }
 
-/** The observations each holder's metrics were read from, by holder. */
 export async function observationIds(
   db: Database,
   scope: CommerceScope,
@@ -186,7 +161,6 @@ export async function observationIds(
   return new Map(rows.map((row) => [row.holder_id, row.ids]));
 }
 
-/** What a finding stores: the product, the window measured, the reading and the row's figures. */
 function evidence(
   row: ProductRow,
   rule: ProductMetricRule,
@@ -218,10 +192,6 @@ function evidence(
   };
 }
 
-/**
- * The per-product metric findings for the window ending at `asOf`, in
- * (rule, product) order: each enabled rule over every active owned product.
- */
 export async function productMetricHits(
   db: Database,
   scope: CommerceScope,

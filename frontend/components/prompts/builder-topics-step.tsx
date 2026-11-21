@@ -1,30 +1,29 @@
-import { Plus, RotateCcw, Sparkles, Tags, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 
 import { Button, IconButton } from '@/components/ui/button';
-import { Callout } from '@/components/ui/callout';
-import { MutationNotice } from '@/components/ui/mutation-notice';
 import { Icon } from '@/components/ui/icon';
 import { Input } from '@/components/ui/input';
 import { Inline, Stack } from '@/components/ui/layout';
-import { QueryState } from '@/components/ui/query-state';
 import { Tag } from '@/components/ui/tag';
-import { textRole } from '@/components/ui/typography';
+import { ChevronDown, Plus, RotateCcw, Sparkles, Tags, Trash2 } from '@/lib/icons';
+import { isImeComposing } from '@/lib/accessibility/ime';
 import { mutationNoticeForError } from '@/lib/api/mutation-notice';
 import type { TopicRow } from '@/lib/prompts/builder-topics';
 
 import { GenerateErrorAlert } from './generation-alerts';
 import type { BuilderTopics } from './use-builder-topics';
+import { Notice } from '@/components/ui/notice';
+import { StateBlock } from '@/components/ui/state-block';
 
 const TOPIC_NAME_MAX = 255;
 
-function rowTag(row: TopicRow): string {
-  if (row.kind === 'proposed') return 'Proposed';
+function rowTag(row: TopicRow): string | null {
+  if (row.kind === 'proposed') return null;
+  if (row.kind === 'existing' && row.removed) return 'Removing';
   if (row.kind === 'added') return 'New';
   return row.nested ? 'Subtopic' : 'Existing';
 }
 
-/** One topic: its editable name, where it came from, and remove (or keep, once removed). */
 function TopicRowEditor({
   row,
   disabled,
@@ -37,46 +36,36 @@ function TopicRowEditor({
   onRemove: () => void;
 }>) {
   const removed = row.kind === 'existing' && row.removed;
+  const tag = rowTag(row);
   return (
-    <Stack as="li" gap="tight">
-      <Inline>
-        <Input
-          aria-label={`Topic name: ${row.name || 'unnamed'}`}
-          value={row.name}
-          maxLength={TOPIC_NAME_MAX}
-          disabled={disabled || removed}
-          onChange={(event) => onChange({ ...row, name: event.target.value })}
+    <Inline as="li">
+      <Input
+        aria-label={`Topic name: ${row.name || 'unnamed'}`}
+        value={row.name}
+        maxLength={TOPIC_NAME_MAX}
+        disabled={disabled || removed}
+        onChange={(event) => onChange({ ...row, name: event.target.value })}
+      />
+      {tag ? <Tag>{tag}</Tag> : null}
+      {removed ? (
+        <IconButton
+          icon={RotateCcw}
+          label={`Keep ${row.savedName}`}
+          disabled={disabled}
+          onClick={() => onChange({ ...row, removed: false })}
         />
-        <Tag>{removed ? 'Removing' : rowTag(row)}</Tag>
-        {removed ? (
-          <IconButton
-            icon={RotateCcw}
-            label={`Keep ${row.savedName}`}
-            disabled={disabled}
-            onClick={() => onChange({ ...row, removed: false })}
-          />
-        ) : (
-          <IconButton
-            icon={Trash2}
-            label={`Remove ${row.name || 'topic'}`}
-            disabled={disabled}
-            onClick={onRemove}
-          />
-        )}
-      </Inline>
-      {/* A proposal's offering links are saved on confirm; say which, so nothing is hidden. */}
-      {row.kind === 'proposed' && row.offerings.length ? (
-        <span className="type-caption">Covers {row.offerings.join('; ')}</span>
-      ) : null}
-    </Stack>
+      ) : (
+        <IconButton
+          icon={Trash2}
+          label={`Remove ${row.name || 'topic'}`}
+          disabled={disabled}
+          onClick={onRemove}
+        />
+      )}
+    </Inline>
   );
 }
 
-/**
- * Step 2: the project's topics beside buyer-facing proposals. Proposals fill
- * gaps and never replace a topic; renames, removals and additions stay local
- * until the plan is confirmed.
- */
 export function BuilderTopicsStep({ topics }: Readonly<{ topics: BuilderTopics }>) {
   const [name, setName] = useState('');
   const busy = topics.preview.isPending || topics.confirm.isPending;
@@ -95,12 +84,8 @@ export function BuilderTopicsStep({ topics }: Readonly<{ topics: BuilderTopics }
     setName('');
   };
   return (
-    <Stack gap="workspace">
-      <Inline className="flex-wrap justify-between">
-        <p className={textRole('body', 'text-ink-secondary')}>
-          Proposals fill gaps beside your topics and never replace them. A removed topic&apos;s
-          prompts stay in your library without a topic. Nothing changes until you confirm.
-        </p>
+    <Stack gap="workspace" className="max-w-[var(--container-prose)]">
+      <Inline className="flex-wrap justify-end">
         <Button
           variant="secondary"
           onClick={() => topics.preview.mutate()}
@@ -116,11 +101,12 @@ export function BuilderTopicsStep({ topics }: Readonly<{ topics: BuilderTopics }
         <GenerateErrorAlert error={topics.preview.error} action="propose topics" />
       ) : null}
       {topics.confirm.error ? (
-        <MutationNotice
+        <Notice
+          kind="mutation"
           notice={mutationNoticeForError(topics.confirm.error, { action: 'confirm the topics' })}
         />
       ) : null}
-      {topics.problem ? <Callout tone="warning">{topics.problem}</Callout> : null}
+      {topics.problem ? <Notice tone="warning">{topics.problem}</Notice> : null}
       {topics.rows.length ? (
         <Stack as="ul" gap="item" aria-label="Topics">
           {topics.rows.map((row) => (
@@ -134,7 +120,7 @@ export function BuilderTopicsStep({ topics }: Readonly<{ topics: BuilderTopics }
           ))}
         </Stack>
       ) : (
-        <QueryState
+        <StateBlock
           kind="empty"
           inline
           icon={Tags}
@@ -143,8 +129,8 @@ export function BuilderTopicsStep({ topics }: Readonly<{ topics: BuilderTopics }
       )}
       {topics.overflow.length ? (
         <Inline>
-          <Button variant="ghost" onClick={topics.showOverflow} disabled={busy}>
-            +{topics.overflow.length} more
+          <Button variant="quiet" onClick={topics.showOverflow} disabled={busy}>
+            <Icon icon={ChevronDown} />+{topics.overflow.length} more
           </Button>
         </Inline>
       ) : null}
@@ -157,7 +143,7 @@ export function BuilderTopicsStep({ topics }: Readonly<{ topics: BuilderTopics }
           disabled={busy}
           onChange={(event) => setName(event.target.value)}
           onKeyDown={(event) => {
-            if (event.key !== 'Enter') return;
+            if (event.key !== 'Enter' || isImeComposing(event)) return;
             event.preventDefault();
             add();
           }}

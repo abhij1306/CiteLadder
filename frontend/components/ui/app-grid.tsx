@@ -27,14 +27,11 @@ import { cn } from '@/lib/utils';
  * Grids never nest a second AppGrid and never set widths on their children.
  */
 const LAYOUT = {
-  quarters: 'desktop:grid-cols-4',
-  fifths: 'desktop:grid-cols-5',
-  pair: 'desktop:grid-cols-2',
-  thirds: 'desktop:grid-cols-3',
-  'main-aside': 'shell:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]',
-  halves: 'shell:grid-cols-2',
-  'table-chart': 'shell:grid-cols-[minmax(0,5fr)_minmax(0,4fr)]',
-  'list-detail': 'desktop:grid-cols-[var(--pane-list-detail)] items-start',
+  pair: 'column-split:grid-cols-2',
+  thirds: 'column-split:grid-cols-3',
+  'main-aside': 'column-wide:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]',
+  halves: 'column-wide:grid-cols-2',
+  slips: 'grid-cols-[repeat(auto-fill,minmax(min(100%,17.5rem),1fr))]',
 } as const;
 
 export type AppGridLayout = keyof typeof LAYOUT;
@@ -49,10 +46,8 @@ export function AppGrid({
   ...props
 }: Readonly<
   HTMLAttributes<HTMLElement> & {
-    /** The grid's element, for the list or section it is. */
     as?: GridElement;
     layout: AppGridLayout;
-    /** Owner-only: a `components/ui` organism's own extra classes. */
     className?: string;
   }
 >) {
@@ -62,7 +57,7 @@ export function AppGrid({
       ...props,
       'data-app-grid': layout,
       className: cn(
-        'grid min-w-0 grid-cols-1 gap-[var(--workspace-gap)] *:min-w-0',
+        'grid min-w-0 grid-cols-1 gap-x-[var(--grid-gap-x,var(--workspace-gap))] gap-y-[var(--grid-gap-y,var(--workspace-gap))] *:min-w-0',
         LAYOUT[layout],
         className,
       ),

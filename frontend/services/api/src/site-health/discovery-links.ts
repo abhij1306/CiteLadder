@@ -1,4 +1,3 @@
-/** A page's in-scope links in document order: pure, so it runs on the interpretation pool. */
 import { policy } from '../config.ts';
 import {
   anchorElements,
@@ -22,7 +21,6 @@ export type DiscoveredLink = {
   rewriteVersion: string;
 };
 
-/** Repair a positively identified encoded tracking-query delimiter (`/p%3Futm_source%3Dx`). */
 function rewriteHref(href: string) {
   const match = /%3f/iu.exec(href);
   if (href.includes('?') || !match) return null;
@@ -35,25 +33,16 @@ function rewriteHref(href: string) {
   return `${href.slice(0, match.index)}?${query}`;
 }
 
-/**
- * The canonical page an anchor names, repaired as discovery repairs it, so the
- * link graph and the broken-link check meet the page discovery admitted.
- */
 export function linkTargetUrl(href: string, baseUrl: string) {
   return canonicalUrl(rewriteHref(href) ?? href, baseUrl);
 }
 
-/**
- * The page title and its bounded, canonical, in-scope links in document order,
- * each resolved against the document base (`<base href>`, else the page URL).
- */
 export function discoveryLinks(root: HtmlNode, pageUrl: string, scope: Scope, maxLinks: number) {
   const baseUrl = documentBaseUrl(root, pageUrl);
   const titleNode = elements(root, 'title').next().value;
   const title = titleNode ? textContent(titleNode).slice(0, 1024) : '';
   const links: DiscoveredLink[] = [];
   const seen = new Set<string>();
-  // Every anchor, hidden and template content included: discovery reads the unpruned page.
   for (const { anchor } of anchorElements(root)) {
     if (links.length >= maxLinks) break;
     const link = admitHref(attribute(anchor, 'href').trim(), baseUrl, scope);
@@ -64,7 +53,6 @@ export function discoveryLinks(root: HtmlNode, pageUrl: string, scope: Scope, ma
   return { title, links };
 }
 
-/** One href's admission under the crawl scope, or null when it names no admissible page. */
 function admitHref(
   href: string,
   baseUrl: string,
@@ -75,7 +63,6 @@ function admitHref(
   const rewritten = rewriteHref(href);
   let target = href;
   try {
-    // A rewritten href is canonicalized first, which drops the repaired tracking query.
     if (rewritten) target = canonicalIdentity(rewritten, baseUrl).url;
   } catch {
     return null;

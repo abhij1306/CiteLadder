@@ -2,12 +2,11 @@ import { describe, expect, it } from 'vite-plus/test';
 
 import type { Visibility } from '@citeladder/contracts';
 import {
-  PLACEHOLDER,
+  brandRuns,
   findActiveRun,
   formatRate,
   formatScore,
   isDashboardStatus,
-  sortedRankings,
   toRunOptions,
   visibleEngines,
 } from './dashboard';
@@ -55,6 +54,7 @@ describe('visibility dashboard helpers', () => {
       },
     ]);
     expect(options.map((o) => o.id)).toEqual([AUDIT_C, AUDIT_A]);
+    expect(options.map((o) => o.label)).toEqual(['14 Jul 00:00', '10 Jul 00:00']);
   });
 
   it('flags dashboard statuses', () => {
@@ -63,18 +63,24 @@ describe('visibility dashboard helpers', () => {
     expect(isDashboardStatus('running')).toBe(false);
   });
 
-  it('finds the newest non-terminal run as the active run', () => {
-    expect(
-      findActiveRun([
-        {
-          id: AUDIT_A,
-          status: 'completed',
-          created_at: '2026-07-10T00:00:00Z',
-        },
-        { id: AUDIT_B, status: 'running', created_at: '2026-07-12T00:00:00Z' },
-        { id: AUDIT_C, status: 'queued', created_at: '2026-07-14T00:00:00Z' },
-      ]),
-    ).toEqual({ id: AUDIT_C, status: 'queued', createdAt: '2026-07-14T00:00:00Z' });
+  it('finds the newest non-terminal brand run as the active run', () => {
+    const runs = [
+      { id: AUDIT_A, status: 'completed', created_at: '2026-07-10T00:00:00Z' },
+      { id: AUDIT_B, status: 'running', created_at: '2026-07-12T00:00:00Z' },
+      { id: AUDIT_C, status: 'queued', created_at: '2026-07-14T00:00:00Z' },
+    ] as const;
+    expect(findActiveRun(runs)).toEqual({
+      id: AUDIT_C,
+      status: 'queued',
+      createdAt: '2026-07-14T00:00:00Z',
+    });
+    const scoped = runs.map((run) => ({
+      ...run,
+      completed_at: null,
+      audit_scope: run.id === AUDIT_C ? ('commerce' as const) : ('brand' as const),
+    }));
+    expect(findActiveRun(brandRuns(scoped))?.id).toBe(AUDIT_B);
+    expect(toRunOptions(brandRuns(scoped)).map((option) => option.id)).toEqual([AUDIT_A]);
   });
 
   it('returns null when every run is terminal', () => {
@@ -88,11 +94,11 @@ describe('visibility dashboard helpers', () => {
     expect(findActiveRun([])).toBeNull();
   });
 
-  it('formats rates and scores, falling back to the placeholder', () => {
-    expect(formatRate(0.5)).toBe('50%');
-    expect(formatRate(null)).toBe(PLACEHOLDER);
+  it('formats rates and scores, a missing one as not measured', () => {
+    expect(formatRate(0.5)).toBe('50.0%');
+    expect(formatRate(null)).toEqual({ absent: 'not_measured' });
     expect(formatScore(72.4)).toBe('72');
-    expect(formatScore(null)).toBe(PLACEHOLDER);
+    expect(formatScore(null)).toEqual({ absent: 'not_measured' });
   });
 
   it('orders engines by canonical order and applies the engine filter', () => {
@@ -127,29 +133,5 @@ describe('visibility dashboard helpers', () => {
     expect(visibleEngines(visibility, 'claude', order).map((e) => e.logical_engine)).toEqual([
       'claude',
     ]);
-  });
-
-  it('sorts rankings by share-of-voice descending', () => {
-    const rows = sortedRankings([
-      {
-        name: 'Comp',
-        is_brand: false,
-        mention_rate: 0.2,
-        citation_rate: null,
-        share_of_voice: 0.2,
-        mention_count: 1,
-        avg_position: null,
-      },
-      {
-        name: 'Acme',
-        is_brand: true,
-        mention_rate: 0.6,
-        citation_rate: null,
-        share_of_voice: 0.6,
-        mention_count: 3,
-        avg_position: null,
-      },
-    ]);
-    expect(rows.map((r) => r.name)).toEqual(['Acme', 'Comp']);
   });
 });

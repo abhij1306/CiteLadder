@@ -89,7 +89,7 @@ describe('provider-free audit estimates and persisted exports', () => {
       .execute();
     expect([estimate.prompt_count, estimate.execution_count, tasks.length]).toEqual([1, 1, 1]);
   });
-  it('exports persisted scores and frozen unknown retrieval while neutralizing spreadsheet formulas', async () => {
+  it('exports persisted scores and frozen retrieval while neutralizing spreadsheet formulas', async () => {
     const t = await auditTenant(db, fixtures),
       foreign = await auditTenant(db, fixtures);
     const [auditId] = await createAudits(
@@ -111,6 +111,7 @@ describe('provider-free audit estimates and persisted exports', () => {
           brand_name: 'Frozen Brand',
           engines: ['chatgpt'],
           competitors: [],
+          measurement_policy: { retrieval_enabled: false },
         }),
         summary: JSON.stringify({ total_completed: 1, brand_mention_rate: 0.75, per_prompt: [] }),
       })
@@ -134,12 +135,12 @@ describe('provider-free audit estimates and persisted exports', () => {
       .where('audit_id', '=', auditId)
       .executeTakeFirstOrThrow();
     expect(csv).toContain('"\'=HYPERLINK(""https://bad.example"")"');
-    expect(csv).toContain(`chatgpt,${task.transport_model},,`);
+    expect(csv).toContain(`chatgpt,${task.transport_model},False,`);
     expect(csv).toContain('True');
     expect(csv).toContain('Frozen query');
     const markdown = await exportAudit(db, t.workspaceId, auditId, 'md');
     expect(markdown).toContain('Frozen Brand');
-    expect(markdown).toContain('retrieval unrecorded');
+    expect(markdown).toContain('retrieval off');
     expect(markdown).toContain('| Brand mention rate | 75% |');
     await expect(exportAudit(db, foreign.workspaceId, auditId, 'csv')).rejects.toMatchObject({
       status: 404,

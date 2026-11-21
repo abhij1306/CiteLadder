@@ -1,15 +1,10 @@
-// Blocking, same-origin check that runs before the app shell: a browser below
-// the support matrix (the `browserslist` in frontend/package.json) gets an
-// "Update your browser" notice in #root instead of an app that breaks part way.
-// `apps/app/src/main.tsx` does not mount over it.
-//
-// The probes are the newest APIs the matrix admits: AbortSignal.any (Chrome
-// and Edge 116, Safari 17.4, Samsung 24) and URL.canParse (Chrome and Edge 120,
-// Samsung 25). Written in old syntax so the browsers it warns can run it.
 (function () {
   var supported;
   try {
-    supported = 'any' in AbortSignal && 'canParse' in URL;
+    supported =
+      'any' in AbortSignal &&
+      'canParse' in URL &&
+      CSS.supports('color', 'light-dark(canvas, canvastext)');
   } catch (_error) {
     supported = false;
   }
@@ -17,6 +12,7 @@
   document.documentElement.dataset.browserSupport = 'unsupported';
   var root = document.getElementById('root');
   if (!root) return;
+  root.textContent = '';
   var notice = document.createElement('main');
   notice.style.maxWidth = '32rem';
   notice.style.margin = '20vh auto 0';

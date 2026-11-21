@@ -1,16 +1,16 @@
 import { useMutation } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 
 import { Button } from '@/components/ui/button';
-import { Callout } from '@/components/ui/callout';
+import { Icon } from '@/components/ui/icon';
 import { ChipInput } from '@/components/ui/chip-input';
 import { Drawer } from '@/components/ui/drawer';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import { Inline, Stack } from '@/components/ui/layout';
-import { MutationNotice } from '@/components/ui/mutation-notice';
+import { Stack } from '@/components/ui/layout';
 import { Textarea } from '@/components/ui/textarea';
 import type { CommerceProductDetail } from '@citeladder/contracts/commerce-suite';
+import { X } from '@/lib/icons';
 import { commerceMutations } from '@/lib/api/commerce';
 import { mutationNoticeForError } from '@/lib/api/mutation-notice';
 import { useWorkspaceCapability } from '@/lib/project/project-context';
@@ -20,6 +20,7 @@ import {
   productEditForm,
   type ProductEditForm,
 } from '@/lib/products/product-edit';
+import { Notice } from '@/components/ui/notice';
 
 type Product = CommerceProductDetail['product'];
 type Catalog = NonNullable<Product['catalog']>;
@@ -36,7 +37,6 @@ const TEXT_FIELDS = [
   { key: 'mpn', label: 'MPN' },
 ] as const;
 
-/** The edit drawer: a catalog product's fields, saved as one edit of what changed. */
 function ProductEditDrawer({
   scope,
   product,
@@ -50,8 +50,6 @@ function ProductEditDrawer({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }>) {
-  // The record as the drawer opened on it: a refetch while it is open never
-  // turns an untouched field into a change that would overwrite newer data.
   const [initial] = useState(() => productEditForm(product, catalog));
   const [values, setValues] = useState<ProductEditForm>(initial);
   const [invalid, setInvalid] = useState<string | null>(null);
@@ -73,10 +71,10 @@ function ProductEditDrawer({
       open={open}
       onOpenChange={close}
       title="Edit product"
-      description="Your edits win over CSV imports and crawls until a later import changes the field."
       footer={
         <>
-          <Button variant="ghost" onClick={() => close(false)}>
+          <Button variant="quiet" onClick={() => close(false)}>
+            <Icon icon={X} />
             Cancel
           </Button>
           <Button variant="primary" onClick={submit} disabled={save.isPending}>
@@ -93,9 +91,10 @@ function ProductEditDrawer({
         }}
       >
         <Stack gap="workspace">
-          {invalid ? <Callout tone="negative">{invalid}</Callout> : null}
+          {invalid ? <Notice tone="negative">{invalid}</Notice> : null}
           {save.error ? (
-            <MutationNotice
+            <Notice
+              kind="mutation"
               notice={mutationNoticeForError(save.error, { action: 'save the product' })}
             />
           ) : null}
@@ -136,15 +135,9 @@ function ProductEditDrawer({
   );
 }
 
-/**
- * "Add to tracking" for a product the answers showed but nobody approved
- * (CM6): one click approves the AI-observed competitor, so it is matched as
- * an approved competitor from then on.
- */
 export function AddToTracking(
   props: Readonly<{ scope: ProjectScope; candidateId: string; name: string }>,
 ) {
-  // Approving a competitor is a write; a role without it is not offered one.
   return useWorkspaceCapability('write') ? <AddToTrackingButton {...props} /> : null;
 }
 
@@ -164,7 +157,8 @@ function AddToTrackingButton({
         {approve.isPending ? 'Adding…' : 'Add to tracking'}
       </Button>
       {approve.error ? (
-        <MutationNotice
+        <Notice
+          kind="mutation"
           notice={mutationNoticeForError(approve.error, { action: 'add the product to tracking' })}
         />
       ) : null}
@@ -175,16 +169,19 @@ function AddToTrackingButton({
 const ARCHIVED_NOTE =
   'This product is out of your catalog, answer matching and shopping prompts. Its history stays here.';
 
-/**
- * A catalog product's own controls on its page: Edit, and Archive or Restore.
- * An archived product says so first; it keeps its history but leaves the
- * catalog, new matching and shopping prompts until restored.
- */
+type ControlParts = Readonly<{ notices: ReactNode; actions: ReactNode }>;
+
 export function ProductCatalogControls({
   scope,
   product,
   catalog,
-}: Readonly<{ scope: ProjectScope; product: Product; catalog: Catalog }>) {
+  children,
+}: Readonly<{
+  scope: ProjectScope;
+  product: Product;
+  catalog: Catalog;
+  children: (parts: ControlParts) => ReactNode;
+}>) {
   const [editing, setEditing] = useState(false);
   const lifecycle = useMutation(commerceMutations.setProductLifecycle(scope));
   const archived = catalog.lifecycle_state === 'archived';
@@ -194,46 +191,53 @@ export function ProductCatalogControls({
       lifecycle_state: archived ? 'active' : 'archived',
     });
   const lifecycleLabel = archived ? 'Restore' : 'Archive';
-  // Editing and archiving are writes; a role without them reads the state only.
   const canWrite = useWorkspaceCapability('write');
   if (!canWrite) {
-    return archived ? (
-      <Callout tone="warning" title="Archived">
-        {ARCHIVED_NOTE}
-      </Callout>
-    ) : null;
-  }
-  return (
-    <Stack gap="compact">
-      {archived ? (
-        <Callout
-          tone="warning"
-          title="Archived"
-          action={
-            <Button onClick={toggle} disabled={lifecycle.isPending}>
-              Restore
-            </Button>
-          }
-        >
+    return children({
+      notices: archived ? (
+        <Notice tone="warning" title="Archived">
           {ARCHIVED_NOTE}
-        </Callout>
-      ) : null}
-      {lifecycle.error ? (
-        <MutationNotice
-          notice={mutationNoticeForError(lifecycle.error, {
-            action: `${lifecycleLabel.toLowerCase()} the product`,
-          })}
-        />
-      ) : null}
-      <Inline gap="compact">
-        <Button onClick={() => setEditing(true)}>Edit product</Button>
-        {archived ? null : (
-          <Button variant="ghost" onClick={toggle} disabled={lifecycle.isPending}>
-            {lifecycle.isPending ? 'Archiving…' : 'Archive'}
-          </Button>
-        )}
-      </Inline>
-      {/* Mounted while open, so each edit starts from the record as last read. */}
+        </Notice>
+      ) : null,
+      actions: null,
+    });
+  }
+  const notices =
+    archived || lifecycle.error ? (
+      <Stack gap="compact">
+        {archived ? (
+          <Notice
+            tone="warning"
+            title="Archived"
+            action={
+              <Button onClick={toggle} disabled={lifecycle.isPending}>
+                Restore
+              </Button>
+            }
+          >
+            {ARCHIVED_NOTE}
+          </Notice>
+        ) : null}
+        {lifecycle.error ? (
+          <Notice
+            kind="mutation"
+            notice={mutationNoticeForError(lifecycle.error, {
+              action: `${lifecycleLabel.toLowerCase()} the product`,
+            })}
+          />
+        ) : null}
+      </Stack>
+    ) : null;
+  const actions = (
+    <>
+      <Button variant="secondary" onClick={() => setEditing(true)}>
+        Edit product
+      </Button>
+      {archived ? null : (
+        <Button variant="secondary" onClick={toggle} disabled={lifecycle.isPending}>
+          {lifecycle.isPending ? 'Archiving…' : 'Archive'}
+        </Button>
+      )}
       {editing ? (
         <ProductEditDrawer
           scope={scope}
@@ -243,6 +247,7 @@ export function ProductCatalogControls({
           onOpenChange={setEditing}
         />
       ) : null}
-    </Stack>
+    </>
   );
+  return children({ notices, actions });
 }

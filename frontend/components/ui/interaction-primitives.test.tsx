@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from 'vite-plus/test';
 import { Button } from './button';
 import { Checkbox } from './checkbox';
 import { ChipInput, type ChipItem } from './chip-input';
-import { CsvImportFileInput, CsvImportTrigger } from './csv-import';
+import { CsvImportFileInput } from './csv-import';
 import { RadioGroup } from './radio-group';
 import { SearchField } from './search-field';
 import { Select } from './select';
@@ -81,7 +81,7 @@ describe('authenticated interaction primitives', () => {
     expect(screen.getByRole('combobox', { name: 'Severity' })).toHaveTextContent('High');
   });
 
-  it('uses Radix keyboard selection and panel wiring for Tabs', async () => {
+  it('uses Radix keyboard selection and panel wiring for Tabs, scrolling the strip to the selected tab', async () => {
     const user = userEvent.setup();
     function Harness() {
       const [value, setValue] = useState<'one' | 'two'>('one');
@@ -101,10 +101,48 @@ describe('authenticated interaction primitives', () => {
       );
     }
     render(<Harness />);
+    const list = screen.getByRole('tablist');
+    const two = screen.getByRole('tab', { name: 'Two' });
+    Object.defineProperty(list, 'clientWidth', { value: 100 });
+    Object.defineProperty(list, 'scrollLeft', { value: 0, writable: true });
+    Object.defineProperty(two, 'offsetLeft', { value: 300 });
+    Object.defineProperty(two, 'offsetWidth', { value: 60 });
     screen.getByRole('tab', { name: 'One' }).focus();
     await user.keyboard('{ArrowRight}');
-    expect(screen.getByRole('tab', { name: 'Two' })).toHaveAttribute('data-state', 'active');
+    expect(two).toHaveAttribute('data-state', 'active');
     expect(screen.getByRole('tabpanel')).toHaveTextContent('Second panel');
+    expect(list.scrollLeft).toBe(280);
+    await user.keyboard('{ArrowLeft}');
+    expect(list.scrollLeft).toBe(0);
+  });
+
+  it('scrolls the page on PageDown from a tab and keeps the selection', async () => {
+    const user = userEvent.setup();
+    const onValueChange = vi.fn();
+    const page = document.scrollingElement ?? document.documentElement;
+    Object.defineProperty(page, 'clientHeight', { value: 1000, configurable: true });
+    const scrollBy = vi.fn();
+    page.scrollBy = scrollBy;
+    render(
+      <Tabs
+        value="one"
+        onValueChange={onValueChange}
+        ariaLabel="Views"
+        items={[
+          { value: 'one', label: 'One' },
+          { value: 'two', label: 'Two' },
+          { value: 'three', label: 'Three' },
+        ]}
+      />,
+    );
+    const one = screen.getByRole('tab', { name: 'One' });
+    one.focus();
+    await user.keyboard('{PageDown}');
+    await user.keyboard('{PageUp}');
+    expect(onValueChange).not.toHaveBeenCalled();
+    expect(one).toHaveFocus();
+    expect(one).toHaveAttribute('data-state', 'active');
+    expect(scrollBy.mock.calls).toEqual([[{ top: 900 }], [{ top: -900 }]]);
   });
 
   it('exposes checkbox and radio state', async () => {
@@ -214,23 +252,12 @@ describe('authenticated interaction primitives', () => {
     expect(screen.getByText('Trail shoes, waterproof')).toBeInTheDocument();
     expect(screen.getAllByText(/running shoes/i)).toHaveLength(1);
     expect(screen.getByText('2/5')).toBeInTheDocument();
-    // The ignored repeat stays in the field for the person to correct.
     expect(field).toHaveValue('running shoes');
 
     await user.clear(field);
     await user.keyboard('{Backspace}');
     expect(screen.queryByText('Trail shoes, waterproof')).not.toBeInTheDocument();
     expect(screen.getByText('Running shoes')).toBeInTheDocument();
-  });
-
-  it('allows selecting the same CSV file again', () => {
-    const onSelect = vi.fn();
-    render(<CsvImportTrigger accessibleLabel="Import products" onSelect={onSelect} />);
-    const input = screen.getByLabelText('Import products');
-    const file = new File(['name\nExample'], 'products.csv', { type: 'text/csv' });
-    fireEvent.change(input, { target: { files: [file] } });
-    fireEvent.change(input, { target: { files: [file] } });
-    expect(onSelect).toHaveBeenCalledTimes(2);
   });
 
   it('resets the CSV field after forwarding its selected file', () => {

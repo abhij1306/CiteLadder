@@ -1,17 +1,12 @@
-import { Pencil } from 'lucide-react';
 import { useId, useState, type ReactNode } from 'react';
 
 import { Button, IconButton } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Icon } from '@/components/ui/icon';
 import { Input } from '@/components/ui/input';
+import { Pencil, X } from '@/lib/icons';
 import { cn } from '@/lib/utils';
 
-/**
- * FieldGroup — a question made of several controls: a `fieldset` named by
- * its label (14/20 medium `ink`), with an optional mono count
- * at its right, a help line under it, the controls, and a note after them
- * (why the step cannot continue yet).
- */
 export function FieldGroup({
   label,
   help,
@@ -21,9 +16,7 @@ export function FieldGroup({
 }: Readonly<{
   label: string;
   help?: ReactNode;
-  /** "2 of 5": what is selected, in mono `ink-muted`. */
   count?: string;
-  /** Why the step cannot continue, in `warning`. */
   note?: ReactNode;
   children: ReactNode;
 }>) {
@@ -36,10 +29,10 @@ export function FieldGroup({
             {label}
           </span>
           {count ? (
-            <span className="text-caption text-ink-muted font-mono whitespace-nowrap">{count}</span>
+            <span className="text-caption text-ink-2 whitespace-nowrap tabular-nums">{count}</span>
           ) : null}
         </div>
-        {help ? <p className="text-body-sm text-ink-secondary">{help}</p> : null}
+        {help ? <p className="text-body-sm text-ink-2">{help}</p> : null}
       </div>
       {children}
       {note ? <p className="text-caption text-warning">{note}</p> : null}
@@ -51,16 +44,11 @@ export type ChecklistItem = Readonly<{
   id: string;
   label: string;
   description?: string;
-  /** A mono fact at the row's end (a domain beside a name). */
   meta?: string;
-  /** A 20px mark before the label: a BrandMark, an EngineMark in `ink`. */
   leading?: ReactNode;
   checked: boolean;
-  /** Checking is unavailable (a limit is reached); unchecking stays available. */
   disabled?: boolean;
-  /** Offers the pencil, when the field has an editor. */
   editable?: boolean;
-  /** Content kept beside the row for assistive tech (a visually hidden link). */
   extra?: ReactNode;
 }>;
 
@@ -70,21 +58,12 @@ export type ChecklistEditor<K extends string> = Readonly<{
     label: (item: ChecklistItem) => string;
     placeholder: string;
   }>[];
-  /** Each field's starting value for this row. */
   values: (item: ChecklistItem) => Readonly<Record<K, string>>;
-  /** Save is offered once every field has a value; values arrive trimmed. */
   onSave: (id: string, values: Readonly<Record<K, string>>) => void;
   onCancel?: (id: string) => void;
-  /** The pencil's accessible name. */
   editLabel: (item: ChecklistItem) => string;
 }>;
 
-/**
- * ChecklistField — a bordered list of checkable rows (52px; 68px with
- * descriptions) under a FieldGroup head, one row editable in place. The
- * editing row swaps the row for its fields with Save (ink) and Cancel (ghost)
- * at the same height. Rows never reorder on check; labels end in an ellipsis.
- */
 export function ChecklistField<K extends string>({
   label,
   help,
@@ -107,18 +86,16 @@ export function ChecklistField<K extends string>({
   editor?: ChecklistEditor<K>;
   editingId?: string | null;
   onEditingChange?: (id: string | null) => void;
-  /** Said in place of the list when there are no rows. */
   empty: ReactNode;
-  /** Actions under the list (Add). */
   footer?: ReactNode;
 }>) {
   const tall = items.some((item) => item.description);
   return (
     <FieldGroup label={label} help={help} count={count} note={note}>
       {items.length === 0 ? (
-        <p className="text-body-sm text-ink-secondary">{empty}</p>
+        <p className="text-body-sm text-ink-2">{empty}</p>
       ) : (
-        <ul className="bg-surface border-line divide-line divide-y rounded-md border">
+        <ul className="bg-surface border-rule divide-rule rounded-control divide-y border">
           {items.map((item) =>
             editor && item.id === editingId ? (
               <EditRow
@@ -160,7 +137,12 @@ function CheckRow({
   onEdit?: { label: string; start: () => void };
 }>) {
   return (
-    <li className={cn('desktop:pl-4 flex items-center gap-3 pr-2 pl-3', tall ? 'h-17' : 'h-13')}>
+    <li
+      className={cn(
+        'desktop:pl-4 flex items-center gap-3 pr-2 pl-3',
+        tall ? 'min-h-17' : 'min-h-13',
+      )}
+    >
       <Checkbox
         checked={item.checked}
         onCheckedChange={onToggle}
@@ -177,7 +159,7 @@ function CheckRow({
         }
       />
       {item.meta ? (
-        <span className="text-caption text-ink-muted shrink-0 font-mono">{item.meta}</span>
+        <span className="text-caption text-ink-2 shrink-0 tabular-nums">{item.meta}</span>
       ) : null}
       {onEdit ? <IconButton icon={Pencil} label={onEdit.label} onClick={onEdit.start} /> : null}
       {item.extra}
@@ -227,11 +209,12 @@ function EditRow<K extends string>({
           className="min-w-0 flex-1 basis-32"
         />
       ))}
+      <Button variant="quiet" onClick={cancel}>
+        <Icon icon={X} />
+        Cancel
+      </Button>
       <Button variant="primary" onClick={save} disabled={!complete}>
         Save
-      </Button>
-      <Button variant="ghost" onClick={cancel}>
-        Cancel
       </Button>
     </li>
   );

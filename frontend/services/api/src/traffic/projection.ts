@@ -1,4 +1,3 @@
-/** Incremental traffic fold. Ordered input buffers just one revision identity. */
 import { policy } from '../config.ts';
 import type { ReferralClassifications } from '../referrals/persisted.ts';
 import { addDays } from '../calendar-days.ts';
@@ -36,7 +35,6 @@ export type ProjectionWindow = {
   granularity: string;
   projectOrigin?: string | null;
   allowedHosts?: ReadonlySet<string>;
-  /** Persisted AI referral classifications; GA4 rows are never classified live (OD3). */
   referrals: ReferralClassifications;
 };
 
@@ -111,7 +109,6 @@ export class TrafficProjectionBuilder {
       if (!previous || row.resync_seq > previous.resync_seq) this.pending.set(key, row);
     }
   }
-  /** A dataset without quality (its provider is not mapped) keeps its values as folded. */
   partitionQuality(dataset: string, days: readonly DayQuality[]) {
     this.qualities.set(dataset, days);
     if (dataset !== p.DATASET_GSC_DAY_DAILY) return;

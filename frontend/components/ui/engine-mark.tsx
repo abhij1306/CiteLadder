@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react';
+
 import { cn } from '@/lib/utils';
 
 export type EngineKey = 'chatgpt' | 'claude' | 'gemini' | 'google';
@@ -17,15 +19,21 @@ const ENGINE_PATHS: Record<EngineKey, string> = {
     'M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3h3.86c2.26-2.09 3.68-5.17 3.68-9.12zM12 24c3.24 0 5.95-1.08 7.93-2.91l-3.86-3c-1.08.72-2.45 1.16-4.07 1.16-3.13 0-5.78-2.11-6.73-4.96H1.29v3.09C3.26 21.3 7.31 24 12 24zM5.27 14.29c-.25-.72-.38-1.49-.38-2.29s.14-1.57.38-2.29V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.98-3.09zM12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.62l3.98 3.09C6.22 6.86 8.87 4.75 12 4.75z',
 };
 
-/** Where the mark sits: `inline` 16px in a row of text or a pill, `row` 20px in filters, cells and identity rows. */
+export function engineMarkKey(engine: string): EngineKey | null {
+  if (engine.startsWith('chatgpt')) return 'chatgpt';
+  if (engine.startsWith('gemini')) return 'gemini';
+  if (engine === 'claude') return 'claude';
+  if (engine === 'google_ai_overview') return 'google';
+  return null;
+}
+
+export function engineOptionMark(engine: string): ReactNode {
+  const key = engineMarkKey(engine);
+  return key ? <EngineMark engine={key} placement="inline" /> : undefined;
+}
+
 const PLACEMENT = { inline: 'size-4', row: 'size-5' } as const;
 
-/**
- * EngineMark — a tracked engine's mark in `currentColor`, so it follows the
- * ink of whatever holds it (`ink`, `ink-secondary`, or `line-control` for
- * "not cited"). Decorative: the engine's name always sits next to it or in
- * the row's accessible name. Never recoloured, never in a circle.
- */
 export function EngineMark({
   engine,
   placement = 'row',

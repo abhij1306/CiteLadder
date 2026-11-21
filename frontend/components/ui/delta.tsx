@@ -1,36 +1,16 @@
-import { MissingValue } from '@/components/ui/unavailable-value';
+import { Absence } from '@/components/ui/absence';
 import { cn } from '@/lib/utils';
 
-/**
- * Delta — a change on its own, in the voice of a Stat's change line: an
- * arrow, the magnitude and a word for screen readers, in the mono `data`
- * style. No sign as well as the arrow.
- *
- * Colour follows meaning, not direction, and the policy decides it:
- * `higher-is-better` paints a rise `positive`, `lower-is-better` (rank,
- * latency, errors) paints it `negative`, and `neutral` stays `ink-secondary`
- * because the movement is a fact, not a verdict. A displayed zero is flat
- * (→, `ink-secondary`). The arrow and the hidden word carry the direction
- * without colour.
- *
- * The direction is decided from the value the reader SEES, after rounding, so
- * a movement of +0.04 never claims a direction it does not show.
- *
- * A missing change (null, undefined or non-finite) is not zero: it renders the
- * availability vocabulary (`MissingValue`: the muted dash, "Not measured" as
- * its accessible name, and the optional reason on hover/focus).
- */
 export type DeltaPolicy = 'higher-is-better' | 'lower-is-better' | 'neutral';
 
 type Direction = 'up' | 'down' | 'flat';
 
-const TREND = {
-  up: { arrow: '↑', word: 'up' },
-  down: { arrow: '↓', word: 'down' },
-  flat: { arrow: '→', word: 'no change' },
-} as const satisfies Record<Direction, { arrow: string; word: string }>;
+const SPOKEN = {
+  up: 'up',
+  down: 'down',
+  flat: 'no change',
+} as const satisfies Record<Direction, string>;
 
-/** What the movement means under the policy; `data-outcome` exposes it. */
 type Outcome = 'improved' | 'worsened' | 'changed' | 'unchanged';
 
 function outcomeOf(direction: Direction, policy: DeltaPolicy): Outcome {
@@ -42,8 +22,8 @@ function outcomeOf(direction: Direction, policy: DeltaPolicy): Outcome {
 const OUTCOME_INK: Record<Outcome, string> = {
   improved: 'text-positive',
   worsened: 'text-negative',
-  changed: 'text-ink-secondary',
-  unchanged: 'text-ink-secondary',
+  changed: 'text-ink-2',
+  unchanged: 'text-ink-2',
 };
 
 function roundedChange(value: number, precision: number) {
@@ -54,7 +34,10 @@ function roundedChange(value: number, precision: number) {
   return { direction, magnitude: Math.abs(rounded) };
 }
 
-const DELTA_FACE = 'type-delta inline-flex items-baseline gap-1 whitespace-nowrap';
+const DELTA_FACE =
+  'type-caption inline-flex items-baseline gap-1 font-medium tabular-nums whitespace-nowrap [[data-public-surface]_&]:font-mono [[data-public-surface]_&]:font-normal';
+
+const SIGN = { up: '+', down: '−', flat: '±' } as const satisfies Record<Direction, string>;
 
 export function Delta({
   value,
@@ -63,28 +46,20 @@ export function Delta({
   unit = '',
   missingReason,
   context,
+  spokenContext,
   className,
 }: Readonly<{
-  /** The signed change, or null when there is nothing to compare against. */
   value: number | null | undefined;
-  /** Which direction is good. Decides the colour, never the arrow. */
   policy?: DeltaPolicy;
-  /** Decimal places the change is rounded to before its direction is decided. */
   precision?: number;
-  /** Appended to the magnitude, e.g. `' pts'`, `'%'`. */
   unit?: string;
-  /** Why there is no change, e.g. "No comparable run" — shown on hover/focus. */
   missingReason?: string;
-  /** The period the change covers, e.g. "vs last week", in `ink-muted`. */
   context?: string;
+  spokenContext?: string;
   className?: string;
 }>) {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
-    return (
-      <span className={cn(DELTA_FACE, 'text-ink-muted', className)}>
-        <MissingValue reason={missingReason} />
-      </span>
-    );
+    return <Absence state="not_measured" reason={missingReason} className={className} />;
   }
   const { direction, magnitude } = roundedChange(value, precision);
   const outcome = outcomeOf(direction, policy);
@@ -94,15 +69,23 @@ export function Delta({
       data-outcome={outcome}
       className={cn(DELTA_FACE, OUTCOME_INK[outcome], className)}
     >
-      <span aria-hidden className="inline-block w-[1ch]">
-        {TREND[direction].arrow}
-      </span>
-      <span className="sr-only">{`${TREND[direction].word} `}</span>
-      <span>
-        {magnitude.toFixed(precision)}
-        {unit}
-      </span>
-      {context ? <span className="text-ink-muted ms-0.5">{context}</span> : null}
+      {direction === 'flat' ? (
+        <>
+          <span className="sr-only">{SPOKEN.flat}</span>
+          <span aria-hidden>{`${SIGN.flat}0${unit}`}</span>
+        </>
+      ) : (
+        <>
+          <span className="sr-only">{`${SPOKEN[direction]} `}</span>
+          <span>
+            <span aria-hidden>{SIGN[direction]}</span>
+            {magnitude.toFixed(precision)}
+            {unit}
+          </span>
+        </>
+      )}
+      {context ? <span className="text-ink-2 ms-0.5 font-normal">{context}</span> : null}
+      {spokenContext ? <span className="sr-only">{` ${spokenContext}`}</span> : null}
     </span>
   );
 }

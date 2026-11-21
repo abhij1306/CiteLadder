@@ -187,8 +187,6 @@ async function judge(
       },
     }));
   } catch (error) {
-    // Only a provider fault or the job deadline settles as uncertain; any
-    // other fault fails the task so it retries and terminal compensation runs.
     let reason = 'deadline_exceeded';
     if (!signal.aborted) {
       if (!(error instanceof ModelError)) throw error;

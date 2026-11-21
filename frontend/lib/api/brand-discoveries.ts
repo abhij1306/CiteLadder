@@ -17,11 +17,6 @@ import {
 
 export type BrandDiscovery = z.infer<typeof brandDiscoverySchema>;
 
-/**
- * The resolved business context. `category` and `category_terms` are open
- * vocabulary and decide what the generated questions are about; the rest are
- * closed facets that select which kinds of question apply.
- */
 export type DiscoveryProfile = BrandDiscovery['profile'];
 
 export const brandDiscoveriesApi = {
@@ -55,7 +50,6 @@ export const brandDiscoveriesApi = {
     });
     return strictValidate(brandDiscoverySchema, value, 'brandDiscovery.run');
   },
-  /** A new discovery from a finished one's input; the finished one is left as it is. */
   rerun: async (id: string, idempotencyKey: string, options?: ApiRequestOptions) => {
     const value = await apiClient.post(`/brand-discoveries/${id}/rerun`, undefined, {
       ...options,
@@ -80,7 +74,6 @@ export const brandDiscoveriesApi = {
 };
 
 export const brandDiscoveryQueries = {
-  /** Discovery limits (the competitor cap); they change only with a deployment. */
   catalog: (workspaceId: string | null) =>
     queryOptions({
       queryKey: queryKeys.brandDiscovery.catalog(workspaceId),
@@ -108,7 +101,6 @@ export const refreshBrandDiscovery = (
   });
 
 export const brandDiscoveryMutations = {
-  /** Execute a queued discovery; its progress is re-read however the request ends. */
   run: () =>
     mutationOptions({
       mutationFn: ({ id, workspace }: { id: string; workspace: string | null }) =>

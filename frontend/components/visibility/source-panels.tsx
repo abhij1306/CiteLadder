@@ -2,15 +2,6 @@ import type { DataTablePager } from '@/components/ui/data-table';
 import { setUrlParams } from '@/lib/navigation/url-state';
 import type { SourcesData } from '@/lib/visibility/sources';
 
-/**
- * The source table's pager: server keyset cursors in both directions, with
- * the rows-per-page control. The displayed offset only labels the current
- * page; it never drives SQL.
- *
- * It is built with no data too. The pager stays mounted for the duration of
- * every load, so the rows-per-page control and the steps never leave the
- * screen and the table never shortens by the height of its footer.
- */
 export function sourcePager({
   data,
   domain,

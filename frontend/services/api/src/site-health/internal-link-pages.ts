@@ -15,7 +15,6 @@ const isTracking = (name: string) =>
   trackingParams.has(name) ||
   policy.internal_links.tracking_param_prefixes.some((prefix) => name.startsWith(prefix));
 
-/** Keep query identity; fragments and click-tracking parameters never name a page. */
 export function linkUrl(value: string, base: string): string | null {
   try {
     const url = new URL(value, base);
@@ -30,10 +29,6 @@ export function linkUrl(value: string, base: string): string | null {
   }
 }
 
-/**
- * Main-content targets are existing contextual links. A link in an unknown
- * region may be contextual, so it also blocks a "missing link" suggestion.
- */
 function linkedTargets(facts: Record<string, unknown>, url: string) {
   const links = record(facts.links);
   const targets = new Set<string>();
@@ -60,11 +55,6 @@ async function contextualInbound(db: Database, scope: LinkScope, crawlId: string
   return new Map(rows.map((row) => [row.site_url_id, row.main_content_inbound_count]));
 }
 
-/**
- * The crawl's link pages: each page's latest audit as the crawl shows it
- * (`pageAuditsSql`, SH-B9), so a later page rerun's content and links count.
- * The contextual inbound counts stay the crawl's own link graph.
- */
 export async function loadLinkPages(db: Database, scope: LinkScope, crawlId: string) {
   const crawl = await loadCrawl(db, scope.workspaceId, crawlId);
   const query = db
@@ -82,7 +72,6 @@ export async function loadLinkPages(db: Database, scope: LinkScope, crawlId: str
     .where('url.workspace_id', '=', scope.workspaceId)
     .where('url.project_id', '=', scope.projectId)
     .where('analysis.finalized_at', 'is not', null)
-    // Filter before the page cap, so discarded rows never take an eligible page's place.
     .where(sql<boolean>`artifact.normalized_facts #>> '{extraction,state}' = 'available'`)
     .where(
       sql<boolean>`artifact.normalized_facts #> '{extraction,truncated}' is distinct from 'true'::jsonb`,
@@ -102,9 +91,6 @@ export async function loadLinkPages(db: Database, scope: LinkScope, crawlId: str
       'artifact.final_url',
       'url.normalized_url',
     ])
-    // Above the cap, indexable pages first, then a stable hash order: a
-    // reproducible spread across site sections rather than the alphabetically
-    // first URLs. The admitted pages are frozen in the run manifest.
     .orderBy(sql`analysis.main_content_indexable desc nulls last`)
     .orderBy(sql`md5(url.normalized_url)`)
     .orderBy('url.normalized_url')

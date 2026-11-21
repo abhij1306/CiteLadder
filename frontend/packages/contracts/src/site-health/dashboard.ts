@@ -17,9 +17,6 @@ import {
 import { rootErrorSchema } from './pages.ts';
 import { cursorPageSchema } from './pagination.ts';
 
-// One per-URL issue-history row — a resolved issue: the latest record of a rule
-// the selected crawl's current analysis no longer reports, from a superseded
-// analysis or a prior crawl in the project chronology. Never a current issue.
 const issueHistoryRowSchema = responseObject({
   id: uuid(),
   crawl_id: uuid(),
@@ -36,15 +33,10 @@ const issueHistoryRowSchema = responseObject({
   created_at: z.string(),
 });
 
-// Per-URL issue history page (crawl-bounded, newest-first, cursor-paginated).
-// Without a finalized current analysis nothing is known to be resolved, which
-// is not the same as an empty history.
 export const issueHistoryPageSchema = cursorPageSchema(issueHistoryRowSchema).extend({
   current_analysis_finalized: z.boolean(),
 });
 
-// Append-only safe crawl event. Free payloads never carry total/frontier/
-// overflow data; `event_type` is an open string (backend owns the catalogue).
 export const siteCrawlEventSchema = responseObject({
   id: uuid(),
   crawl_id: uuid(),
@@ -54,7 +46,6 @@ export const siteCrawlEventSchema = responseObject({
   created_at: z.string(),
 });
 
-// Latest / selected crawl dashboard projection (`/projects/{id}/site-health`).
 export const siteHealthDashboardSchema = responseObject({
   project_id: uuid(),
   crawl: siteCrawlSchema.nullable(),
@@ -62,8 +53,6 @@ export const siteHealthDashboardSchema = responseObject({
   // THE screen phase, resolved server-side. The client renders this; it does
   // not re-derive it from crawl statuses + monitored counts.
   phase: z.enum(['empty', 'discovering', 'analyzing', 'dashboard', 'terminal']),
-  // Null until the crawl terminalizes; content verification compares a
-  // published revision against a later snapshot.
   snapshot_id: uuid().nullable(),
   quota: monitoredQuotaSchema,
   // same root-failure projection as the pages response — the failed
@@ -116,8 +105,6 @@ export const changesPageSchema = changeSummarySchema.extend({
   next_cursor: z.string().nullable(),
 });
 
-// One failed check on a page, named the way the rule catalog names it. A raw
-// rule id (`aeo.answer_first`) never reaches the screen.
 const readinessFailingCheckSchema = responseObject({
   rule_id: z.string(),
   title: z.string(),
@@ -125,14 +112,9 @@ const readinessFailingCheckSchema = responseObject({
   expected_capability: z.string(),
   remediation: z.string(),
   content_addressable: z.boolean(),
-  // Who can resolve it: `content`, `agent` or `code`. Derived by the backend
-  // from the rule catalog, so the panel offers the same action the Issues rail
-  // does and never one the hand-off endpoint would refuse.
   remediation_route: z.string(),
 });
 
-// Evidence is one row per FAILING PAGE listing that page's failed checks —
-// never one row per evaluation, which repeated the same URL once per rule.
 const readinessEvidencePageSchema = responseObject({
   site_url_id: uuid(),
   source_analysis_id: uuid(),
@@ -140,7 +122,6 @@ const readinessEvidencePageSchema = responseObject({
   failed_checks: z.array(readinessFailingCheckSchema),
 });
 
-// One mapped rule rolled up, carrying the catalog title and the fix.
 export const readinessCheckSchema = responseObject({
   rule_id: z.string(),
   scope: z.enum(['page', 'site', 'cluster', 'graph']),
@@ -176,9 +157,6 @@ export const readinessDimensionSchema = responseObject({
   reason: z.string(),
   checkpoint_ids: z.array(z.string()),
   determinate_checkpoint_ids: z.array(z.string()),
-  // Applicable checks that produced no determinate verdict. Stated as a count
-  // so a coverage shortfall reads as "3 checks unresolved" rather than as a
-  // withheld score.
   unresolved_count: z.number().int(),
   earned_points: z.number(),
   determinate_points: z.number(),
@@ -190,9 +168,6 @@ export const readinessDimensionSchema = responseObject({
   not_applicable_count: z.number().int(),
   error_count: z.number().int(),
   coverage: z.number().nullable(),
-  // Human-scale quantities: pages a check applied to, and pages that failed at
-  // least one. Always render `evidence_pages.length` against these, never as a
-  // total of its own.
   checked_page_count: z.number().int(),
   failing_page_count: z.number().int(),
   checks: z.array(readinessCheckSchema),
@@ -219,28 +194,6 @@ export const aeoReadinessSchema = responseObject({
 const measurementStateSchema = z.enum(['measured', 'limited_evidence', 'not_measured', 'excluded']);
 const dimensionApplicabilitySchema = z.enum(['applicable', 'not_applicable']);
 const searchEligibilitySchema = z.enum(['eligible', 'blocked', 'unknown', 'excluded']);
-const acquisitionEligibilityCheckpointSchema = responseObject({
-  checkpoint_id: z.literal('acquisition.public_representation'),
-  outcome: z.string(),
-  reason: z.string(),
-  source_task_id: uuid().nullable(),
-  source_attempt_id: uuid().nullable(),
-  source_artifact_id: uuid().nullable(),
-});
-const indexEligibilityCheckpointSchema = responseObject({
-  checkpoint_id: z.literal('search.indexability'),
-  outcome: z.string(),
-  reason: z.string(),
-  source_analysis_id: uuid().nullable(),
-  source_evaluation_id: uuid().nullable(),
-});
-const searchPolicyEligibilityCheckpointSchema = responseObject({
-  checkpoint_id: z.enum(['search.crawler_access', 'search.snippet_access']),
-  outcome: z.string(),
-  reason: z.string(),
-  source_analysis_id: uuid().nullable(),
-  source_evaluation_id: uuid().nullable(),
-});
 const overviewDimensionSchema = responseObject({
   key: z.string(),
   label: z.string(),
@@ -258,22 +211,17 @@ const overviewDimensionSchema = responseObject({
 });
 const overviewIssueSchema = responseObject({
   rule_id: z.string(),
-  // The rule's current catalog label (its failing title); `description`
-  // states the passing expectation and is never shown under it.
   title: z.string(),
   finding_class: z.string(),
   severity: z.string(),
   category: z.string(),
   description: z.string(),
   remediation: z.string(),
-  // Which site score the rule feeds — `web_fundamentals` (Web Fundamentals)
-  // and/or `aeo_readiness`. Drives the Effect column on Top issues.
   score_roles: z.array(z.string()),
   affected_pages: z.number().int(),
   eligibility_blocker: z.boolean(),
   impact_band: z.number().int(),
   impact_label: z.string(),
-  // The Issues tab the rule is listed under; null for a rule the catalog retired.
   section: issueSectionSchema.nullable(),
 });
 
@@ -284,28 +232,12 @@ const cohortCompositionSchema = responseObject({
   current_page_count_by_kind: z.partialRecord(pageKindSchema, z.number().int().nonnegative()),
 });
 
-// The frozen snapshot keeps its provenance id lists (source evaluations,
-// analyses, artifacts and classification tasks); this response renders the
-// projection without them (owner, 2 Nov 2026).
 export const siteHealthOverviewSchema = responseObject({
   project_id: uuid(),
   crawl_id: uuid(),
   snapshot_id: uuid(),
   search_eligibility: searchEligibilitySchema,
   eligibility_totals: z.record(z.string(), z.number().int()),
-  eligibility_reasons: z.array(
-    responseObject({
-      site_url_id: uuid(),
-      state: searchEligibilitySchema,
-      checkpoints: z.array(
-        z.union([
-          acquisitionEligibilityCheckpointSchema,
-          indexEligibilityCheckpointSchema,
-          searchPolicyEligibilityCheckpointSchema,
-        ]),
-      ),
-    }),
-  ),
   web_fundamentals_score: z.number().nullable(),
   web_fundamentals_coverage: z.number().nullable(),
   web_fundamentals_state: measurementStateSchema,
@@ -363,10 +295,6 @@ export const siteHealthOverviewSchema = responseObject({
     }),
     limitations: z.array(z.string()),
   }),
-  /**
-   * The project's open issues over time, one point per UTC day an audit landed,
-   * oldest first (SH-B9). Empty until the first audit lands.
-   */
   open_issue_trend: z.array(
     responseObject({ day: z.iso.date(), open_count: z.number().int().nonnegative() }),
   ),
@@ -411,7 +339,6 @@ const siteHealthErrorCodeSchema = z.enum([
   'http_5xx',
 ]);
 
-// Coded error body. Limit errors carry `limit`/`currently_used`. Extra keys fail loud.
 export const siteHealthErrorSchema = responseObject({
   code: siteHealthErrorCodeSchema,
   message: z.string(),

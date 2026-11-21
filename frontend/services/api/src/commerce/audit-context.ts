@@ -23,7 +23,6 @@ function productEvidence(product: Selectable<CommerceProducts>) {
   };
 }
 
-/** The archived products among prompt targets. */
 async function archivedProducts(
   db: Database,
   scope: CommerceScope,
@@ -67,11 +66,9 @@ export async function freezeCommerceContext(
         .orderBy('id')
         .execute()
     : [];
-  // An archived product is out of prompt context: its prompts freeze no target.
   const archived = await archivedProducts(db, scope, approved);
   const targets = approved.filter((target) => !archived.has(target.target_id));
   const evidence = [];
-  // Several approved prompts share one target; its evidence is frozen once.
   const distinct = new Map(targets.map((row) => [`${row.target_kind}:${row.target_id}`, row]));
   for (const target of distinct.values()) {
     const category =
@@ -137,13 +134,6 @@ export async function freezeCommerceContext(
   };
 }
 
-/**
- * Every audit scope of a project that qualifies for catalog matching freezes
- * the current catalog revision, recording a new one when the catalog changed
- * since the last, so brand answers are matched too (CM1). Projects without the
- * `commerce` capability or with no catalog and no approved competitor freeze
- * nothing and pay nothing.
- */
 export async function freezeCatalogRevision(db: Database, scope: CommerceScope) {
   const revision = await recordCatalogRevision(db, scope, { kind: 'audit', id: null });
   return revision

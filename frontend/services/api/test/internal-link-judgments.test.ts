@@ -336,9 +336,7 @@ describe('internal link judgment execution', () => {
     await expect(admit()).rejects.toThrow('An internal link analysis is already running');
     await compensateTerminalTasks(db, { workspaceId: seed.workspaceId, taskIds: [taskId!] });
     expect((await linkRun(db, scope, runId)).analysis?.state).toBe('failed');
-    // Admission now passes the live-run check and stops only at the crawl's own evidence.
     await expect(admit()).rejects.toThrow('The crawl captured too few pages to link');
-    // Only a usable site crawl is offered for linking: never a page rerun or a failed crawl.
     const rerun = await siteFixtures.sibling(seed, {
       configuration: JSON.stringify({ page_rerun: true }),
     });

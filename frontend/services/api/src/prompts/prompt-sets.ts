@@ -1,11 +1,3 @@
-/**
- * Prompt sets: a project's prompt library containers.
- *
- * Project bootstrap and Commerce also create sets; deleting one takes the
- * project lock and then the set lock, the order generation holds while
- * it stages candidates, so a delete never lands between its re-resolution and
- * its inserts.
- */
 import { randomUUID } from 'node:crypto';
 
 import {
@@ -34,7 +26,6 @@ export const promptSetUpdate = promptSetUpdateRequestSchema.extend({
   description: z.string().max(1024).nullish(),
 });
 
-/** A set in the caller's workspace (and named project), or `Prompt set not found`. */
 export async function scopedPromptSet(
   db: Kysely<DB>,
   workspaceId: string,
@@ -99,15 +90,12 @@ export async function listPromptSets(
   return views(db, sets);
 }
 
-/**
- * The bounds the request schemas enforce on the forms a prompt-set list opens,
- * read from the same policy values so the browser never restates them.
- */
 export function promptFormLimits(): PromptFormLimits {
   const generation = policy.prompts.generation;
   return {
     generation_count_max: generationSetting('max_count'),
     import_rows_max: policy.prompts.import_max_rows,
+    bulk_prompts_max: policy.prompts.bulk_prompts_max,
     persona_max_chars: policy.prompts.persona_max_chars,
     run_context_max_chars: generation.run_context_max_chars,
     distribution_personas_max: generation.distribution_personas_max,

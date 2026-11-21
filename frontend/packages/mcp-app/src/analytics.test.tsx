@@ -20,7 +20,6 @@ const result = (project_id = project) => ({
 });
 const answerId = '44444444-4444-4444-8444-444444444444';
 const uuid = /[0-9a-f]{8}-[0-9a-f]{4}-/u;
-/** Everything a person or assistive technology can read, including collapsed sections. */
 function shownText() {
   const labelled = [...document.querySelectorAll('[aria-label],[title],[alt]')].flatMap((node) =>
     ['aria-label', 'title', 'alt'].map((name) => node.getAttribute(name) ?? ''),
@@ -146,7 +145,7 @@ describe('CiteLadder MCP App', () => {
             approach: 'Answer common pricing questions on the page.',
             status: 'in_progress',
             priority_score: 0.8,
-            link: `https://app.example.test/agent/actions/${answerId}?project=${project}`,
+            link: `https://app.example.test/actions/${answerId}?project=${project}`,
           },
         ],
       },
@@ -330,6 +329,124 @@ describe('CiteLadder MCP App', () => {
       ).not.toBeInTheDocument();
     },
   );
+  it('switches trends to share of voice, position and win rate and lists what changed', async () => {
+    const user = userEvent.setup();
+    const controller = createController({
+      call: vi.fn(async () => undefined),
+      context: vi.fn(async () => undefined),
+    });
+    const row = { mention_count: 1, citation_rate: null, mention_rate: 0.5 };
+    const withEarlier = <T extends object>(point: T) => [
+      {
+        ...point,
+        completed_at: '2026-10-02T12:00:00Z',
+        source_snapshot_ids: [foreign],
+        events: [],
+      },
+      point,
+    ];
+    controller.receive({
+      ...result(),
+      selection: {
+        project_id: project,
+        view: 'trends',
+        from_at: '2026-10-01T00:00:00Z',
+        to_at: '2026-10-05T00:00:00Z',
+      },
+      evidence: {
+        state: 'available',
+        points: withEarlier({
+          audit_id: audit,
+          completed_at: '2026-10-03T12:00:00Z',
+          logical_engine: null,
+          visibility_score: null,
+          brand_mention_rate: 0.5,
+          owned_citation_rate: 0,
+          sov: { mention: 0.25 },
+          avg_position: 1.5,
+          retrieval_enabled: true,
+          rankings: [
+            {
+              ...row,
+              name: 'Acme',
+              is_brand: true,
+              share_of_voice: 0.25,
+              avg_position: 1.5,
+              win_rate: 0.4,
+              sentiment: {
+                mentions: 4,
+                classified: 2,
+                positive: 1,
+                negative: 0,
+                net_sentiment: 50,
+              },
+            },
+            {
+              ...row,
+              name: 'Globex',
+              is_brand: false,
+              share_of_voice: 0.75,
+              avg_position: 1,
+              win_answers: null,
+              win_rate: null,
+            },
+            {
+              ...row,
+              name: 'Initech',
+              is_brand: false,
+              share_of_voice: 0,
+              avg_position: null,
+              win_answers: 0,
+              win_rate: null,
+            },
+          ],
+          source_snapshot_ids: [answerId],
+          analyzer_versions: ['1'],
+          scoring_rule_versions: ['1'],
+          spans_version_boundary: false,
+          events: [
+            {
+              kind: 'action_live',
+              action_id: foreign,
+              title: 'Publish the pricing page',
+              implemented_at: '2026-10-02T00:00:00Z',
+            },
+          ],
+        }),
+      },
+    });
+    render(<Analytics controller={controller} />);
+    const cells = () =>
+      screen
+        .getAllByRole('row')
+        .slice(1)
+        .map((tableRow) => tableRow.children[1]?.textContent);
+    const pick = async (label: string) => {
+      await user.click(screen.getByRole('combobox', { name: 'Trend metric' }));
+      await user.click(screen.getByRole('option', { name: label }));
+    };
+    await pick('Share of voice');
+    expect(cells()).toContain('25.0%');
+    await pick('Position');
+    expect(cells()).toContain('1.5');
+    await pick('Sentiment');
+    expect(cells().some((text) => /Too few.*classified/i.test(text ?? ''))).toBe(true);
+    await pick('Win rate');
+    expect(cells()).toContain('40.0%');
+    const competitor = async (name: string) => {
+      await user.click(screen.getByRole('combobox', { name: 'Competitor' }));
+      await user.click(screen.getByRole('option', { name }));
+    };
+    await competitor('Globex');
+    await vi.waitFor(() => expect(cells()).toContain('—Unavailable'));
+    expect(cells()).not.toContain('—Not applicable');
+    await competitor('Initech');
+    await vi.waitFor(() => expect(cells()).toContain('—Not applicable'));
+    const legend = [...document.querySelectorAll('li')].map((item) => item.textContent);
+    expect(legend).toContainEqual(
+      expect.stringMatching(/ · Action live: Publish the pricing page$/),
+    );
+  });
   it('tells an empty Actions list apart from an unavailable read', async () => {
     const user = userEvent.setup();
     const call = vi.fn(async (): Promise<unknown> => ({ state: 'available', items: [] }));
@@ -443,7 +560,7 @@ describe('CiteLadder MCP App', () => {
     const tab = screen.getByRole('tab', { name: 'Overview' });
     tab.focus();
     await user.keyboard('{ArrowRight}');
-    expect(screen.getByRole('tab', { name: 'Trends' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: 'Insights' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('tab', { name: 'Sources' })).toBeDisabled();
     expect(screen.getByText('No measured runs in this window.')).toBeInTheDocument();
   });
@@ -528,7 +645,6 @@ describe('CiteLadder MCP App', () => {
       });
       controller.receive({
         ...result(),
-        // Sources without a resolved run carry the overview's reason.
         selection: { project_id: project, view },
         evidence: { state: 'unavailable', reason: 'metrics_pending' },
       });

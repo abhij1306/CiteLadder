@@ -1,9 +1,4 @@
-/**
- * The Overview PDF: a branded cover, then the project's saved layout, widget
- * by widget, from the same persisted reads the page shows, then a plain
- * reading guide. Every section prints a missing value as missing; nothing here
- * computes a metric of its own, and no internal identifier reaches the page.
- */
+import { comparisonBasis } from '@citeladder/contracts/comparison-reason';
 import { commandCenterSchema } from '@citeladder/contracts/opportunities';
 import type { OverviewWidgetKey } from '@citeladder/contracts/overview';
 
@@ -38,6 +33,7 @@ import { readOverviewLayout } from './overview-layout.ts';
 const ROWS = policy.projects.overview_report_list_rows;
 const COHORT = policy.visibility.core_cohort;
 const NO_COMPARISON = 'No comparison yet';
+const NO_READING = 'No value';
 
 type View = ReportContext['view'];
 type Action = View['actions'][number];
@@ -51,7 +47,6 @@ const SEVERITY: Record<Action['severity'], Tag> = {
   info: { label: 'Informational', tone: 'neutral' },
 };
 
-/** What an action is about, from the target the backend presents (a theme label names itself). */
 function target(action: Action): string {
   const label = action.target_label;
   if (!label) return 'Across the project';
@@ -60,12 +55,15 @@ function target(action: Action): string {
   return label;
 }
 
-/**
- * A figure's note: what it measures, then its change. Without a comparable run
- * the cover's notice says so once, so a cell carries no change line of its own.
- */
+function showsChange(view: View): boolean {
+  const measured = view.measurement;
+  if (!measured) return false;
+  const status = measured.comparison_status;
+  return comparisonBasis({ status, answers: measured.comparison_answers }).kind !== 'declined';
+}
+
 function note(view: View, meaning: string, change: string | null): string {
-  if (!view.measurement?.comparable_audit_id) return meaning;
+  if (!showsChange(view)) return meaning;
   return `${meaning} · ${change ?? NO_COMPARISON}`;
 }
 
@@ -74,14 +72,13 @@ function percentStat(view: View, label: string, metric: Metric, meaning: string)
   return {
     label,
     value: figure(metric.value, '%'),
-    note: metric.value === null ? 'Not measured' : note(view, meaning, change),
+    note: metric.value === null ? NO_READING : note(view, meaning, change),
   };
 }
 
 function rankStat({ view, brands }: ReportContext): Stat {
   const { value, delta } = view.state.brand_rank;
-  if (value === null) return { label: 'Brand rank', value: MISSING, note: 'Not measured' };
-  // A lower rank is better, so a negative change is a gain.
+  if (value === null) return { label: 'Brand rank', value: MISSING, note: NO_READING };
   let change: string | null = null;
   if (delta !== null && delta !== 0)
     change = `${delta < 0 ? 'Up' : 'Down'} ${plural(Math.abs(delta), 'place')}`;
@@ -101,20 +98,14 @@ function citationStat({ view }: ReportContext): Stat {
 
 const commandCenterSections: Partial<Record<OverviewWidgetKey, Section>> = {
   project_state: (context) => {
-    const { view, report, shown } = context;
+    const { view, report } = context;
     heading(report, 'project_state');
-    // The owned citation rate joins the headline figures when both widgets are shown.
     report.stats([
       percentStat(view, 'Visibility', view.state.visibility, 'of answers name you'),
       percentStat(view, 'Share of voice', view.state.share_of_voice, 'of brand mentions'),
-      ...(shown.has('citation_share') ? [citationStat(context)] : []),
+      citationStat(context),
       rankStat(context),
     ]);
-  },
-  citation_share: (context) => {
-    if (context.shown.has('project_state')) return;
-    heading(context.report, 'citation_share');
-    context.report.stats([citationStat(context)]);
   },
   movement: ({ view, report }) => {
     heading(report, 'movement');
@@ -166,17 +157,6 @@ const commandCenterSections: Partial<Record<OverviewWidgetKey, Section>> = {
     );
     truncated(report, view.actions.length, 'open action');
   },
-  progress_proof: ({ view, report }) => {
-    heading(report, 'progress_proof');
-    const resolved = view.resolved_actions;
-    const since = resolved.since_audit_id ? 'since the previous comparable run' : 'so far';
-    report.text(`${plural(resolved.count, 'action')} resolved ${since}.`);
-    for (const title of resolved.titles) report.text(`•  ${title}`, { size: 9 });
-    quiet(
-      report,
-      'Movement shown alongside resolved actions does not establish that the actions caused it.',
-    );
-  },
   company_facts: ({ view, report }) => {
     heading(report, 'company_facts');
     const facts = view.facts;
@@ -211,7 +191,6 @@ function guide({ view, report, prompts }: ReportContext, brand: string) {
     report.text('No run has completed yet, so there are no figures to report.');
     return;
   }
-  // Prompt scores exist only for prompts the run measured, so the count says "measured".
   const scope = prompts ? `${measuredPrompts(prompts.length)} across` : 'answers from';
   report.text(
     `This report covers the run completed ${dateTime(measurement.completed_at)}: ${scope} ${engines(measurement.logical_engines)}. Changes compare it with the previous run that used the same prompts and engines. A dash (${MISSING}) means there is no value or no comparison yet; it never stands for zero.`,
@@ -220,7 +199,6 @@ function guide({ view, report, prompts }: ReportContext, brand: string) {
 
 const measuredPrompts = (count: number) => `${plural(count, 'prompt')} measured`;
 
-/** Reads a run-scoped projection, or null before the first completed run. */
 async function beforeFirstRun<T>(read: () => Promise<T>): Promise<T | null> {
   try {
     return await read();
@@ -242,7 +220,6 @@ export async function overviewReport(db: Database, scope: ProjectScope) {
             db,
             { ...scope, marketId: null },
             {
-              // The command center's run, so every section describes the same audit.
               auditId: measurement.audit_id,
               auditIds: null,
               baselineAuditIds: null,
@@ -273,10 +250,8 @@ export async function overviewReport(db: Database, scope: ProjectScope) {
         ]
       : [website, 'No completed measurement yet.'].filter(Boolean),
   });
-  if (measurement && !measurement.comparable_audit_id)
-    report.note(
-      'No comparison yet: changes appear once a second run uses the same prompts and engines.',
-    );
+  const limitation = view.track.limitations[0];
+  if (measurement && limitation) report.note(limitation);
   const context: ReportContext = {
     db,
     scope,
@@ -284,15 +259,12 @@ export async function overviewReport(db: Database, scope: ProjectScope) {
     report,
     prompts,
     brands: ranked?.rankings.length ?? null,
-    shown: new Set(layout.widgets.map((widget) => widget.key)),
   };
   const sections = { ...commandCenterSections, ...librarySections };
   for (const widget of layout.widgets) {
     try {
       await sections[widget.key]?.(context);
     } catch (error) {
-      // Before the first completed run a widget's read has nothing to select,
-      // and a run whose results are still being written is not that.
       if (!(error instanceof AnalysisNotFoundError)) throw error;
       quiet(
         report,

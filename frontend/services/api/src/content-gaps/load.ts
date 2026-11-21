@@ -1,11 +1,3 @@
-/**
- * The persisted inputs of one content-angle refresh (content optimization
- * section 1): the window's audits, the competitor and editorial pages their
- * answers cited, the owned pages they cited, and the latest crawl's content
- * pages. The window's answers are Visibility's evidence statement
- * (`evidenceScope`), so a citation counts here exactly when Visibility counts
- * it. Reads only; every query is scoped to the workspace and project.
- */
 import { sql } from 'kysely';
 
 import { policy } from '../config.ts';
@@ -27,16 +19,13 @@ import {
 
 const p = policy.content_optimization;
 
-/** One citation of a URL, with the prompt and engine of the answer that made it. */
 type CitationRef = { id: string; promptId: string; engine: string };
 
-/** One cited competitor or editorial URL under one prompt topic (null: topicless prompts). */
 export type CitedUrl = {
   topicId: string | null;
   canonicalUrl: string;
   urlHash: string;
   title: string;
-  /** The title was empty in every citation, so it is the URL's path slug. */
   titleFromSlug: boolean;
   domain: string;
   classification: string;
@@ -45,10 +34,8 @@ export type CitedUrl = {
   citations: CitationRef[];
 };
 
-/** One owned URL cited in the window, with each citation's prompt. */
 export type OwnedCitation = { canonicalUrl: string; citations: CitationRef[] };
 
-/** A content page of the latest crawl, as the prefilter and the model read it. */
 export type CandidatePage = {
   siteUrlId: string;
   canonicalUrl: string;
@@ -65,7 +52,6 @@ export type Limitation =
   | { code: 'no_gap_citations' }
   | { code: 'no_content_crawl' };
 
-/** The newest dashboard-ready brand audit of the default market, and the window it anchors. */
 export type Anchor = {
   auditId: string;
   /** UTC text with microseconds (`utcText`), so the anchor itself is never cut out. */
@@ -82,11 +68,6 @@ export type AngleInputs = {
   limitations: Limitation[];
 };
 
-/**
- * The latest succeeded run, or undefined. A failed run never counts, so a
- * refused or failed computation is retried by the next trigger over the same
- * inputs, and the Opportunity refresh keeps reading the run before it.
- */
 export function latestSucceededRun(db: Database, scope: Scope) {
   return db
     .selectFrom('content_angle_runs')
@@ -112,7 +93,6 @@ export function latestSucceededRun(db: Database, scope: Scope) {
 
 export type SucceededRun = NonNullable<Awaited<ReturnType<typeof latestSucceededRun>>>;
 
-/** The anchor audit and its window, or null when the project has no dashboard-ready audit. */
 export async function resolveAnchor(db: Database, scope: Scope): Promise<Anchor | null> {
   const auditId = await latestBrandRunId(db, { ...scope, marketId: null });
   if (auditId === null) return null;
@@ -132,11 +112,6 @@ export async function resolveAnchor(db: Database, scope: Scope): Promise<Anchor 
   return { auditId, windowStart: row.start_text, windowEnd: row.end_text };
 }
 
-/**
- * The crawl's current, completed analyses of content pages (CO15), joined to
- * their site URL: the one statement the owned match and a page chat's target
- * check read content pages from.
- */
 export function contentPageAnalyses(db: Database, scope: Scope, crawlId: string) {
   return db
     .selectFrom('site_page_analyses as analysis')
@@ -151,7 +126,6 @@ export function contentPageAnalyses(db: Database, scope: Scope, crawlId: string)
     .where('analysis.page_kind', 'in', p.content_page_kinds);
 }
 
-/** The path slug a page with no title is named by. */
 function slugTitle(url: string): string {
   try {
     const parsed = new URL(url);
@@ -168,7 +142,6 @@ function slugTitle(url: string): string {
   }
 }
 
-/** The most frequent non-empty title, ties in text order; '' when every title is empty. */
 function commonTitle(titles: string[]): string {
   const counts = new Map<string, number>();
   for (const title of titles.map((value) => value.trim()).filter(Boolean))
@@ -183,10 +156,6 @@ const isGapSource = (row: { classification: string; source_class: string | null 
   (row.source_class !== null &&
     (p.gap_sources.source_classes as readonly string[]).includes(row.source_class));
 
-/**
- * Visibility's selection of the default market's runs, every engine and both
- * brand cohorts; `auditIds` names the window's runs once they are known.
- */
 const windowSelection = (scope: Scope, auditIds: string[] | null): RunSelection => ({
   ...scope,
   marketId: null,
@@ -281,12 +250,10 @@ function ownedUrls(rows: CitationRow[]): OwnedCitation[] {
   }));
 }
 
-/** A scalar normalized fact as text (`scalarText` in SQL): '' when absent or not a scalar. */
 const factText = (key: string) =>
   sql<string>`coalesce(case when jsonb_typeof(artifact.normalized_facts -> ${key}::text)
     in ('string', 'number', 'boolean') then artifact.normalized_facts ->> ${key}::text end, '')`;
 
-/** The crawl's content pages the owned match reads: title, headings and an excerpt only. */
 export async function contentPages(
   db: Database,
   scope: Scope,
@@ -317,7 +284,6 @@ export async function contentPages(
   }));
 }
 
-/** Everything one refresh reads, anchored at `anchor`, except the content pages. */
 export async function loadAngleInputs(
   db: Database,
   scope: Scope,

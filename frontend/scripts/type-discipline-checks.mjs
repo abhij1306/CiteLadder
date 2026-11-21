@@ -1,27 +1,6 @@
 import { lineIndex, parseSource, walk } from './source-ast.mjs';
 
-/**
- * Type-discipline findings: the casts and assertions TypeScript reviews kept
- * finding, each of which hides a fact the compiler could have checked.
- *
- *   - `keys-cast`: `Object.keys(x) as K[]` claims the object holds no other
- *     keys. Derive the list from the data that owns the order instead.
- *   - `index-non-null`: `list[0]!` / `list.at(-1)!` claims a list is non-empty.
- *     Make it non-empty by construction (`[T, ...T[]]`), destructure, or read
- *     the value once and check it. `split(...)[0]` is exempt: a split always
- *     yields at least one part.
- *   - `value-change-cast`: a cast inside an `onValueChange` handler. The shared
- *     Select, RadioGroup and Tabs are generic over their option values, so the
- *     handler receives the option type; those three controls own the one cast
- *     from Radix's string.
- *
- * check-design-system.mjs runs these in its file walk and ratchets them per
- * file and rule against type-discipline-baseline.json, so recorded debt burns
- * down and a new occurrence fails.
- */
-
 const OBJECT_KEY_READERS = new Set(['keys', 'entries']);
-/** The generic controls that turn Radix's string into their option type. */
 const RADIX_VALUE_OWNERS = new Set([
   'components/ui/radio-group.tsx',
   'components/ui/select.tsx',
@@ -42,7 +21,6 @@ function keysCast(node) {
   const call = node.expression;
   return (
     call?.type === 'CallExpression' &&
-    // A named property implies a member callee, so `object` is then defined.
     OBJECT_KEY_READERS.has(propertyName(call.callee)) &&
     call.callee.object.type === 'Identifier' &&
     call.callee.object.name === 'Object'
@@ -64,7 +42,6 @@ const isValueChangeHandler = (node) =>
   node.name?.type === 'JSXIdentifier' &&
   node.name.name === 'onValueChange';
 
-/** Every type-discipline finding in one module, line-addressed. */
 export function typeDisciplineFindings(source, label) {
   const program = parseSource(source, label);
   const lineOf = lineIndex(source);

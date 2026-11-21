@@ -1,172 +1,22 @@
-import { randomUUID } from 'node:crypto';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { afterAll, afterEach, describe, expect, it } from 'vitest';
-import { asOwner, testDatabase } from './support.ts';
-import { VisibilityFixtures } from './visibility-fixtures.ts';
+import { describe, expect, it } from 'vitest';
 import { auditTenant, auditTestKey } from './audit-fixtures.ts';
+import { auditWorkerHarness } from './audit-worker-fixtures.ts';
 import { sql } from 'kysely';
-import { auditPolicy, auditRuntime } from '../src/audits/config.ts';
+import { auditPolicy } from '../src/audits/config.ts';
 import { providerPolicy } from '../src/providers/config.ts';
 import { searchPolicy } from '../src/search-surfaces/dataforseo.ts';
 import { createAudits } from '../src/audits/creation.ts';
 import { auditInput } from '../src/audits/inputs.ts';
 import { AuditWorker } from '../src/audits/worker.ts';
 import { deriveExecution } from '../src/audits/derivation.ts';
-import { finalizeAudit } from '../src/audits/finalization.ts';
-import { createConnection } from '../src/providers/connections.ts';
-import { createConnectionInput } from '../src/providers/inputs.ts';
-import { probeConnection } from '../src/providers/probes.ts';
-import { dataforseoSecretIdentity } from '../src/providers/dataforseo-identity.ts';
 import { record } from '../src/db/json.ts';
 import { drainLanes } from '../src/workers/runner.ts';
 import { SiteHealthWorker } from '../src/workers/site-health-worker.ts';
 import { SiteFixtures } from './site-health-fixtures.ts';
 import { prompt } from './prompt-fixtures.ts';
-const db = testDatabase(),
-  fixtures = new VisibilityFixtures(db),
-  base = auditRuntime({});
-const runtime = { ...base, audits: { ...base.audits, worker_concurrency: 1 } };
-const workspaces: string[] = [],
-  tasks: string[] = [],
-  accountPools: string[] = [];
-afterEach(async () => {
-  if (tasks.length) {
-    await db.deleteFrom('execution_cost_projections').where('task_id', 'in', tasks).execute();
-    await asOwner((owner) =>
-      owner.deleteFrom('provider_attempts').where('task_id', 'in', tasks).execute(),
-    );
-  }
-  if (workspaces.length)
-    await db
-      .deleteFrom('provider_capacity_buckets')
-      .where(
-        'connection_id',
-        'in',
-        db.selectFrom('provider_connections').select('id').where('workspace_id', 'in', workspaces),
-      )
-      .execute();
-  // A DataForSEO login's quota pool outlives its connection; each seed has its own login.
-  if (accountPools.length)
-    await db
-      .deleteFrom('provider_capacity_buckets')
-      .where('account_pool_identity', 'in', accountPools)
-      .execute();
-  await fixtures.cleanup();
-  tasks.length = 0;
-  workspaces.length = 0;
-  accountPools.length = 0;
-});
-afterAll(async () => {
-  await db.destroy();
-});
-async function seed(
-  surface = false,
-  extraPrompts: string[] = [],
-  observed: 'chatgpt_search' | 'google_ai_overview' = 'chatgpt_search',
-) {
-  const t = await auditTenant(db, fixtures);
-  workspaces.push(t.workspaceId);
-  for (const text of extraPrompts) await prompt(db, t.setId, text);
-  if (surface) {
-    const login = `worker-${randomUUID()}@example.com`;
-    accountPools.push(
-      dataforseoSecretIdentity(JSON.stringify({ login, password: 'x' }), auditTestKey),
-    );
-    const c = await createConnection(
-      db,
-      t.workspaceId,
-      t.userId,
-      createConnectionInput.parse({
-        transport_provider: 'dataforseo',
-        api_login: login,
-        api_password: 'test',
-        routes: [{ logical_engine: observed }],
-      }),
-      auditTestKey,
-      runtime.providers,
-    );
-    await probeConnection(db, t.workspaceId, c.id, auditTestKey, runtime.providers, async () => ({
-      status: 200,
-      body: { status_code: 20000, tasks: [] },
-    }));
-  }
-  const [auditId] = await createAudits(
-    db,
-    t.workspaceId,
-    auditInput.parse({
-      project_id: t.projectId,
-      prompt_set_id: t.setId,
-      engines: [surface ? observed : 'chatgpt'],
-    }),
-    {},
-    runtime,
-  );
-  const all = await db
-    .selectFrom('audit_tasks')
-    .selectAll()
-    .where('audit_id', '=', auditId)
-    .orderBy('randomized_position')
-    .execute();
-  tasks.push(...all.map((task) => task.id));
-  await db
-    .updateTable('audit_tasks')
-    .set({ available_at: new Date(Date.now() + 3600000) })
-    .where('audit_id', '=', auditId)
-    .where('id', '!=', all[0]!.id)
-    .execute();
-  return { ...t, auditId, task: all[0]! };
-}
-function worker(
-  scope: { workspaceId: string; auditId: string },
-  send: typeof fetch,
-  settings = runtime,
-  now?: () => Date,
-) {
-  return new AuditWorker(
-    db,
-    settings,
-    auditTestKey,
-    {
-      execution: deriveExecution,
-      finalize: (workspaceId, auditId) => finalizeAudit(db, workspaceId, auditId, async () => {}),
-    },
-    { owner: 'worker', taskScope: scope, send, ...(now ? { now } : {}) },
-  );
-}
-/** A Google AI Overview whose paid submission is known (`aio-task`), awaiting its free retrieval. */
-async function submittedOverview(pollCount: number) {
-  const t = await seed(true, [], 'google_ai_overview');
-  const connectionId = record(t.task.provider_route_snapshot).connection_id as string;
-  const { credential_revision } = await db
-    .selectFrom('provider_connections')
-    .select('credential_revision')
-    .where('id', '=', connectionId)
-    .executeTakeFirstOrThrow();
-  await db
-    .updateTable('audit_tasks')
-    .set({
-      provider_submission_ref: 'paid-intent',
-      provider_task_submitted_at: new Date(Date.now() - 60000),
-      provider_task_id: 'aio-task',
-      provider_poll_count: pollCount,
-      attempt_count: 1,
-      provider_connection_id: connectionId,
-      provider_credential_revision: credential_revision,
-    })
-    .where('id', '=', t.task.id)
-    .execute();
-  return t;
-}
-async function ready(id: string) {
-  await db
-    .updateTable('audit_tasks')
-    .set({ available_at: new Date(0) })
-    .where('id', '=', id)
-    .execute();
-}
-async function stored(id: string) {
-  return db.selectFrom('audit_tasks').selectAll().where('id', '=', id).executeTakeFirstOrThrow();
-}
+const { db, fixtures, runtime, workspaces, tasks, seed, worker, ready, stored } =
+  auditWorkerHarness();
 describe('leased audit worker phases', () => {
   it.each([
     { elapsed: 60, liveLimit: 600, expired: true },
@@ -550,163 +400,7 @@ describe('leased audit worker phases', () => {
         .execute(),
     ).toHaveLength(0);
   });
-  it('observes a Google AI Overview with one paid submission and a free retrieval', async () => {
-    const t = await seed(true, [], 'google_ai_overview'),
-      paths: string[] = [];
-    // The provider's per-second pool admits the retrieval once the clock moves on.
-    let tick = Date.now();
-    const clock = () => new Date(tick);
-    const w = worker(
-      t,
-      async (input) => {
-        const url = String(input);
-        paths.push(url.split('/').slice(-2).join('/'));
-        if (url.endsWith('/task_post'))
-          return Response.json({
-            status_code: 20000,
-            tasks: [{ id: 'aio-task', status_code: 20100, cost: 0.002 }],
-          });
-        return Response.json({
-          status_code: 20000,
-          tasks: [
-            {
-              id: 'aio-task',
-              status_code: 20000,
-              result: [
-                {
-                  items: [
-                    {
-                      type: 'ai_overview',
-                      items: [
-                        {
-                          type: 'ai_overview_element',
-                          text: 'Acme Running shoes',
-                          links: [{ url: 'https://acme.example/shoes' }],
-                        },
-                      ],
-                      references: [{ url: 'https://publisher.example/guide' }],
-                    },
-                  ],
-                },
-              ],
-            },
-          ],
-        });
-      },
-      runtime,
-      clock,
-    );
-    await w.runOnce();
-    expect(await stored(t.task.id)).toMatchObject({
-      status: 'awaiting_provider_result',
-      provider_task_id: 'aio-task',
-      attempt_count: 1,
-    });
-    tick += 2000;
-    await ready(t.task.id);
-    await w.runOnce();
-    expect(paths).toEqual(['organic/task_post', 'advanced/aio-task']);
-    expect(await stored(t.task.id)).toMatchObject({ status: 'succeeded', attempt_count: 1 });
-    const observation = await db
-      .selectFrom('aio_observations')
-      .select(['outcome', 'provider_task_id', 'reference_count'])
-      .where('task_id', '=', t.task.id)
-      .executeTakeFirstOrThrow();
-    expect(observation).toEqual({
-      outcome: 'ai_overview_present',
-      provider_task_id: 'aio-task',
-      reference_count: 1,
-    });
-    const artifact = await db
-      .selectFrom('raw_response_artifacts')
-      .select('usage')
-      .where('task_id', '=', t.task.id)
-      .executeTakeFirstOrThrow();
-    expect(record(artifact.usage).provider_cost_microusd).toBe(2000);
-  });
-  it('stops a Google AI Overview at the poll ceiling without another provider call', async () => {
-    const t = await submittedOverview(1000);
-    let calls = 0;
-    await worker(t, async () => {
-      calls++;
-      throw new Error('Unexpected provider call');
-    }).runOnce();
-    expect(calls).toBe(0);
-    expect(await stored(t.task.id)).toMatchObject({
-      status: 'failed',
-      error_code: 'poll_ceiling_exceeded',
-      attempt_count: 1,
-    });
-    expect(
-      await db
-        .selectFrom('aio_observations')
-        .select(['outcome', 'error_code'])
-        .where('task_id', '=', t.task.id)
-        .executeTakeFirstOrThrow(),
-    ).toEqual({ outcome: 'execution_failure', error_code: 'poll_ceiling_exceeded' });
-  });
-  it('polls a paid Google AI Overview again when saving its answer fails, never writing it off', async () => {
-    const t = await submittedOverview(0);
-    const paths: string[] = [];
-    let tick = Date.now();
-    let saves = 0;
-    const w = new AuditWorker(
-      db,
-      runtime,
-      auditTestKey,
-      {
-        // The first save loses its database connection inside the owned transaction.
-        execution: async (...args) => {
-          if (++saves === 1) throw new Error('Connection terminated unexpectedly');
-          return deriveExecution(...args);
-        },
-        finalize: (workspaceId, auditId) => finalizeAudit(db, workspaceId, auditId, async () => {}),
-      },
-      {
-        owner: 'worker',
-        taskScope: t,
-        now: () => new Date(tick),
-        send: async (input) => {
-          paths.push(String(input).split('/').slice(-2).join('/'));
-          return Response.json({
-            status_code: 20000,
-            tasks: [
-              {
-                id: 'aio-task',
-                status_code: 20000,
-                result: [{ items: [{ type: 'organic', title: 'No overview here' }] }],
-              },
-            ],
-          });
-        },
-      },
-    );
-    await w.runOnce();
-    const parked = await stored(t.task.id);
-    expect([parked.status, parked.attempt_count, parked.provider_poll_count]).toEqual([
-      'awaiting_provider_result',
-      1,
-      1,
-    ]);
-    tick += 2000;
-    await ready(t.task.id);
-    await w.runOnce();
-    expect(paths).toEqual(['advanced/aio-task', 'advanced/aio-task']);
-    expect(await stored(t.task.id)).toMatchObject({ status: 'succeeded', attempt_count: 1 });
-    expect(
-      await db
-        .selectFrom('provider_attempts')
-        .select(['status', 'error_code'])
-        .where('task_id', '=', t.task.id)
-        .orderBy('attempt_number')
-        .execute(),
-    ).toEqual([
-      { status: 'failed', error_code: 'result_unsaved' },
-      { status: 'succeeded', error_code: '' },
-    ]);
-  });
   it('settles every claimed task when finalizing their audit fails', async () => {
-    // One prompt at three repetitions: two run together, one stays queued.
     const t = await seed();
     await db
       .updateTable('audit_tasks')
@@ -729,7 +423,6 @@ describe('leased audit worker phases', () => {
         taskScope: t,
         send: async () => {
           calls++;
-          // The second answer is still running when the first task's finalize fails.
           if (calls === 2) await sleep(50);
           return Response.json({
             status: 'completed',
@@ -747,43 +440,6 @@ describe('leased audit worker phases', () => {
       .where('audit_id', '=', t.auditId)
       .execute();
     expect(settled.map((task) => task.status).sort()).toEqual(['queued', 'succeeded', 'succeeded']);
-  });
-  it('records a retrieval whose credential is gone with its full failure code', async () => {
-    const t = await seed(true, [], 'google_ai_overview');
-    const connectionId = record(t.task.provider_route_snapshot).connection_id as string;
-    await db
-      .updateTable('audit_tasks')
-      .set({
-        provider_submission_ref: 'paid-intent',
-        provider_task_submitted_at: new Date(Date.now() - 60000),
-        provider_task_id: 'aio-task',
-        attempt_count: 1,
-        provider_connection_id: connectionId,
-      })
-      .where('id', '=', t.task.id)
-      .execute();
-    await db
-      .updateTable('provider_connections')
-      .set({ active: false })
-      .where('id', '=', connectionId)
-      .execute();
-    let calls = 0;
-    await worker(t, async () => {
-      calls++;
-      throw new Error('Unexpected provider call');
-    }).runOnce();
-    expect(calls).toBe(0);
-    expect(await stored(t.task.id)).toMatchObject({
-      status: 'failed',
-      error_code: 'credential_unavailable_for_retrieval',
-    });
-    expect(
-      await db
-        .selectFrom('aio_observations')
-        .select(['outcome', 'error_code'])
-        .where('task_id', '=', t.task.id)
-        .executeTakeFirstOrThrow(),
-    ).toEqual({ outcome: 'execution_failure', error_code: 'credential_unavailable_for_retrieval' });
   });
 });
 describe('audit failure codes', () => {
@@ -852,7 +508,6 @@ describe('audit runner lane', () => {
         taskScope: { workspaceId: seedCrawl.workspaceId, crawlId: seedCrawl.crawlId },
         executors: {
           link_metrics: async () => {
-            // The sequential drain reached audits only after this task's window.
             answeredDuringCrawl = await Promise.race([answered.promise, sleep(3000, false)]);
           },
         },

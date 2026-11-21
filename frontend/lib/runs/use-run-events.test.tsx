@@ -13,10 +13,8 @@ import { makeStreamResponse } from '@/test/sse';
 const AUDIT = '11111111-1111-4111-8111-111111111111';
 const PROJECT = '22222222-2222-4222-8222-222222222222';
 
-/** The stream reads its workspace from the shared selection. */
 const WORKSPACE = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 
-/** A resolved selection naming the workspace the stream belongs to. */
 function selectionFor(workspaceId: string | null) {
   return testProjectSelection({ activeWorkspaceId: workspaceId });
 }
@@ -69,8 +67,6 @@ describe('useRunEvents', () => {
     await vi.advanceTimersByTimeAsync(300);
 
     const stale = (key: readonly unknown[]) => client.getQueryState(key)?.isInvalidated;
-    // The finished run's own reads and every audit-derived read are stale;
-    // another run's row is untouched.
     expect([run, executions, visibility, product].map(stale)).toEqual([true, true, true, true]);
     expect(stale(otherRun)).toBe(false);
     unmount();

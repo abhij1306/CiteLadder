@@ -1,4 +1,3 @@
-/** Scheduler limits and checked-in IANA catalog; admission also requires runtime support. */
 export const auditSchedules = {
   default_timezone: 'UTC',
   settings: {

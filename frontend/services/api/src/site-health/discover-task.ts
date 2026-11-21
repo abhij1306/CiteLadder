@@ -1,12 +1,3 @@
-/**
- * The `discover` task: acquire one page under the crawl's scope, extract its
- * in-scope links and bounded facts from one parse, and commit the artifact,
- * the URL's observation, the admitted frontier and the page's disposition
- * (document, canonical alias, or a page to analyze) with the task outcome.
- * Network I/O happens outside the transaction; the commit takes the runtime
- * lock before the crawl and task, and writes nothing if the lease or crawl
- * was lost meanwhile.
- */
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import type { FetchedPage } from '../safe-fetch.ts';
@@ -30,17 +21,15 @@ import {
 } from './frontier.ts';
 import { crawlRobotsHandling, isBotBlock } from './page-fetch.ts';
 import {
-  Abandoned,
   commitTask,
   finalFailure,
   httpError,
-  loadScope,
-  markRunning,
   prepareTask,
   recordCrawlEvent,
   settleTask,
   type Crawl,
   type SiteTaskContext,
+  type TaskScope,
 } from './site-task.ts';
 import { taskOutcome } from './task-outcome.ts';
 import { classifyUrlAdmission } from './url-admission.ts';
@@ -108,8 +97,6 @@ async function acquire(ctx: SiteTaskContext, crawl: Crawl, task: SiteTask): Prom
   };
   if (DOCUMENT_TYPES.has(page.contentType))
     return { ...success, discovery: { title: '', links: [] }, facts: null };
-  // One parse, off the event loop: discovery reads every anchor of the whole
-  // document before fact extraction bounds it.
   const { discovery, facts } = await discoverAsync(
     page.body,
     {
@@ -130,7 +117,6 @@ async function acquire(ctx: SiteTaskContext, crawl: Crawl, task: SiteTask): Prom
   return { ...success, discovery, facts };
 }
 
-/** The fetched URL's latest title and content type. */
 async function refreshFetchedUrl(
   trx: Database,
   crawl: Crawl,
@@ -151,7 +137,6 @@ async function refreshFetchedUrl(
     .execute();
 }
 
-/** The fetched URL's identity and its observation, before admission adds sparse ones. */
 async function writeObservation(
   trx: Database,
   crawl: Crawl,
@@ -171,12 +156,6 @@ async function writeObservation(
   return siteUrlId;
 }
 
-/**
- * The task URL's identity. An admitted task names the one its admission wrote
- * in this crawl. A planner seed names none: its discover is the crawl's
- * sighting of the URL, recorded like any admission's (a seed seen again in a
- * later crawl has its identity refreshed for this crawl).
- */
 async function siteUrlFor(trx: Database, crawl: Crawl, task: SiteTask) {
   if (task.site_url_id) return task.site_url_id;
   const identity = canonicalIdentity(task.requested_url);
@@ -191,7 +170,6 @@ async function siteUrlFor(trx: Database, crawl: Crawl, task: SiteTask) {
   return (await upsertSiteUrls(trx, crawl, [item])).get(identity.hash)!;
 }
 
-/** The task's observation of its URL in this crawl, with the frontier's rewrite provenance. */
 async function insertObservation(
   trx: Database,
   crawl: Crawl,
@@ -233,12 +211,6 @@ async function insertObservation(
   ]);
 }
 
-/**
- * A URL whose fetch failed for good is still part of the crawl: observe it
- * with its status and the page that linked it, so it lists as an error with
- * its source. The root's failure is the crawl's own, and a URL the crawl's
- * policy excluded is not an error.
- */
 async function observeFailure(trx: Database, crawl: Crawl, task: SiteTask, outcome: Outcome) {
   const root = canonicalIdentity(crawl.root_url).hash === task.url_hash;
   if (!root && taskOutcome(outcome) !== 'excluded')
@@ -247,7 +219,6 @@ async function observeFailure(trx: Database, crawl: Crawl, task: SiteTask, outco
 async function observeFailedUrl(trx: Database, crawl: Crawl, task: SiteTask, outcome: Outcome) {
   const siteUrlId = await siteUrlFor(trx, crawl, task);
   if (!task.site_url_id) {
-    // The failed task is the row's status, so it must name the identity it failed for.
     await trx
       .updateTable('site_crawl_tasks')
       .set({ site_url_id: siteUrlId })
@@ -264,11 +235,6 @@ async function observeFailedUrl(trx: Database, crawl: Crawl, task: SiteTask, out
   });
 }
 
-/**
- * The page's links as frontier candidates, each naming this page as its
- * referrer. The root also admits itself: a sample's allowance is filled from
- * admitted identities, and the root has no inventory row before its first fetch.
- */
 function candidatesFor(
   task: SiteTask,
   discovery: Discovery,
@@ -299,7 +265,6 @@ function candidatesFor(
   return [...links, root];
 }
 
-/** A document is inventory, an alias of an active page is excluded, anything else is analyzed. */
 async function dispose(
   trx: Database,
   crawl: Crawl,
@@ -327,11 +292,13 @@ async function dispose(
     });
 }
 
-async function persist(ctx: SiteTaskContext, claimed: SiteTask, outcome: Outcome) {
+async function persist(
+  ctx: SiteTaskContext,
+  claimed: SiteTask,
+  { crawl, task }: TaskScope,
+  outcome: Outcome,
+) {
   await commitTask(ctx, claimed, async (trx, lock) => {
-    const live = await loadScope(trx, claimed);
-    if (live?.task.lease_owner !== ctx.owner) throw new Abandoned();
-    const { crawl, task } = live;
     let artifactId: string | null = null;
     let admitted = 0;
     let sampleCapped = false;
@@ -380,7 +347,7 @@ async function persist(ctx: SiteTaskContext, claimed: SiteTask, outcome: Outcome
         .where('id', '=', locked.crawl.id)
         .where('workspace_id', '=', locked.crawl.workspace_id)
         .execute();
-      if (artifactId)
+      if (artifactId && ctx.cadence.discoveryEvent.admits(locked.crawl.id))
         await recordCrawlEvent(trx, locked.crawl, 'discovery.progress', 'discovery progress', {
           admitted,
           depth: task.depth,
@@ -412,6 +379,6 @@ async function persist(ctx: SiteTaskContext, claimed: SiteTask, outcome: Outcome
 
 export async function runDiscover(ctx: SiteTaskContext, claimed: SiteTask) {
   const scope = await prepareTask(ctx, claimed);
-  if (!scope || !(await markRunning(ctx, claimed))) return;
-  await persist(ctx, claimed, await acquire(ctx, scope.crawl, scope.task));
+  if (!scope) return;
+  await persist(ctx, claimed, scope, await acquire(ctx, scope.crawl, scope.task));
 }

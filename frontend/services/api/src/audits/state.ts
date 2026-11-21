@@ -14,7 +14,7 @@ export async function transitionAudit(
 ) {
   const audit = await db
     .selectFrom('audits')
-    .select(['id', 'status'])
+    .select(['id', 'status', 'project_id', 'audit_scope', 'launch_id'])
     .where('workspace_id', '=', workspaceId)
     .where('id', '=', auditId)
     .forUpdate()

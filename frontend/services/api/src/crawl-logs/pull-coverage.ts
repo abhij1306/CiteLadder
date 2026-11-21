@@ -1,9 +1,3 @@
-/**
- * Coverage of one reporting day for a Google Cloud pull source, judged from
- * its persisted receipts. Drains (empty pulls) are the delivery evidence:
- * pulls run only while the subscription passes verification, so unbroken
- * drains also show it stayed verified.
- */
 import type { Selectable } from 'kysely';
 import type { CrawlLogBatches, CrawlLogSources } from '../generated/db-schema.ts';
 import { crawlLogs } from '../config/crawl-logs.ts';
@@ -11,7 +5,6 @@ import { crawlLogs } from '../config/crawl-logs.ts';
 type Receipt = Pick<Selectable<CrawlLogBatches>, 'received_at' | 'drained' | 'catalog_version'>;
 type Day = { start: Date; end: Date };
 
-/** The longest wait between the times, in minutes, counting from midnight to midnight. */
 export function gapMinutes(times: readonly Date[], day: Day) {
   const points = [
     day.start.getTime(),
@@ -30,7 +23,6 @@ function decision(source: Selectable<CrawlLogSources>, receipts: readonly Receip
   );
   if (!today.length) return { coverage: 'unknown', reason: 'no_data', gap } as const;
   const settledAfter = day.end.getTime() + settings.pull_settle_minutes * 60000;
-  // A source first verified after midnight was not collecting the whole day.
   if (
     source.created_at > day.start ||
     !source.verified_at ||
@@ -52,14 +44,6 @@ function decision(source: Selectable<CrawlLogSources>, receipts: readonly Receip
   return { coverage: 'complete', reason: 'drained_unsampled_current_filter', gap } as const;
 }
 
-/**
- * `complete` only when the source was live all day, the sink filter matched
- * the catalog in force all day, nothing was sampled, drains never paused for
- * longer than `max_pull_gap_minutes`, and a drain settled the day at least
- * `pull_settle_minutes` after it closed. Otherwise `partial` with the first
- * failing condition, or `unknown` without any receipt. Also returns the
- * day's longest wait between drains.
- */
 export function pullCoverage(
   source: Selectable<CrawlLogSources>,
   receipts: readonly Receipt[],

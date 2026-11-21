@@ -8,7 +8,6 @@ import { admitLinkRun, cancelLinkRun, linkRun } from '../site-health/internal-li
 import { executeLinkRun } from '../site-health/internal-link-execution.ts';
 import { defineGetRoute, definePostRoute } from './define.ts';
 
-/** Every route here reads the path project inside the active workspace. */
 const family = { family: 'site-health-internal-links', authorize: 'active-project' } as const;
 const root = '/api/v1/projects/{project_id}/site-health/internal-links';
 const uuid = { scalar: { kind: 'uuid' }, required: true } as const;

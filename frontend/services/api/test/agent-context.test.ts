@@ -55,7 +55,6 @@ describe('Agent persisted context binding', () => {
       .set({ finalized_at: new Date() })
       .where('crawl_id', '=', seed.crawlId)
       .execute();
-    // What the terminal publication does after finalizing the analyses.
     await refreshIssueCurrency(db, await loadCrawl(db, seed.workspaceId, seed.crawlId));
     const ref = {
       crawl_id: seed.crawlId,
@@ -168,7 +167,6 @@ describe('Agent persisted context binding', () => {
       .where('workspace_id', '=', seed.workspaceId)
       .where('crawl_id', '=', seed.crawlId)
       .execute();
-    // A later one-page rerun re-reads one page; it is never the site's content.
     const rerunId = await fixtures.sibling(seed, {
       configuration: JSON.stringify({ page_rerun: true }),
       created_at: new Date(Date.now() + 1000),
@@ -239,7 +237,6 @@ describe('Agent persisted context binding', () => {
     const named = await selectContentFragments(db, seed, 'pricing guide', '', seed.crawlId);
     expect(named.pages.map((page) => page.site_url_id)).toEqual([pricing.id]);
 
-    // A failed crawl audited nothing: naming it never passes off a tracked page's older audit.
     await fixtures.monitor(seed, [pricing.id]);
     const failed = await fixtures.sibling(seed, {
       status: 'failed',
@@ -276,7 +273,6 @@ describe('Agent persisted context binding', () => {
     expect(related.map((page) => [page.title, page.body_text.length])).toEqual([
       ['About', policy.agent_context.content_context_per_page_body_chars],
     ]);
-    // Another site's address, or only an email domain, names no target.
     for (const request of ['Compare us with https://rival.test/pricing', 'Mail kerry@example.test'])
       expect((await readAgentContext(db, seed, {}, request)).summary).toMatchObject({
         target_url: null,

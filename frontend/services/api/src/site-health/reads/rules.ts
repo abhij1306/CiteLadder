@@ -1,4 +1,3 @@
-/** The rule catalog as the read API presents it: labels, routes, ranks and group identity. */
 import { issueSectionSchema, type IssueSection } from '@citeladder/contracts/site-health';
 import { policy } from '../../config.ts';
 import { sql } from 'kysely';
@@ -10,17 +9,14 @@ import { uuidV5 } from '../../uuid-v5.ts';
 const reads = policy.site_health.reads;
 const RULES = new Map(policy.site_health.rule_catalog.map((rule) => [rule.rule_id, rule]));
 
-/** Whether the catalog defines this rule. */
 export const isKnownRule = (ruleId: string) => RULES.has(ruleId);
 
-/** Critical first; a severity the catalog no longer defines sorts after every known one. */
 const SEVERITY_RANK = new Map(
   ['critical', 'high', 'medium', 'low', 'info'].map((severity, rank) => [severity, rank]),
 );
 const UNRANKED = 99;
 export const severityRank = (severity: string) => SEVERITY_RANK.get(severity) ?? UNRANKED;
 
-/** The same severity order at the database boundary, before limiting rows. */
 export const severityOrder = (column: string) => sql<number>`case ${sql.ref(column)}
   ${sql.join(
     [...SEVERITY_RANK].map(([severity, rank]) => sql`when ${severity} then ${rank}`),
@@ -28,10 +24,10 @@ export const severityOrder = (column: string) => sql<number>`case ${sql.ref(colu
   )}
   else ${UNRANKED} end`;
 
-/** The current catalog label; a retired or unknown rule shows its id. */
 export const ruleTitle = (ruleId: string) => RULES.get(ruleId)?.display_label ?? ruleId;
 
-/** The catalog rules whose label contains the text, ignoring case. */
+export const ruleRemediation = (ruleId: string) => RULES.get(ruleId)?.remediation ?? null;
+
 export function rulesTitled(query: string): string[] {
   const needle = query.trim().toLowerCase();
   if (!needle) return [];
@@ -40,7 +36,6 @@ export function rulesTitled(query: string): string[] {
     .map((rule) => rule.rule_id);
 }
 
-/** Who can resolve the rule; an unknown rule needs a developer. */
 export const remediationRoute = (ruleId: string) =>
   RULES.get(ruleId)?.remediation_route ?? reads.unknown_rule_remediation_route;
 
@@ -51,21 +46,14 @@ const SECTION_BY_CATEGORY: Readonly<Record<string, IssueSection>> = z
   .record(z.string(), issueSectionSchema)
   .parse(reads.issue_section_by_category);
 
-/**
- * The Issues tab a finding belongs to: its category's configured section
- * (titles, descriptions, headings and answer content read as Content), else
- * its own dimension.
- */
 export const issueSection = (issue: { dimension: string; category: string }): IssueSection =>
   SECTION_BY_CATEGORY[issue.category] ?? issueSectionSchema.parse(issue.dimension);
 
-/** The Issues tab of a catalog rule; a retired or unknown rule has none. */
 export function ruleSection(ruleId: string): IssueSection | null {
   const rule = RULES.get(ruleId);
   return rule ? issueSection(rule) : null;
 }
 
-/** A defect's band by severity; an advisory's by its readiness dimension's weight. */
 export function issueImpact(ruleId: string, findingClass: string, severity: string) {
   const bands: Record<string, number> = reads.defect_impact_bands;
   if (findingClass === 'defect') {
@@ -83,32 +71,16 @@ export function issueImpact(ruleId: string, findingClass: string, severity: stri
   };
 }
 
-/**
- * One issue group's stable identity within a crawl. Links to defect groups
- * predate the finding-class suffix, so a defect keeps the unsuffixed name.
- */
 export function issueGroupId(crawlId: string, ruleId: string, findingClass: string) {
-  const suffix = findingClass === 'defect' ? '' : `:${findingClass}`;
-  return uuidV5(crawlId, `site-issue-group:${ruleId}${suffix}`);
+  return uuidV5(crawlId, `site-issue-group:${ruleId}:${findingClass}`);
 }
 
-/** Link problems judged once on the crawl root for every page that carries the link. */
 const sitewideLinkRules: readonly string[] = [
   'technical.sitewide_broken_link',
   'technical.sitewide_link_redirect',
 ];
 const SITEWIDE_LINK_RULES = new Set(sitewideLinkRules);
 
-/**
- * A site-level finding (an architecture rule or a sitewide link) is persisted
- * once, against the homepage, and names the pages (or page kinds) it found in
- * its evidence. Its group counts and page kinds come from that evidence, not
- * from the one row, so "Pages buried too deeply" reads 11 pages rather than
- * the homepage. `null` for every per-page rule.
- *
- * Under the Issues page-kind filter it counts only the affected pages of that
- * kind, from the per-kind counts the evidence records over every page.
- */
 export function siteLevelScope(
   ruleId: string,
   evidence: unknown,
@@ -120,12 +92,10 @@ export function siteLevelScope(
   return { ...scope, affected: typeof counted === 'number' ? counted : 0 };
 }
 
-/** Rules whose finding is persisted once for the site (`siteLevelScope`), as SQL over `alias`. */
 export const siteLevelRuleOf = (alias: string) => {
   const rule = sql.ref(`${alias}.rule_id`);
   return sql`(${rule} like 'architecture.%' or ${rule} = any(${sitewideLinkRules}::text[]))`;
 };
-/** `siteLevelRuleOf` over the issue alias `i`. */
 export const siteLevelRule = siteLevelRuleOf('i');
 
 function wholeSiteScope(
@@ -134,7 +104,6 @@ function wholeSiteScope(
 ): { affected: number; pageKinds: string[] } | null {
   const facts = record(evidence);
   if (SITEWIDE_LINK_RULES.has(ruleId)) {
-    // Without a recorded count the group falls back to its own rows, never to zero.
     if (typeof facts.count !== 'number') return null;
     const kinds = Array.isArray(facts.linking_page_kinds) ? facts.linking_page_kinds : [];
     return {
@@ -156,16 +125,17 @@ function wholeSiteScope(
   }
   if (Array.isArray(facts.page_kinds)) {
     const kinds = rows(facts.page_kinds);
-    const key =
-      ruleId === 'architecture.duplicate_metadata_in_page_kind'
-        ? 'duplicate_metadata_count'
-        : 'page_count';
     const affected = kinds.reduce((sum, row) => {
-      const value = row[key];
+      const value = row.page_count;
       return sum + (typeof value === 'number' ? value : 0);
     }, 0);
     return { affected, pageKinds: kindsOf(kinds) };
   }
+  if (Array.isArray(facts.duplicate_sets) && typeof facts.count === 'number')
+    return {
+      affected: facts.count,
+      pageKinds: Object.keys(record(facts.page_kind_counts)).sort(compareText),
+    };
   return null;
 }
 
@@ -187,7 +157,6 @@ export type IssueRow = {
   reason_code: string;
 };
 
-/** One persisted issue occurrence on one page. */
 export const issueOccurrence = (
   issue: IssueRow,
   page: {

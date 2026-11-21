@@ -7,18 +7,21 @@ import { policy } from '../config.ts';
 import { record, jsonObjects } from '../db/json.ts';
 import { scalarText } from '../text-order.ts';
 import {
+  cohortNamesBrand,
+  namedByPrompt,
   scoreExecution,
   scoringConfig,
   classifyCitation,
   type ClassifiedCitation,
 } from './scoring.ts';
-import { assessEntities } from './entity-assessment.ts';
+import { assessEntities, brandNamed } from './entity-assessment.ts';
 import { classifySourceDomain, classifySourceOrigin } from './opportunities/source-patterns.ts';
 import { citationIdentity } from '../source-pages/identity.ts';
 import { fanoutProjection } from './fanout.ts';
 import { answerAds, persistAds } from './ads.ts';
+import { answerFormatColumns } from './answer-formats.ts';
+import { firstNamed, firstNamedColumns } from './win-rate.ts';
 
-/** A retrieved URL is never provider-resolved, so it keeps no resolved URL. */
 function retrievedIdentity(url: string) {
   const { resolved_url: _resolved, ...identity } = citationIdentity(url);
   return identity;
@@ -30,7 +33,6 @@ function citationClassification(classified: ClassifiedCitation) {
   return classified.matched_competitor ? 'competitor' : 'third_party';
 }
 
-/** The artifact, its prompt snapshot and the deterministic score derived from them. */
 async function scoredArtifact(
   db: Database,
   { task, audit, artifactId }: { task: AuditTask; audit: Selectable<Audits>; artifactId: string },
@@ -51,7 +53,6 @@ async function scoredArtifact(
   const config = scoringConfig(audit.configuration),
     metadata = record(artifact.provider_metadata);
   const citations = jsonObjects(artifact.citations ?? [], 'artifact.citations');
-  // Null when the surface does not expose what it read.
   const retrieved =
     artifact.retrieved_sources === null
       ? null
@@ -61,6 +62,7 @@ async function scoredArtifact(
       config,
       answerText: artifact.answer_text,
       promptText: snapshot.text,
+      promptNamesBrand: cohortNamesBrand(snapshot.cohort),
       citations,
       searchEvents: jsonObjects(artifact.search_events ?? [], 'artifact.search_events'),
       searchUsed: artifact.search_used,
@@ -72,7 +74,6 @@ async function scoredArtifact(
   return { artifact, snapshot, config, citations, retrieved, score };
 }
 
-/** What every derived row carries: its analysis, artifact and analyzer version. */
 type Provenance = Pick<
   Selectable<BrandMentions>,
   'workspace_id' | 'audit_id' | 'analysis_id' | 'artifact_id' | 'analyzer_version' | 'created_at'
@@ -169,11 +170,6 @@ async function persistRetrievedSources(
       .execute();
 }
 
-/**
- * Derives one answer's analysis, mentions, citations, retrieved sources and ads from its
- * immutable artifact. The caller holds the scoped audit/task lock and commits alongside the
- * artifact. Returns the new analysis, or null when the artifact was already analyzed.
- */
 export async function analyzeResponse(
   db: Database,
   task: AuditTask,
@@ -199,7 +195,10 @@ export async function analyzeResponse(
   const at = new Date(),
     id = randomUUID(),
     versions = policy.audits.analysis,
-    assessments = assessEntities(artifact.answer_text, config),
+    assessed = assessEntities(artifact.answer_text, config),
+    assessments = namedByPrompt(cohortNamesBrand(snapshot.cohort), artifact.answer_text)
+      ? brandNamed(assessed)
+      : assessed,
     ads = answerAds({
       id: task.id,
       logical_engine: task.logical_engine,
@@ -237,9 +236,19 @@ export async function analyzeResponse(
         searchQueryCount: score.search_query_count,
         providerMetadata: task.provider_metadata,
       }),
-      // Set only when ads apply and the envelope was read: zero ads is then an observation.
+      ...answerFormatColumns({
+        logicalEngine: task.logical_engine,
+        providerMetadata: artifact.provider_metadata,
+      }),
       ads_parser_version: ads ? policy.audits.ads_versions.parser_version : null,
       avg_position: score.brand_position,
+      ...firstNamedColumns(
+        firstNamed({
+          brandName: config.brandName,
+          brandOffset: score.brand_first_offset,
+          competitorOffsets: score.competitor_first_offsets,
+        }),
+      ),
       score: JSON.stringify(score),
       entity_assessments: JSON.stringify(assessments),
       retrieval_observed: retrieved !== null,

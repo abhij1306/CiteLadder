@@ -13,7 +13,6 @@ function validTimeZone(value: string): boolean {
   }
 }
 
-/** The cookie stores a choice, never an automatically detected zone. */
 export function readTimeZonePreference(cookieHeader: string): string {
   const encoded = cookieHeader
     .split(';')
@@ -34,11 +33,6 @@ export function resolveDisplayTimeZone(preference: string, deviceTimeZone?: stri
   return deviceTimeZone && validTimeZone(deviceTimeZone) ? deviceTimeZone : 'UTC';
 }
 
-/** A server may use an explicit cookie; Auto has no server-side device zone. */
-export function resolveServerDisplayTimeZone(cookieHeader: string): string {
-  return resolveDisplayTimeZone(readTimeZonePreference(cookieHeader));
-}
-
 function detectDeviceTimeZone(): string | undefined {
   try {
     return Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -47,7 +41,6 @@ function detectDeviceTimeZone(): string | undefined {
   }
 }
 
-// Resolved once per browser load, so one visit cannot mix zones between rows.
 const visitDeviceTimeZone = typeof window === 'undefined' ? undefined : detectDeviceTimeZone();
 
 function browserTimeZone(): string {
@@ -63,7 +56,6 @@ function subscribe(notify: () => void): () => void {
   };
 }
 
-/** How far `timeZone`'s wall clock is ahead of UTC at `instant`, in milliseconds. */
 function zoneOffsetMs(instant: number, timeZone: string): number {
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone,
@@ -88,10 +80,6 @@ function zoneOffsetMs(instant: number, timeZone: string): number {
   return wall - Math.floor(instant / 1000) * 1000;
 }
 
-/**
- * The last second of the calendar day `isoDay` (`YYYY-MM-DD`) in `timeZone`,
- * as a UTC instant. The second pass settles a day whose offset changes (DST).
- */
 export function endOfDayInZone(isoDay: string, timeZone: string): string {
   const wall = Date.parse(`${isoDay}T23:59:59Z`);
   let instant = wall - zoneOffsetMs(wall, timeZone);
@@ -99,7 +87,6 @@ export function endOfDayInZone(isoDay: string, timeZone: string): string {
   return new Date(instant).toISOString();
 }
 
-/** React consumers update when the preference changes without remounting a route. */
 export function useDisplayTimeZone(): string {
   return useSyncExternalStore(subscribe, browserTimeZone, () => 'UTC');
 }

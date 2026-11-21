@@ -1,23 +1,16 @@
-/**
- * Brand facts: the user-owned statements fact-checking compares answers
- * against. Gated by the workspace's `fact_checking` grant (the pilot).
- *
- * Every change appends a `brand_fact_revisions` row and moves the fact's
- * current revision; an edit names the revision it read, so a stale edit is a
- * conflict, never a silent overwrite. Audits freeze the confirmed revisions
- * they check against, so later edits never rewrite an earlier verdict.
- */
 import { randomUUID } from 'node:crypto';
 
 import {
   factStatusSchema,
   factTopicSchema,
   type BrandFact,
+  type BrandFactImportResult,
   type BrandFactList,
 } from '@citeladder/contracts/fact-checking';
 import { asApiErrorCode } from '@citeladder/contracts/error-codes';
 import {
   brandFactCreateRequestSchema,
+  brandFactImportRequestSchema,
   brandFactUpdateRequestSchema,
 } from '@citeladder/contracts/project-requests';
 import type { Selectable } from 'kysely';
@@ -44,7 +37,6 @@ export const brandFactCreate = brandFactCreateRequestSchema.extend({
   source_url: sourceUrl,
 });
 
-/** A partial edit of the revision the editor read; absent fields are kept. */
 export const brandFactUpdate = brandFactUpdateRequestSchema.extend({
   statement: statement.optional(),
   source_url: sourceUrl,
@@ -64,6 +56,10 @@ function view(row: Selectable<BrandFacts>): BrandFact {
 
 /** The project's facts by topic, confirmed first. */
 export async function listBrandFacts(db: Database, scope: ProjectScope): Promise<BrandFactList> {
+  const formLimits = {
+    statement_max_chars: limits.statement_max_chars,
+    facts_import_max_rows: limits.facts_import_max_rows,
+  };
   const rows = await db
     .selectFrom('brand_facts')
     .selectAll()
@@ -80,7 +76,7 @@ export async function listBrandFacts(db: Database, scope: ProjectScope): Promise
         (factTopicOrder.get(a.topic) ?? 0) - (factTopicOrder.get(b.topic) ?? 0) ||
         status.indexOf(a.status) - status.indexOf(b.status),
     );
-  return { enabled: true, facts };
+  return { enabled: true, facts, limits: formLimits };
 }
 
 function revisionOf(row: Selectable<BrandFacts>, userId: string | null) {
@@ -98,7 +94,6 @@ function revisionOf(row: Selectable<BrandFacts>, userId: string | null) {
   };
 }
 
-/** A new draft fact; drafts are never checked against until confirmed. */
 export function createBrandFact(
   db: Database,
   scope: ProjectScope,
@@ -140,7 +135,85 @@ export function createBrandFact(
   });
 }
 
-/** Apply an edit to the revision the editor read, appending the next revision. */
+export const brandFactImport = brandFactImportRequestSchema.extend({
+  rows: brandFactImportRequestSchema.shape.rows.min(1).max(limits.facts_import_max_rows),
+});
+
+const ROW_ERRORS: Record<string, string> = {
+  topic: `Topic must be one of: ${factTopicSchema.options.join(', ')}.`,
+  statement: `Statement is required, up to ${limits.statement_max_chars} characters.`,
+  source_url: 'Source URL must be an http or https address.',
+};
+
+function factKey(topic: string, statement: string) {
+  return `${topic}\n${statement.normalize('NFKC').toLowerCase().replace(/\s+/gu, ' ').trim()}`;
+}
+
+export function importBrandFacts(
+  db: Database,
+  scope: ProjectScope,
+  userId: string,
+  input: z.output<typeof brandFactImport>,
+): Promise<BrandFactImportResult> {
+  return db.transaction().execute(async (trx) => {
+    await acquireProjectLock(trx, scope.projectId);
+    const kept = await trx
+      .selectFrom('brand_facts')
+      .select(['topic', 'statement'])
+      .where('workspace_id', '=', scope.workspaceId)
+      .where('project_id', '=', scope.projectId)
+      .where('status', '!=', 'retired')
+      .execute();
+    const seen = new Set(kept.map((fact) => factKey(fact.topic, fact.statement)));
+    let room = limits.max_facts_per_project - kept.length;
+    const now = new Date();
+    const created: Selectable<BrandFacts>[] = [];
+    const rows = input.rows.map((raw, index): BrandFactImportResult['rows'][number] => {
+      const parsed = brandFactCreate.safeParse({
+        topic: raw.topic.trim().toLowerCase(),
+        statement: raw.statement,
+        source_url: raw.source_url?.trim() || null,
+      });
+      if (!parsed.success) {
+        const field = String(parsed.error.issues[0]?.path[0] ?? 'statement');
+        return { index, kind: 'invalid', message: ROW_ERRORS[field] ?? ROW_ERRORS.statement! };
+      }
+      const key = factKey(parsed.data.topic, parsed.data.statement);
+      if (seen.has(key)) return { index, kind: 'duplicate' };
+      if (room <= 0)
+        return {
+          index,
+          kind: 'invalid',
+          message: `A project can hold ${limits.max_facts_per_project} facts.`,
+        };
+      seen.add(key);
+      room--;
+      const fact = {
+        id: randomUUID(),
+        workspace_id: scope.workspaceId,
+        project_id: scope.projectId,
+        revision: 1,
+        topic: parsed.data.topic,
+        statement: parsed.data.statement,
+        source_url: parsed.data.source_url ?? null,
+        status: 'draft',
+        created_at: now,
+        updated_at: now,
+      };
+      created.push(fact);
+      return { index, kind: 'created', fact_id: fact.id };
+    });
+    if (created.length) {
+      await trx.insertInto('brand_facts').values(created).execute();
+      await trx
+        .insertInto('brand_fact_revisions')
+        .values(created.map((fact) => revisionOf(fact, userId)))
+        .execute();
+    }
+    return { rows };
+  });
+}
+
 export function updateBrandFact(
   db: Database,
   scope: ProjectScope,

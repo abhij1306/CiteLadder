@@ -11,7 +11,6 @@ export function acquisitionDomain(value: string): string {
   if (/[\\/:?#@%\s]/u.test(value))
     throw new Error('Use a bare registrable domain or * for the global stop');
   const ascii = domainToASCII(value).toLowerCase().replace(/\.$/u, '');
-  // Bare-host validation precedes the shared URL/registrable-domain normalization.
   if (!ascii || /[^a-z0-9.-]/u.test(ascii))
     throw new Error('Use a bare registrable domain or * for the global stop');
   let domain: string;

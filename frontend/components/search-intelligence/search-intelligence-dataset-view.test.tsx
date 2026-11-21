@@ -104,6 +104,9 @@ it('filters on the server and exports every saved matching page', async () => {
   expect(exported[0]).toContain('needle first');
   expect(exported[1]).toContain('=needle second');
   expect(requests.at(-1)?.get('search')).toBe('needle');
+  expect(requests.filter((params) => !['', 'needle', null].includes(params.get('search')))).toEqual(
+    [],
+  );
 });
 
 it('hands the visible rows, or one selected row, to the Agent by id', async () => {
@@ -198,7 +201,6 @@ it('rounds estimated traffic in the table and opens readable details from the ke
   await userEvent.click(screen.getByRole('button', { name: 'View evidence for Family outfits' }));
   const details = screen.getByRole('dialog', { name: 'Row details' });
   expect(within(details).getByText('3,600')).toBeInTheDocument();
-  // Record identities stay out of what the reader sees.
   expect(details).not.toHaveTextContent(result.id);
   expect(details).not.toHaveTextContent(dataset.id);
 });
@@ -230,7 +232,7 @@ it('links a missing keyword that became an Action', async () => {
   );
   expect(screen.getByRole('link', { name: 'Open Action' })).toHaveAttribute(
     'href',
-    expect.stringContaining(`/agent/actions/${actionId}`),
+    expect.stringContaining(`/actions/${actionId}`),
   );
 });
 
@@ -255,11 +257,10 @@ it('opens Sources on the run a citation match came from', async () => {
   const href = screen.getByRole('link', { name: 'View in Sources' }).getAttribute('href')!;
   const url = new URL(href, 'http://x');
   expect(url.pathname).toBe('/visibility');
-  expect(url.searchParams.get('tab')).toBe('sources');
+  expect(url.searchParams.get('tab')).toBe('domains');
   expect(url.searchParams.get('run')).toBe(runId);
 });
 
-// `empty` is what acquisition records when the provider answered with no rows.
 it.each([
   ['empty', 0, 'The provider returned no data for this saved scope.'],
   ['complete', 0, 'The provider returned no data for this saved scope.'],
@@ -319,7 +320,6 @@ it('uses shared pagination and resets its cursor when sorting or changing rows p
 
   expect(await screen.findByText('First keyword')).toBeInTheDocument();
   expect(requests[0]?.get('limit')).toBe('10');
-  // The pager counts the rows; the footer adds only what the provider had.
   expect(
     screen.getByText(
       (_, node) =>
@@ -374,7 +374,6 @@ it('keeps the rows and the pager on screen while the next page loads', async () 
   });
   expect(await screen.findByText('First keyword')).toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: 'Next page' }));
-  // The previous page stays behind the busy bar, and the pager stays put.
   expect(screen.getByText('First keyword')).toBeInTheDocument();
   expect(screen.getByRole('region', { name: 'Ranking keywords' })).toHaveAttribute(
     'aria-busy',
@@ -474,7 +473,10 @@ it('does not show a previous query page after a sort read fails', async () => {
   });
   expect(await screen.findByText('First keyword')).toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: 'Keyword' }));
-  expect(await screen.findByText('Read failed')).toBeInTheDocument();
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    "Couldn't load the saved rowsThe request failed or timed out.Retry",
+  );
+  expect(screen.getByRole('button', { name: 'Copy reference' })).toBeInTheDocument();
   expect(screen.queryByText('First keyword')).not.toBeInTheDocument();
 });
 
@@ -508,7 +510,6 @@ it('reads the rows the strip’s keyword filters narrow to', async () => {
   await screen.findByText('First keyword');
   expect(requests.at(-1)?.get('min_volume')).toBe('10');
   expect(requests.at(-1)?.get('intent')).toBe('commercial');
-  // The table's own toolbar keeps only its search and actions.
   expect(
     screen.queryByRole('spinbutton', { name: 'Minimum search volume' }),
   ).not.toBeInTheDocument();

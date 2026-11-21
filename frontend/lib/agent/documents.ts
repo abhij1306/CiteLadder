@@ -1,11 +1,9 @@
 import type { AgentChatDetail, AgentOutput } from '@/lib/api/agent';
 
-/** The in-page anchor of one document, for the chat's document list. */
 export function documentAnchor(outputId: string): string {
   return `document-${outputId}`;
 }
 
-/** The document changed most recently, or none in a chat without documents. */
 export function latestOutput(detail: Pick<AgentChatDetail, 'outputs'>): AgentOutput | undefined {
   let latest: AgentOutput | undefined;
   for (const output of detail.outputs) {
@@ -14,11 +12,6 @@ export function latestOutput(detail: Pick<AgentChatDetail, 'outputs'>): AgentOut
   return latest;
 }
 
-/**
- * Where each document is shown: after the reply that last wrote it. A
- * document without a recorded reply follows the last reply before its latest
- * revision; one with no earlier reply is shown after the messages.
- */
 export function outputPlacements(detail: Pick<AgentChatDetail, 'outputs' | 'messages'>): {
   byMessage: ReadonlyMap<string, readonly AgentOutput[]>;
   unplaced: readonly AgentOutput[];

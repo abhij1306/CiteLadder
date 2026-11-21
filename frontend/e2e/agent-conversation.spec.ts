@@ -24,6 +24,7 @@ function chatDetail(): AgentChatDetail {
       id: CHAT,
       project_id: FIXTURE_PROJECT.id,
       action_id: null,
+      origin: 'chat',
       target_label: null,
       title: 'Discuss buyer needs',
       turn_count: 12,
@@ -46,6 +47,7 @@ function chatDetail(): AgentChatDetail {
     },
     outputs: [],
     page_fetch: null,
+    actions: [],
     messages: Array.from({ length: 24 }, (_, index) => ({
       id: `77777777-7777-4777-8777-${String(index + 1).padStart(12, '0')}`,
       sequence: index + 1,
@@ -58,9 +60,10 @@ function chatDetail(): AgentChatDetail {
       skill_source: 'chat',
       evidence_refs: [],
       web_sources: [],
-      // A written reply records its model call; only an unanswered turn's reply has none.
       steps: index % 2 ? [{ kind: 'model', ordinal: 1 }] : [],
       mentions: [],
+      attachments: [],
+      proposals: [],
       created_at: NOW,
     })),
     latest_run: {
@@ -71,12 +74,77 @@ function chatDetail(): AgentChatDetail {
       steps_used: 1,
       error_code: '',
       error_detail: '',
-      // A turn that has just started, so the page reads it at its quickest cadence.
       created_at: new Date().toISOString(),
       completed_at: null,
       progress: [],
     },
   };
+}
+
+const LONG_URL = (n: number) =>
+  `https://www.bestandless.com.au/Categories/Kids/Kids-Underwear-%2526-Socks/Boys-Underwear-Multipack-Collection/boys-trunks-${n}`;
+const LIMITS = { mentions_max: 5, attachments_max: 3, attachment_max_chars: 40000 };
+
+for (const width of [1440, 390]) {
+  test(`a turn with long URL chips stays inside the thread at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 844 });
+    const current = chatDetail();
+    current.latest_run!.status = 'succeeded';
+    const urlActions = [1, 2, 3, 4].map((n) => ({
+      id: `88888888-8888-4888-8888-00000000000${n}`,
+      target_label: LONG_URL(n),
+      status: 'open' as const,
+    }));
+    current.actions = [
+      {
+        id: '88888888-8888-4888-8888-000000000000',
+        target_label: 'Form controls missing accessible names',
+        status: 'open',
+      },
+      ...urlActions,
+    ];
+    const [request, reply] = current.messages.slice(-2);
+    request!.content = `Fix these pages ${LONG_URL(9)}`;
+    request!.mentions = current.actions.map(({ id, target_label }) => ({
+      kind: 'action',
+      id,
+      label: target_label,
+    }));
+    reply!.content = `Read Actions and the project overview.\n\n\`${LONG_URL(5)}\``;
+    current.messages = [request!, reply!];
+    await stubAuthedShell(page, [
+      ['**/api/v1/agent/skills', { skills: SKILLS, limits: LIMITS }],
+      [`**/api/v1/projects/${FIXTURE_PROJECT.id}/actions*`, actionsPage()],
+      [`**/api/v1/projects/${FIXTURE_PROJECT.id}/agent/chats?*`, { items: [], next_cursor: null }],
+    ]);
+    await page.route(`**/api/v1/agent/chats/${CHAT}`, (route) => route.fulfill({ json: current }));
+    await page.goto(fixtureProjectPath(`/agent/chats/${CHAT}`));
+    const chips = page.getByRole('list', { name: 'Mentioned Actions' }).getByRole('link');
+    await expect(chips).toHaveCount(5);
+    const thread = page.getByRole('region', { name: 'Agent conversation' });
+    expect(
+      await thread.evaluate((element) => element.scrollWidth - element.clientWidth),
+    ).toBeLessThanOrEqual(0);
+    const threadBox = (await thread.boundingBox())!;
+    const bubble = (await page
+      .getByText(/^Fix these pages/)
+      .locator('..')
+      .boundingBox())!;
+    expect(bubble.x + bubble.width).toBeLessThanOrEqual(threadBox.x + threadBox.width);
+    for (const chip of await chips.all()) {
+      const box = (await chip.boundingBox())!;
+      expect(box.x).toBeGreaterThanOrEqual(bubble.x);
+      expect(box.x + box.width).toBeLessThanOrEqual(bubble.x + bubble.width);
+      expect(box.height).toBeLessThan(40);
+    }
+    await expect(chips.nth(1)).toHaveAccessibleName(
+      /^@https:\/\/www\.bestandless\.com\.au\/Categories\/Kids\/Kids-Underwear-&-Socks\/.*\/boys-trunks-1\b/,
+    );
+    const tail = chips.nth(1).getByText('/boys-trunks-1', { exact: true });
+    const tailBox = (await tail.boundingBox())!;
+    expect(await tail.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+    expect(tailBox.x + tailBox.width).toBeLessThanOrEqual(bubble.x + bubble.width);
+  });
 }
 
 for (const width of [1280, 390]) {
@@ -92,7 +160,17 @@ for (const width of [1280, 390]) {
     });
     let reading = false;
     await stubAuthedShell(page, [
-      ['**/api/v1/agent/skills', { skills: SKILLS, limits: { mentions_max: 5 } }],
+      [
+        '**/api/v1/agent/skills',
+        {
+          skills: SKILLS,
+          limits: {
+            mentions_max: 5,
+            attachments_max: 3,
+            attachment_max_chars: 40000,
+          },
+        },
+      ],
       [`**/api/v1/projects/${FIXTURE_PROJECT.id}/actions*`, actionsPage()],
       [`**/api/v1/projects/${FIXTURE_PROJECT.id}/agent/chats?*`, { items: [], next_cursor: null }],
     ]);
@@ -130,7 +208,6 @@ for (const width of [1280, 390]) {
     await expect(page.getByRole('combobox')).toHaveCount(1);
     await reply.fill('Explain the first recommendation.');
     await reply.press('Enter');
-    // The composer keeps its text while the turn is pending; assert the sent message.
     const followUp = page
       .getByRole('paragraph')
       .filter({ hasText: /^Explain the first recommendation\.$/ });
@@ -162,7 +239,17 @@ for (const width of [1280, 390]) {
       const sends: { key: string | undefined; body: unknown }[] = [];
       let reads = 0;
       await stubAuthedShell(page, [
-        ['**/api/v1/agent/skills', { skills: SKILLS, limits: { mentions_max: 5 } }],
+        [
+          '**/api/v1/agent/skills',
+          {
+            skills: SKILLS,
+            limits: {
+              mentions_max: 5,
+              attachments_max: 3,
+              attachment_max_chars: 40000,
+            },
+          },
+        ],
         [`**/api/v1/projects/${FIXTURE_PROJECT.id}/actions*`, actionsPage()],
         [
           `**/api/v1/projects/${FIXTURE_PROJECT.id}/agent/chats?*`,
@@ -178,7 +265,6 @@ for (const width of [1280, 390]) {
       );
       await page.route(`**/api/v1/agent/chats/${CHAT}/runs/${RUN}/cancel`, (route) => {
         current.latest_run!.status = 'cancelled';
-        // The server answers a stopped turn with a saved reply.
         current.messages.push({
           ...current.messages.at(-1)!,
           id: '77777777-7777-4777-8777-999999999997',
@@ -203,7 +289,12 @@ for (const width of [1280, 390]) {
         fixtureProjectPath(surface === 'page' ? `/agent/chats/${CHAT}` : '/projects'),
       );
       if (surface === 'panel') {
-        await page.getByRole('button', { name: 'Open agent' }).click();
+        if (width < 900) {
+          await page.getByRole('button', { name: 'More', exact: true }).click();
+          await page.getByRole('menuitem', { name: 'Ask agent' }).click();
+        } else {
+          await page.getByRole('button', { name: 'Ask agent' }).click();
+        }
         await page.getByLabel('Message the agent').fill('Discuss buyer needs');
         await page.getByRole('button', { name: 'Send', exact: true }).click();
       }
@@ -211,25 +302,28 @@ for (const width of [1280, 390]) {
       await expect(reply).toBeVisible();
       await page.getByText('Context used', { exact: true }).click();
       await expect(page.getByText('Selected crawl robots policy', { exact: true })).toBeVisible();
-      // Context is described in plain words; record identities never reach the reader.
       await expect(page.getByText(RUN)).toHaveCount(0);
       await expect(
-        page.getByRole('button', { name: 'Skill: Continue with Growth plan' }),
+        page.getByRole('button', { name: 'Remove Skill: Continue with Growth plan', exact: true }),
       ).toBeVisible();
       await reply.fill('Draft kept while working');
-      // While the turn runs, Stop takes Send's place and drafting continues.
       await expect(page.getByRole('button', { name: 'Send', exact: true })).toHaveCount(0);
-      // A long skill label truncates beside Stop rather than wrapping the control row.
-      const skillBox = await page
-        .getByRole('button', { name: 'Skill: Continue with Growth plan' })
+      const menuBox = await page
+        .getByRole('button', { name: 'Add a skill or Action' })
         .boundingBox();
       const stopBox = await page.getByRole('button', { name: 'Stop', exact: true }).boundingBox();
-      expect(Math.abs(skillBox!.y - stopBox!.y)).toBeLessThanOrEqual(1);
-      expect(skillBox!.x + skillBox!.width).toBeLessThanOrEqual(stopBox!.x);
-      // Only the thread scrolls, in its own region on both surfaces.
+      expect(Math.abs(menuBox!.y - stopBox!.y)).toBeLessThanOrEqual(1);
+      expect(menuBox!.x + menuBox!.width).toBeLessThanOrEqual(stopBox!.x);
       const thread = page.getByRole('region', { name: 'Agent conversation' });
       await thread.evaluate((element) => element.scrollTo(0, 0));
       await expect(page.getByRole('button', { name: 'Jump to latest' })).toBeAttached();
+      const jumpBox = await page.getByRole('button', { name: 'Jump to latest' }).boundingBox();
+      const replyBox = await reply.boundingBox();
+      expect(jumpBox!.width).toBe(jumpBox!.height);
+      expect(
+        Math.abs(jumpBox!.x + jumpBox!.width / 2 - (replyBox!.x + replyBox!.width / 2)),
+      ).toBeLessThanOrEqual(2);
+      expect(jumpBox!.y + jumpBox!.height).toBeLessThanOrEqual(replyBox!.y);
       const priorReads = reads;
       current.messages.push({
         ...current.messages.at(-1)!,
@@ -255,19 +349,22 @@ for (const width of [1280, 390]) {
         sequence: 26,
         content: 'Next persisted answer.\n\n' + 'Additional buyer evidence. '.repeat(40),
       });
-      await expect(page.getByText(/Next persisted answer/)).toBeVisible();
+      await expect(page.getByRole('article').getByText(/Next persisted answer/)).toBeVisible();
       await expect(page.getByRole('button', { name: 'Jump to latest' })).not.toBeAttached();
       const remaining = await thread.evaluate(
         (element) => element.scrollHeight - element.scrollTop - element.clientHeight,
       );
       expect(remaining).toBeLessThanOrEqual(1);
-      // Following the thread never scrolls the window under the shell chrome.
-      expect(await page.evaluate(() => window.scrollY)).toBe(0);
+      expect(await page.locator('#main').evaluate((panel) => panel.scrollTop)).toBe(0);
       await expect(reply).toHaveValue('Draft kept while working');
       const stop = page.getByRole('button', { name: 'Stop', exact: true });
       await stop.focus();
       await stop.press('Enter');
-      await expect(page.getByText('Stopped. Nothing from this turn was saved.')).toBeVisible();
+      await expect(
+        page
+          .getByRole('list', { name: 'Messages' })
+          .getByText('Stopped. Nothing from this turn was saved.'),
+      ).toBeVisible();
 
       await reply.fill('');
       await reply.press('/');
@@ -278,8 +375,13 @@ for (const width of [1280, 390]) {
       await expect(reply).toHaveValue('/');
       await page.getByRole('menuitemradio', { name: 'Growth plan', exact: true }).click();
       await expect(reply).toBeFocused();
-      await page.getByRole('button', { name: 'Skill: Growth plan', exact: true }).click();
+      await expect(
+        page.getByRole('button', { name: 'Remove Skill: Growth plan', exact: true }),
+      ).toBeVisible();
+      await page.getByRole('button', { name: 'Add a skill or Action' }).click();
+      await page.getByRole('menuitem', { name: 'Skills: Growth plan' }).click();
       await page.getByRole('menuitemradio', { name: 'Automatic', exact: true }).click();
+      await expect(page.getByRole('button', { name: 'Add a skill or Action' })).toBeFocused();
       await reply.fill('Explain this');
       await reply.press('Shift+Enter');
       await reply.press('Enter');

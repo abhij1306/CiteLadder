@@ -1,5 +1,4 @@
 import { useMutation } from '@tanstack/react-query';
-import { X } from 'lucide-react';
 import { useState } from 'react';
 
 import { MARKET_COUNTRIES, MARKET_LANGUAGES } from '@citeladder/contracts/markets';
@@ -7,19 +6,14 @@ import { MARKET_COUNTRIES, MARKET_LANGUAGES } from '@citeladder/contracts/market
 import { Button, IconButton } from '@/components/ui/button';
 import { Inline, Stack } from '@/components/ui/layout';
 import { MarketSelect } from '@/components/ui/market-select';
-import { MutationNotice } from '@/components/ui/mutation-notice';
 import { textRole } from '@/components/ui/typography';
 import { ledgerClasses, ledgerItemClasses } from '@/components/ui/workspace';
+import { X } from '@/lib/icons';
 import { mutationNoticeForError } from '@/lib/api/mutation-notice';
 import { projectMutations } from '@/lib/api/projects';
 import { useProjectMarkets } from '@/lib/project/use-project-markets';
+import { Notice } from '@/components/ui/notice';
 
-/**
- * Additional measurement markets. Each one is measured as its own run and
- * read on its own in Visibility; the default market is the project's country
- * and language above. Adding and removing apply at once, apart from the
- * panel's Save.
- */
 export function ProjectMarkets({
   projectId,
   workspaceId,
@@ -44,17 +38,14 @@ export function ProjectMarkets({
   const failed = add.error ?? remove.error;
   return (
     <Stack as="section" gap="compact" aria-label="Additional markets">
-      <p className={textRole('label')}>Additional markets</p>
-      <p className="type-caption text-ink-muted">
-        Measure the same prompts from other countries. Each market runs and reports separately.
-      </p>
+      <p className={textRole('body', 'text-ink-2')}>Additional markets</p>
       {extra.length ? (
         <ul className={ledgerClasses()}>
           {extra.map((market) => (
             <Inline
               as="li"
               key={market.id}
-              className={ledgerItemClasses('type-body justify-between')}
+              className={ledgerItemClasses('type-body text-ink-2 justify-between')}
             >
               <span>{market.label}</span>
               <IconButton
@@ -89,7 +80,8 @@ export function ProjectMarkets({
         </Button>
       </Stack>
       {failed ? (
-        <MutationNotice
+        <Notice
+          kind="mutation"
           notice={mutationNoticeForError(failed, {
             action: add.error ? 'add the market' : 'remove the market',
           })}

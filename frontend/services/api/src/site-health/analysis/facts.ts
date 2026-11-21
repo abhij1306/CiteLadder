@@ -1,12 +1,5 @@
-/**
- * Deterministic page facts for one fetched page: metadata, headings, links,
- * structured data, page-owned content, and delivery/security signals. The
- * result is the bounded JSON persisted as `site_fetch_artifacts.normalized_facts`
- * and read by every Site Health analyzer. A malformed page yields partial facts.
- */
 import { policy } from '../../config.ts';
 import { resolveSettingSpec, type SettingSource } from '../../config/settings.ts';
-import { compareText } from '../../text-order.ts';
 import { onlyOf } from '../../lists.ts';
 import {
   ancestors,
@@ -36,13 +29,7 @@ import { analysisPolicy, limits, squash } from './policy.ts';
 import { mergeRobotsHeader, robotsMeta } from './robots-directives.ts';
 import { elementRegion, nodeIsRendered, pageScope, regionNodeIsVisible } from './regions.ts';
 import { emptySourceSupport, sameSite, sourceSupportFacts } from './source-support.ts';
-import {
-  declaredSchemaTypes,
-  jsonLdBlocks,
-  jsonLdObjects,
-  microdataBlocks,
-  productFacts,
-} from './structured-data.ts';
+import { structuredDataFacts as structuredData } from './structured-data.ts';
 
 const f = analysisPolicy.facts;
 const HTML_TYPES = new Set(['text/html', 'application/xhtml+xml']);
@@ -91,7 +78,6 @@ const metaContent = (root: HtmlNode, name: string) =>
     .find(Boolean)
     ?.slice(0, limits.meta_chars) ?? '';
 
-/** Update-date meta keys, in the order they are trusted. */
 const MODIFIED_META_KEYS = [
   'article:modified_time',
   'og:updated_time',
@@ -100,7 +86,6 @@ const MODIFIED_META_KEYS = [
   'dc.date.modified',
 ];
 
-/** `<meta property|name="prefix:…">` values; the first declaration of a key wins. */
 function metaPropertyMap(root: HtmlNode, prefix: string) {
   const found: Record<string, string> = {};
   for (const meta of elements(root, 'meta')) {
@@ -122,7 +107,6 @@ function canonicalDeclarations(root: HtmlNode, baseUrl: string) {
   return declarations;
 }
 
-/** The channel and authored value a `mailto:`/`tel:` href declares, or null. */
 function contactHref(href: string) {
   const lowered = href.toLowerCase();
   let channel = '';
@@ -133,13 +117,10 @@ function contactHref(href: string) {
   let decoded = raw;
   try {
     decoded = decodeURIComponent(raw);
-  } catch {
-    // A malformed escape keeps the authored value.
-  }
+  } catch {}
   return { channel, value: decoded.trim().slice(0, limits.contact_value_chars) };
 }
 
-/** Declared contact points from `mailto:`/`tel:` hrefs; body-text matches are not declarations. */
 function contactPoints(root: HtmlNode) {
   const points: { channel: string; value: string }[] = [];
   const seen = new Set<string>();
@@ -157,24 +138,17 @@ function contactPoints(root: HtmlNode) {
   return points;
 }
 
-/** The host a link names, or null when it is relative or has no authority. */
 function hrefHost(href: string) {
   const authority = /^(?:[a-z][a-z0-9+.-]*:)?\/\/([^/?#]*)/iu.exec(href)?.[1];
   if (!authority) return null;
   const host = authority.slice(authority.lastIndexOf('@') + 1).replace(/:\d*$/u, '');
   return host.replaceAll(/[[\]]/gu, '').toLowerCase() || null;
 }
-/**
- * Internal means the crawl's own site: the page's registrable domain and every
- * subdomain of it, the same scope the crawler admits. An exact-host test hid
- * `www`/`docs` links from the link graph and broken-link checks the crawl fetched.
- */
 const isInternal = (href: string, baseHost: string) => {
   const host = hrefHost(href);
   return host === null || (Boolean(baseHost) && sameSite(host, baseHost.toLowerCase()));
 };
 
-/** An href resolved as a browser resolves it; an empty one names nothing, an unresolvable one stays. */
 function resolvedHref(href: string, baseUrl: string) {
   try {
     return href && new URL(href, baseUrl).href;
@@ -183,13 +157,6 @@ function resolvedHref(href: string, baseUrl: string) {
   }
 }
 
-/**
- * Rendered anchors carry text and region for content diagnostics. Anchors in
- * template content or hidden markup (a collapsed menu) are links crawlers
- * follow, as discovery does, so they are kept apart for reachability only.
- * URLs are recorded resolved against the document base (`<base href>`), so a
- * relative link means what it means to a browser.
- */
 function linksAndAssets(root: HtmlNode, baseUrl: string, baseHost: string, maxLinks: number) {
   const anchors = [];
   const unrendered = [];
@@ -246,7 +213,6 @@ function linksAndAssets(root: HtmlNode, baseUrl: string, baseHost: string, maxLi
   };
 }
 
-/** Internal anchor text: how a hub advertises the pages it links to. */
 function linkContext(anchors: { is_internal: boolean; anchor_text: string }[]) {
   const context: string[] = [];
   const seen = new Set<string>();
@@ -289,7 +255,6 @@ function headingFacts(root: HtmlNode) {
   };
 }
 
-/** Context that makes a page's currency matter, without reading a date. */
 function freshnessContext(
   finalUrl: string,
   title: string,
@@ -347,7 +312,6 @@ function hreflangAlternates(root: HtmlNode, baseUrl: string) {
   return alternates;
 }
 
-/** Characters of inline JavaScript; JSON-LD and other data blocks are not code. */
 function inlineScriptChars(root: HtmlNode) {
   let total = 0;
   for (const script of elements(root, 'script')) {
@@ -359,7 +323,6 @@ function inlineScriptChars(root: HtmlNode) {
   return total;
 }
 
-/** A top-level navigation: assigning `location`/`location.href`, or `location.replace/assign(`. */
 const SCRIPT_NAVIGATION = /\blocation(?:\.href)?\s*=(?!=)|\blocation\.(?:replace|assign)\s*\(/u;
 
 /**
@@ -376,10 +339,6 @@ function refreshTarget(content: string) {
   return target ? { seconds, target } : null;
 }
 
-/**
- * A meta refresh that sends the reader to another URL, and whether inline
- * script navigates the window. A refresh to the page itself is a reload.
- */
 function clientRedirect(root: HtmlNode, finalUrl: string, baseUrl: string) {
   const refresh = metaRefresh(root, finalUrl, baseUrl);
   return {
@@ -389,7 +348,6 @@ function clientRedirect(root: HtmlNode, finalUrl: string, baseUrl: string) {
   };
 }
 
-/** The first meta refresh that leads to another URL, resolved against the document base. */
 function metaRefresh(root: HtmlNode, finalUrl: string, baseUrl: string) {
   for (const meta of elements(root, 'meta')) {
     if (attribute(meta, 'http-equiv').trim().toLowerCase() !== 'refresh') continue;
@@ -399,14 +357,11 @@ function metaRefresh(root: HtmlNode, finalUrl: string, baseUrl: string) {
       const target = new URL(refresh.target, baseUrl);
       if (target.href !== new URL(finalUrl).href)
         return { url: target.href.slice(0, limits.url_chars), seconds: refresh.seconds };
-    } catch {
-      // An unresolvable target sends the reader nowhere.
-    }
+    } catch {}
   }
   return null;
 }
 
-/** Whether inline JavaScript, within the scan budget, navigates the window. */
 function scriptNavigates(root: HtmlNode) {
   let scanned = 0;
   for (const script of elements(root, 'script')) {
@@ -428,7 +383,6 @@ function blockingResources(root: HtmlNode, stylesheets: number) {
   return { scripts, stylesheets, total: scripts + stylesheets };
 }
 
-/** Visible body text (non-rendered subtrees pruned) and its word count. */
 function bodyText(root: HtmlNode, maxChars: number) {
   const body: HtmlNode = elements(root, 'body').next().value ?? root;
   let raw = '';
@@ -508,7 +462,6 @@ export type PageFacts = DocumentFacts & {
   delivery: ReturnType<typeof deliveryFacts>;
 };
 
-/** Page-owned facts are cleared when the document is not one the analyzer can read. */
 function clearPageOwned<T extends DocumentFacts>(facts: T, reason: string): T {
   return {
     ...facts,
@@ -521,25 +474,6 @@ function clearPageOwned<T extends DocumentFacts>(facts: T, reason: string): T {
     contact_points: [],
     commerce: emptyCommerceFacts(),
     extraction: { state: 'unavailable', reason, truncated: facts.extraction.truncated },
-  };
-}
-
-function structuredData(root: HtmlNode, maxBlocks: number, baseUrl: string) {
-  const raw = [...elements(root, 'script')]
-    .filter((node) => attribute(node, 'type').toLowerCase() === 'application/ld+json')
-    .map(textContent);
-  const objects = jsonLdObjects(raw);
-  const jsonLd = jsonLdBlocks(objects, maxBlocks);
-  const microdata = microdataBlocks(root, maxBlocks, baseUrl);
-  const blocks = [...jsonLd, ...microdata].slice(0, maxBlocks);
-  return {
-    blocks,
-    count: blocks.length,
-    has_json_ld: jsonLd.length > 0,
-    has_microdata: microdata.length > 0,
-    types: [...new Set(blocks.map((block) => block.type))].sort(compareText),
-    declared_types: declaredSchemaTypes(objects, root, maxBlocks),
-    product: productFacts(blocks),
   };
 }
 
@@ -632,11 +566,6 @@ function deliveryFacts(delivery: Delivery, headers: Record<string, string>) {
   };
 }
 
-/**
- * Bounded, deterministic facts for one page; never throws on hostile markup.
- * `parsed` is the whole body's tree when the caller (discovery) already has
- * it; an oversized body is still re-parsed under the fact byte cap.
- */
 export function extractPageFacts(
   body: Buffer,
   delivery: Delivery,

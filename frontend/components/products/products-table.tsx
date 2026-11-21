@@ -1,4 +1,4 @@
-import { PackageOpen } from 'lucide-react';
+import type { ReactNode } from 'react';
 
 import { DataTable, type DataTableColumn, type DataTablePager } from '@/components/ui/data-table';
 import {
@@ -7,10 +7,11 @@ import {
   TableCellLines,
   TableRow,
   TableSelectCell,
-  mutedWhenMissing,
 } from '@/components/ui/table';
 import { TextLink } from '@/components/ui/text-link';
-import { MissingValue, UnavailableValue } from '@/components/ui/unavailable-value';
+import { Absence } from '@/components/ui/absence';
+import { ClampText } from '@/components/ui/clamp-text';
+import { Value } from '@/components/ui/value';
 import type {
   CommerceProductPage,
   CommerceProductRow,
@@ -23,28 +24,28 @@ import {
   type ProductCell,
   type ProductColumnKey,
 } from '@/lib/products/product-columns';
-import { productHref, type ProductScopeFilters } from '@/lib/products/product-filters';
+import {
+  productHref,
+  type ProductFilters,
+  type ProductScopeFilters,
+} from '@/lib/products/product-filters';
+import { PackageOpen } from '@/lib/icons';
 import { useProjectScope } from '@/lib/project/active-project-scope';
 import type { UseQueryResult } from '@tanstack/react-query';
 
 import { AddToTracking } from './product-catalog-controls';
 
-/** The metric columns a reader can sort by; each sorts best first. */
 const SORTABLE: Partial<Record<ProductColumnKey, CommerceProductSort>> = {
   visibility: 'visibility',
   win_rate: 'win_rate',
   position: 'position',
 };
 
-function MissingCell({ state }: Readonly<{ state: 'unavailable' | 'unknown' | 'none' }>) {
-  if (state === 'none') return <span className="text-ink-muted">None</span>;
-  // Unavailable (nothing in scope to measure) is the missing mark, so a row of
-  // unmeasured figures is not a row of repeated words; unknown (the catalog has
-  // no price) keeps its word. Neither is ever a zero.
-  return state === 'unknown' ? <UnavailableValue state="unknown" /> : <MissingValue />;
-}
-
-/** Each metric column's width role; the product name takes a quarter of the table. */
+const LOW_PRIORITY: ReadonlySet<ProductColumnKey> = new Set([
+  'mentioned_price',
+  'catalog_price',
+  'merchants',
+]);
 const COLUMN_WIDTHS: Record<ProductColumnKey, DataTableColumn['width']> = {
   visibility: 'shortMetric',
   appearances: 'shortMetric',
@@ -52,22 +53,47 @@ const COLUMN_WIDTHS: Record<ProductColumnKey, DataTableColumn['width']> = {
   position: 'shortMetric',
   mentioned_price: 'figure',
   catalog_price: 'figure',
-  merchants: 'name',
+  merchants: 'category',
 };
 
-/** A metric's text, or the word for its missing state, with its note beneath. */
-export function MetricValue({ cell }: Readonly<{ cell: ProductCell }>) {
-  const value = cell.kind === 'value' ? cell.text : <MissingCell state={cell.state} />;
+function MetricValue({ cell, text }: Readonly<{ cell: ProductCell; text: boolean }>) {
+  let value: ReactNode;
+  if (cell.kind === 'missing') value = <MissingValue cell={cell} />;
+  else value = text ? <ClampText>{cell.text}</ClampText> : <Value value={cell.text} />;
   if (!cell.note) return value;
   return (
-    <span title={cell.note}>
+    <span className="inline-flex items-baseline gap-2 whitespace-nowrap">
       {value}
-      <span className="type-caption block">{cell.note}</span>
+      <span className="text-ink-2 font-sans">{cell.note}</span>
     </span>
   );
 }
 
-/** The product cell: its page (in the read's window), its brand and who holds it. */
+export function MissingValue({
+  cell,
+}: Readonly<{ cell: Extract<ProductCell, { kind: 'missing' }> }>) {
+  switch (cell.state) {
+    case 'none':
+      return <Absence state="none" />;
+    case 'not_mentioned':
+      return <Absence state="none" label="Not mentioned" />;
+    case 'not_applicable':
+      return <Absence state="not_applicable" />;
+    case 'unknown':
+      return <Absence state="unavailable" label="Unknown" />;
+    case 'unavailable':
+      return <Absence state="not_measured" />;
+    default: {
+      const exhaustive: never = cell.state;
+      return exhaustive;
+    }
+  }
+}
+
+export type ProductsEmpty =
+  | Readonly<{ kind: 'empty'; source: ProductFilters['source'] }>
+  | Readonly<{ kind: 'filtered'; onClear: () => void }>;
+
 export function ProductName({
   row,
   scope,
@@ -76,18 +102,14 @@ export function ProductName({
   scope: ProductScopeFilters;
 }>) {
   const name = (
-    <TextLink href={productHref(row.holder_id, scope)} text="inherit">
+    <TextLink href={productHref(row.holder_id, scope)} text="inherit" underline="hover">
       {row.name}
     </TextLink>
   );
-  return <TableCellLines title primary={name} secondary={holderCaption(row)} />;
+  const caption = row.kind === 'owned' ? row.brand : holderCaption(row);
+  return <TableCellLines title primary={name} secondary={caption || undefined} />;
 }
 
-/**
- * The Products table: one row per holder with the shown metric columns. A
- * catalog product can be checked for bulk competitor discovery; competitor
- * rows cannot (discovery targets the catalog), nor archived products.
- */
 export function ProductsTable({
   query,
   columns,
@@ -100,15 +122,19 @@ export function ProductsTable({
   scope,
   trackable = false,
   selectable = true,
+  empty,
+  description,
+  actions,
+  onRetry = () => void query.refetch(),
 }: Readonly<{
-  /** The reader's rows per page: the footprint the table reserves. */
+  actions?: ReactNode;
+  empty: ProductsEmpty;
+  onRetry?: () => void;
+  description?: ReactNode;
   pageSize: number;
   query: UseQueryResult<CommerceProductPage>;
-  /** All products: an AI-observed competitor's row offers Add to tracking (CM6). */
   trackable?: boolean;
-  /** Whether catalog rows can be checked; archived products take no new competitors. */
   selectable?: boolean;
-  /** The window, engine and prompt set a row's page opens with. */
   scope: ProductScopeFilters;
   columns: readonly ProductColumnKey[];
   sort: CommerceProductSort;
@@ -122,7 +148,7 @@ export function ProductsTable({
     {
       key: 'product',
       label: 'Product',
-      width: 'lead',
+      kind: 'identity',
       sort: { active: sort === 'name', descending: false, onSort: () => onSort('name') },
     },
     ...shown.map((column): DataTableColumn => {
@@ -132,7 +158,8 @@ export function ProductsTable({
         label: column.label,
         hint: column.hint,
         width: COLUMN_WIDTHS[column.key],
-        numeric: column.key !== 'merchants',
+        kind: column.key === 'merchants' ? 'text' : 'number',
+        ...(LOW_PRIORITY.has(column.key) ? { priority: 'low' as const } : {}),
         ...(sortKey
           ? {
               sort: {
@@ -150,7 +177,7 @@ export function ProductsTable({
             key: 'track',
             label: 'Tracking',
             width: 'name',
-            trailing: true,
+            kind: 'actions',
             hideLabel: true,
           } satisfies DataTableColumn,
         ]
@@ -168,23 +195,22 @@ export function ProductsTable({
   return (
     <DataTable
       label="Products"
+      description={description}
+      actions={actions}
       columns={tableColumns}
       rowCount={rows.length}
       pageSize={pageSize}
-      rowLines={2}
-      minWidth="xl"
-      pinFirstColumn
       busy={{ active: query.isFetching && !query.isPending, label: 'Updating products' }}
       selection={{
         all,
         onAllChange: (next) => onCheck(owned, next),
         noun: 'products on this page',
       }}
-      state={tableState(query)}
+      state={tableState({ query, empty, onRetry })}
       pager={pager}
     >
       {rows.map((row) => (
-        <TableRow key={row.holder_id}>
+        <TableRow key={row.holder_id} highlight={trackable && row.kind === 'owned'}>
           <TableSelectCell
             label={`Select ${row.name}`}
             checked={checked.has(row.holder_id)}
@@ -197,12 +223,8 @@ export function ProductsTable({
           {shown.map((column) => {
             const cell = productCell(row, column.key);
             return (
-              <TableCell
-                key={column.key}
-                numeric={column.key !== 'merchants'}
-                className={mutedWhenMissing(cell.kind === 'value' ? 0 : null)}
-              >
-                <MetricValue cell={cell} />
+              <TableCell key={column.key}>
+                <MetricValue cell={cell} text={column.key === 'merchants'} />
               </TableCell>
             );
           })}
@@ -226,22 +248,37 @@ export function ProductsTable({
   );
 }
 
-function tableState(query: UseQueryResult<CommerceProductPage>) {
+const EMPTY_COPY = {
+  catalog: { heading: 'No products yet' },
+  all: { heading: 'No products yet' },
+  archived: { heading: 'No archived products' },
+} as const satisfies Record<ProductFilters['source'], { heading: string }>;
+
+function tableState({
+  query,
+  empty,
+  onRetry,
+}: Readonly<{
+  query: UseQueryResult<CommerceProductPage>;
+  empty: ProductsEmpty;
+  onRetry: () => void;
+}>) {
   if (query.isPending) return { kind: 'loading', label: 'Loading products' } as const;
   if (query.isError)
     return {
       kind: 'error',
+      title: "Couldn't load products",
       error: query.error,
       fallback: 'Products could not be loaded.',
-      onRetry: () => void query.refetch(),
+      onRetry,
       pending: query.isFetching,
     } as const;
   if (query.data.items.length) return undefined;
-  return {
-    kind: 'empty',
-    icon: PackageOpen,
-    heading: 'No products match',
-    description:
-      'Import a catalog, run a Site Health crawl, or clear the search and category to see more.',
-  } as const;
+  if (empty.kind === 'filtered')
+    return {
+      kind: 'filtered',
+      heading: 'No products match these filters',
+      onClear: empty.onClear,
+    } as const;
+  return { kind: 'empty', icon: PackageOpen, ...EMPTY_COPY[empty.source] } as const;
 }

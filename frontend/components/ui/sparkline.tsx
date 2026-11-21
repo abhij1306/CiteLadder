@@ -1,4 +1,4 @@
-import { CHART_FILL, CHART_STROKE, chartPath, type ChartTone } from '@/components/ui/chart';
+import { chartFill, chartPath, chartStroke, type ChartTone } from '@/components/ui/chart';
 import { cn } from '@/lib/utils';
 
 const WIDTH = 80;
@@ -9,7 +9,6 @@ const SPARK_TONE = { accent: 1, ink: 2, muted: 3 } as const satisfies Record<str
 
 export type SparklineTone = keyof typeof SPARK_TONE;
 
-/** The points on the series' own min-to-max scale; a `null` stays a gap. */
 function sparkPoints(values: readonly (number | null)[]) {
   const measured = values.filter((value): value is number => value !== null);
   const low = measured.length ? Math.min(...measured) : 0;
@@ -22,23 +21,14 @@ function sparkPoints(values: readonly (number | null)[]) {
   );
 }
 
-/**
- * Sparkline — a fixed 80 × 24 line for a table cell or a stat: the shape of
- * the last few weeks, with a dot on the latest value. Scaled to its own min
- * and max, so levels are compared by the number beside it, never the line.
- * No axes, tooltips or fills. Decorative unless given a `label`.
- */
 export function Sparkline({
   values,
   tone = 'ink',
   label,
   className,
 }: Readonly<{
-  /** Oldest first; `null` is unavailable and leaves a gap. */
   values: readonly (number | null)[];
-  /** `accent` for your brand, `ink` for the leader, `muted` for others. */
   tone?: SparklineTone;
-  /** Its name, when no number sits beside it. */
   label?: string;
   className?: string;
 }>) {
@@ -62,11 +52,9 @@ export function Sparkline({
         strokeWidth={1.5}
         strokeLinecap="round"
         strokeLinejoin="round"
-        className={CHART_STROKE[chartTone]}
+        className={chartStroke(chartTone)}
       />
-      {last ? (
-        <circle cx={last[0]} cy={last[1]} r={2.25} className={CHART_FILL[chartTone]} />
-      ) : null}
+      {last ? <circle cx={last[0]} cy={last[1]} r={2.25} className={chartFill(chartTone)} /> : null}
     </svg>
   );
 }

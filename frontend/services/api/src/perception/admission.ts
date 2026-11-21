@@ -1,15 +1,3 @@
-/**
- * Perception versions frozen at audit admission, and the enqueue that follows
- * an analysis. The frozen versions decide whether an audit is perceived at
- * all: only brand audits freeze them, and an audit without them is never
- * classified and never reads as pending.
- *
- * A brand audit in a fact-checking pilot workspace with confirmed facts also
- * freezes `fact_check`: the claim and verification versions and the exact
- * confirmed fact revisions it checks against. Its perception template version
- * then names the claims addendum too, so its results never pool with plain
- * perception under one version.
- */
 import { createHash } from 'node:crypto';
 
 import { factTopicSchema, type FactTopic } from '@citeladder/contracts/fact-checking';
@@ -38,20 +26,16 @@ const factCheckSchema = z.object({
   claims_version: z.string().min(1),
   verify_template_version: z.string().min(1),
   metrics_version: z.string().min(1),
-  // SHA-256 of the sorted revision ids: equal fact sets compare equal.
   fact_set_hash: z.string().min(1),
   facts: z.array(z.object({ revision_id: z.uuid(), topic: factTopicSchema })).min(1),
-  // The related-topic map in force at admission; later config never rewrites a read.
   related_topics: z.record(z.string(), z.array(factTopicSchema)),
 });
 export type FrozenFactCheck = z.infer<typeof factCheckSchema>;
 
-/** The topics a claim on `topic` is checked against: its own, then its frozen neighbours. */
 export function factScope(factCheck: FrozenFactCheck, topic: FactTopic): FactTopic[] {
   return [topic, ...(factCheck.related_topics[topic] ?? [])];
 }
 
-/** The claim topics with at least one frozen fact in scope; any other claim is not covered. */
 export function checkedTopics(factCheck: FrozenFactCheck): ReadonlySet<FactTopic> {
   const withFacts = new Set(factCheck.facts.map((fact) => fact.topic));
   return new Set(
@@ -61,7 +45,6 @@ export function checkedTopics(factCheck: FrozenFactCheck): ReadonlySet<FactTopic
   );
 }
 
-/** What a new audit freezes: the versions and gateway model in force now, for a brand audit only. */
 export function admittedPerceptionVersions(input: {
   auditScope: string;
   factCheck: FrozenFactCheck | null;
@@ -79,11 +62,6 @@ export function admittedPerceptionVersions(input: {
   };
 }
 
-/**
- * The fact-check a new brand audit freezes: the newest revision of each
- * confirmed fact, topic-ordered and capped. Null outside the pilot, for
- * other scopes, or when the project has no confirmed fact.
- */
 export async function admittedFactCheck(
   db: Database,
   input: { workspaceId: string; projectId: string; auditScope: string },
@@ -126,23 +104,16 @@ export async function admittedFactCheck(
   };
 }
 
-/** The audit's frozen fact-check, or null for an audit outside the pilot. */
 export function frozenFactCheck(configuration: unknown): FrozenFactCheck | null {
   const parsed = factCheckSchema.safeParse(record(configuration).fact_check);
   return parsed.success ? parsed.data : null;
 }
 
-/** The audit's frozen versions, or null for an audit that is not perceived. */
 export function frozenPerceptionVersions(configuration: unknown): PerceptionVersions | null {
   const parsed = versionsSchema.safeParse(record(configuration).perception);
   return parsed.success ? parsed.data : null;
 }
 
-/**
- * Queue one classification for a perceived answer that names the brand or a
- * competitor. Runs inside the analysis transaction; no network I/O here. The
- * key holds the extractor version, so a re-derived finalize never adds a row.
- */
 export async function enqueuePerception(
   db: Database | Transaction<DB>,
   input: {

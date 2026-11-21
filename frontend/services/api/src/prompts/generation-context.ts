@@ -18,6 +18,7 @@ import {
   wantedTopics,
   type GenerationInput,
 } from './generation-input.ts';
+import { brandTopics } from './brand-topics.ts';
 import { acquireProjectLock } from './locks.ts';
 import { loadObservedQueries } from './observed-queries.ts';
 import { scopedPromptSet } from './prompt-sets.ts';
@@ -26,20 +27,13 @@ import { linkTopicOfferings } from './topics.ts';
 
 export type OfferingMap = z.infer<typeof offeringMapSchema>;
 const businessMap = z.object({ offerings: z.array(offeringMapSchema).default([]) });
-/** The persisted `business_context.business_map` offerings. */
 export const offeringMaps = (business: Record<string, unknown>): OfferingMap[] =>
   businessMap.parse(business.business_map ?? {}).offerings;
 
-/** Columns generation reads; widening one is a reviewed change, not a `selectAll`. */
 const topicColumns = ['id', 'name', 'description', 'parent_id'] as const;
 const promptColumns = ['id', 'topic_id', 'text', 'normalized_text_hash'] as const;
 const candidateColumns = ['text', 'normalized_text_hash', 'disposition', 'jev_decision'] as const;
 
-/**
- * What a topic proposal reads for an authorized project: the saved
- * offerings, the brand names to strip, the category vocabulary and the
- * names of the topics it already has, which proposals never repeat.
- */
 export async function topicProposalInput(
   trx: Database,
   scope: { workspaceId: string; projectId: string },
@@ -78,9 +72,6 @@ export async function topicProposalInput(
     .execute();
   const business = record(profile?.business_context);
   return {
-    // The saved offerings, whatever their review state: onboarding saves the
-    // ones its reader just reviewed as unreviewed, and the proposal filter
-    // keeps only buyer-facing names grounded in them.
     offerings: strings(profile?.products_services),
     brandNames: [brand?.name ?? project.brand_name, ...aliases.map((row) => row.alias)],
     categoryTerms: [...strings(business.category_terms), ...strings(business.category_aliases)],
@@ -89,7 +80,6 @@ export async function topicProposalInput(
   };
 }
 
-/** What a topic recovery reads, authorized; null when the project already has topics. */
 function recoveryInput(db: Database, workspaceId: string, setId: string) {
   return db.transaction().execute(async (trx) => {
     const set = await scopedPromptSet(trx, workspaceId, setId);
@@ -98,19 +88,10 @@ function recoveryInput(db: Database, workspaceId: string, setId: string) {
   });
 }
 
-/**
- * A project without topics gets buyer-facing topics proposed from its
- * saved offerings before generation (`proposeTopics`). The proposal's
- * model call runs outside any transaction after `reserve` admits it; the
- * topics are written under the project lock only if the project still has
- * none. Returns what was created, what the cap left out and what was dropped,
- * for run provenance; null when the project already had topics.
- */
 export async function recoverTopics(
   db: Database,
   scope: { workspaceId: string; setId: string },
   model: {
-    /** Configures the model only once the set is authorized and needs topics. */
     gateway: () => ModelGateway;
     deadline: AbortSignal;
     reserve: () => Promise<void>;
@@ -169,7 +150,6 @@ export async function recoverTopics(
 }
 export type TopicRecovery = Awaited<ReturnType<typeof recoverTopics>>;
 
-/** Persisted field sources, overridden by each profile field's review state. */
 function fieldSources(business: Record<string, unknown>, sources: Record<string, unknown>) {
   const result = { ...record(business.field_sources) };
   for (const field of ['description', 'positioning', 'products_services', 'target_audience']) {
@@ -181,7 +161,6 @@ function fieldSources(business: Record<string, unknown>, sources: Record<string,
   return result;
 }
 
-/** The project's brand and its aliases, when a brand is recorded. */
 async function brandIdentity(
   trx: Database,
   { workspaceId, projectId }: { workspaceId: string; projectId: string },
@@ -203,7 +182,6 @@ async function brandIdentity(
   return { brand, aliases };
 }
 
-/** The current demand snapshot and its highest-priority active signals, at most `count`. */
 async function demandGrounding(
   trx: Database,
   { workspaceId, projectId, count }: { workspaceId: string; projectId: string; count: number },
@@ -251,7 +229,6 @@ type GenerationProject = Pick<
   'country_code' | 'primary_market' | 'language_code'
 >;
 
-/** The business context generation reads: the persisted context overlaid with profile fields. */
 function generationBusiness({
   profile,
   project,
@@ -305,11 +282,8 @@ export function generationContext(
       .where('project_id', '=', project.id)
       .where('workspace_id', '=', workspaceId)
       .executeTakeFirst();
-    const topics = await trx
-      .selectFrom('topics')
+    const topics = await brandTopics(trx, { workspaceId, projectId: project.id })
       .select(topicColumns)
-      .where('project_id', '=', project.id)
-      .where('workspace_id', '=', workspaceId)
       .orderBy('created_at')
       .orderBy('id')
       .execute();
@@ -332,7 +306,6 @@ export function generationContext(
       .select(promptColumns)
       .where('prompt_set_id', '=', setId)
       .where('workspace_id', '=', workspaceId)
-      // Oldest first: model and judge context keep the most recent texts.
       .orderBy('created_at')
       .orderBy('id')
       .execute();
@@ -385,8 +358,6 @@ export function generationContext(
       { name: context.brand_name, aliases: context.brand_aliases },
       ...context.competitors,
     ]);
-    // Persisted search data only: grounding never fetches, and an empty result
-    // leaves generation exactly as it is without it.
     const observed = await loadObservedQueries(trx, {
       workspaceId,
       projectId: project.id,

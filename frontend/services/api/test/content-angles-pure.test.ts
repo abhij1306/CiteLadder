@@ -1,7 +1,3 @@
-/**
- * Content-angle lineage, the clustering request, aggregation and output
- * validation: pure functions, no database.
- */
 import { describe, expect, it } from 'vitest';
 
 import { aggregateAngle } from '../src/content-gaps/aggregate.ts';
@@ -35,9 +31,7 @@ describe('assignLineages', () => {
     const lineages = assignLineages(
       previous,
       [
-        // 3 shared of 5 total: Jaccard 0.6.
         { key: 'relabelled', topicId: 't1', memberUrls: ['a', 'b', 'c'] },
-        // 1 shared of 3 total: Jaccard 0.33.
         { key: 'drifted', topicId: 't1', memberUrls: ['x', 'z'] },
       ],
       0.5,

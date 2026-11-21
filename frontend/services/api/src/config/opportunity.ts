@@ -1,7 +1,5 @@
-/** Opportunity catalog: deterministic decisions over persisted evidence. */
 import type { ExpectedCheck } from '@citeladder/contracts/opportunities';
 
-/** What a per-product metric rule reads and the value that clears it. */
 type ProductMetricRule = Pick<
   Extract<ExpectedCheck, { kind: 'product_metric' }>,
   'metric' | 'comparison' | 'target' | 'min_samples'
@@ -16,13 +14,9 @@ export const opportunities = {
   CODE_OPPORTUNITY_ORDER_CONFLICT: 'opportunity_order_conflict',
   RULE_CITED_ALTERNATIVES: 'cited_alternatives_without_uploaded_presence',
   RULE_CATALOG_FIELDS_MISSING: 'catalog_fields_missing',
-  // A confirmed decline already passed the audit's materiality and agreement
-  // gates, so confidence and size rank it and never drop it below the floor.
   CONFIRMED_DECLINE_CONFIDENCE_FLOOR: 0.5,
   CONFIRMED_DECLINE_GAP_CAP: 2,
   DEMAND_SIGNAL_GAP_FACTOR: 2,
-  // A demand signal's value factor is its priority score over this scale,
-  // capped at 1 and never below the floor, so a zero score still ranks.
   DEMAND_SIGNAL_PRIORITY_SCALE: 100,
   DEMAND_SIGNAL_VALUE_FACTOR_FLOOR: 0.01,
   OPPORTUNITY_TYPE_VISIBILITY: 'visibility',
@@ -41,7 +35,6 @@ export const opportunities = {
   // after that its last observation stands. Declarations may be backdated by
   // at most the same span, and never placed in the future beyond the skew.
   VERIFICATION_WINDOW_DAYS: 30,
-  // A new page takes longer to rank than an edited one takes to recrawl.
   CHECK_KIND_WINDOW_DAYS: { keyword_presence: 90 } satisfies Partial<
     Record<ExpectedCheck['kind'], number>
   >,
@@ -49,7 +42,6 @@ export const opportunities = {
   VISIBILITY_METRIC_PROMPT_SCORE: 'prompt_score',
   VISIBILITY_CHECK_MIN_DELTA: 1,
   TRAFFIC_METRIC_CLICKS: 'clicks',
-  // Clicks per day: sync windows differ in length, so windows compare as rates.
   TRAFFIC_CHECK_MIN_DAILY_GAIN: 0.1,
   OPPORTUNITY_RULES_BY_ID: {
     brand_absent_high_value_prompt: {
@@ -84,61 +76,6 @@ export const opportunities = {
       check_kind: 'visibility_metric',
       severity: 'high',
       title: 'Prompt visibility has a confirmed decline',
-    },
-    missing_structured_data: {
-      action_path: 'owned',
-      enabled: true,
-      opportunity_type: 'site',
-      remediation:
-        "Add schema.org structured data (JSON-LD preferred) so answer engines can parse and attribute the page's content.",
-      rule_id: 'missing_structured_data',
-      check_kind: 'site_rule',
-      severity: 'medium',
-      title: 'Missing structured data on owned page',
-    },
-    schema_properties_incomplete: {
-      action_path: 'owned',
-      enabled: true,
-      opportunity_type: 'site',
-      remediation:
-        "Complete the required and recommended properties for the page's expected schema type, using the exact missing-property evidence as the implementation checklist.",
-      rule_id: 'schema_properties_incomplete',
-      check_kind: 'site_rule',
-      severity: 'medium',
-      title: 'Schema properties are incomplete',
-    },
-    schema_visible_content_conflict: {
-      action_path: 'owned',
-      enabled: true,
-      opportunity_type: 'site',
-      remediation:
-        'Align the visible title, headings, and page claims with the corresponding schema.org values; do not leave competing facts for answer engines to resolve.',
-      rule_id: 'schema_visible_content_conflict',
-      check_kind: 'site_rule',
-      severity: 'high',
-      title: 'Visible content conflicts with schema',
-    },
-    content_structure_incomplete: {
-      action_path: 'owned',
-      enabled: true,
-      opportunity_type: 'site',
-      remediation:
-        "Strengthen the page's substantive content, answer-first opening, and question-led headings using the persisted rule evidence.",
-      rule_id: 'content_structure_incomplete',
-      check_kind: 'site_rule',
-      severity: 'low',
-      title: 'Answer-oriented content structure is incomplete',
-    },
-    citability_trust_incomplete: {
-      action_path: 'owned',
-      enabled: true,
-      opportunity_type: 'site',
-      remediation:
-        'Add the missing author, date, source, or organization identity signals so readers and answer engines can assess provenance.',
-      rule_id: 'citability_trust_incomplete',
-      check_kind: 'site_rule',
-      severity: 'medium',
-      title: 'Citability and trust signals are incomplete',
     },
     product_not_mentioned: {
       action_path: 'owned',
@@ -305,21 +242,16 @@ export const opportunities = {
       severity: 'low',
       title: 'Page has weak internal-link authority',
     },
-    // One Site Health issue family across its pages (BL2): `SITE_ISSUE_FAMILY`.
-    // Severity and title are the family's own Site Health rule's.
     site_issue_family: {
       action_path: 'owned',
       enabled: true,
       opportunity_type: 'site',
-      remediation:
-        'This defect fails on many pages for one cause, usually a shared template or component. Fix that cause once, then let the next comparable crawl confirm every affected page passes.',
+      remediation: '',
       rule_id: 'site_issue_family',
       check_kind: 'issue_family',
       severity: 'high',
-      title: 'A Site Health defect repeats across pages',
+      title: 'A Site Health issue repeats across pages',
     },
-    // A site change is a field that moved between two crawls, not a Site
-    // Health rule a crawl evaluates, so no check can read it.
     site_change_potential_regression: {
       action_path: 'owned',
       enabled: true,
@@ -369,14 +301,12 @@ export const opportunities = {
       enabled: true,
       opportunity_type: 'topic',
       remediation:
-        'Competitors rank for this search and you have no ranking page for it. Improve the page that already covers it or publish one that answers it directly, then confirm in Search Console or a later Keyword Research analysis. DataForSEO rankings are provider estimates.',
+        'Competitors rank for this search and you have no ranking page for it. Improve the page that already covers it or publish one that answers it directly, then confirm in Search Console or a later Keyword research analysis. DataForSEO rankings are provider estimates.',
       rule_id: 'search_keyword_gap',
       check_kind: 'keyword_presence',
       severity: 'medium',
       title: 'Competitors rank for a search you do not',
     },
-    // Content gaps from persisted content angles (content optimization section 2).
-    // Measured by `owned_url_cited`: an answer to the angle's prompts cites your page.
     content_gap_improve_page: {
       action_path: 'owned',
       enabled: true,
@@ -432,8 +362,6 @@ export const opportunities = {
       severity: 'high',
       title: 'Competitors listed on a cited page you are absent from',
     },
-    // `check_kind`: what a declaration freezes for the rule's findings; null
-    // when nothing can isolate the work (`opportunities/checks/`).
   } satisfies Record<
     string,
     Record<string, unknown> & { check_kind: ExpectedCheck['kind'] | null }
@@ -447,34 +375,10 @@ export const opportunities = {
     emerging_query: 'emerging_query',
     declining_query: 'declining_query',
   },
-  SITE_ISSUE_TO_OPPORTUNITY_RULE_ID: {
-    'aeo.structured_data_present': 'missing_structured_data',
-    'aeo.schema_required_valid': 'schema_properties_incomplete',
-    'aeo.schema_recommended_present': 'schema_properties_incomplete',
-    'aeo.product_evidence_facts': 'schema_properties_incomplete',
-    'aeo.listing_item_facts': 'schema_properties_incomplete',
-    'aeo.schema_matches_content': 'schema_visible_content_conflict',
-    'aeo.answer_first': 'content_structure_incomplete',
-    'aeo.question_headings': 'content_structure_incomplete',
-    'aeo.heading_hierarchy': 'content_structure_incomplete',
-    'aeo.product_answer_facts': 'content_structure_incomplete',
-    'aeo.listing_answer_set': 'content_structure_incomplete',
-    'aeo.visible_attribution': 'citability_trust_incomplete',
-    'aeo.content_date_present': 'citability_trust_incomplete',
-    'aeo.offer_freshness_signal': 'citability_trust_incomplete',
-    'aeo.source_support_present': 'citability_trust_incomplete',
-    'aeo.organization_identity': 'citability_trust_incomplete',
-    'aeo.trust_path_present': 'citability_trust_incomplete',
-    'aeo.product_brand_identity': 'citability_trust_incomplete',
-  },
-  // Site Health defects whose rule id starts with `ISSUE_RULE_PREFIX` become one
-  // finding per rule across its affected pages, never one per page, so a shared
-  // component failing on 179 pages is one Action. The cohort lists at most
-  // `COHORT_PAGES_MAX` pages in URL order, which bounds what a declaration
-  // freezes and a crawl re-reads; the Agent reads at most `AGENT_PAGES_MAX`.
   SITE_ISSUE_FAMILY: {
     RULE_ID: 'site_issue_family',
-    ISSUE_RULE_PREFIX: 'web.',
+    FINDING_CLASSES: ['defect', 'advisory'],
+    DEFECT_VALUE_FACTOR: 1.01,
     COHORT_PAGES_MAX: 500,
     AGENT_PAGES_MAX: 50,
   },
@@ -518,7 +422,6 @@ export const opportunities = {
     not_assessed: 1,
     unavailable: 1,
   },
-  // Keyword gaps from published Search Intelligence datasets (owner, 2026-10-09).
   SEARCH_GAP: {
     RULE_ID: 'search_keyword_gap',
     MIN_SEARCH_VOLUME: 50,
@@ -527,59 +430,42 @@ export const opportunities = {
     MAX_DATASET_AGE_DAYS: 90,
     MAX_ROWS_READ: 5000,
     EXCLUDED_INTENTS: ['navigational'],
-    // log10(volume) / this, clamped: 100 → 0.5, 10,000 → 1.
     VALUE_LOG_DIVISOR: 4,
     MIN_VALUE_FACTOR: 0.25,
     GAP_FACTOR_BASE: 2,
     GAP_FACTOR_PER_EXTRA_COMPETITOR: 0.5,
     GAP_FACTOR_CAP: 3,
   },
-  // Content-gap priority (content optimization section 2). The raising
-  // thresholds are `min_citations` and `min_domains` in content optimization
-  // policy; these only rank what they let through. The model never scores.
   CONTENT_GAP: {
     RULE_IMPROVE_PAGE: 'content_gap_improve_page',
     RULE_NEW_PAGE: 'content_gap_new_page',
-    // Each prompt beyond the first adds this much value, up to the cap.
     VALUE_PER_EXTRA_PROMPT: 0.1,
     VALUE_FACTOR_CAP: 2,
-    // 1 + log10(citations) + this × the share of cited domains that are competitors, capped.
     COMPETITOR_SHARE_WEIGHT: 1,
     GAP_FACTOR_CAP: 3,
   },
-  // Commerce Actions from the per-product metrics (commerce improvement PR 9).
-  // Each rule names the metric it reads, the value that clears it and the
-  // fewest samples a reading needs: below that the product has too little data
-  // and fires nothing. A rule fires when a sufficient reading is not cleared;
-  // a declared Action is met when a later window's reading clears it.
   PRODUCT_METRICS: {
-    // One of `policy.commerce.products.window_days`.
     WINDOW_DAYS: 30,
     PAGE_SIZE: 500,
     RULES: {
-      // Samples: executions in the window. Cleared by one appearance.
       product_not_mentioned: {
         metric: 'appearances',
         comparison: 'at_least',
         target: 1,
         min_samples: 5,
       },
-      // Samples: quotes in the catalog currency. Cleared within 10% of the catalog price.
       price_mismatch: {
         metric: 'price_gap_share',
         comparison: 'at_most',
         target: 0.1,
         min_samples: 2,
       },
-      // Samples: ordered appearances. Cleared by a win rate of 20% or more.
       losing_position: {
         metric: 'win_rate',
         comparison: 'at_least',
         target: 0.2,
         min_samples: 3,
       },
-      // Samples: merchant mentions (answers per merchant domain). Cleared by
-      // one answer sending shoppers to your own store.
       merchant_absent: {
         metric: 'owned_merchant_answers',
         comparison: 'at_least',
@@ -599,7 +485,6 @@ export const opportunities = {
   PRIORITY_ROUNDING_DECIMALS: 1,
   MIN_PRIORITY_TO_SURFACE: 10,
   RECOMPUTE_MAX_ANALYSES: 5000,
-  RECOMPUTE_MAX_ISSUES: 5000,
   LIST_DEFAULT_LIMIT: 50,
   LIST_MAX_LIMIT: 200,
 };

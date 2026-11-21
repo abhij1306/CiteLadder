@@ -11,15 +11,6 @@ import {
 
 import { cn } from '@/lib/utils';
 
-/**
- * Official CiteLadder brand logo: the speech-bubble mark, with or without the
- * wordmark. Drawn inline in two tokens only — the ink (`currentColor`, the
- * bubble and "Ladder") and the forest accent (the bars and "Cite") — so both
- * forms resolve to the current theme without a filter and never carry a
- * colour outside the palette. Sizing is governed by `BRAND_LOGO_SIZES` or an
- * explicit `size`.
- */
-
 export const BRAND_LOGO_SIZES = {
   brand: 18,
   compact: 16,

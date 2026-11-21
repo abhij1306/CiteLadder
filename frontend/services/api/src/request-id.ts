@@ -1,10 +1,3 @@
-/**
- * Correlation ids for request tracing.
- *
- * A safe client-supplied id is kept, anything else is replaced by a fresh
- * 16-hex-character id, and the id is echoed in the configured response header
- * and bound to every log record written while the request runs.
- */
 import { randomUUID } from 'node:crypto';
 
 import type { MiddlewareHandler } from 'hono';
@@ -15,7 +8,6 @@ import { withCorrelationId } from './logging.ts';
 const MAX_LENGTH = 128;
 const SAFE_ID = /^[\p{L}\p{N}\-_.]+$/u;
 
-/** Accept a bounded identifier safe to echo in headers and logs. */
 function sanitizeCorrelationId(value: string): string {
   const candidate = value.trim();
   const length = [...candidate].length;

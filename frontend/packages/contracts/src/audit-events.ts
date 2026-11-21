@@ -3,16 +3,6 @@ import { z } from 'zod';
 const responseObject = <Shape extends z.ZodRawShape>(shape: Shape) => z.object(shape);
 const uuid = () => z.uuid();
 
-// ---------------------------------------------------------------------------
-// Audit events — the discriminated envelope shared by `GET /audits/{id}/events`
-// and its SSE stream. On the wire SSE `event:` IS `event_type` and SSE `id:` IS
-// the event UUID (the `Last-Event-ID` resume cursor).
-//
-// This is a DISCRIMINATED UNION, not a permissive envelope: an unknown
-// `event_type` fails parsing rather than reaching a handler as a partial
-// object. Payloads are invalidation signals only — never treat one as a row.
-// ---------------------------------------------------------------------------
-
 const eventEnvelope = <Type extends string, Payload extends z.ZodTypeAny>(
   eventType: Type,
   payload: Payload,

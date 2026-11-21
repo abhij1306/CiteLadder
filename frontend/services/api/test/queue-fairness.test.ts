@@ -1,8 +1,3 @@
-/**
- * Workspace fairness, lane by lane, against real PostgreSQL: a quiet
- * workspace's only task is served before a busy workspace's second task even
- * though the busy backlog has higher priority and has waited longer.
- */
 import { randomUUID } from 'node:crypto';
 
 import { sql } from 'kysely';
@@ -23,6 +18,8 @@ import {
   TaskQueue,
   type ClaimFilter,
 } from '../src/queue/task-queue.ts';
+import type { Database } from '../src/db/database.ts';
+import { commitTask } from '../src/site-health/site-task.ts';
 import { DiscoveryWorker } from '../src/workers/discovery-worker.ts';
 import { IntegrationWorker } from '../src/workers/integration-worker.ts';
 import { AgentFixtures } from './agent-support.ts';
@@ -35,7 +32,6 @@ import { testDatabase } from './support.ts';
 const db = testDatabase();
 const fixtures = new SiteFixtures(db);
 const agentFixtures = new AgentFixtures(db);
-// Kinds no production worker drains, so unscoped claims see only this file's rows.
 const ANALYTICS_PROBE = 'fairness_probe';
 const SITE_PROBE = 'fairness_probe';
 
@@ -46,11 +42,8 @@ afterAll(async () => {
 });
 
 type Backlog = { priority: number; count: number; availableAt: Date };
-/** One queue lane as its worker uses it: seed a workspace's backlog, claim the next row. */
 type Lane = {
-  /** A fresh workspace holding `count` claimable rows; returns its ID. */
   seed: (backlog: Backlog) => Promise<string>;
-  /** The workspace of the next claimed row, or null when nothing was claimed. */
   claimNext: () => Promise<string | null>;
 };
 
@@ -80,7 +73,6 @@ async function analyticsTasks(workspaceId: string, backlog: Backlog) {
   }
 }
 
-/** Claims only this lane's seeded workspaces, never other work in the shared database. */
 const seeded =
   (workspaces: readonly string[]): ClaimFilter =>
   (column) =>
@@ -141,7 +133,6 @@ function auditLane(): Lane {
   return {
     async seed(backlog) {
       const tenant = await auditTenant(db, fixtures);
-      // The tenant holds one prompt; each further prompt adds one task to the audit.
       for (let index = 1; index < backlog.count; index += 1)
         await prompt(db, tenant.setId, `Which trail shoes suit wet route ${index}?`);
       const [auditId] = await createAudits(
@@ -226,7 +217,6 @@ function agentLane(): Lane {
   };
 }
 
-/** Grant, connection and mapping for one workspace, then `count` queued sync runs. */
 async function integrationRuns(workspaceId: string, grantId: string, backlog: Backlog) {
   const projectId = await seedProject(db, workspaceId);
   const connectionId = randomUUID();
@@ -291,7 +281,6 @@ async function integrationRuns(workspaceId: string, grantId: string, backlog: Ba
         property_ref: 'https://example.test',
         project_id: projectId,
         sync_kind: 'on_demand',
-        // One active run per mapping window, so each run covers its own day.
         window_start: new Date(Date.UTC(2026, 6, 20 + index)),
         window_end: new Date(Date.UTC(2026, 6, 21 + index)),
         resync_seq: index + 1,
@@ -319,7 +308,6 @@ function integrationLane(): Lane {
   const workspaceByGrant = new Map<string, string>();
   let served: string | null = null;
   const client = { page: vi.fn(async () => ({ payload: { rows: [] }, rawRowCount: 0 })) };
-  // The claim is private to the worker; a token is resolved for the claimed run's grant.
   const worker = new IntegrationWorker(
     db,
     client,
@@ -376,5 +364,58 @@ describe.each([
 
     expect(order).toEqual(['busy', 'quiet', 'busy', 'busy']);
     expect(label(await lane.claimNext())).toBeNull();
+  });
+});
+
+describe('commit durability by lane', () => {
+  const durability = async (trx: Database) =>
+    (
+      await sql<{ value: string }>`select current_setting('synchronous_commit') as value`.execute(
+        trx,
+      )
+    ).rows[0]!.value;
+
+  it('commits only Site Health claims and task commits asynchronously, inside their transaction', async () => {
+    const site = new TaskQueue(db, SITE_HEALTH_LANE, { leaseTtlSeconds: 120 });
+    const analytics = new TaskQueue(db, ANALYTICS_LANE, { leaseTtlSeconds: 120 });
+    const crawl = await fixtures.crawl('running');
+    await fixtures.task(crawl, SITE_PROBE);
+    const { workspaceId } = await fixtures.tenant();
+    await analyticsTasks(workspaceId, { priority: 0, count: 1, availableAt: new Date() });
+
+    const seen: Record<string, string> = {};
+    const [claimed] = await site.claim({
+      owner: 'durability',
+      kinds: [SITE_PROBE],
+      where: seeded([crawl.workspaceId]),
+      onClaimed: async (trx) => {
+        seen.siteClaim = await durability(trx);
+      },
+    });
+    await analytics.claim({
+      owner: 'durability',
+      kinds: [ANALYTICS_PROBE],
+      where: seeded([workspaceId]),
+      onClaimed: async (trx) => {
+        seen.analyticsClaim = await durability(trx);
+      },
+    });
+    const committed = await commitTask(
+      { db, owner: 'durability', queue: site, signal: new AbortController().signal },
+      claimed!,
+      async (trx, lock) => {
+        seen.siteCommit = await durability(trx);
+        expect((await lock()).task.id).toBe(claimed!.id);
+      },
+    );
+    seen.afterwards = await durability(db);
+
+    expect(committed).toBe(true);
+    expect(seen).toEqual({
+      siteClaim: 'off',
+      analyticsClaim: 'on',
+      siteCommit: 'off',
+      afterwards: 'on',
+    });
   });
 });

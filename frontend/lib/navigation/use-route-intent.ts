@@ -4,7 +4,6 @@ import { useCallback } from 'react';
 import { prefetchRoute } from '@/lib/navigation/route-prefetch';
 import { useProjectContext } from '@/lib/project/project-context';
 
-/** Warm a destination's code and primary read on pointer or keyboard intent. */
 export function useRouteIntent() {
   const queryClient = useQueryClient();
   const { activeProject } = useProjectContext();

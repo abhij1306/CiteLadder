@@ -10,8 +10,6 @@ import {
   makePageSummary as page,
 } from '@/test/fixtures/site-health';
 
-/** A DIFFERENT crawl than the table is rendering — the row must link back to
- * the crawl that actually analyzed the page, not the one in view. */
 const SOURCE_CRAWL = '33333333-3333-4333-8333-333333333333';
 
 function LocationDisplay() {
@@ -41,18 +39,17 @@ describe('PagesTable', () => {
     expect(screen.getByTestId('location')).toHaveTextContent(`/site/crawls/${CRAWL}/pages/${UUID}`);
   });
 
-  it('shows seven columns, the page title as the link to its detail', () => {
+  it('leads with the page, its title the link to its detail', () => {
     renderPages(<PagesTable pages={[page()]} crawlId={CRAWL} />);
     expect(screen.getAllByRole('columnheader').map((head) => head.textContent)).toEqual([
-      '#',
       'Page',
       'Type',
       'Issues',
-      'Web Fundamentals',
-      'AEO Readiness',
-      'Last Audit',
+      'Web fundamentals',
+      'AEO readiness',
+      'Last audit',
     ]);
-    const link = screen.getByRole('link', { name: /^View Homepage — / });
+    const link = screen.getByRole('link', { name: /^View Homepage, / });
     expect(link).toHaveTextContent('Homepage');
     expect(link).toHaveAttribute('href', `/site/crawls/${CRAWL}/pages/${UUID}`);
   });
@@ -107,7 +104,6 @@ describe('PagesTable', () => {
     const row = screen.getByText('Homepage').closest('tr');
     expect(row).not.toBeNull();
     expect(within(row!).getByRole('cell', { name: 'Excluded' })).toBeInTheDocument();
-    // A measured score is the number alone: no evidence caption under it.
     expect(within(row!).getByRole('cell', { name: '46' })).toBeInTheDocument();
     expect(within(row!).queryByText('Limited evidence')).not.toBeInTheDocument();
     expect(within(row!).queryByText(/confidence/i)).not.toBeInTheDocument();
@@ -165,11 +161,8 @@ describe('PagesTable', () => {
         ]}
       />,
     );
-    // No zeroes rendered for the missing scores.
     expect(screen.queryByText('0')).not.toBeInTheDocument();
-    // Blocked status badge is shown.
     expect(screen.getByText('Blocked')).toBeInTheDocument();
-    // Placeholder appears for the missing score/issue cells.
     expect(screen.getAllByText('Not measured').length).toBeGreaterThan(0);
   });
 
@@ -213,7 +206,7 @@ describe('PagesTable', () => {
         crawlId={CRAWL}
       />,
     );
-    expect(screen.getByRole('link', { name: /^View Homepage — / })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: /^View Homepage, / })).toHaveAttribute(
       'href',
       `/site/crawls/${SOURCE_CRAWL}/pages/${UUID}`,
     );

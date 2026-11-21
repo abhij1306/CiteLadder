@@ -1,15 +1,16 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useEffect, type ReactNode } from 'react';
 
-import { GateNoticeFrame } from '@/components/layout/gate-notice-frame';
 import { Button } from '@/components/ui/button';
-import { RouteLoadingScreen } from '@/components/layout/page-shell';
+import { NoticePage } from '@/components/templates/notice-page';
 import { isWorkspaceOnlyRoute } from '@/lib/navigation/app-routes';
 import { useCanonicalProjectUrl, workspaceDestination } from '@/lib/navigation/project-destination';
 import { resolveGate, type NoticeKind } from '@/lib/project/bootstrap';
 import { ActiveProjectScopeProvider } from '@/lib/project/active-project-scope';
 import { useProjectContext } from '@/lib/project/project-context';
 import type { FailureScope } from '@/lib/project/selection';
+
+import { RouteLoadingScreen } from './page-shell';
 
 /**
  * The project-route gate.
@@ -44,10 +45,9 @@ export function OnboardingGate({ children }: Readonly<{ children: ReactNode }>) 
   useOnboardingRedirect(state === 'redirecting', activeWorkspaceId);
   useCanonicalProjectUrl(status === 'ready' && projectRequired);
 
-  // The route's own loading frame, so this wait and the page's first read are
-  // one loading state in one place rather than a bare box, then a header.
-  if (state === 'redirecting') return <RouteLoadingScreen label="Opening project setup…" />;
-  if (state === 'loading') return <RouteLoadingScreen label="Loading your workspace…" />;
+  if (state === 'redirecting')
+    return <NoticePage tone="loading" heading="Opening project setup…" />;
+  if (state === 'loading') return <RouteLoadingScreen />;
   if (state !== 'ready') {
     return (
       <GateNotice
@@ -59,11 +59,6 @@ export function OnboardingGate({ children }: Readonly<{ children: ReactNode }>) 
     );
   }
 
-  // A ready project-required route always has its project resolved; the
-  // screen receives it non-null instead of re-checking the selection. Keyed by
-  // the project, so a switch remounts the route: no draft, filter or mutation
-  // outcome of one project carries into the next, while view state held in the
-  // URL still does.
   if (projectRequired && activeProject) {
     return (
       <ActiveProjectScopeProvider
@@ -77,13 +72,6 @@ export function OnboardingGate({ children }: Readonly<{ children: ReactNode }>) 
   return <>{children}</>;
 }
 
-/**
- * Send an empty workspace to project creation, CARRYING the workspace.
- *
- * Refreshing the creation route, or reaching it in an account with more than
- * one membership, must not silently change which workspace the project ends
- * up in.
- */
 function useOnboardingRedirect(redirecting: boolean, workspaceId: string | null) {
   const router = useNavigate();
   useEffect(() => {
@@ -108,73 +96,61 @@ function GateNotice({
   if (kind === 'failed') return <FailureNotice errorScope={errorScope} onRetry={onRetry} />;
   if (kind === 'missing-project') {
     return (
-      <NoticeShell title="That project is unavailable">
-        <p>
-          It may have been deleted, or it belongs to a workspace you do not have access to. Choose
-          another project to continue.
-        </p>
-        <NoticeLink href={noticeHref('/projects', workspaceId)}>Go to your projects</NoticeLink>
-      </NoticeShell>
+      <NoticePage
+        tone="warning"
+        heading="That project is unavailable"
+        actions={
+          <NoticeLink href={noticeHref('/projects', workspaceId)}>Go to your projects</NoticeLink>
+        }
+      >
+        It may have been deleted, or it belongs to a workspace you do not have access to. Choose
+        another project to continue.
+      </NoticePage>
     );
   }
   return (
-    <NoticeShell title="This workspace has no projects">
-      <p>You have read-only access to this workspace.</p>
-      <NoticeLink href={noticeHref('/settings', workspaceId)}>Open workspace settings</NoticeLink>
-    </NoticeShell>
+    <NoticePage
+      tone="info"
+      heading="This workspace has no projects"
+      actions={
+        <NoticeLink href={noticeHref('/settings', workspaceId)}>Open workspace settings</NoticeLink>
+      }
+    >
+      You have read-only access to this workspace.
+    </NoticePage>
   );
 }
 
-/**
- * Say which read failed.
- *
- * Reporting a workspace failure when only the project list 403'd sent readers
- * looking for an access problem that was not there — the workspace had
- * resolved perfectly well.
- */
 function FailureNotice({
   errorScope,
   onRetry,
 }: Readonly<{ errorScope: FailureScope; onRetry: () => void }>) {
   const workspaceFailed = errorScope === 'workspace';
   return (
-    <NoticeShell
-      title={
+    <NoticePage
+      tone="negative"
+      heading={
         workspaceFailed ? 'Your workspace could not be loaded' : 'Projects could not be loaded'
       }
+      actions={
+        <Button variant="primary" onClick={onRetry}>
+          Retry
+        </Button>
+      }
     >
-      <p>Retry to load your {workspaceFailed ? 'workspace and its projects' : 'projects'}.</p>
-      <Button variant="secondary" className="w-fit" onClick={onRetry}>
-        Retry
-      </Button>
-    </NoticeShell>
+      Retry to load your {workspaceFailed ? 'workspace and its projects' : 'projects'}.
+    </NoticePage>
   );
 }
 
-/**
- * Carry the workspace out of a notice.
- *
- * These links are the reader's only way forward from a dead end, and the
- * workspace they are in is not necessarily the one that resolves by default.
- * Naming it keeps the destination in the same workspace even when device
- * storage is unavailable.
- */
 function noticeHref(pathname: string, workspaceId: string | null): string {
   return workspaceId ? workspaceDestination(pathname, null, workspaceId) : pathname;
 }
 
 function NoticeLink({ href, children }: Readonly<{ href: string; children: ReactNode }>) {
   return (
-    <Button asChild variant="secondary" className="w-fit">
+    <Button asChild variant="primary">
       <Link to={href}>{children}</Link>
     </Button>
-  );
-}
-
-function NoticeShell({ title, children }: Readonly<{ title: string; children: ReactNode }>) {
-  return (
-    <section className="grid min-h-[60vh] place-items-center py-[var(--page-section-gap)]">
-      <GateNoticeFrame title={title}>{children}</GateNoticeFrame>
-    </section>
   );
 }

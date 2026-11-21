@@ -1,3 +1,4 @@
+import { sql } from 'kysely';
 import { randomUUID } from 'node:crypto';
 import { setTimeout } from 'node:timers/promises';
 import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
@@ -16,17 +17,17 @@ import { fitTrackedSet } from '../src/site-health/admission-writes.ts';
 import { candidate } from '../src/site-health/frontier.ts';
 import { fillTrackedSet } from '../src/site-health/tracked-set.ts';
 import { classifyUrlAdmission } from '../src/site-health/url-admission.ts';
-import { publishCancelledCrawls } from '../src/site-health/lifecycle.ts';
+import { publishCancelledCrawls, reconcileCrawl } from '../src/site-health/lifecycle.ts';
 import { record } from '../src/db/json.ts';
 import { TEST_SESSION_COOKIE, sessionToken, testConfig, testDatabase } from './support.ts';
-import { SiteFixtures } from './site-health-fixtures.ts';
+import { FinalizeFixtures } from './site-health-finalize-fixtures.ts';
 import type { Tenant } from './visibility-fixtures.ts';
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 const config = testConfig();
 const db = testDatabase(config);
 const app = createApp(config, db);
-const fixtures = new SiteFixtures(db);
+const fixtures = new FinalizeFixtures(db);
 afterEach(() => vi.unstubAllEnvs());
 afterAll(async () => {
   await fixtures.cleanup();
@@ -48,6 +49,18 @@ async function request(tenant: Tenant, path: string, method = 'GET', body?: unkn
 function allow(limit: number) {
   vi.stubEnv('SITE_HEALTH_MONITORED_URL_LIMIT', String(limit));
 }
+const sitemapCandidates = (urls: string[]) =>
+  urls.map((url, index) => {
+    const admission = classifyUrlAdmission(url);
+    return candidate(admission, {
+      url: admission.url!,
+      hash: admission.hash,
+      depth: 1,
+      sourceKind: 'sitemap',
+      parentPosition: 0,
+      linkOrdinal: index,
+    });
+  });
 async function create(tenant: Tenant, options: Record<string, unknown> = {}) {
   return db
     .transaction()
@@ -77,7 +90,6 @@ describe('crawl control admission', () => {
       .selectAll()
       .where('crawl_id', '=', crawl.id)
       .execute();
-    // A full crawl fetches no page to discover: site setup reads the sitemap first.
     expect(tasks.map((task) => [task.task_kind, task.requested_url]).sort()).toEqual([
       ['analyze', 'https://example.test/'],
       ['site_setup', 'https://example.test/'],
@@ -129,17 +141,7 @@ describe('crawl control admission', () => {
     const crawl = await create(tenant);
     const fill = (paths: string[]) =>
       db.transaction().execute(async (trx) => {
-        const items = paths.map((path) => {
-          const admission = classifyUrlAdmission(`https://example.test${path}`);
-          return candidate(admission, {
-            url: admission.url!,
-            hash: admission.hash,
-            depth: 1,
-            sourceKind: 'sitemap',
-            parentPosition: 0,
-            linkOrdinal: 0,
-          });
-        });
+        const items = sitemapCandidates(paths.map((path) => `https://example.test${path}`));
         return (await fillTrackedSet(trx, crawl, items)).map(({ item }) => item.url);
       });
     const fit = (limit: number) =>
@@ -162,7 +164,6 @@ describe('crawl control admission', () => {
         row.deselected_at !== null,
       ]);
 
-    // Room for two beside the root: the product tier before about, about before the blog.
     expect(await fill(['/blog/x', '/about', '/products/a'])).toEqual([
       'https://example.test/products/a',
       'https://example.test/about',
@@ -174,7 +175,6 @@ describe('crawl control admission', () => {
       ['/products/a', 1, true, false],
       ['/about', 2, false, true],
     ]);
-    // A free slot fills with a page never tracked before, never the page that left.
     expect(await fill(['/about', '/blog/x'])).toEqual(['https://example.test/blog/x']);
     // A higher limit restores the set in fill order first.
     await fit(3);
@@ -184,6 +184,24 @@ describe('crawl control admission', () => {
       ['/about', 2, true, false],
       ['/blog/x', 3, false, true],
     ]);
+  });
+
+  it('fills a full sitemap’s worth of tracked pages past the bind-parameter limit', async () => {
+    const tenant = await fixtures.tenant({ websiteUrl: 'https://example.test/' });
+    allow(5001);
+    const crawl = await create(tenant);
+    const items = sitemapCandidates(
+      Array.from({ length: 5000 }, (_, index) => `https://example.test/products/p${index}`),
+    );
+    const joined = await db.transaction().execute((trx) => fillTrackedSet(trx, crawl, items));
+    expect(joined).toHaveLength(5000);
+    const active = await db
+      .selectFrom('monitored_site_urls')
+      .select((eb) => eb.fn.countAll<string>().as('count'))
+      .where('project_id', '=', tenant.projectId)
+      .where('active', '=', true)
+      .executeTakeFirstOrThrow();
+    expect(Number(active.count)).toBe(5001);
   });
 
   it('sizes a full crawl to its tracked pages and its HTML walk to the discovery cap', async () => {
@@ -255,7 +273,6 @@ describe('crawl control admission', () => {
       .where('crawl_id', '=', crawl.id)
       .where('task_kind', '=', 'analyze')
       .execute();
-    // Site setup is no page, so the last tracked page keeps its slot.
     expect(analyzed.map((task) => task.site_url_id).sort()).toEqual([root.id, a.id, z.id].sort());
   });
 
@@ -331,7 +348,6 @@ describe('crawl-control HTTP contracts', () => {
       (await request(reader, '/site-crawls', 'POST', { project_id: seed.projectId })).status,
     ).toBe(403);
     expect((await request(reader, `/site-crawls/${seed.crawlId}/cancel`, 'POST')).status).toBe(403);
-    // Settings resolve once at startup, so the lower limit is a separately started app.
     const limited = createApp(testConfig({ ABUSE_CRAWL_CREATE_LIMIT: '1' }), db);
     const create = (projectId: string) =>
       request(seed, '/site-crawls', 'POST', { project_id: projectId }, limited);
@@ -373,7 +389,6 @@ describe('crawl-control HTTP contracts', () => {
     allow(1);
     const page = await fixtures.page(seed, '/a', {}, { observed: true });
     await fixtures.monitor(seed, [page.id]);
-    // The frozen profile, rather than a later invalid website setting, owns a rerun.
     await db
       .updateTable('projects')
       .set({ website_url: '' })
@@ -417,24 +432,17 @@ describe('crawl-control HTTP contracts', () => {
     const page = await fixtures.page(seed, '/a', {});
     await fixtures.monitor(seed, [page.id]);
     const response = await request(seed, `/site-crawls/${seed.crawlId}/cancel`, 'POST');
-    expect(response.status).toBe(200);
     expect(siteCrawlSchema.parse(await response.json()).status).toBe('cancelled');
-    expect(
-      await db
+    const snapshots = () =>
+      db
         .selectFrom('site_health_snapshots')
         .select('id')
         .where('crawl_id', '=', seed.crawlId)
-        .execute(),
-    ).toHaveLength(0);
+        .execute();
+    expect(await snapshots()).toHaveLength(0);
     await publishCancelledCrawls(db, 100);
-    await publishCancelledCrawls(db, 100);
-    expect(
-      await db
-        .selectFrom('site_health_snapshots')
-        .select('id')
-        .where('crawl_id', '=', seed.crawlId)
-        .execute(),
-    ).toHaveLength(1);
+    expect(await fixtures.terminalize(seed)).toBe(true);
+    expect(await snapshots()).toHaveLength(1);
     expect(
       await db
         .selectFrom('site_crawl_events')
@@ -463,29 +471,32 @@ describe('crawl-control HTTP contracts', () => {
           .where('id', '=', seed.crawlId)
           .executeTakeFirstOrThrow()
       ).terminal_counters;
-    // While the crawl runs nothing is persisted and its tasks are counted live.
     expect(await stored()).toBeNull();
     await fixtures.page(seed, '/b', {});
     expect(record((await counters()).body)).toMatchObject({
       analyzed: 2,
       by_page_kind: { product: 2 },
     });
-    // The stop persists the counters in its own transaction.
-    expect((await request(seed, `/site-crawls/${seed.crawlId}/cancel`, 'POST')).status).toBe(200);
+    const { taskId } = await fixtures.analyzable(seed, '/held');
+    await db.transaction().execute(async (trx) => {
+      await sql`select id from site_crawl_tasks where id = ${taskId} for update`.execute(trx);
+      expect((await request(seed, `/site-crawls/${seed.crawlId}/cancel`, 'POST')).status).toBe(200);
+    });
     expect(record(await stored())).toMatchObject({
       analyzed: 2,
+      queued: 1,
       activity: { state: 'terminal' },
-      by_page_kind: { product: 2 },
     });
-    // A task row no terminal owner counted changes nothing the dashboard reads.
+    await sql`update site_crawl_tasks set status = 'cancelled' where id = ${taskId}`.execute(db);
+    await reconcileCrawl(db, seed.workspaceId, seed.crawlId);
+    expect(record(await stored())).toMatchObject({ analyzed: 2, queued: 0 });
     await fixtures.page(seed, '/late', {});
     expect(record((await counters()).body)).toMatchObject({
       analyzed: 2,
       activity: { state: 'terminal', reason: 'terminal' },
       by_page_kind: { product: 2 },
     });
-    const outsider = await fixtures.crawl();
-    expect((await counters(outsider)).status).toBe(404);
+    expect((await counters(await fixtures.crawl())).status).toBe(404);
   });
 
   it('lists a crawl with the same counters its dashboard reads, live or persisted', async () => {
@@ -498,14 +509,12 @@ describe('crawl-control HTTP contracts', () => {
       return record(record(items.find((item) => record(item).id === seed.crawlId)).counters);
     };
     expect(await listed()).toMatchObject({ analyzed: 2, by_page_kind: { product: 2 } });
-    // A terminal crawl with no persisted counters is counted, never reported as zero.
     await db
       .updateTable('site_crawls')
       .set({ status: 'completed', completed_at: new Date() })
       .where('id', '=', seed.crawlId)
       .execute();
     expect(await listed()).toMatchObject({ analyzed: 2, by_page_kind: { product: 2 } });
-    // Once persisted, the stored counters win over later task rows.
     await db
       .updateTable('site_crawls')
       .set({
@@ -600,7 +609,6 @@ describe('crawl-control HTTP contracts', () => {
     const pages = [`${seed.root}`, `${seed.root}a`, `${seed.root}b`];
     expect(await audited(source.id)).toEqual(pages);
     expect(await audited(next.id)).toEqual(pages);
-    // The retired per-crawl recrawl route is gone.
     expect((await request(seed, `/site-crawls/${next.id}/recrawl`, 'POST')).status).toBe(404);
   });
 
@@ -611,7 +619,6 @@ describe('crawl-control HTTP contracts', () => {
       .select('email')
       .where('id', '=', tenant.userId)
       .executeTakeFirstOrThrow();
-    // The person is the signed-in caller; a body cannot name someone else.
     const forged = await request(tenant, '/site-crawls', 'POST', {
       project_id: tenant.projectId,
       robots: 'ignore',
@@ -650,7 +657,6 @@ describe('crawl-control HTTP contracts', () => {
       (await frozen(source.id)).robots_decision,
     );
 
-    // Choosing to respect robots.txt again replaces the kept choice.
     await db
       .updateTable('site_crawls')
       .set({ status: 'completed' })

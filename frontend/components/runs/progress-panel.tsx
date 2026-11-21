@@ -1,37 +1,32 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 
-import { Badge } from '@/components/ui/badge';
+import { StatusMark } from '@/components/ui/status-mark';
+import { Tag } from '@/components/ui/tag';
 import { MeasurementContext } from '@/components/runs/measurement-context';
+import { CircleStop, Download, RotateCcw } from '@/lib/icons';
 import { useEngineCatalog } from '@/lib/providers/engines';
 import { marketLabel } from '@citeladder/contracts/markets';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { Dot } from '@/components/ui/icon';
+import { Icon } from '@/components/ui/icon';
+import { MastheadPrimary } from '@/components/ui/masthead-actions';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Inline, Stack } from '@/components/ui/layout';
-import { ProgressBar } from '@/components/ui/progress-bar';
-import { MutationNotice } from '@/components/ui/mutation-notice';
-import { StatRow } from '@/components/ui/stat-row';
+import { Spinner } from '@/components/ui/spinner';
+import { RungMeter } from '@/components/ui/rung-meter';
 import { humanizeApiError } from '@/lib/api/errors';
 import type { MutationNotice as MutationNoticeData } from '@/lib/api/mutation-notice';
 import { runsApi } from '@/lib/api/runs';
 import type { Audit } from '@citeladder/contracts';
 import { saveBlob } from '@/lib/download';
 import { useDisplayTimeZone } from '@/lib/display-timezone';
-import { formatDisplayDate, formatDisplayTime } from '@/lib/format';
+import { formatCount, formatDisplayTime } from '@/lib/format';
 import { AUDIT_STATES } from '@/lib/runs/status';
+import { Notice } from '@/components/ui/notice';
+import { FigureStrip } from '@/components/ui/figure-strip';
 
 type ExportFormat = 'csv' | 'md';
 
-/**
- * Authenticated CSV/MD export state for one run. Exports use the audit's
- * persisted workspace identity rather than a headerless navigation that could
- * resolve another workspace. The route owns this so its actions can live in the
- * page's identity band while the panel still reports an export failure.
- */
 export function useRunExport(audit: Audit | undefined) {
-  // The route stays mounted across runs (a repair run is a navigation, not a
-  // remount), so each state belongs to the run it was started for and is ignored
-  // once the reader is looking at another one.
   const [exporting, setExporting] = useState<{ auditId: string; format: ExportFormat } | null>(
     null,
   );
@@ -62,11 +57,6 @@ export function useRunExport(audit: Audit | undefined) {
   };
 }
 
-/**
- * The run's actions: exports, a Cancel enabled only while the backend still
- * accepts a cooperative cancel (i.e. not `reporting`/terminal), and a failure
- * rerun when something failed. Rendered in the route's identity band.
- */
 export function RunActions({
   audit,
   cancelPending,
@@ -78,7 +68,6 @@ export function RunActions({
 }: Readonly<{
   audit: Audit;
   cancelPending: boolean;
-  /** Cancel and rerun are offered only to a role that may run audits. */
   onCancel?: () => void;
   onRerunFailures?: () => void;
   rerunPending?: boolean;
@@ -89,45 +78,73 @@ export function RunActions({
   return (
     <>
       <Button variant="secondary" onClick={() => onExport('csv')} disabled={exporting !== null}>
+        <Icon icon={Download} />
         {exporting === 'csv' ? 'Exporting…' : 'Export CSV'}
       </Button>
       <Button variant="secondary" onClick={() => onExport('md')} disabled={exporting !== null}>
+        <Icon icon={Download} />
         {exporting === 'md' ? 'Exporting…' : 'Export MD'}
       </Button>
-      {onCancel ? (
-        <Button variant="danger" onClick={onCancel} disabled={!cancelable || cancelPending}>
+      {onCancel && (cancelable || cancelPending) ? (
+        <Button variant="danger" onClick={onCancel} disabled={cancelPending}>
+          <Icon icon={CircleStop} />
           {cancelPending ? 'Cancelling…' : 'Cancel run'}
         </Button>
       ) : null}
       {audit.failed_count > 0 && onRerunFailures ? (
-        <Button variant="secondary" onClick={onRerunFailures} disabled={rerunPending}>
-          {rerunPending ? 'Creating repair…' : 'Rerun failed'}
-        </Button>
+        <RerunFailed
+          primary={audit.status === 'failed'}
+          onRerun={onRerunFailures}
+          pending={rerunPending}
+        />
       ) : null}
     </>
   );
 }
 
+function RerunFailed({
+  primary,
+  onRerun,
+  pending,
+}: Readonly<{ primary: boolean; onRerun: () => void; pending: boolean }>) {
+  const button = (
+    <Button variant={primary ? 'primary' : 'secondary'} onClick={onRerun} disabled={pending}>
+      <Icon icon={RotateCcw} />
+      {pending ? 'Creating repair…' : 'Rerun failed'}
+    </Button>
+  );
+  return primary ? <MastheadPrimary>{button}</MastheadPrimary> : button;
+}
+
+export function ProgressSkeleton() {
+  return (
+    <FigureStrip
+      label="Run figures"
+      lead={<Skeleton variant="text" lines={1} label="Loading run" />}
+      segments={RUN_FIGURES.map(({ key, label }) => ({ key, label, value: null, loading: true }))}
+    />
+  );
+}
+
 function ProgressStatus({ audit, polling }: Readonly<{ audit: Audit; polling: boolean }>) {
   const engines = useEngineCatalog();
+  const timeZone = useDisplayTimeZone();
   return (
     <Inline className="flex-wrap">
-      <Badge variant="run-status" value={AUDIT_STATES[audit.status].badge}>
+      <span className="type-body text-ink-2">
+        Started {formatDisplayTime(audit.created_at, timeZone)}
+      </span>
+      <StatusMark variant="run-status" value={AUDIT_STATES[audit.status].badge}>
         {AUDIT_STATES[audit.status].label}
-      </Badge>
-      <Badge>{marketLabel(audit.market)}</Badge>
+      </StatusMark>
+      <Tag>{marketLabel(audit.market)}</Tag>
       <MeasurementContext provenance={audit.model_provenance} />
       {audit.not_applicable_engines.length ? (
-        <Badge>
+        <Tag>
           Not available in this market: {audit.not_applicable_engines.map(engines.label).join(', ')}
-        </Badge>
+        </Tag>
       ) : null}
-      {polling ? (
-        <Inline as="span" className="type-caption inline-flex tabular-nums" aria-live="polite">
-          <Dot className="activity-dot bg-info" />
-          {'Updating…'}
-        </Inline>
-      ) : null}
+      {polling ? <Spinner label="Updating…" showLabel /> : null}
     </Inline>
   );
 }
@@ -137,31 +154,29 @@ function RunProgress({
   finished,
 }: Readonly<{
   requested: number;
-  /** Answers that reached an outcome, failed ones included: a failure is no longer pending. */
   finished: number;
 }>) {
   const percent = requested > 0 ? Math.min(100, Math.round((finished / requested) * 100)) : 0;
 
-  return <ProgressBar label="Progress" value={percent} />;
+  return <RungMeter label="Progress" value={percent} />;
 }
 
-function ProgressMetrics({ audit }: Readonly<{ audit: Audit }>) {
-  const timeZone = useDisplayTimeZone();
+const RUN_FIGURES = [
+  { key: 'requested', label: 'Requested', count: (audit: Audit) => audit.requested_count },
+  { key: 'completed', label: 'Completed', count: (audit: Audit) => audit.completed_count },
+  { key: 'failed', label: 'Failed', count: (audit: Audit) => audit.failed_count },
+] as const;
+
+function ProgressMetrics({ audit, lead }: Readonly<{ audit: Audit; lead: ReactNode }>) {
   return (
-    <StatRow
-      segments={[
-        { key: 'requested', label: 'Requested', value: audit.requested_count },
-        { key: 'completed', label: 'Completed', value: audit.completed_count },
-        { key: 'failed', label: 'Failed', value: audit.failed_count },
-        // A date is not a figure: the day holds the figure's one line and the
-        // time, with its zone, is the line under it.
-        {
-          key: 'created',
-          label: 'Created',
-          value: formatDisplayDate(audit.created_at, timeZone),
-          sub: formatDisplayTime(audit.created_at, timeZone),
-        },
-      ]}
+    <FigureStrip
+      label="Run figures"
+      lead={lead}
+      segments={RUN_FIGURES.map(({ key, label, count }) => ({
+        key,
+        label,
+        value: formatCount(count(audit)),
+      }))}
     />
   );
 }
@@ -181,9 +196,11 @@ function ProgressNotices({
 }>) {
   return (
     <>
-      {errorMessage ? <p className="type-body text-negative">{errorMessage}</p> : null}
-      {cancelNotice ? <MutationNotice notice={cancelNotice} onRetry={onCancelRetry} /> : null}
-      {rerunNotice ? <MutationNotice notice={rerunNotice} onRetry={onRerunRetry} /> : null}
+      {errorMessage ? <Notice tone="negative">{errorMessage}</Notice> : null}
+      {cancelNotice ? (
+        <Notice kind="mutation" notice={cancelNotice} onRetry={onCancelRetry} />
+      ) : null}
+      {rerunNotice ? <Notice kind="mutation" notice={rerunNotice} onRetry={onRerunRetry} /> : null}
     </>
   );
 }
@@ -206,11 +223,8 @@ export function ProgressPanel({
   onRerunRetry,
 }: Readonly<{
   audit: Audit;
-  /** A failed export from `useRunExport`. */
   exportError?: string | null;
-  /** The A4 mutation notice for a failed cancel (verbatim 4xx, transient retry). */
   cancelNotice?: MutationNoticeData | null;
-  /** Retry affordance for a transient cancel failure. */
   onCancelRetry?: () => void;
   rerunNotice?: MutationNoticeData | null;
   onRerunRetry?: () => void;
@@ -218,29 +232,28 @@ export function ProgressPanel({
   const polling = AUDIT_STATES[audit.status].active;
 
   return (
-    <Card>
-      <CardContent>
-        <Stack gap="workspace">
-          <ProgressStatus audit={audit} polling={polling} />
-
-          {polling && audit.requested_count > 0 ? (
-            <RunProgress
-              requested={audit.requested_count}
-              finished={audit.completed_count + audit.failed_count}
-            />
-          ) : null}
-
-          <ProgressMetrics audit={audit} />
-
-          <ProgressNotices
-            errorMessage={exportError ?? audit.error_message}
-            cancelNotice={cancelNotice}
-            onCancelRetry={onCancelRetry}
-            rerunNotice={rerunNotice}
-            onRerunRetry={onRerunRetry}
-          />
-        </Stack>
-      </CardContent>
-    </Card>
+    <Stack gap="workspace">
+      <ProgressMetrics
+        audit={audit}
+        lead={
+          <Stack>
+            <ProgressStatus audit={audit} polling={polling} />
+            {polling && audit.requested_count > 0 ? (
+              <RunProgress
+                requested={audit.requested_count}
+                finished={audit.completed_count + audit.failed_count}
+              />
+            ) : null}
+          </Stack>
+        }
+      />
+      <ProgressNotices
+        errorMessage={exportError ?? audit.error_message}
+        cancelNotice={cancelNotice}
+        onCancelRetry={onCancelRetry}
+        rerunNotice={rerunNotice}
+        onRerunRetry={onRerunRetry}
+      />
+    </Stack>
   );
 }

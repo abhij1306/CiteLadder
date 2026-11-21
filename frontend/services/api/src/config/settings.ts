@@ -1,4 +1,3 @@
-/** The setting engine: one environment-overridable policy value and its validation. */
 import { ConfigError } from './config-error.ts';
 import { epochMicros, parseDatetime } from '../http/datetimes.ts';
 
@@ -19,7 +18,6 @@ const TRUE_VALUES = new Set(['1', 'on', 't', 'true', 'y', 'yes']);
 const FALSE_VALUES = new Set(['0', 'off', 'f', 'false', 'n', 'no']);
 
 function envValue(spec: SettingSpec, env: Env): string | undefined {
-  // Environment aliases are case-insensitive.
   const byLowerName = new Map(
     Object.entries(env).map(([name, value]) => [name.toLowerCase(), value]),
   );
@@ -66,7 +64,6 @@ function parseBoolean(name: string, raw: string): boolean {
 
 function parseDatetimeSetting(name: string, raw: string): Date | null {
   if (!raw.trim()) return null;
-  // Refuse calendar-invalid or free-form timestamps.
   const parsed = parseDatetime(raw.trim());
   if (parsed === null) throw new ConfigError(`${name} must be a timestamp`);
   // A naive timestamp is kept as "present but unusable"; demo access then
@@ -100,11 +97,6 @@ function resolveFromEnv(name: string, spec: SettingSpec, env: Env): unknown {
   return raw === undefined ? spec.default : parseSetting(name, spec, raw);
 }
 
-/**
- * Every catalogued setting, resolved and validated once from one environment.
- * `loadConfig` builds it at startup; owners read their values from it instead
- * of re-reading an environment.
- */
 export class Settings {
   readonly #values: ReadonlyMap<SettingSpec, unknown>;
 
@@ -116,7 +108,6 @@ export class Settings {
     this.#values = values;
   }
 
-  /** The resolved value; a setting outside the catalog is a programming error. */
   of(spec: SettingSpec): unknown {
     if (!this.#values.has(spec)) {
       throw new ConfigError(`${spec.env[0] ?? 'setting'} is not a catalogued setting`);
@@ -125,15 +116,12 @@ export class Settings {
   }
 }
 
-/** Where a setting's value comes from: the resolved settings, or an environment for unit tests and CLIs. */
 export type SettingSource = Settings | Env;
 
-/** Resolve one setting under `name` (used in error messages). */
 export function resolveSpec(name: string, spec: SettingSpec, source: SettingSource): unknown {
   return source instanceof Settings ? source.of(spec) : resolveFromEnv(name, spec, source);
 }
 
-/** Resolve one policy setting from its source. */
 export function resolveSettingSpec(spec: SettingSpec, source: SettingSource): unknown {
   return resolveSpec(spec.env[0] ?? 'setting', spec, source);
 }

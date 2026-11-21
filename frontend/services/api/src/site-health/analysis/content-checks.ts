@@ -1,4 +1,3 @@
-/** Content, identity, question and product readiness checks over persisted facts. */
 import { normalizeDomain } from '../../analysis/domains.ts';
 import { DAY_MS } from '../../calendar-days.ts';
 import { compareText } from '../../text-order.ts';
@@ -21,7 +20,6 @@ type Atom = {
   evidence: unknown;
 };
 
-/** An atom's outcome under its trait condition; an inapplicable atom is not a failure. */
 function atomDetail(
   contract: CompositeContract,
   name: string,
@@ -62,6 +60,11 @@ function structuredDataPresent(facts: Facts): CheckResult {
   const sd = record(facts.structured_data);
   const blocks = count(sd.count);
   const declared = list(sd.declared_types);
+  if (!declared.length && count(sd.invalid_json_ld_count) > 0)
+    return [
+      'not_applicable',
+      { reason: 'structured_data_invalid', invalid_json_ld_count: count(sd.invalid_json_ld_count) },
+    ];
   return [
     passFail(declared.length > 0),
     {
@@ -112,10 +115,6 @@ function contentDatePresent(facts: Facts): CheckResult {
   return [passFail(published || modified), evidence];
 }
 
-/**
- * The newest declared date against the audit time. An undated page is the date
- * check's finding, not this one's; a date that cannot be read stays unknown.
- */
 function contentRecency(facts: Facts): CheckResult {
   const dates = record(facts.dates);
   const declared = [text(dates.published), text(dates.modified)].filter((value) => value.trim());
@@ -136,10 +135,8 @@ function contentRecency(facts: Facts): CheckResult {
   return ['missing', { ...evidence, reason: 'content_not_recent' }];
 }
 
-/** The host of an absolute web URL; empty for anything else. */
 const bareHost = (value: string) =>
   /^https?:\/\//iu.test(value.trim()) ? normalizeDomain(value) : '';
-/** The organization links to profiles elsewhere (Wikidata, LinkedIn, ...) that confirm the entity. */
 function entityProfiles(facts: Facts): CheckResult {
   const types = new Set(analysisPolicy.rules.organization_bearing_schema_types);
   const blocks = records(record(facts.structured_data).blocks).filter((block) =>
@@ -196,8 +193,6 @@ function headingHierarchy(facts: Facts): CheckResult {
   const sections = records(facts.primary_heading_outline)
     .filter((item) => text(item.text).trim())
     .map((item) => ({ level: count(item.level), text: text(item.text).slice(0, 256) }));
-  // No headings means no hierarchy that could skip a level: nothing to judge,
-  // rather than something left unresolved that would hold coverage down.
   if (!sections.length)
     return [
       'not_applicable',
@@ -269,12 +264,14 @@ const questionRelationships = (facts: Facts) =>
 const relationshipSources = (items: Record<string, unknown>[]) =>
   [...new Set(items.map((item) => text(item.source)))].sort(compareText);
 
-/** Every observed FAQ question needs a server-rendered answer. */
 function answerFirst(facts: Facts): CheckResult {
   if (!Array.isArray(facts.question_answer_relationships))
     return ['unknown', { reason: 'question_relationships_unavailable' }];
   const relationships = questionRelationships(facts);
-  if (!relationships.length) return ['unknown', { reason: 'no_question_answer_relationships' }];
+  if (!relationships.length)
+    return text(facts.page_kind) === 'faq'
+      ? ['unknown', { reason: 'no_question_answer_relationships' }]
+      : ['not_applicable', { reason: 'no_question_headings' }];
   const answered = relationships.filter(
     (item) => item.answer_state === 'available' && text(item.answer).trim(),
   );
@@ -372,7 +369,6 @@ function productAnswerFacts(facts: Facts, contract: CompositeContract): CheckRes
   ];
 }
 
-/** An authored offer expiry checked at the frozen audit time. */
 function offerValidity(value: string, auditTime: unknown) {
   const validUntil = /^\d{4}-\d{2}-\d{2}/u.exec(value)?.[0];
   const parsed = validUntil ? new Date(`${validUntil}T00:00:00Z`) : null;
@@ -405,8 +401,6 @@ function offerFreshness(facts: Facts): CheckResult {
   };
   if (quoteLed(facts)) return ['not_applicable', { ...evidence, reason: 'quote_led_offer' }];
   if (!offer) return ['missing', { ...evidence, reason: 'offer_state_missing' }];
-  // A price shown only as page text: the whole machine-readable Offer is
-  // absent, not just its currency.
   if (!list(schema.price).length && !currency.length)
     return ['missing', { ...evidence, reason: 'offer_not_structured' }];
   if (!currency.length) return ['missing', { ...evidence, reason: 'offer_currency_missing' }];

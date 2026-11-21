@@ -1,10 +1,3 @@
-/**
- * The deterministic half of an Opportunity refresh: scoring and
- * consolidation, the rows and the immutable snapshot one refresh persists,
- * and the snapshot's read projection.
- *
- * Pure functions over loaded evidence.
- */
 import { sourceMixSchema as sourceMix } from '@citeladder/contracts/opportunities';
 
 import { randomUUID } from 'node:crypto';
@@ -27,7 +20,6 @@ const r = policy.opportunity.refresh;
 export type Scored = [DetectorHit, number];
 type Json = Record<string, unknown>;
 
-/** The crawl fields coverage reads. */
 export type CoverageCrawl = {
   status: string;
   score_summary: unknown;
@@ -35,10 +27,8 @@ export type CoverageCrawl = {
   failed_url_count: number | null;
 };
 
-/** A stored count, or 0 when absent. */
 const integer = (value: unknown): number => Math.trunc(Number(value) || 0);
 
-/** Exactly how much of a terminal crawl feeds detection. */
 export function siteCoverage(crawl: CoverageCrawl | null): [Json, string[]] {
   if (crawl === null) return [{}, []];
   const summary = record(crawl.score_summary);
@@ -66,16 +56,13 @@ export function siteCoverage(crawl: CoverageCrawl | null): [Json, string[]] {
 const mergedIds = (left: string[], right: string[]) =>
   [...new Set([...left, ...right])].sort(compareText);
 
-/** The hit's own severity when it carries a known one, else its rule's. */
 function hitSeverity(hit: DetectorHit): string {
   const own = hit.finding?.severity;
   return own && o.OPPORTUNITY_SEVERITIES.includes(own) ? own : rules[hit.rule_id]!.severity;
 }
 
-/** Positive when `left` is the higher-scored hit. */
 const preference = (left: Scored, right: Scored) => left[1] - right[1];
 
-/** Score, drop sub-threshold hits and fold one row per (rule, target). */
 export function scoreHits(hits: DetectorHit[]): Scored[] {
   const consolidated = new Map<string, Scored>();
   for (const hit of hits) {
@@ -89,7 +76,6 @@ export function scoreHits(hits: DetectorHit[]): Scored[] {
       consolidated.set(key, [hit, score]);
       continue;
     }
-    // `max` keeps the first of two equal candidates.
     const [selected, selectedScore] =
       preference([hit, score], current) > 0 ? [hit, score] : current;
     consolidated.set(key, [
@@ -109,7 +95,6 @@ export function scoreHits(hits: DetectorHit[]): Scored[] {
   );
 }
 
-/** The persisted fields of one new live Opportunity. */
 export function newOpportunity(hit: DetectorHit, score: number) {
   const rule = rules[hit.rule_id]!;
   return {
@@ -118,7 +103,7 @@ export function newOpportunity(hit: DetectorHit, score: number) {
     severity: hitSeverity(hit),
     priority_score: score,
     title: hit.finding?.title || rule.title,
-    remediation: rule.remediation,
+    remediation: hit.finding?.remediation || rule.remediation,
     ...targetColumns(hit.target),
     evidence: hit.evidence,
     source_analysis_ids: [...hit.source_analysis_ids],
@@ -147,7 +132,6 @@ export type SnapshotSources = {
   demand: { id: string; source_hash: string } | null;
 };
 
-/** One immutable refresh snapshot's persisted fields, over the new live set. */
 export function buildSnapshot(
   sources: SnapshotSources,
   rows: Pick<NewOpportunity, 'opportunity_type' | 'severity'>[],
@@ -189,7 +173,6 @@ export function buildSnapshot(
 
 type GapSnapshot = { prompt_index: number; snapshot_id: string | null; text: string };
 
-/** Stamp the audit and its gap prompts on the source mix. */
 export function stampSourceMix(
   auditId: string,
   snapshots: GapSnapshot[],
@@ -209,39 +192,25 @@ type CurrentSnapshot = {
   formula_version: string;
 };
 
-/**
- * Every persisted input a refresh reads, by identity: the audit, the Commerce
- * run, match pass and catalog fields, crawl (and the
- * newest page rerun it folds in), demand revision, internal-link run,
- * source-page revision, keyword-gap datasets and content-angle run.
- * Two refreshes over equal identities compute the same set.
- */
 export type SourceIdentity = {
   audit_id: string | null;
-  /** The latest Commerce run, read for Commerce hits apart from the brand run. */
   commerce_audit_id: string | null;
-  /** The newest match pass, read for the per-product metric findings. */
   commerce_match_pass_id: string | null;
-  /** The catalog products' fields, read for catalog-field and per-product findings. */
   commerce_catalog_revision: string | null;
   site_crawl_id: string | null;
-  /** The newest page rerun the crawl's view folds in (`foldedRerunId`). */
   site_rerun_id: string | null;
   demand_snapshot_id: string | null;
   demand_source_revision: string | null;
   internal_link_run_id: string | null;
   source_pages_revision: string | null;
   search_gap_revision: string | null;
-  /** The content-angle run content gaps are read from; null when none is current. */
   content_angle_run_id: string | null;
 };
 
-/** Equal identities; a stored one missing a field (an older snapshot) never matches. */
 export function sameIdentity(left: Record<string, unknown>, right: SourceIdentity): boolean {
   return Object.entries(right).every(([key, value]) => left[key] === value);
 }
 
-/** Whether the latest snapshot already describes these exact sources and versions. */
 export function snapshotIsCurrent(current: CurrentSnapshot | null, identity: SourceIdentity) {
   return (
     current !== null &&
@@ -252,7 +221,6 @@ export function snapshotIsCurrent(current: CurrentSnapshot | null, identity: Sou
   );
 }
 
-/** A persisted snapshot row, as its read projects it. */
 type StoredSnapshot = CurrentSnapshot & {
   audit_id: string | null;
   site_crawl_id: string | null;
@@ -275,7 +243,6 @@ const truthyRecord = (value: unknown) => {
   return Object.keys(found).length ? found : null;
 };
 
-/** One immutable snapshot, projected without recomputing any metric. */
 export function projectSnapshot(snapshot: StoredSnapshot) {
   return {
     id: snapshot.id,

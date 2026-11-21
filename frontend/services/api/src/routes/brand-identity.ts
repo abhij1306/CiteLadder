@@ -2,8 +2,14 @@ import {
   brandProfileSchema,
   businessMapSchema,
   competitorSchema,
+  projectThemeSchema,
 } from '@citeladder/contracts/project';
-import { brandFactListSchema, brandFactSchema } from '@citeladder/contracts/fact-checking';
+import {
+  brandFactImportResultSchema,
+  brandFactListSchema,
+  brandFactSchema,
+  verdictOverrideSchema,
+} from '@citeladder/contracts/fact-checking';
 import { observedCompetitorSchema } from '@citeladder/contracts/visibility';
 import type { Context } from 'hono';
 import { z } from 'zod';
@@ -16,31 +22,43 @@ import {
   readBrandProfile,
   updateBrandProfile,
 } from '../projects/brand-profile.ts';
+import { overrideVerdict, verdictOverrideRequest } from '../perception/verdict-overrides.ts';
 import {
   brandFactCreate,
+  brandFactImport,
   brandFactUpdate,
   createBrandFact,
+  importBrandFacts,
   listBrandFacts,
   updateBrandFact,
 } from '../projects/brand-facts.ts';
 import { businessMapUpdate, readBusinessMap, updateBusinessMap } from '../projects/business-map.ts';
-import { acceptSuggestion, COMPETITORS_WRITE } from '../commands/competitors.ts';
+import {
+  createTheme,
+  deleteTheme,
+  listThemes,
+  renameTheme,
+  themeRequest,
+} from '../projects/themes.ts';
+import { acceptSuggestion, COMPETITORS_WRITE, rejectSuggestion } from '../commands/competitors.ts';
 import { routeActor } from '../commands/permission.ts';
 import { listSuggestions } from '../projects/competitor-suggestions.ts';
 import { logoResponse } from '../projects/logos.ts';
-import { defineGetRoute, definePatchRoute, definePostRoute, definePutRoute } from './define.ts';
+import {
+  defineDeleteRoute,
+  defineGetRoute,
+  definePatchRoute,
+  definePostRoute,
+  definePutRoute,
+  projectScopeOf,
+} from './define.ts';
 import { fileResponse } from './opportunity-contracts.ts';
 
 const family = 'brand-identity';
-/** The path project inside the active workspace. */
 const activeProject = { family, authorize: 'active-project' } as const;
 const root = '/api/v1/projects/{project_id}';
 const uuid = { scalar: { kind: 'uuid' }, required: true } as const;
 const projectPath = { project_id: uuid } as const;
-
-function scopeOf(c: Context<AppEnv>, projectId: string) {
-  return { workspaceId: c.get('workspace').workspaceId, projectId };
-}
 
 /** Logo reads authorize through the path: an `<img>` sends no workspace header. */
 function serveLogo(
@@ -60,7 +78,7 @@ export const brandIdentityRoutes = [
     params: { path: projectPath, query: {} },
     response: brandProfileSchema,
     async handle({ c, db }, { path }) {
-      return readBrandProfile(db, scopeOf(c, path.project_id));
+      return readBrandProfile(db, projectScopeOf(c, path.project_id));
     },
   }),
   definePutRoute({
@@ -71,7 +89,7 @@ export const brandIdentityRoutes = [
     body: brandProfileUpdate,
     response: brandProfileSchema,
     async handle({ c, db }, { path }) {
-      const scope = scopeOf(c, path.project_id);
+      const scope = projectScopeOf(c, path.project_id);
       const update = await readBody(c, brandProfileUpdate);
       return updateBrandProfile(db, scope, c.get('user').id, update);
     },
@@ -82,7 +100,7 @@ export const brandIdentityRoutes = [
     params: { path: projectPath, query: {} },
     response: brandFactListSchema,
     async handle({ c, db }, { path }) {
-      return listBrandFacts(db, scopeOf(c, path.project_id));
+      return listBrandFacts(db, projectScopeOf(c, path.project_id));
     },
   }),
   definePostRoute({
@@ -93,8 +111,38 @@ export const brandIdentityRoutes = [
     body: brandFactCreate,
     response: brandFactSchema,
     async handle({ c, db }, { path }) {
-      const scope = scopeOf(c, path.project_id);
+      const scope = projectScopeOf(c, path.project_id);
       return createBrandFact(db, scope, c.get('user').id, await readBody(c, brandFactCreate));
+    },
+  }),
+  definePostRoute({
+    ...activeProject,
+    path: `${root}/brand-facts/import`,
+    capability: 'write',
+    params: { path: projectPath, query: {} },
+    body: brandFactImport,
+    response: brandFactImportResultSchema,
+    async handle({ c, db }, { path }) {
+      const scope = projectScopeOf(c, path.project_id);
+      const input = await readBody(c, brandFactImport);
+      return importBrandFacts(db, scope, c.get('user').id, input);
+    },
+  }),
+  definePostRoute({
+    ...activeProject,
+    path: `${root}/claim-verdicts/{verdict_id}/overrides`,
+    capability: 'write',
+    params: { path: { ...projectPath, verdict_id: uuid }, query: {} },
+    body: verdictOverrideRequest,
+    response: verdictOverrideSchema,
+    async handle({ c, db }, { path }) {
+      const change = await readBody(c, verdictOverrideRequest);
+      return overrideVerdict(db, {
+        scope: projectScopeOf(c, path.project_id),
+        userId: c.get('user').id,
+        verdictId: path.verdict_id,
+        change,
+      });
     },
   }),
   definePatchRoute({
@@ -105,10 +153,53 @@ export const brandIdentityRoutes = [
     body: brandFactUpdate,
     response: brandFactSchema,
     async handle({ c, db }, { path }) {
-      const scope = scopeOf(c, path.project_id);
+      const scope = projectScopeOf(c, path.project_id);
       const update = await readBody(c, brandFactUpdate);
       return updateBrandFact(db, scope, c.get('user').id, path.fact_id, update);
     },
+  }),
+  defineGetRoute({
+    ...activeProject,
+    path: `${root}/themes`,
+    params: { path: projectPath, query: {} },
+    response: z.array(projectThemeSchema),
+    handle: ({ c, db }, { path }) => listThemes(db, projectScopeOf(c, path.project_id)),
+  }),
+  definePostRoute({
+    ...activeProject,
+    path: `${root}/themes`,
+    capability: 'write',
+    status: 201,
+    params: { path: projectPath, query: {} },
+    body: themeRequest,
+    response: projectThemeSchema,
+    async handle({ c, db }, { path }) {
+      return createTheme(db, projectScopeOf(c, path.project_id), await readBody(c, themeRequest));
+    },
+  }),
+  definePatchRoute({
+    ...activeProject,
+    path: `${root}/themes/{theme_id}`,
+    capability: 'write',
+    params: { path: { ...projectPath, theme_id: uuid }, query: {} },
+    body: themeRequest,
+    response: projectThemeSchema,
+    async handle({ c, db }, { path }) {
+      const input = await readBody(c, themeRequest);
+      return renameTheme(
+        db,
+        { ...projectScopeOf(c, path.project_id), themeId: path.theme_id },
+        input,
+      );
+    },
+  }),
+  defineDeleteRoute({
+    ...activeProject,
+    path: `${root}/themes/{theme_id}`,
+    capability: 'write',
+    params: { path: { ...projectPath, theme_id: uuid }, query: {} },
+    handle: ({ c, db }, { path }) =>
+      deleteTheme(db, { ...projectScopeOf(c, path.project_id), themeId: path.theme_id }),
   }),
   defineGetRoute({
     ...activeProject,
@@ -117,7 +208,7 @@ export const brandIdentityRoutes = [
     params: { path: projectPath, query: {} },
     response: businessMapSchema,
     async handle({ c, db }, { path }) {
-      return readBusinessMap(db, scopeOf(c, path.project_id));
+      return readBusinessMap(db, projectScopeOf(c, path.project_id));
     },
   }),
   definePutRoute({
@@ -128,7 +219,7 @@ export const brandIdentityRoutes = [
     body: businessMapUpdate,
     response: businessMapSchema,
     async handle({ c, db }, { path }) {
-      const scope = scopeOf(c, path.project_id);
+      const scope = projectScopeOf(c, path.project_id);
       const update = await readBody(c, businessMapUpdate);
       return updateBusinessMap(db, scope, c.get('user').id, update);
     },
@@ -140,7 +231,7 @@ export const brandIdentityRoutes = [
     params: { path: projectPath, query: {} },
     response: z.array(observedCompetitorSchema),
     async handle({ c, db }, { path }) {
-      return listSuggestions(db, scopeOf(c, path.project_id));
+      return listSuggestions(db, projectScopeOf(c, path.project_id));
     },
   }),
   definePostRoute({
@@ -152,6 +243,16 @@ export const brandIdentityRoutes = [
     response: competitorSchema,
     handle: ({ c, db }, { path }) =>
       acceptSuggestion(db, routeActor(c, COMPETITORS_WRITE), path.project_id, path.candidate_id),
+  }),
+  definePostRoute({
+    ...activeProject,
+    exposure: 'both',
+    permission: COMPETITORS_WRITE,
+    path: `${root}/competitor-suggestions/{candidate_id}/reject`,
+    params: { path: { ...projectPath, candidate_id: uuid }, query: {} },
+    response: observedCompetitorSchema,
+    handle: ({ c, db }, { path }) =>
+      rejectSuggestion(db, routeActor(c, COMPETITORS_WRITE), path.project_id, path.candidate_id),
   }),
   defineGetRoute({
     family,

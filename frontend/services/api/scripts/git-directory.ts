@@ -1,8 +1,6 @@
-/** The worktree's Git directory, where operator scripts keep their logs. */
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 
-/** `.git` itself, or the directory a linked worktree's `.git` file names. */
 export function gitDirectory(from: string): string {
   for (let directory = resolve(from); ; directory = dirname(directory)) {
     const marker = join(directory, '.git');

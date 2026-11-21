@@ -1,4 +1,3 @@
-/** A third-party page answers cite: a declaration records the publisher page, not an owned one. */
 import { plainTarget } from './shared.ts';
 import type { ActionTargetModule } from './kind.ts';
 

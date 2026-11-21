@@ -45,7 +45,6 @@ describe('cohortComposition', () => {
   });
 
   it('marks a share shift at the threshold as changed and just below it as comparable', () => {
-    // product 50/100 → 60/100 is exactly 10 points; 59/100 is 9.
     const atThreshold = cohortComposition({
       previous: { category: 50, product: 50 },
       current: { category: 40, product: 60 },
@@ -62,7 +61,6 @@ describe('cohortComposition', () => {
   });
 
   it('measures share of the cohort, not raw count growth', () => {
-    // Every kind doubles: counts change, shares do not.
     const { changed } = cohortComposition({
       previous: { category: 20, product: 80 },
       current: { category: 40, product: 160 },

@@ -1,4 +1,3 @@
-/** The content-angle analytics kind. */
 import type { AnalyticsKinds } from '../queue/executor.ts';
 import { compensateContentAngles, contentAngleRefresh } from './refresh.ts';
 

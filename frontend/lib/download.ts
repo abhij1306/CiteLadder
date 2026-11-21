@@ -1,4 +1,3 @@
-/** Download a blob through a short-lived object URL. */
 export function saveBlob(blob: Blob, filename: string): void {
   if (typeof document === 'undefined' || typeof URL.createObjectURL !== 'function') return;
   // react-doctor-disable-next-line

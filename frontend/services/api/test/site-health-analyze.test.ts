@@ -43,12 +43,10 @@ const fetchSettings = siteFetchSettings({
 const RICH =
   "<html lang='en'><head><title>Rich page about widgets</title><meta name='description' content='Widgets.'></head>" +
   '<body><main><h1>Widgets</h1><p>Widgets are useful tools for small workshops.</p></main></body></html>';
-/** A crawl of example.test that chose to ignore robots.txt. */
 const IGNORE_ROBOTS = JSON.stringify({ robots: 'ignore', root_registrable_domain: 'example.test' });
 
 const site = (pages: Record<string, Served>, requests: string[] = []) =>
   new SitePageFetcher(db, recordedSite(pages, requests), fetchSettings);
-/** Lease exactly these tasks to one worker and execute them, as its claim would. */
 async function analyzeWith(
   settings: typeof workerSettings,
   fetcher: SitePageFetcher,
@@ -115,12 +113,7 @@ describe('analyze acquisition', () => {
         created_at: new Date(),
       })
       .execute();
-    // Site setup records the sitemap's URLs, the authority for membership.
-    await db
-      .updateTable('site_crawls')
-      .set({ site_facts: JSON.stringify({ sitemap: { fetched: true, urls: [page.url] } }) })
-      .where('id', '=', seed.crawlId)
-      .execute();
+    await fixtures.sitemapEntry(seed, page);
     await analyze(
       site({
         '/sitemap-page': {
@@ -137,7 +130,6 @@ describe('analyze acquisition', () => {
       .where('rule_id', 'in', ['technical.indexable', 'technical.sitemap_noindex'])
       .orderBy('rule_id')
       .execute();
-    // The page's own noindex is its choice; listing it in the sitemap is the finding.
     expect(evaluations.map((row) => [row.rule_id, row.outcome])).toEqual([
       ['technical.indexable', 'not_applicable'],
       ['technical.sitemap_noindex', 'missing'],
@@ -149,7 +141,6 @@ describe('analyze acquisition', () => {
       reason: 'sitemap_lists_noindex',
       context_sources: { sitemap_crawl_id: seed.crawlId, sitemap_observation_id: observationId },
     });
-    // Sitemap hygiene, not a visibility blocker: it lists under Advisories, not Issues.
     const issues = await db
       .selectFrom('site_issues')
       .select(['rule_id', 'finding_class'])
@@ -162,7 +153,6 @@ describe('analyze acquisition', () => {
   it('acquires, analyzes and settles the page with its evidence in one commit', async () => {
     const seed = await running({ status: 'queued', started_at: null });
     const page = await fixtures.analyzable(seed, '/rich');
-    // Outstanding sibling work keeps the crawl (and this provisional analysis) open.
     await fixtures.analyzable(seed, '/later');
     const requests: string[] = [];
     await analyze(site({ '/rich': { body: RICH } }, requests), page.taskId);
@@ -217,13 +207,14 @@ describe('analyze acquisition', () => {
     );
     const issues = await db
       .selectFrom('site_issues')
-      .select('rule_id')
+      .select(['rule_id', 'is_current'])
       .where('analysis_id', '=', analysis!.id)
       .execute();
-    expect(issues.map((row) => row.rule_id)).toContain('technical.canonical_present');
-
+    const canonical = issues.find((row) => row.rule_id === 'technical.canonical_present');
+    expect(canonical?.is_current).toBe(true);
     const after = await crawl(seed);
-    expect(after).toMatchObject({ status: 'running', analyzed_url_count: 1 });
+    expect(after).toMatchObject({ status: 'running', analyzed_url_count: 0 });
+    expect((await crawlCounters(db, after)).analyzed).toBe(1);
     expect(after.started_at).not.toBeNull();
     const url = await db
       .selectFrom('site_urls')
@@ -260,7 +251,7 @@ describe('analyze acquisition', () => {
       [discovered.artifactId, false],
       [discovered.artifactId, true],
     ]);
-    expect((await crawl(seed)).analyzed_url_count).toBe(2);
+    expect((await crawlCounters(db, await crawl(seed))).analyzed).toBe(1);
   });
 
   it.each(['product', 'category', 'other'])(
@@ -311,7 +302,6 @@ describe('analyze acquisition', () => {
     expect(deferred.available_at.getTime()).toBeGreaterThan(Date.now());
     expect(requests).toEqual([]);
 
-    // The root also waits for site setup, whose facts only its analysis reads.
     const other = await running({ site_facts: null });
     const otherRoot = await fixtures.analyzable(other, '/');
     await fixtures.task(other, 'site_setup');
@@ -389,7 +379,6 @@ describe('analyze failures', () => {
           : advice === 'past-date'
             ? new Date(before - 45_000).toUTCString()
             : advice;
-      // Default backoff: 2 s base, 60 s ceiling, up to 1.5 s jitter.
       await analyzeWith(
         { ...siteWorkerSettings({}), concurrency: 1 },
         site({ '/limited': { status: 429, headers: { 'retry-after': header } } }),
@@ -519,7 +508,6 @@ describe('analyze failures', () => {
     );
     expect(await task(page.taskId)).toMatchObject({ status: 'succeeded', error_code: '' });
     expect(requests).toEqual(['/robots.txt', '/private', '/open']);
-    // Discovery would have observed both pages in this crawl.
     await db
       .insertInto('site_url_observations')
       .values(
@@ -563,7 +551,6 @@ describe('analyze failures', () => {
       '/robots.txt': { body: 'User-agent: *\nDisallow: /private\n', contentType: 'text/plain' },
       '/private': { body: RICH },
     });
-    // Page documents and other non-crawl fetches call without a choice.
     expect(await fetcher.fetch('https://example.test/private')).toMatchObject({
       ok: false,
       code: codes.robots_denied,
@@ -593,13 +580,11 @@ describe('analyze failures', () => {
       status: 'failed',
       error_code: codes.url_admission_rejected,
     });
-    // The own-site page is fetched; the off-site hop is never requested.
     expect(requests).toEqual(['/robots.txt', '/go']);
   });
 
   it.each([
     ['access-blocked (403)', { status: 403 }, 'failed', codes.access_blocked, ['/robots.txt']],
-    // A transient failure is retried in place, then the task retries later.
     [
       'unreachable (503)',
       { status: 503 },
@@ -645,14 +630,14 @@ describe('analyze failures', () => {
 async function lease(taskId: string, owner: string) {
   return db
     .updateTable('site_crawl_tasks')
-    .set({ status: 'leased', lease_owner: owner, lease_expires_at: new Date(Date.now() + 60_000) })
+    .set({ status: 'running', lease_owner: owner, lease_expires_at: new Date(Date.now() + 60_000) })
     .where('id', '=', taskId)
     .returningAll()
     .executeTakeFirstOrThrow();
 }
 
 describe('analyze guards', () => {
-  it('commits current setup facts even when context changes on the final allowed attempt', async () => {
+  it('requeues an analysis whose context changed mid-interpretation, then commits current facts', async () => {
     const seed = await running();
     const page = await fixtures.analyzable(seed, '/');
     await db
@@ -675,6 +660,8 @@ describe('analyze guards', () => {
       });
     try {
       const fetcher = site({ '/': { body: RICH } });
+      await analyze(fetcher, page.taskId);
+      expect(await task(page.taskId)).toMatchObject({ status: 'queued', attempt_count: 0 });
       await analyze(fetcher, page.taskId);
       expect(await task(page.taskId)).toMatchObject({ status: 'succeeded', attempt_count: 1 });
       const [analysis] = await analyses(seed, page.siteUrlId);
@@ -723,7 +710,6 @@ describe('analyze guards', () => {
       title: 'Foreign evidence',
       delivery: { final_url: page.url },
     });
-    // Inconsistent persisted references must still fail closed at the read boundary.
     await db
       .updateTable('site_fetch_artifacts')
       .set({ crawl_id: seed.crawlId })
@@ -829,7 +815,6 @@ describe('page fetch policy', () => {
   });
   it('excludes non-content endpoints but not ordinary pages or their tracking variants', () => {
     expect(hardExcluded(new URL('https://example.test/cart'))).toBe(true);
-    // A tagged link admits its clean target, so the tracking variant is not excluded.
     expect(hardExcluded(new URL('https://example.test/products/widget?utm_source=x'))).toBe(false);
     expect(hardExcluded(new URL('https://example.test/assets/site.css'))).toBe(true);
     expect(hardExcluded(new URL('https://example.test/products/widget'))).toBe(false);

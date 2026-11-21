@@ -13,7 +13,6 @@ const PROJECT = '11111111-1111-4111-8111-111111111111';
 const TASK = '33333333-3333-4333-8333-333333333333';
 const RANGE = `/api/v1/projects/${PROJECT}/performance/range`;
 
-/** A dashboard whose selected window has no projection yet. */
 function unprojected(from: string): PerformanceDashboard {
   const empty = { clicks: null, impressions: null, ctr: null, position: null };
   return {
@@ -76,7 +75,6 @@ function rangeTask(status: string, from = '2026-08-01') {
   });
 }
 
-/** A response held until the test opens it. */
 function gate() {
   let open: () => void = () => undefined;
   const opened = new Promise<void>((resolve) => {

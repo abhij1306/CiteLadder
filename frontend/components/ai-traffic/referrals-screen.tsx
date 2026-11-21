@@ -2,13 +2,14 @@ import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 
 import { AiReferralsContent } from '@/components/ai-traffic/referrals-content';
-import { choiceFilter } from '@/components/ui/all-filters';
+import { choiceFilter, rangeFilter } from '@/components/ui/all-filters';
 import type { FilterBarProps } from '@/components/ui/filter-bar';
 import { Spinner } from '@/components/ui/spinner';
 import type { TabRowProps } from '@/components/ui/tabs';
 import { aiTrafficQueries } from '@/lib/api/ai-traffic';
 import { GRANULARITY_OPTIONS } from '@/lib/format';
 import {
+  DEFAULT_RANGE,
   RANGE_OPTIONS,
   rangeToParams,
   type AiReferralsGranularity,
@@ -19,7 +20,7 @@ import { stringUrlCodec, useUrlState } from '@/lib/navigation/url-state';
 
 const rangeCodec = stringUrlCodec<AiReferralsRange>(
   RANGE_OPTIONS.map((option) => option.value),
-  'latest',
+  DEFAULT_RANGE,
 );
 const granularityCodec = stringUrlCodec<AiReferralsGranularity>(
   GRANULARITY_OPTIONS.map((option) => option.value),
@@ -31,11 +32,9 @@ export function AiReferralsScreen({
   notice,
 }: Readonly<{
   tabs?: TabRowProps;
-  /** Shown above the referrals, e.g. why crawl logs are unavailable. */
   notice?: React.ReactNode;
 }> = {}) {
   const { workspaceId, projectId } = useProjectScope();
-  // The range is the screen's shared `range` parameter, so a preset follows the reader across tabs.
   const [range, setRange] = useUrlState('range', rangeCodec);
   const [granularity, setGranularity] = useUrlState('granularity', granularityCodec);
   const rangeParams = useMemo(() => rangeToParams(range), [range]);
@@ -54,8 +53,6 @@ export function AiReferralsScreen({
         onChangeRange: setRange,
         granularity,
         onChangeGranularity: setGranularity,
-        // Only a read that has an answer on screen is "previous data shown";
-        // the first load has none, and the content already says it is loading.
         refreshing: dashboardQuery.isFetching && dashboardQuery.data !== undefined,
       })}
     />
@@ -82,15 +79,11 @@ function referralsControls({
         Updating data… Previous data shown.
       </>
     ) : null,
-    // The same control row as the other AI Traffic tabs: the window and the
-    // chart interval in All filters, the live note at the row's end.
     filters: [
-      choiceFilter({
-        id: 'range',
-        label: 'Reporting range',
+      rangeFilter({
         value: range,
-        defaultValue: 'latest',
-        groups: [{ options: RANGE_OPTIONS }],
+        defaultValue: DEFAULT_RANGE,
+        options: RANGE_OPTIONS,
         onChange: onChangeRange,
       }),
       choiceFilter({

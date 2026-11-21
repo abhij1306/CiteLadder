@@ -18,7 +18,6 @@ const uuid = { scalar: { kind: 'uuid' }, required: true } as const;
 const projectPath = { project_id: uuid } as const;
 const itemPath = { ...projectPath, schedule_id: uuid } as const;
 const defaults = { family: 'audit-schedules', authorize: 'project', exposure: 'both' } as const;
-/** A write resolves the project in the active workspace. */
 const writes = {
   ...defaults,
   authorize: 'active-project',

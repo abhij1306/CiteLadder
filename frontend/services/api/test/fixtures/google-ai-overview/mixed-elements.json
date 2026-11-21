@@ -1,0 +1,105 @@
+{
+  "status_code": 20000,
+  "tasks": [
+    {
+      "id": "ours",
+      "status_code": 20000,
+      "cost": 0.0012,
+      "result": [
+        {
+          "keyword": "best running shoes for flat feet",
+          "datetime": "2026-01-02 12:00:00 +00:00",
+          "items": [
+            {
+              "type": "ai_overview",
+              "rank_group": 1,
+              "rank_absolute": 1,
+              "asynchronous_ai_overview": true,
+              "markdown": "Acme and Rival lead for flat feet.",
+              "items": [
+                {
+                  "type": "ai_overview_element",
+                  "title": null,
+                  "text": "Acme and Rival lead for flat feet.",
+                  "markdown": "Acme and Rival lead for flat feet.",
+                  "links": [{ "url": "https://acme.example/stability", "title": "Acme Stability" }],
+                  "references": [
+                    {
+                      "type": "ai_overview_reference",
+                      "source": "Runner Review",
+                      "domain": "runner.example",
+                      "url": "https://runner.example/flat-feet",
+                      "title": "Best shoes for flat feet"
+                    }
+                  ]
+                },
+                {
+                  "type": "ai_overview_table_element",
+                  "markdown": "| Brand | Arch |\n|---|---|\n| Acme | High |",
+                  "table": {
+                    "table_header": ["Brand", "Arch"],
+                    "table_content": [
+                      ["Acme", "High"],
+                      ["Rival", "Medium"]
+                    ]
+                  },
+                  "references": [
+                    {
+                      "type": "ai_overview_reference",
+                      "domain": "lab.example",
+                      "url": "https://lab.example/arch-test",
+                      "title": "Arch support lab test"
+                    }
+                  ]
+                },
+                {
+                  "type": "ai_overview_video_element",
+                  "title": "Flat feet shoe review",
+                  "snippet": "A podiatrist compares stability shoes.",
+                  "url": "https://video.example/watch?v=1",
+                  "domain": "video.example",
+                  "source": "Video Example"
+                },
+                {
+                  "type": "ai_overview_expanded_element",
+                  "title": "How to choose",
+                  "text": "Look for firm midsoles.",
+                  "components": [
+                    {
+                      "type": "ai_overview_expanded_component",
+                      "title": "Fit",
+                      "text": "Try shoes late in the day.",
+                      "markdown": "Try shoes **late** in the day.",
+                      "links": [{ "url": "https://fit.example/guide", "title": "Fit guide" }],
+                      "references": [
+                        {
+                          "type": "ai_overview_reference",
+                          "domain": "fit.example",
+                          "url": "https://fit.example/guide",
+                          "title": "Fit guide"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "ai_overview_expanded_component",
+                      "text": null,
+                      "markdown": "Replace them every 500 miles."
+                    }
+                  ]
+                }
+              ],
+              "references": [
+                {
+                  "type": "ai_overview_reference",
+                  "domain": "runner.example",
+                  "url": "https://runner.example/flat-feet",
+                  "title": "Best shoes for flat feet"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

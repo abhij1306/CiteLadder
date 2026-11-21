@@ -38,6 +38,7 @@ export function makeSet(prompts: Prompt[]): PromptSet {
     id: SET_ID,
     project_id: '11111111-1111-4111-8111-111111111111',
     name: 'Default prompt set',
+    kind: 'brand',
     description: '',
     prompt_count: prompts.length,
     prompts,
@@ -46,11 +47,11 @@ export function makeSet(prompts: Prompt[]): PromptSet {
   };
 }
 
-/** Form bounds as the API lists them; tests override the one they exercise. */
 export function makeFormLimits(overrides: Partial<PromptFormLimits> = {}): PromptFormLimits {
   return {
     generation_count_max: 50,
     import_rows_max: 500,
+    bulk_prompts_max: 500,
     persona_max_chars: 120,
     run_context_max_chars: 280,
     distribution_personas_max: 8,
@@ -62,7 +63,6 @@ export function makeFormLimits(overrides: Partial<PromptFormLimits> = {}): Promp
   };
 }
 
-/** The prompt-set list read: the sets plus the form bounds. */
 export function makeSetList(
   sets: PromptSet[],
   limits: PromptFormLimits = makeFormLimits(),

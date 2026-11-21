@@ -3,11 +3,6 @@ import type { ModelGateway } from '../src/models/gateway.ts';
 import type { JevClient } from '../src/models/jev.ts';
 import { runMetered } from '../src/models/meter-scope.ts';
 
-/**
- * A meter for tests of feature logic with faked providers: every call still
- * runs inside a metering scope, and the features it named are recorded.
- * Charging itself is covered against PostgreSQL in the metering tests.
- */
 export function recordingMeter(workspaceId = 'test-workspace') {
   const features: string[] = [];
   const scoped =

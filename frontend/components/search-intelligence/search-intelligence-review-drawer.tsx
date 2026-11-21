@@ -1,6 +1,5 @@
 import { useState } from 'react';
 
-import { Callout } from '@/components/ui/callout';
 import { Drawer } from '@/components/ui/drawer';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
@@ -32,8 +31,8 @@ import {
   ReviewSummary,
   marketOptions,
 } from './search-intelligence-review-parts';
+import { Notice } from '@/components/ui/notice';
 
-/** Typed depths keep a draft per dataset, so a field can be cleared while typing. */
 function useDatasetSelections(readiness: SearchIntelligenceReadiness, action: string) {
   const [selections, setSelections] = useState<SearchDatasetSelectionRequest[]>(() =>
     defaultSelections(readiness, action),
@@ -61,7 +60,6 @@ function useDatasetSelections(readiness: SearchIntelligenceReadiness, action: st
     const current = selections.find((item) => selectionKey(item) === selectionKey(option));
     return drafts[selectionKey(option)] ?? String(current?.depth ?? option.depth);
   };
-  // A depth the reader is still typing has not reached its selection yet.
   const depthsValid = selections.every((item) => {
     const draft = drafts[selectionKey(item)];
     return draft === undefined || String(item.depth) === draft;
@@ -164,7 +162,6 @@ export function SearchIntelligenceReviewDrawer({
         onOpenChange(nextOpen);
       }}
       title={action === 'seed' ? 'Research a keyword' : 'Review analysis cost'}
-      description="Nothing is fetched or charged until you confirm the estimate."
       footer={
         <ReviewFooter
           review={review}
@@ -181,7 +178,7 @@ export function SearchIntelligenceReviewDrawer({
         />
       }
     >
-      {error ? <Callout tone="negative">{error}</Callout> : null}
+      {error ? <Notice tone="negative">{error}</Notice> : null}
       {review ? (
         <ReviewSummary review={review} />
       ) : (
@@ -199,7 +196,7 @@ export function SearchIntelligenceReviewDrawer({
             )}
           </Field>
           {wantsSeed ? (
-            <Field label="Keyword suggestion seed" hint="The keyword to find related searches for.">
+            <Field label="Keyword suggestion seed">
               {(field) => (
                 <Input {...field} value={seed} onChange={(event) => setSeed(event.target.value)} />
               )}
@@ -214,10 +211,10 @@ export function SearchIntelligenceReviewDrawer({
           />
           <HistoryScopeNotice scope={researchScope} selections={selections} />
           {comparisonOrderConflict(selections, researchScope, rankingOrder) ? (
-            <Callout tone="negative">
+            <Notice tone="negative">
               Keyword comparisons on an exact host can be ordered by volume, cost per click or
               difficulty. Change the keyword order or the research scope in Advanced options.
-            </Callout>
+            </Notice>
           ) : null}
           <AdvancedOptions
             targets={readiness.owned_targets}

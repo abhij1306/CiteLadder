@@ -10,7 +10,7 @@ import { budget, spendBudget } from '../src/abuse/usage.ts';
 import { importCatalog } from './commerce-support.ts';
 import { createModelGateway, gatewaySettings } from '../src/models/gateway.ts';
 import { reviewCandidates } from '../src/prompts/candidates.ts';
-import { candidate, generationRun } from './prompt-fixtures.ts';
+import { candidate, generationRun, topic } from './prompt-fixtures.ts';
 import { testDatabase } from './support.ts';
 import { VisibilityFixtures } from './visibility-fixtures.ts';
 
@@ -44,6 +44,26 @@ it('saves manual prompts disabled', async () => {
       buyerManualInput.parse({ target, text: 'Which shoes grip rain?' }),
     ),
   ).resolves.toMatchObject({ enabled: false, approved_at: null, target });
+});
+
+it('files Commerce prompts under their own topic, never a same-named brand topic', async () => {
+  const brandTopic = await topic(db, scope.projectId, 'trail MASTER');
+  const topicOf = async (text: string) => {
+    const row = await manualBuyerPrompt(db, scope, buyerManualInput.parse({ target, text }));
+    return (
+      await db
+        .selectFrom('prompts')
+        .select('topic_id')
+        .where('id', '=', row.id)
+        .executeTakeFirstOrThrow()
+    ).topic_id;
+  };
+  const beside = await topicOf('Which shoes cushion knees?');
+  await db.updateTable('topics').set({ name: 'Trails' }).where('id', '=', brandTopic).execute();
+  const created = await topicOf('Which shoes grip rain?');
+  const reused = await topicOf('Which shoes dry fastest?');
+  expect([beside, reused]).toEqual([null, created]);
+  expect([created === null, created === brandTopic]).toEqual([false, false]);
 });
 
 it('generates target-bound prompts and fails atomically on unusable or foreign targets', async () => {
@@ -129,7 +149,6 @@ it('generates target-bound prompts and fails atomically on unusable or foreign t
               prompts: [
                 { text: 'best running shoes for wet trails' },
                 { text: 'waterproof trail shoes for muddy hikes' },
-                // Binds only through the plural fold: "shoe" meets "shoes".
                 { text: 'best waterproof shoe for rainy commutes' },
               ],
             }),
@@ -151,7 +170,6 @@ it('generates target-bound prompts and fails atomically on unusable or foreign t
 });
 
 type Row = { text: string; context?: string; stage?: string; branded?: boolean };
-/** One scripted answer per model call; `null` or no answer left is a provider failure. */
 function gatewayAnswering(answers: (Row[] | null)[]) {
   const io = {
     fetch: vi.fn<typeof fetch>(async () => {
@@ -248,7 +266,6 @@ it("keeps each target's usable prompts and binds category prompts through the ca
     .where('normalized_name', '=', 'rain jackets')
     .executeTakeFirstOrThrow();
   const answers = [
-    // Binds only through the category name: no product or term says "jacket".
     [
       {
         text: 'cheap rain jacket that packs small for cycling',
@@ -256,7 +273,6 @@ it("keeps each target's usable prompts and binds category prompts through the ca
         stage: 'consideration',
       },
     ],
-    // Every prompt for the product is unusable.
     [{ text: 'What do you prefer in Trail master?' }],
   ];
   const io = {
@@ -341,7 +357,6 @@ describe('category matrix and hero products', () => {
     const { gateway } = gatewayAnswering([
       [
         ...organicCells,
-        // A fourth context and a duplicate cell are over the configured matrix.
         cell('rain jacket for a ferry commuter', 'Ferry commuter', 'decision'),
         cell('another rain jacket for a commuting cyclist', 'Commuting cyclist', 'decision'),
         branded('Acme Corp rain jacket vs another brand for cycling'),
@@ -373,7 +388,6 @@ describe('category matrix and hero products', () => {
       [
         cell('Acme Corp rain jacket that packs small', 'Commuting cyclist', 'consideration'),
         cell('rain jacket that packs small for cycling', 'Commuting cyclist', 'decision'),
-        // A branded row that never names the brand is not a branded comparison.
         branded('rain jacket comparison between two cycling brands'),
       ],
     ]);
@@ -440,7 +454,6 @@ describe('category matrix and hero products', () => {
 });
 
 describe('one prompt insert path shared by candidate review and Commerce', () => {
-  /** The Commerce set (created by a first buyer prompt) with one staged candidate per text. */
   async function commerceSetWithCandidates(texts: string[]) {
     await manualBuyerPrompt(
       db,

@@ -6,8 +6,9 @@ import {
   auditablePrompts,
   batchLabel,
   buildLaunchPayload as buildWithLimits,
-  canLaunch,
   clampRepetitions,
+  launchBlocker,
+  launchReadiness,
   promptBatches,
   PROMPT_BATCH_SIZE,
   toggleEngine,
@@ -17,7 +18,6 @@ import {
 
 const PROJECT_ID = '11111111-1111-4111-8111-111111111111';
 const SET_ID = '22222222-2222-4222-8222-222222222222';
-/** The repetition range the prompt-set list carries, as the dialog passes it. */
 const LIMITS = { audit_repetitions_min: 1, audit_repetitions_max: 10 };
 const buildLaunchPayload = (launch: LaunchSelection) => buildWithLimits(launch, LIMITS);
 
@@ -44,16 +44,20 @@ describe('clampRepetitions', () => {
   });
 });
 
-describe('canLaunch', () => {
-  it('requires a prompt set and at least one engine', () => {
-    expect(canLaunch(selection())).toBe(true);
-    expect(canLaunch(selection({ promptSetId: null }))).toBe(false);
-    expect(canLaunch(selection({ engines: [] }))).toBe(false);
+describe('launchBlocker', () => {
+  it('requires a prompt set and at least one engine, and says which is missing', () => {
+    expect(launchBlocker(selection())).toBeNull();
+    expect(launchBlocker(selection({ promptSetId: null }))).toBe(
+      'Choose a prompt set to launch a run.',
+    );
+    expect(launchBlocker(selection({ engines: [] }))).toBe(
+      'Choose at least one engine to launch a run.',
+    );
     expect(
-      canLaunch(
+      launchBlocker(
         selection({ promptSetId: null, promptIds: ['33333333-3333-4333-8333-333333333333'] }),
       ),
-    ).toBe(true);
+    ).toBeNull();
   });
 });
 
@@ -65,7 +69,9 @@ describe('markets', () => {
       null,
       GERMANY,
     ]);
-    expect(canLaunch(selection({ marketIds: [] }))).toBe(false);
+    expect(launchBlocker(selection({ marketIds: [] }))).toBe(
+      'Choose at least one market to launch a run.',
+    );
   });
 
   it('toggles the default market apart from a named one', () => {
@@ -112,6 +118,26 @@ describe('toggleEngine', () => {
   });
 });
 
+describe('launchReadiness', () => {
+  it('launches only when some set holds an active, enabled prompt', () => {
+    const idle = makeSet([
+      makePrompt({ id: 'archived', status: 'archived' }),
+      makePrompt({ id: 'disabled', enabled: false }),
+    ]);
+    expect([
+      launchReadiness({ status: 'success', promptSets: [] }),
+      launchReadiness({ status: 'success', promptSets: [idle] }),
+      launchReadiness({ status: 'success', promptSets: [idle, makeSet([makePrompt({})])] }),
+      launchReadiness({ status: 'pending' }),
+    ]).toEqual([
+      { kind: 'blocked', reason: 'Add an active prompt to launch a run.' },
+      { kind: 'blocked', reason: 'Add an active prompt to launch a run.' },
+      { kind: 'ready' },
+      { kind: 'checking' },
+    ]);
+  });
+});
+
 describe('prompt batching', () => {
   const prompts = Array.from({ length: 23 }, (_, index) =>
     makePrompt({
@@ -128,8 +154,6 @@ describe('prompt batching', () => {
       makePrompt({ id: 'disabled', enabled: false, created_at: '2026-01-02T00:00:00Z' }),
       makePrompt({ id: 'earlier', created_at: '2026-01-03T00:00:00Z' }),
     ]);
-    // Archived and disabled prompts are not audit-eligible, so a batch must
-    // never spend a slot on one — the backend would reject the whole request.
     expect(auditablePrompts(set).map((prompt) => prompt.id)).toEqual(['earlier', 'later']);
   });
 

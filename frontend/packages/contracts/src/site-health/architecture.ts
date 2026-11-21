@@ -9,7 +9,6 @@ export const architecturePageKindSchema = responseObject({
   page_count: z.number().int(),
   median_depth: z.number().nullable(),
   indexable_count: z.number().int(),
-  duplicate_metadata_count: z.number().int(),
   orphan_count: z.number().int().nullable(),
 });
 
@@ -35,8 +34,6 @@ const architectureInternalLinkingSchema = responseObject({
   content_link_count: z.number().int(),
   pages_with_incoming_count: z.number().int(),
   pages_with_incoming_percentage: z.number().nullable(),
-  // Null only on crawls persisted before orphan counts stopped being withheld
-  // under partial coverage; a re-crawl re-derives them.
   orphan_page_count: z.number().int().nullable(),
   orphan_pages: z.array(architectureOrphanPageSchema).default([]),
 });

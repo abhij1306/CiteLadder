@@ -3,19 +3,8 @@ import { setupServer } from 'msw/node';
 
 import { catalogHandler } from './provider-catalog-fixture';
 
-/**
- * The workspace every test account belongs to, unless a test says otherwise.
- */
 const TEST_WORKSPACE_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 
-/**
- * Membership is a precondition of the authenticated shell, not a feature of
- * any one screen: `ProjectProvider` resolves which workspace it is in before
- * it can scope a single request. Answering it by default means a screen test
- * exercises the screen rather than re-declaring the account it runs in, and
- * `onUnhandledFrame: 'error'` keeps its bite for everything else. A test
- * about workspaces overrides this with `server.use(...)`.
- */
 const defaultHandlers = [
   http.get('/api/v1/workspaces', () =>
     HttpResponse.json([
@@ -32,8 +21,6 @@ const defaultHandlers = [
       },
     ]),
   ),
-  // Every screen names engines from the provider catalogue, which the shell
-  // reads before any of them; answer it like the workspace list.
   catalogHandler(),
 ];
 

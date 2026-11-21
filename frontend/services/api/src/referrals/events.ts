@@ -1,4 +1,3 @@
-/** Sanitize recorded referral signals before persisting immutable events. */
 import { createHash } from 'node:crypto';
 
 import { normalizeDomain } from '../analysis/domains.ts';
@@ -32,7 +31,6 @@ function paramAllowed(name: string): boolean {
   );
 }
 
-/** Strip credentials, fragments and non-allowlisted query parameters. */
 export function sanitizeReferralUrl(url: string | null): string {
   if (!url?.trim()) return '';
   try {
@@ -51,7 +49,6 @@ export function sanitizeReferralUrl(url: string | null): string {
   }
 }
 
-/** `unpack_dimension_key`: the declared values, split from the right. */
 function unpackDimensionKey(dataset: string, key: string): NonEmpty<string> | null {
   const arity: number | undefined = (referrals.dimension_arity as Record<string, number>)[dataset];
   if (arity === undefined) return null;
@@ -75,16 +72,13 @@ function signalsForRow(row: MetricRowIdentity): Signals | null {
     utm_campaign: '',
   };
   if (row.dataset === referrals.datasets.referrer_daily) {
-    // (pageReferrer, date): the full referring URL.
     return { ...empty, referrer_url: values[0].trim() };
   }
-  // (sessionSource, sessionMedium, date): the session's traffic-source tags.
   const [source, medium] = values;
   if (medium === undefined) throw new Error(`Expected a session medium on a ${row.dataset} row`);
   return { ...empty, utm_source: source.trim(), utm_medium: medium.trim() };
 }
 
-/** The sanitized event fields for one metric row, or null when it maps to no signals. */
 export function referralEventFields(row: MetricRowIdentity): ReferralEventFields | null {
   const signals = signalsForRow(row);
   if (signals === null) return null;
@@ -103,7 +97,6 @@ export function referralEventFields(row: MetricRowIdentity): ReferralEventFields
   const raw = Object.fromEntries(
     Object.entries(candidate).filter(([key]) => referrals.raw_allowlist.includes(key)),
   );
-  // The dedupe key: stable across re-runs because the artifact is immutable.
   const contentHash = createHash('sha256')
     .update(
       JSON.stringify({

@@ -1,7 +1,3 @@
-/**
- * The rows one Search Intelligence acquisition writes, built from the run and
- * its plan. Pure: AcquisitionState performs every insert and update.
- */
 import { randomUUID } from 'node:crypto';
 import type { Selectable } from 'kysely';
 import { SEARCH_DATASET_KINDS } from '@citeladder/contracts/search-intelligence';
@@ -16,7 +12,6 @@ import { datasetKind, isBacklinkKind, si, type DatasetKind } from './requests.ts
 type Run = Selectable<SearchIntelligenceRuns>;
 type Dataset = Selectable<SearchIntelligenceDatasets>;
 
-/** Whether a dataset holds everything asked for, some of it, nothing, or is unknowable. */
 function datasetCoverage(o: {
   resultAvailable: boolean;
   received: number;
@@ -30,13 +25,11 @@ function datasetCoverage(o: {
   const whole = SEARCH_DATASET_KINDS[o.kind].fixedDepth || o.exhausted || o.saved >= o.requested;
   return whole ? 'complete' : 'partial';
 }
-/** Whether the provider holds more rows than were saved for a list dataset. */
 function isTruncated(coverage: string, kind: DatasetKind, total: number | null, saved: number) {
   if (coverage === 'partial') return true;
   return !SEARCH_DATASET_KINDS[kind].summary && total !== null && total > saved;
 }
 
-/** One dispatch attempt's row: its send, or the outcome of that send. */
 export function newAttempt(
   call: { workspace_id: string; project_id: string; id: string },
   o: {
@@ -63,7 +56,6 @@ export function newAttempt(
   };
 }
 
-/** One page's normalized rows, as the dataset's rows from this call. */
 export function newRows(
   rows: ReturnType<typeof normalizeResponse>['rows'],
   dataset: Dataset,
@@ -83,7 +75,6 @@ export function newRows(
   }));
 }
 
-/** A new call at intent for one page of the plan. */
 export function newCall(o: {
   run: Run;
   datasetId: string;
@@ -118,7 +109,6 @@ export function newCall(o: {
   };
 }
 
-/** A new collecting dataset for the plan's scope. */
 export function newDataset(run: Run, plan: ResearchPlan, kind: DatasetKind, at: Date) {
   const target = record(plan.target),
     comparison = record(plan.comparison),
@@ -157,10 +147,6 @@ export function newDataset(run: Run, plan: ResearchPlan, kind: DatasetKind, at: 
   };
 }
 
-/**
- * The dataset after one published page: its counts and summary, and, once the
- * plan has no later page for it or the provider ran out, its coverage.
- */
 export function publishedPage(o: {
   dataset: Dataset;
   normalized: ReturnType<typeof normalizeResponse>;

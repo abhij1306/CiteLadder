@@ -1,10 +1,3 @@
-/**
- * Cached brand and competitor logos, served to the browser's `<img>`.
- *
- * The logo refresh fetches and caches assets through the safe
- * fetcher); these reads serve a ready asset with validators, sandboxed so an
- * image can never run as a document.
- */
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { notFound } from '../errors.ts';
@@ -21,7 +14,6 @@ export function competitorLogoUrl(projectId: string, competitorId: string): stri
   return `${policy.api.prefix}/projects/${projectId}/competitors/${competitorId}/logo`;
 }
 
-/** The project's brand logo, or the competitor's when `competitorId` is set. */
 export async function logoResponse(
   db: Database,
   scope: ProjectScope,

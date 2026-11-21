@@ -46,7 +46,6 @@ export type PerformanceSyncEnqueueResponse = z.infer<typeof performanceSyncEnque
 export type ProjectReadiness = z.infer<typeof projectReadinessSchema>;
 export type ProjectReadinessStage = z.infer<typeof projectReadinessStageSchema>;
 
-/** Dashboard query: the selected range, and optionally a comparison range. */
 export type PerformanceDashboardParams = {
   range?: PerformanceRange;
   from?: string;
@@ -54,17 +53,9 @@ export type PerformanceDashboardParams = {
   compare?: PerformanceCompare;
   compare_from?: string;
   compare_to?: string;
-  /** Chart bucket size. Omitted means day, the server's default. */
   granularity?: PerformanceGranularity;
 };
 
-/**
- * Table query (contract C4). `snapshot_id` is the identity the dashboard
- * returned — carrying it back is what keeps a table and the chart above it
- * on the same persisted projection instead of each recomputing bounds.
- * `sort` and `page_size` are backend-validated (422 on anything outside the
- * config whitelist); the frontend never hard-codes the whitelist.
- */
 export type PerformanceTableParams = {
   snapshot_id: string;
   dimension?: PerformanceDimension;
@@ -84,13 +75,6 @@ const performanceApi = {
     const res = await apiClient.get<PerformanceDashboard>(path, options);
     return strictValidate(performanceDashboardSchema, res, 'performance.getDashboard');
   },
-  /**
-   * `GET /projects/{id}/readiness` — the post-connect ladder.
-   *
-   * A projection over rows that already exist (grant status, backfill runs,
-   * snapshot presence), so the surface can say WHERE a freshly connected
-   * project's data is instead of showing one undifferentiated spinner.
-   */
   getReadiness: async (projectId: string, options?: ApiRequestOptions) => {
     const res = await apiClient.get<ProjectReadiness>(`/projects/${projectId}/readiness`, options);
     return strictValidate(projectReadinessSchema, res, 'performance.getReadiness');
@@ -104,13 +88,6 @@ const performanceApi = {
     const res = await apiClient.get<PerformanceTablePage>(path, options);
     return strictValidate(performanceTablePageSchema, res, 'performance.getTable');
   },
-  /**
-   * `POST /performance/range` — queues the display projection for one custom
-   * or comparison window over already-persisted evidence. Idempotent on
-   * `(project, from, to)`: asking twice returns the same task id, so the
-   * client polls one identity whether it queued the work or joined a request
-   * already in flight.
-   */
   enqueueRange: async (
     projectId: string,
     params: { from: string; to: string },
@@ -129,13 +106,6 @@ const performanceApi = {
     );
     return strictValidate(performanceRangeTaskSchema, res, 'performance.getRangeTask');
   },
-  /**
-   * `POST /projects/{id}/performance/sync` — enqueues one integrations sync
-   * run per active mapped GSC/GA4 connection (202, C3). The window is
-   * INCREMENTAL server-side: it extends what the connection already covers
-   * rather than re-fetching a fixed trailing window. Poll each run via
-   * `integrationsApi.getSync(connection_id, sync_run_id)`.
-   */
   syncNow: async (projectId: string, options?: ApiRequestOptions) => {
     const res = await apiClient.post<PerformanceSyncEnqueueResponse>(
       `/projects/${projectId}/performance/sync`,
@@ -157,10 +127,6 @@ const scoped = (scope: ProjectScope, signal?: AbortSignal) => ({
   workspaceId: scope.workspaceId,
 });
 
-/**
- * Performance reads, so the screen and navigation intent request the SAME key
- * from one definition instead of each assembling its own.
- */
 export const performanceQueries = {
   dashboard: (scope: ProjectScope, params: PerformanceDashboardParams) =>
     queryOptions({
@@ -168,20 +134,17 @@ export const performanceQueries = {
       queryFn: ({ signal }) =>
         performanceApi.getDashboard(scope.projectId, params, scoped(scope, signal)),
     }),
-  /** One page of one dimension table; tab intent warms the same key the table reads. */
   table: (scope: ProjectScope, params: PerformanceTableParams) =>
     queryOptions({
       queryKey: queryKeys.performance.table(scope, params),
       queryFn: ({ signal }) =>
         performanceApi.getTable(scope.projectId, params, scoped(scope, signal)),
     }),
-  /** The post-connect readiness ladder: ONE entry every surface asking "connected?" reads. */
   readiness: (scope: ProjectScope) =>
     queryOptions({
       queryKey: queryKeys.performance.readiness(scope),
       queryFn: ({ signal }) => performanceApi.getReadiness(scope.projectId, scoped(scope, signal)),
     }),
-  /** One queued range projection; skips until a task is queued. */
   rangeTask: (scope: ProjectScope, taskId: string | null) =>
     queryOptions({
       queryKey: queryKeys.performance.rangeTask(scope, taskId ?? ''),
@@ -192,22 +155,15 @@ export const performanceQueries = {
     }),
 };
 
-/** Every Performance read of the project, after a range projection was built. */
 export const refreshPerformance = (client: QueryClient, projectId: string) =>
   client.invalidateQueries({ queryKey: queryKeys.performance.project(projectId) });
 
-/**
- * Performance writes. Neither persists a projection by itself: the range task
- * and the sync runs are polled, and their terminal state refreshes the reads.
- */
 export const performanceMutations = {
-  /** Queue the display projection for one window; idempotent on the window. */
   enqueueRange: (scope: ProjectScope) =>
     mutationOptions({
       mutationFn: (window: { from: string; to: string }) =>
         performanceApi.enqueueRange(scope.projectId, window, scoped(scope)),
     }),
-  /** One integrations sync run per active mapped connection. */
   syncNow: (scope: ProjectScope) =>
     mutationOptions({
       mutationFn: () => {

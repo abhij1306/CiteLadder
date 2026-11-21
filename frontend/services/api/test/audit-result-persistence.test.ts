@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { sql } from 'kysely';
 import { afterAll, afterEach, describe, expect, it } from 'vitest';
 import { asOwner, testDatabase } from './support.ts';
 import { VisibilityFixtures } from './visibility-fixtures.ts';
@@ -118,7 +119,6 @@ describe('atomic audit execution persistence', () => {
       reasoning_tokens: null,
       total_output_tokens: 5,
     });
-    // What the answer read is its own evidence, apart from what it cited.
     const read = await db
       .selectFrom('retrieved_sources as source')
       .innerJoin('response_analyses as analysis', 'analysis.id', 'source.analysis_id')
@@ -229,7 +229,6 @@ describe('atomic audit execution persistence', () => {
       .set({ available_at: new Date(0) })
       .where('id', '=', t.context.task.id)
       .execute();
-    // Other repetitions are left queued; direct claim of this retry gives the next owner its lease.
     await db
       .updateTable('audit_tasks')
       .set({
@@ -289,7 +288,6 @@ describe('atomic audit execution persistence', () => {
       deriveExecution,
     );
     expect(await finalizeAudit(db, t.workspaceId, t.auditId, async () => {})).toBeNull();
-    // Other frozen repetitions failed; they remain in the requested denominator.
     await db
       .updateTable('audit_tasks')
       .set({ status: 'failed', error_code: 'timeout', completed_at: new Date() })
@@ -306,7 +304,6 @@ describe('atomic audit execution persistence', () => {
       unavailable: 0,
       rate: 1 / 3,
     });
-    // The core prompt also counts toward "All prompts", stored as its own block.
     expect(record(record(metric!.metrics).all)).toMatchObject({
       cohort: 'all',
       total_completed: 1,
@@ -319,6 +316,15 @@ describe('atomic audit execution persistence', () => {
       .executeTakeFirstOrThrow();
     expect(metric!.source_analysis_ids).toEqual([analysis.id]);
     expect(metric!.source_artifact_ids).toEqual([analysis.artifact_id]);
+    expect(analysis).toMatchObject({
+      first_named_kind: 'brand',
+      first_named_name: 'Acme Running',
+      brand_first_offset: 0,
+    });
+    expect(record(metric!.metrics).win_tally).toEqual({
+      answers: 1,
+      first: { 'Acme Running': 1 },
+    });
     const prompt = await db
       .selectFrom('prompt_metric_snapshots')
       .selectAll()
@@ -342,5 +348,17 @@ describe('atomic audit execution persistence', () => {
     expect(await finalizeAudit(db, t.workspaceId, t.auditId, async () => {})).toBeNull();
     const foreign = await auditTenant(db, fixtures);
     expect(await finalizeAudit(db, foreign.workspaceId, t.auditId, async () => {})).toBeNull();
+    const firstNamed = (kind: string | null, name: string | null) =>
+      db
+        .updateTable('response_analyses')
+        .set({ first_named_kind: sql<string>`${kind}`, first_named_name: name })
+        .where('id', '=', analysis.id)
+        .executeTakeFirstOrThrow();
+    await expect(firstNamed(null, null)).rejects.toMatchObject({ code: '23502' });
+    await expect(firstNamed('none', 'Acme Running')).rejects.toMatchObject({ code: '23514' });
+    await expect(firstNamed('other', 'Acme Running')).rejects.toMatchObject({ code: '23514' });
+    await expect(firstNamed('competitor', 'Rival')).resolves.toMatchObject({
+      numUpdatedRows: 1n,
+    });
   });
 });

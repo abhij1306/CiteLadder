@@ -1,18 +1,18 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 
 import { PageKindBadge } from '@/components/site-health/page-kind-badge';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Icon } from '@/components/ui/icon';
 import { Inline, Stack } from '@/components/ui/layout';
-import { QueryState } from '@/components/ui/query-state';
+import { UrlText } from '@/components/ui/table';
 import { TextLink } from '@/components/ui/text-link';
 import { treeBranchClasses } from '@/components/ui/workspace';
 import type { ArchitectureNode } from '@citeladder/contracts';
+import { StateBlock } from '@/components/ui/state-block';
+import { SectionContent, TitledSection } from '@/components/ui/section';
+import { ChevronDown } from '@/lib/icons';
+import { formatCount, readableUrl, sharedOrigin } from '@/lib/format';
 
-/**
- * Where a page's parent came from. Most pages sit under their URL parent, so
- * that default goes unlabelled and only the exceptions say where they came
- * from: a caption on every row said nothing.
- */
 const PARENT_SOURCE_LABELS: Record<ArchitectureNode['parent_source'], string | null> = {
   breadcrumb: 'Breadcrumb',
   explicit_structure: 'Site structure',
@@ -20,13 +20,8 @@ const PARENT_SOURCE_LABELS: Record<ArchitectureNode['parent_source'], string | n
   unknown: 'No known parent',
 };
 
-/**
- * Group nodes under the parent the crawl actually resolved.
- *
- * A parent id that is missing from this crawl's node set, or that points at
- * the node itself, is treated as no parent: rendering it would either drop the
- * page from the tree entirely or recurse forever.
- */
+const HIERARCHY_PREVIEW_ROWS = 10;
+
 function nodesByParent(nodes: ArchitectureNode[]): Map<string | null, ArchitectureNode[]> {
   const nodeIds = new Set(nodes.map((node) => node.site_url_id));
   const grouped = new Map<string | null, ArchitectureNode[]>();
@@ -47,34 +42,68 @@ function nodesByParent(nodes: ArchitectureNode[]): Map<string | null, Architectu
   return grouped;
 }
 
+/** The first `limit` nodes in reading order; a prefix, so every shown node's parent is shown. */
+function previewIds(
+  roots: readonly ArchitectureNode[],
+  grouped: Map<string | null, ArchitectureNode[]>,
+  limit: number,
+): Set<string> {
+  const shown = new Set<string>();
+  const visit = (nodes: readonly ArchitectureNode[]) => {
+    for (const node of nodes) {
+      if (shown.size >= limit) return;
+      shown.add(node.site_url_id);
+      visit(grouped.get(node.site_url_id) ?? []);
+    }
+  };
+  visit(roots);
+  return shown;
+}
+
 export function HierarchyCard({
   nodes,
   crawlId,
 }: Readonly<{ nodes: ArchitectureNode[]; crawlId: string | null }>) {
   const grouped = useMemo(() => nodesByParent(nodes), [nodes]);
-  const roots = grouped.get(null) ?? [];
+  const origin = useMemo(() => sharedOrigin(nodes.map((node) => node.url)), [nodes]);
+  const [expanded, setExpanded] = useState(false);
+  const roots = useMemo(() => grouped.get(null) ?? [], [grouped]);
+  const cut = !expanded && nodes.length > HIERARCHY_PREVIEW_ROWS;
+  const shown = useMemo(
+    () => (cut ? previewIds(roots, grouped, HIERARCHY_PREVIEW_ROWS) : null),
+    [cut, roots, grouped],
+  );
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Observed hierarchy</CardTitle>
-        <CardDescription>
-          Each page sits under its parent in the URL path unless its breadcrumb or the site’s
-          structure says otherwise. Pages with no known parent sit at the top.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
+    <TitledSection
+      title="Observed hierarchy"
+      description={origin ? readableUrl(origin) : undefined}
+    >
+      <SectionContent>
         {roots.length === 0 ? (
-          <QueryState kind="empty" inline message="No hierarchy nodes were measured." />
+          <StateBlock kind="empty" inline message="No hierarchy nodes were measured." />
         ) : (
-          <section
-            className="content-scroll max-h-96 overflow-y-auto overscroll-contain"
-            aria-label="Observed hierarchy pages"
-          >
-            <HierarchyList nodes={roots} grouped={grouped} crawlId={crawlId} />
-          </section>
+          <Stack>
+            <section aria-label="Observed hierarchy pages">
+              <HierarchyList
+                nodes={roots}
+                grouped={grouped}
+                crawlId={crawlId}
+                origin={origin}
+                shown={shown}
+              />
+            </section>
+            {cut ? (
+              <Inline>
+                <Button variant="secondary" onClick={() => setExpanded(true)}>
+                  <Icon icon={ChevronDown} />
+                  {`Show all ${formatCount(nodes.length)}`}
+                </Button>
+              </Inline>
+            ) : null}
+          </Stack>
         )}
-      </CardContent>
-    </Card>
+      </SectionContent>
+    </TitledSection>
   );
 }
 
@@ -82,39 +111,51 @@ function HierarchyList({
   nodes,
   grouped,
   crawlId,
+  origin,
+  shown,
 }: Readonly<{
   nodes: ArchitectureNode[];
   grouped: Map<string | null, ArchitectureNode[]>;
   crawlId: string | null;
+  origin: string | null;
+  shown: Set<string> | null;
 }>) {
+  const visible = shown ? nodes.filter((node) => shown.has(node.site_url_id)) : nodes;
   return (
     <ul className={treeBranchClasses()}>
-      {nodes.map((node) => {
+      {visible.map((node) => {
         const children = grouped.get(node.site_url_id) ?? [];
-        // The home page is the root by definition, not a page missing a parent.
         const home = node.depth_from_home === 0;
         const source = home ? null : PARENT_SOURCE_LABELS[node.parent_source];
+        const childShown = children.some((child) => !shown || shown.has(child.site_url_id));
         return (
           <Stack as="li" gap="item" key={node.site_url_id} className="min-w-0">
-            <Inline className="flex-wrap">
+            <Inline>
               {crawlId ? (
                 <TextLink
                   text="body"
-                  className="min-w-0 [overflow-wrap:anywhere]"
+                  className="flex min-w-0"
+                  aria-label={readableUrl(node.url)}
                   href={`/site/crawls/${crawlId}/pages/${node.site_url_id}`}
                 >
-                  {node.url}
+                  <UrlText url={node.url} origin={origin} />
                 </TextLink>
               ) : (
-                <span className="type-body text-ink min-w-0 [overflow-wrap:anywhere]">
-                  {node.url}
+                <span className="type-body text-ink flex min-w-0">
+                  <UrlText url={node.url} origin={origin} />
                 </span>
               )}
               <PageKindBadge pageKind={node.page_kind} />
-              {source ? <span className="type-caption">{source}</span> : null}
+              {source ? <span className="type-caption whitespace-nowrap">{source}</span> : null}
             </Inline>
-            {children.length > 0 ? (
-              <HierarchyList nodes={children} grouped={grouped} crawlId={crawlId} />
+            {childShown ? (
+              <HierarchyList
+                nodes={children}
+                grouped={grouped}
+                crawlId={crawlId}
+                origin={origin}
+                shown={shown}
+              />
             ) : null}
           </Stack>
         );

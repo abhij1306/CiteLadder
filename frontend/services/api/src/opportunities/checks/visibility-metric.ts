@@ -1,8 +1,3 @@
-/**
- * A tracked prompt's score rises in a later visibility run. Members with no
- * prompt get no check: the project-wide score moves for reasons the Action
- * never touched, so it cannot verify one.
- */
 import { sql } from 'kysely';
 import { policy } from '../../config.ts';
 import { record } from '../../db/json.ts';
@@ -14,11 +9,6 @@ import { once } from './read-context.ts';
 
 const o = policy.opportunity.opportunities;
 
-/**
- * The prompts a member is measured on: its own, or for an earned listing,
- * which has no reading of its own, every tracked prompt whose answers cited
- * the page.
- */
 function promptsOf(member: MemberFacts): string[] {
   if (member.target_prompt_id !== null) return [member.target_prompt_id];
   const prompts = record(record(member.evidence).content_handoff).affected_prompts;
@@ -26,7 +16,6 @@ function promptsOf(member: MemberFacts): string[] {
   return [...new Set(prompts.map((item) => scalarText(record(item).prompt_id)).filter(Boolean))];
 }
 
-/** A prompt's score, frozen from the snapshot's audit. */
 async function promptCheck(
   { db, scope, auditId }: FreezeContext,
   promptId: string,
@@ -63,7 +52,6 @@ export const visibilityMetricCheck: CheckModule<'visibility_metric'> = {
   sources: ['audit'],
   measurable: (member) => promptsOf(member).length > 0,
   async freeze(members, context) {
-    // One baseline read per prompt, however many members name it.
     const frozen = new Map<string, CheckOf<'visibility_metric'>>();
     const checks: MemberCheck[] = [];
     for (const member of members)
@@ -77,12 +65,9 @@ export const visibilityMetricCheck: CheckModule<'visibility_metric'> = {
       }
     return checks;
   },
-  /** A prompt's score in this audit against the score frozen at declaration. */
   async read(ctx, source, check) {
     const d = ctx.declaration;
     const prompt = parseUuid(check.target_prompt_id);
-    // Checks declared against the project-wide score measured nothing the
-    // Action changed; they stay unmeasurable rather than verify by drift.
     if (!prompt) return outcome(ctx.reading, 'unavailable', 'not_prompt_scoped');
     const snapshot = await once(ctx, 'metric_snapshot', () =>
       ctx.scope

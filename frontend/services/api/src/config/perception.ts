@@ -1,8 +1,3 @@
-/**
- * Answer perception policy: versions, caps, the closed theme list and the
- * model templates, plus the gated fact-checking block (claim addendum,
- * verification template, topics and platform caps).
- */
 import { factTopicSchema } from '@citeladder/contracts/fact-checking';
 import { z } from 'zod';
 import value from './perception.json' with { type: 'json' };
@@ -17,12 +12,12 @@ const factCheck = z.strictObject({
   verify_template_version: version,
   metrics_version: version,
   topics: z.array(factTopicSchema).min(1),
-  // Neighbouring topics whose facts a claim is also checked against, so a
-  // claim filed under an adjacent topic still meets the fact that decides it.
   related_topics: z.record(z.string(), z.array(factTopicSchema)),
   statement_max_chars: positive,
   source_url_max_chars: positive,
   max_facts_per_project: positive,
+  facts_import_max_rows: positive,
+  override_note_max_chars: positive,
   max_frozen_facts: positive,
   max_claims_per_answer: positive,
   max_facts_per_verification: positive,
@@ -36,6 +31,7 @@ const factCheck = z.strictObject({
   max_cited_alongside: positive,
   claims_default_limit: positive,
   claims_max_limit: positive,
+  claims_export_max_rows: positive,
   eval_policy_version: version,
   eval_thresholds: z.strictObject({
     max_false_contradiction_rate: share,
@@ -67,7 +63,14 @@ const schema = z.strictObject({
   task_max_attempts: positive,
   quotes_default_limit: positive,
   quotes_max_limit: positive,
-  themes: z.array(z.string().regex(/^[a-z_]+$/u)).min(2),
+  project_themes: z.strictObject({
+    fallback: z.string().trim().min(1),
+    name_max_chars: positive,
+    research_max: positive,
+    research_max_words: positive,
+    research_min_confidence: share,
+    company_fact_terms: z.array(z.string().trim().toLowerCase().min(1)),
+  }),
   eval_policy_version: version,
   eval_thresholds: z.strictObject({
     min_label_agreement: share,
@@ -77,6 +80,8 @@ const schema = z.strictObject({
   }),
   system_template: z.string().trim().min(1),
   user_template: z.string().trim().min(1),
+  max_untracked_names_per_answer: positive,
+  max_untracked_name_chars: positive,
   fact_check: factCheck,
 });
 
@@ -109,8 +114,6 @@ function loadPerception(input: unknown) {
   if (!result.success)
     throw new ConfigError('Invalid perception configuration: ' + result.error.message);
   const config = result.data;
-  if (config.themes.at(-1) !== 'other' || new Set(config.themes).size !== config.themes.length)
-    throw new ConfigError('Perception themes must be unique and end with the "other" fallback');
   if (config.quotes_default_limit > config.quotes_max_limit)
     throw new ConfigError('Perception quote default limit exceeds its maximum');
   for (const slot of ['{prompt}', '{language}', '{themes}', '{max_aspects}', '{entities}'])
@@ -123,7 +126,6 @@ function loadPerception(input: unknown) {
 export const perception = loadPerception(value);
 export type PerceptionPolicy = typeof perception;
 
-/** Each configured fact topic's display and freeze order; unconfigured topics are absent. */
 export const factTopicOrder: ReadonlyMap<string, number> = new Map(
   perception.fact_check.topics.map((topic, index) => [topic, index]),
 );

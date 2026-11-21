@@ -6,13 +6,6 @@ import type { DeriveExecution } from '../audits/result-persistence.ts';
 import type { MeterableShelfResolver } from './shelf.ts';
 import { frozenRevisionId, frozenVersions, prepareShelfExecution } from './shelf.ts';
 
-/**
- * Older writers saved answers before derivation. Prepare recovery outside the
- * audit transaction for every succeeded answer that no pass covers yet under
- * the audit's frozen versions: Commerce audits, and any audit that froze a
- * catalog revision. A backfill pass counts, so recovery never spends resolver
- * quota on an answer whose derivation would be discarded.
- */
 export async function prepareSavedShelf(
   db: Database,
   workspaceId: string,

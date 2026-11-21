@@ -13,7 +13,7 @@ it('shows a viewer the crawl without any control to start, stop or schedule one'
   renderScreen();
 
   expect(await screen.findByTestId('status-strip')).toBeVisible();
-  expect(screen.getByRole('tablist', { name: 'Website analysis' })).toBeVisible();
+  expect(screen.getByRole('tablist', { name: 'Site health analysis' })).toBeVisible();
   for (const name of ['Run new crawl', 'Stop crawl', 'Rerun', /schedule/i])
     expect(screen.queryByRole('button', { name })).toBeNull();
 });

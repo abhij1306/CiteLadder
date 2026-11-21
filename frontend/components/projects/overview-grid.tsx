@@ -1,18 +1,12 @@
-import { ArrowDown, ArrowUp, Maximize2, Minimize2, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import { overviewWidgetTitles, type OverviewWidget } from '@citeladder/contracts/overview';
 import { AppGrid } from '@/components/ui/app-grid';
 import { IconButton } from '@/components/ui/button';
 import { FloatingToolbar } from '@/components/ui/workspace';
-import { moveWidget, removeWidget, toggleWidth } from '@/lib/overview/layout';
-import { cn } from '@/lib/utils';
+import { ArrowDown, ArrowUp, Maximize2, Minimize2, X } from '@/lib/icons';
+import { moveWidget, overviewRows, removeWidget, toggleWidth } from '@/lib/overview/layout';
 
-/**
- * The Overview's two-column grid. Half widgets share a row and its height;
- * full widgets span it. While editing, each widget carries its controls in an
- * overlay, so entering or leaving edit mode never moves a widget.
- */
 export function OverviewGrid({
   widgets,
   editing,
@@ -26,32 +20,35 @@ export function OverviewGrid({
   onChange: (widgets: OverviewWidget[]) => void;
   render: (widget: OverviewWidget) => ReactNode;
 }>) {
-  return (
-    <AppGrid layout="halves">
-      {widgets.map((widget, index) => (
-        // The widget's own card names its region; this cell only places it.
-        <div
-          key={widget.key}
-          data-widget={widget.key}
-          className={cn('relative min-w-0', widget.size === 'full' && 'shell:col-span-2')}
-        >
-          {render(widget)}
-          {editing ? (
-            <WidgetControls
-              widget={widget}
-              first={index === 0}
-              last={index === widgets.length - 1}
-              only={widgets.length === 1}
-              pending={pending}
-              onMove={(to) => onChange(moveWidget(widgets, index, to))}
-              onResize={() => onChange(toggleWidth(widgets, index))}
-              onRemove={() => onChange(removeWidget(widgets, index))}
-              index={index}
-            />
-          ) : null}
-        </div>
-      ))}
-    </AppGrid>
+  const cell = (widget: OverviewWidget) => {
+    const index = widgets.indexOf(widget);
+    return (
+      <section key={widget.key} data-widget={widget.key} className="relative min-w-0">
+        {render(widget)}
+        {editing ? (
+          <WidgetControls
+            widget={widget}
+            first={index === 0}
+            last={index === widgets.length - 1}
+            only={widgets.length === 1}
+            pending={pending}
+            onMove={(to) => onChange(moveWidget(widgets, index, to))}
+            onResize={() => onChange(toggleWidth(widgets, index))}
+            onRemove={() => onChange(removeWidget(widgets, index))}
+            index={index}
+          />
+        ) : null}
+      </section>
+    );
+  };
+  return overviewRows(widgets).map((row) =>
+    row.length === 1 ? (
+      cell(row[0])
+    ) : (
+      <AppGrid key={row.map((widget) => widget.key).join()} layout="halves">
+        {row.map(cell)}
+      </AppGrid>
+    ),
   );
 }
 

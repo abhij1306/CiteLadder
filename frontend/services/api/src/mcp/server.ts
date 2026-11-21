@@ -1,4 +1,3 @@
-/** Stateless Streamable HTTP delivery over persisted MCP owners. */
 import type { Context, Hono } from 'hono';
 import type { ServiceConfig } from '../config.ts';
 import api from '../config/api.json' with { type: 'json' };
@@ -32,7 +31,6 @@ const CAPABILITIES = { tools: {}, resources: {}, prompts: {} };
 function object(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
-/** Credential-free origin identities normalize explicit default ports. */
 function origin(value: string): string | null {
   try {
     const url = new URL(value);
@@ -101,7 +99,6 @@ function declaredBodyTooLarge(c: McpContext) {
     (!/^\d+$/u.test(declared) || Number(declared) > api.request_body_max_bytes)
   );
 }
-/** Reads the clone to its end, stopping as soon as it passes the body limit. */
 async function exceedsBodyLimit(reader: ReadableStreamDefaultReader<Uint8Array>) {
   let bytes = 0;
   try {
@@ -192,7 +189,6 @@ function modernHeadersRefusal(
     return c.json(rpcError(message.id, -32602, 'Required client metadata is missing'), 400);
   return null;
 }
-/** Settles the protocol version: whether this is a modern request, or the response refusing it. */
 function negotiateVersion(
   c: McpContext,
   message: RpcMessage,
@@ -263,7 +259,6 @@ async function callTool(call: McpCall): Promise<MethodResult> {
     return toolFailure(error, name, write);
   }
 }
-/** A caller's mistake is a tool error the model can read and correct. */
 function toolFailure(error: unknown, name: string, write: boolean): MethodResult {
   const problem = callerMessage(error);
   if (problem === null)
@@ -337,7 +332,6 @@ async function dispatchMethod(call: McpCall): Promise<MethodResult> {
     case 'ping':
       return {};
     case 'tools/list':
-      // A read-only grant neither lists nor can call a change.
       return { tools: principal.canWrite ? listedWithChanges : listedTools };
     case 'tools/call':
       return callTool(call);

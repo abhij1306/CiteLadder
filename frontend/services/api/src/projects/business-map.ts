@@ -1,11 +1,3 @@
-/**
- * The editable business map: per-offering facts that ground prompt generation.
- *
- * Stored in `brand_profiles.business_context.business_map`. Entries carry
- * provenance: generation adds model suggestions (`suggested`) to
- * offerings whose map is empty, under the project advisory lock; only a
- * person confirms them, here, under the same lock.
- */
 import { businessMapSchema, offeringMapSchema } from '@citeladder/contracts/project';
 import {
   businessMapEntryRequestSchema,
@@ -103,7 +95,6 @@ function mergeDimension(requested: EntryInput[], prior: Entry[], reviewer: Revie
   return [...merged.values()];
 }
 
-/** Each exclusion names two distinct entries of its offering; repeats collapse. */
 function checkedExclusions(offering: Omit<OfferingMap, 'exclusions'>, exclusions: Exclusion[]) {
   const known = new Set(
     DIMENSIONS.flatMap((dimension) => offering[dimension].map((entry) => key(entry.value))),
@@ -152,7 +143,6 @@ export async function readBusinessMap(db: Database, scope: ProjectScope): Promis
   return { offerings: storedOfferings(context), available_offerings: profileProducts(profile) };
 }
 
-/** Replace the map; surviving entries keep their provenance. */
 export function updateBusinessMap(
   db: Database,
   scope: ProjectScope,
@@ -169,7 +159,6 @@ export function updateBusinessMap(
       userId,
       at: now.toISOString(),
     });
-    // Replace only the map key, so every other persisted fact is untouched.
     await trx
       .updateTable('brand_profiles')
       .set({

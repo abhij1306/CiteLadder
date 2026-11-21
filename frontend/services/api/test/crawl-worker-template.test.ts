@@ -10,7 +10,6 @@ const env = {
   CITELADDER_CRAWL_TOKEN: 'secret',
 };
 const start = Date.parse('2026-10-09T00:00:00Z');
-/** The origin answers a Request; the ingest endpoint answers its URL string. */
 function stubFetch(ingest: () => Promise<Response>) {
   const fetch = vi.fn(async (input: Request | string, _init?: RequestInit) =>
     typeof input === 'string' ? ingest() : new Response('visitor content', { status: 404 }),

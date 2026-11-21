@@ -7,7 +7,7 @@ import { promptsApi } from '@/lib/api/prompts';
 import { ApiError } from '@/lib/api/errors';
 import type { PromptSet, PromptSetList } from '@citeladder/contracts';
 import { makeProject } from '@/test/fixtures/project';
-import { makeSet, makeSetList } from '@/test/fixtures/prompts';
+import { makePrompt, makeSet, makeSetList } from '@/test/fixtures/prompts';
 import { renderWithProviders } from '@/test/render';
 import { usePromptSet } from './use-prompt-set';
 
@@ -97,6 +97,68 @@ it('does not interpret a failed lookup as an empty project', async () => {
   await userEvent.setup().click(screen.getByRole('button', { name: 'First' }));
   await waitFor(() =>
     expect(screen.getByRole('status', { name: 'First result' })).toHaveTextContent('unavailable'),
+  );
+  expect(create).not.toHaveBeenCalled();
+});
+
+it('reads every set as one library and adds to the main brand set, not the newest', async () => {
+  const COMMERCE = '44444444-4444-4444-8444-444444444444';
+  const brand = makeSet([makePrompt({ text: 'Best running shoes?' })]);
+  const commerce: PromptSet = {
+    ...makeSet([
+      makePrompt({
+        id: '55555555-5555-4555-8555-555555555555',
+        prompt_set_id: COMMERCE,
+        text: 'Trail shoes under $100?',
+        cohort: 'commerce',
+      }),
+    ]),
+    id: COMMERCE,
+    name: 'Commerce Buyer Prompts',
+    kind: 'commerce',
+    created_at: '2025-06-01T00:00:00Z',
+  };
+  const HOLIDAY = '66666666-6666-4666-8666-666666666666';
+  const holiday: PromptSet = {
+    ...makeSet([
+      makePrompt({
+        id: '77777777-7777-4777-8777-777777777777',
+        prompt_set_id: HOLIDAY,
+        text: 'Gift running shoes?',
+      }),
+    ]),
+    id: HOLIDAY,
+    name: 'Holiday',
+    created_at: '2026-08-01T00:00:00Z',
+  };
+  vi.spyOn(promptsApi, 'listPromptSets').mockResolvedValue(makeSetList([holiday, brand, commerce]));
+  const create = vi.spyOn(promptsApi, 'createPromptSet');
+  function Library() {
+    const { prompts, setNames } = usePromptSet();
+    return (
+      <output aria-label="Library">
+        {prompts
+          .map((prompt) => `${prompt.text} (${setNames.get(prompt.prompt_set_id)})`)
+          .join(' | ')}
+      </output>
+    );
+  }
+  const project = makeProject();
+  renderWithProviders(
+    <>
+      <Library />
+      <Consumer name="Add" />
+    </>,
+    { projectSelection: { activeProject: project, activeProjectId: project.id, status: 'ready' } },
+  );
+  await waitFor(() =>
+    expect(screen.getByRole('status', { name: 'Library' })).toHaveTextContent(
+      'Best running shoes? (Default prompt set) | Gift running shoes? (Holiday) | Trail shoes under $100? (Commerce Buyer Prompts)',
+    ),
+  );
+  await userEvent.setup().click(screen.getByRole('button', { name: 'Add' }));
+  await waitFor(() =>
+    expect(screen.getByRole('status', { name: 'Add result' })).toHaveTextContent(brand.id),
   );
   expect(create).not.toHaveBeenCalled();
 });

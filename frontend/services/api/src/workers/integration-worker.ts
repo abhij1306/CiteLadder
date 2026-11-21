@@ -33,7 +33,6 @@ const templates = Object.values(integrationPolicy.datasets);
 const excluded = new Set(integrationPolicy.excluded_datasets);
 // 13 bound parameters a row stays well inside PostgreSQL's 65,535 limit.
 const METRIC_INSERT_BATCH = 2_000;
-/** Marks a stop requested by the caller's deadline rather than a failure. */
 const DEADLINE = Symbol('deadline');
 
 type Run = {
@@ -85,11 +84,8 @@ export class IntegrationWorker {
   readonly #tokenResolver: typeof freshAccessToken;
   readonly #scope?: { workspaceId: string; runId: string };
   readonly #queue: TaskQueue<'integration_sync_runs'>;
-  /** Pages this attempt committed; a deadline stop with progress is not charged. */
   #committedPages = 0;
-  /** When this claim's first provider request started; null until one has. */
   #firstRequestAt: number | null = null;
-  /** When this claim's attempt began. */
   #startedAt = 0;
 
   constructor(
@@ -149,7 +145,6 @@ export class IntegrationWorker {
         await startedEvents(trx, claimed);
         const [run] = claimed;
         if (!run) return;
-        // Window bounds as the session renders them: the run is read by date.
         window = await trx
           .selectFrom('integration_sync_runs')
           .select([
@@ -164,12 +159,10 @@ export class IntegrationWorker {
     return row && window ? { ...row, ...window } : null;
   }
 
-  /** Earliest claimable run or lease expiry, so an idle runner stays for a retry, history chunk or recovery due soon. */
   nextDue(): Promise<Date | null> {
     return this.#queue.nextDue();
   }
 
-  /** The fenced run lock every sync write takes first. */
   #held(db: Database, run: Run) {
     return this.#queue.fence(db, run, this.#owner, [statuses.running]);
   }
@@ -213,7 +206,6 @@ export class IntegrationWorker {
     );
   }
 
-  /** Dataset imports share a grant and lease; finish each before advancing. */
   async #importTemplates(
     run: Run,
     provider: IntegrationProvider,
@@ -264,7 +256,6 @@ export class IntegrationWorker {
     )
       return;
     let offset = offsets.size ? lastOffset + this.#settings.sync_page_size : 0;
-    // Commit each offset under the lease before fetching its successor.
     for (let pageNumber = 0; pageNumber < this.#settings.sync_max_pages; pageNumber += 1) {
       signal.throwIfAborted();
       if (offsets.has(offset)) {
@@ -328,11 +319,6 @@ export class IntegrationWorker {
     return { page, template };
   }
 
-  /**
-   * One provider page with a token resolved for it: a run can outlast the
-   * refresh skew. A 401 refreshes the refused token once before it counts as
-   * a credential failure that demotes the grant.
-   */
   async #page(
     run: Run,
     provider: IntegrationProvider,
@@ -442,8 +428,6 @@ export class IntegrationWorker {
           created_at: new Date(),
         })
         .execute();
-      // All derived rows use the same artifact and locked page transaction,
-      // batched so a 25,000-row page is a few statements rather than one per row.
       const createdAt = new Date();
       for (let index = 0; index < rows.length; index += METRIC_INSERT_BATCH) {
         await trx
@@ -561,13 +545,6 @@ export class IntegrationWorker {
     });
   }
 
-  /**
-   * The caller's deadline stopped the run, not the provider. Committed pages
-   * resume on the next claim, so an attempt that made progress is refunded, as
-   * is one stopped before its first provider request had a full request
-   * timeout (admitted late in a drain, or slowed by setup). One that had that time and committed nothing still
-   * counts, which bounds a run that cannot finish a single page.
-   */
   async #release(trx: Database, run: Run, now: Date): Promise<void> {
     const started = this.#firstRequestAt;
     const admittedLate =

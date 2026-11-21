@@ -36,7 +36,6 @@ function acquire(userId: string, limits: StreamLimits): () => void {
   };
 }
 
-/** Who holds a stream, and whether their access still stands. */
 export type StreamOwner = {
   userId: string;
   limits: StreamLimits;
@@ -55,14 +54,6 @@ export function streamOwner(c: Context<AppEnv>, db: Database, limits: StreamLimi
   };
 }
 
-/**
- * Admit one event stream for the user or refuse with 429 before it starts.
- * The slot is released when the stream completes, errors, is cancelled, or
- * the request aborts, whichever happens first. Every recheck interval the
- * owner's access is read again; once it has ended (or cannot be confirmed)
- * the signal `open` received aborts and the stream closes, so the client's
- * reconnect goes through full authorization.
- */
 export function slottedEventStream(
   input: StreamOwner & {
     signal: AbortSignal;

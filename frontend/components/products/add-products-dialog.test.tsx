@@ -78,7 +78,6 @@ const RESULT = {
   ],
 };
 
-/** Every stage request body the server receives, answered with STAGE. */
 function recordStages() {
   const staged: unknown[] = [];
   mswServer.use(
@@ -120,14 +119,12 @@ describe('AddProductsDialog', () => {
     expect(
       screen.getByText('2 products ready from catalog.csv; 1 row cannot be imported.'),
     ).toBeVisible();
-    // Clearing a category leaves out the categories under it too.
     fireEvent.click(within(tree).getByRole('checkbox', { name: 'Footwear (2 products)' }));
     expect(within(tree).getByRole('checkbox', { name: 'Running (2 products)' })).not.toBeChecked();
     expect(within(tree).getByRole('checkbox', { name: 'Sale (1 product)' })).toBeChecked();
     fireEvent.click(screen.getByRole('button', { name: 'Import 2 products' }));
 
     const rows = await screen.findByRole('list', { name: 'Rows' });
-    // Everything shown cleared is left out, not only the box the person cleared.
     expect(applied).toEqual([{ excluded_categories: ['footwear', 'running'] }]);
     expect(screen.getByLabelText('Import results')).toHaveTextContent(
       '1 added, 1 updated, 0 unchanged, 1 rejected',
@@ -188,7 +185,6 @@ describe('AddProductsDialog', () => {
     const staged = recordStages();
     open();
     await userEvent.setup().click(screen.getByRole('tab', { name: 'Merchant Center feed' }));
-    // "title,brand\nCafé,Acme\n" with é as the Windows-1252 byte 0xE9.
     const bytes = new Uint8Array([
       ...new TextEncoder().encode('title,brand\nCaf'),
       0xe9,

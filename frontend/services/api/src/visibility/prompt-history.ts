@@ -1,14 +1,3 @@
-/**
- * One tracked prompt over time: its mention and owned-citation rates per run,
- * oldest first, with the Actions whose declared work this prompt measures.
- *
- * The spine is the persisted `prompt_metric_snapshots` of the market's
- * dashboard-ready brand runs; rates count that run's persisted answers for the
- * prompt, never a rescore. A run with no successful answer reads unavailable,
- * never zero. Implementation markers are when a user said the work went live;
- * nothing here claims the work moved a rate.
- */
-import { actionStatusSchema } from '@citeladder/contracts/actions';
 import type {
   promptHistoryImplementationSchema,
   promptHistoryPointSchema,
@@ -19,6 +8,7 @@ import { sql } from 'kysely';
 import type { z } from 'zod';
 
 import { frozenComparisonKey } from '../analysis/comparison.ts';
+import { statusView } from '../opportunities/action-status.ts';
 import { policy } from '../config.ts';
 import { notFound } from '../errors.ts';
 import type { Database } from '../db/database.ts';
@@ -27,9 +17,10 @@ import { groupBy } from '../lists.ts';
 import { compareText } from '../text-order.ts';
 import { scopedPrompt } from '../prompts/prompts.ts';
 import { ratio } from './metrics.ts';
-import { answerStates, getPromptMetrics, outcomeCounts } from './prompts.ts';
+import { answerStates, outcomeCounts } from './prompt-outcomes.ts';
+import { getPromptMetrics } from './prompts.ts';
 import { marketOf, type RunScope } from './runs.ts';
-import { selectedCohorts, validateCohort, validateEngineAndRange } from './selection.ts';
+import { selectedCohorts, validateEngineAndRange, validatePromptCohort } from './selection.ts';
 
 const visibility = policy.visibility;
 
@@ -40,7 +31,6 @@ type Implementation = z.input<typeof promptHistoryImplementationSchema>;
 export type PromptHistoryQuery = {
   promptId: string;
   logicalEngine: string | null;
-  /** Omitted reads the prompt's own cohort. */
   cohort: PromptHistory['cohort'] | null;
 };
 
@@ -54,15 +44,11 @@ export async function getPromptHistory(
   validateEngineAndRange({ logicalEngine: request.logicalEngine, fromAt: null, toAt: null });
   const prompt = await scopedPrompt(db, scope.workspaceId, request.promptId);
   if (prompt.project_id !== scope.projectId) throw notFound('Prompt');
-  // A prompt is measured in its own cohort; one no read serves falls back to core.
-  const own = promptCohortSchema.parse(prompt.cohort);
   const query: ResolvedQuery = {
     ...request,
-    cohort:
-      request.cohort ??
-      (visibility.requestable_cohorts.includes(own) ? own : promptCohortSchema.enum.core),
+    cohort: request.cohort ?? promptCohortSchema.parse(prompt.cohort),
   };
-  validateCohort(query.cohort);
+  validatePromptCohort(query.cohort);
   const [points, implementations] = await Promise.all([
     historyPoints(db, scope, query),
     implementationMarkers(db, scope, query.promptId),
@@ -92,7 +78,6 @@ export async function getPromptHistory(
   };
 }
 
-/** The newest `trend_max_points` runs that scored the prompt, oldest first. */
 async function historyPoints(
   db: Database,
   scope: RunScope,
@@ -185,11 +170,9 @@ async function historyPoints(
   });
 }
 
-/** `(audit_id, prompt_index)` row values for a tuple `in` list. */
 const pairList = (pairs: readonly { audit: string; index: number }[]) =>
   sql.join(pairs.map(({ audit, index }) => sql`(${audit}::uuid, ${index}::int)`));
 
-/** Declarations whose frozen checks measure this prompt, oldest go-live first. */
 async function implementationMarkers(
   db: Database,
   scope: RunScope,
@@ -211,7 +194,6 @@ async function implementationMarkers(
     .where('actions.workspace_id', '=', scope.workspaceId)
     .where('actions.project_id', '=', scope.projectId)
     .where(sql<boolean>`ie.expected_checks @> ${checks}::jsonb`)
-    // The newest markers survive the cap; the response lists them oldest first.
     .orderBy('ie.declared_implemented_at', 'desc')
     .orderBy('ie.id', 'desc')
     .limit(visibility.trend_max_points)
@@ -220,7 +202,7 @@ async function implementationMarkers(
     implementation_event_id: row.id,
     action_id: row.action_id,
     title: row.target_label,
-    status: actionStatusSchema.parse(row.status),
+    status: statusView(row.status).status,
     implemented_at: wireUtc(row.implemented_at),
   }));
 }

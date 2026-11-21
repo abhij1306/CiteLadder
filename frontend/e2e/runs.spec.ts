@@ -1,16 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { FIXTURE_PROJECT, fixtureProjectPath, stubAuthedShell } from './helpers/app-fixture';
 
-/**
- * F10 Run/Executions explorer smoke: shell → open a run → open evidence.
- *
- * The `/auth/me`, `/projects`, `/audits*`, and `/executions/*` calls are stubbed
- * at the network layer so the spec runs without a live backend. It exercises the
- * in-run evidence drawer flow (shell → Runs → open run → open evidence).
- *
- * playwright.config.ts starts (or reuses) the dev server; if it cannot come up
- * the whole run fails to boot rather than skipping this spec.
- */
 const PROJECT_ID = FIXTURE_PROJECT.id;
 const WORKSPACE_ID = FIXTURE_PROJECT.workspace_id;
 const AUDIT_ID = '44444444-4444-4444-8444-444444444444';
@@ -40,8 +30,6 @@ const audit = {
   completed_at: '2026-01-01T00:10:00Z',
 };
 
-// The list row carries the table's columns only; the answer comes with the
-// single-execution evidence read below.
 const execution = {
   id: EXEC_ID,
   prompt_index: 0,
@@ -64,6 +52,7 @@ const evidence = {
   logical_engine: 'gemini',
   transport_provider: 'google',
   transport_model: 'gemini-flash-latest',
+  retrieval_enabled: true,
   prompt_index: 0,
   repetition: 1,
   prompt_class: 'unbranded',
@@ -77,11 +66,15 @@ const evidence = {
   unintended_domain_cited: false,
   citation_count: 1,
   search_used: true,
+  search: 'used',
   search_query_count: 1,
+  named: [{ name: 'Acme', kind: 'brand', offset: 0, position: 1 }],
   perception: [],
   claims: [],
   ads: { applicability: 'not_applicable', parser_version: null, items: [] },
   avg_position: null,
+  first_named: { kind: 'brand', name: 'Acme', logo_url: null, website_url: null },
+  answer_formats: { kind: 'not_applicable' },
   score: { visibility: 1 },
   citations: [
     {
@@ -110,18 +103,16 @@ test('shell → open run → open execution evidence', async ({ page }) => {
 
   await page.goto(fixtureProjectPath('/runs'));
 
-  // Runs list renders and the run links to its detail page.
   await expect(page.getByRole('heading', { level: 1, name: 'Runs' })).toBeVisible();
-  await page.getByRole('table').getByRole('link', { name: 'View' }).first().click();
+  await page.getByRole('table').getByRole('link', { name: 'Brand audit · Jan 1, 2026' }).click();
 
-  // Run detail: progress panel + executions table.
   await expect(page).toHaveURL(fixtureProjectPath(`/runs/${AUDIT_ID}`));
   await expect(page.getByText('Executions')).toBeVisible();
   await page.getByRole('button', { name: 'Evidence' }).first().click();
 
-  // Execution evidence stays in the run page's drawer: answer + citation.
-  const drawer = page.getByRole('dialog');
-  await expect(drawer).toBeVisible();
-  await expect(drawer.getByText('Acme is a leading CRM.')).toBeVisible();
-  await expect(drawer.getByText('Acme docs')).toBeVisible();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByText(/is a leading CRM\./u)).toBeVisible();
+  await expect(dialog.locator('[data-brand-chip="Acme"]')).toContainText('Acme');
+  await expect(dialog.getByText('Acme docs')).toBeVisible();
 });

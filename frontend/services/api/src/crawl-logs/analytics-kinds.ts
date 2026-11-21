@@ -1,4 +1,3 @@
-/** The crawl-log analytics kinds. */
 import { crawlLogs } from '../config/crawl-logs.ts';
 import type { AnalyticsKinds } from '../queue/executor.ts';
 import {

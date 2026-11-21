@@ -1,19 +1,3 @@
-/**
- * The content rule catalog (docs/plans/content-rules-engine.md, "The rule
- * catalog"; CO13): the rules a page document's suggestions apply, each with
- * its category, layer, check, source and strength, and the evidence it needs.
- * Seeded from the plan's appendix research catalog (each rule's `ref`).
- *
- * Two layers live here. `site_health` rules (L0) are owned by Site Health's
- * evaluators and listed only so their findings carry a category, source and
- * strength, and so the model pass never raises or re-judges them; it may only
- * write the text for one of their findings already on the page. `model` rules
- * (L4) are the ones the model pass judges. The deterministic L1–L3 rules are
- * not here until their linters run. The catalog's version is a fingerprint of
- * this file's content (`page-documents/content-rules.ts`).
- */
-
-/** User-facing categories, in display order; every suggestion has one. */
 const CONTENT_RULE_CATEGORIES = [
   'correctness',
   'clarity',
@@ -24,13 +8,6 @@ const CONTENT_RULE_CATEGORIES = [
   'coverage',
 ] as const;
 
-/**
- * What a rule needs before it may run. `fetched_page`: the page document and
- * its fetch. `page_kind`: the fetch knows the page's Site Health kind (needed
- * by rules limited to some page types). `page_prompts`: the prompts the page
- * should be cited for, from the Action's content-gap evidence or the prompts
- * chosen for the chat. The rest are never available to the model pass yet.
- */
 const CONTENT_RULE_EVIDENCE = [
   'fetched_page',
   'page_kind',
@@ -42,7 +19,6 @@ const CONTENT_RULE_EVIDENCE = [
   'external_retrieval',
 ] as const;
 
-/** Where each rule's guidance comes from. */
 const CONTENT_RULE_SOURCES = {
   g_helpful: {
     label: 'Google Search Central: creating helpful content',
@@ -117,14 +93,8 @@ const CONTENT_RULE_SOURCES = {
 type Category = (typeof CONTENT_RULE_CATEGORIES)[number];
 type Evidence = (typeof CONTENT_RULE_EVIDENCE)[number];
 type SourceKey = keyof typeof CONTENT_RULE_SOURCES;
-/**
- * `requirement`: a search-engine policy. `recommendation`: guidance that
- * suggests rather than requires. `heuristic`: a tool convention or contested
- * evidence, labelled as such. Recommendations and heuristics are phrased as options.
- */
 type Strength = 'requirement' | 'recommendation' | 'heuristic';
 
-/** A Site Health rule (L0); its id is Site Health's rule id. */
 type SiteHealthRule = {
   id: string;
   ref: string;
@@ -134,7 +104,6 @@ type SiteHealthRule = {
   source: SourceKey;
   strength: Strength;
 };
-/** A rule the model pass (L4) judges. `page_types` limits it to Site Health page kinds. */
 type ModelRule = {
   id: string;
   ref: string;
@@ -146,9 +115,7 @@ type ModelRule = {
   requires: readonly Evidence[];
   source: SourceKey;
   strength: Strength;
-  /** What the rule checks, as the model reads it. */
   checks: string;
-  /** Rule-specific phrasing, beyond its strength's. */
   guidance?: string;
   thresholds?: Readonly<Record<string, number>>;
 };
@@ -170,10 +137,6 @@ type ModelOverrides = Partial<
     'check' | 'severity' | 'page_types' | 'requires' | 'strength' | 'guidance' | 'thresholds'
   >
 >;
-/**
- * A model rule (L4): a page rule judged by the model alone, of medium severity
- * and recommendation strength, unless `overrides` says otherwise.
- */
 const model = (
   id: string,
   ref: string,
@@ -196,8 +159,6 @@ const model = (
   ...overrides,
 });
 
-// Shared override sets: code finds candidates and the model judges (`hybrid`),
-// and the AI-writing tells, which are clarity heuristics flagged as clusters.
 const HYBRID = { check: 'hybrid' } as const;
 const HYBRID_LOW = { check: 'hybrid', severity: 'low' } as const;
 const HYBRID_HIGH = { check: 'hybrid', severity: 'high' } as const;
@@ -206,15 +167,7 @@ const HEURISTIC = { ...HYBRID_LOW, strength: 'heuristic' } as const;
 const CLARITY_FIX = 'A clarity fix, never a verdict on who wrote it.';
 const VOICE_CLUSTER = { ...HEURISTIC, guidance: CLARITY_FIX } as const;
 
-/**
- * Appendix rules left out, and why: every deterministic one (A8, A13, B8, C3–C8,
- * C11, C14, C15, C19, D1–D7, E1, E2, E6, E9, E10, F1, F3, F4) until the L1–L3
- * linters run, except those Site Health already checks (L0 below); A6 (whether
- * AI was used is not knowable from the page, and the engine gives no authorship
- * verdicts); C16 (link `rel` attributes are not in the Markdown page document).
- */
 const RULES: readonly ContentRule[] = [
-  // L0: Site Health owns these. The model pass never raises them.
   site('technical.title_present', 'C1', 'search_guidelines', 'g_title'),
   site('technical.meta_description_present', 'C9', 'search_guidelines', 'g_snippet'),
   site('technical.canonical_present', 'C20', 'search_guidelines', 'g_canonical'),
@@ -240,7 +193,6 @@ const RULES: readonly ContentRule[] = [
   site('aeo.visible_attribution', 'A5', 'search_guidelines', 'g_helpful'),
   site('aeo.trust_path_present', 'G3', 'search_guidelines', 'g_raters'),
 
-  // L4: the model pass judges these.
   model(
     'search_guidelines.original_value',
     'A1',
@@ -594,14 +546,12 @@ export const contentRules = {
   categories: CONTENT_RULE_CATEGORIES,
   evidence: CONTENT_RULE_EVIDENCE,
   sources: CONTENT_RULE_SOURCES,
-  /** How a suggestion from each strength is worded. */
   phrasing: {
     requirement: 'State it plainly: the page breaks a search-engine policy.',
     recommendation: 'Phrase it as an option grounded in published guidance, never as a must.',
     heuristic:
       'Phrase it as an option and say it is a heuristic: a tool convention or contested evidence.',
   },
-  /** Said with every rule list: what a suggestion may never do. */
   limits:
     'Never promise a ranking or citation gain and never quote an uplift. A fact, figure, source, quote or credential the page, the business facts or the person do not give is asked for in needs_input, never written. A missing source is not a false claim.',
   rules: RULES,

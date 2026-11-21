@@ -1,4 +1,3 @@
-/** Transient observed-crawl graph. Unobserved targets never become authority nodes. */
 import { policy } from '../config.ts';
 import { record } from '../db/json.ts';
 import { compareText } from '../text-order.ts';
@@ -61,7 +60,6 @@ function relTokens(raw: unknown) {
       .filter(Boolean),
   );
 }
-/** One anchor on an edge. Unrendered anchors count for reachability, never for text or main content. */
 function update(
   edge: LinkEdge,
   { anchor, rendered }: { anchor: Record<string, unknown>; rendered: boolean },
@@ -85,7 +83,6 @@ function update(
     region: typeof anchor.region === 'string' ? anchor.region : 'unknown',
   });
 }
-/** Rendered anchors, then those in hidden or template markup that crawlers also follow. */
 export function pageAnchors(facts: Record<string, unknown>) {
   const links = record(facts.links);
   const list = (raw: unknown, rendered: boolean) =>

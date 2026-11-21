@@ -47,8 +47,32 @@ describe('logoDevUrl', () => {
     expect(url.pathname).toBe('/www.acme.com');
     expect(url.searchParams.get('token')).toBe('pk_test');
     expect(url.searchParams.get('size')).toBe('48');
-    // A monogram at 200 OK would mask the failure and beat our own initials.
     expect(url.searchParams.get('fallback')).toBe('404');
+  });
+
+  it('resolves a brand mark from its stored domain, and to the letter only without one', async () => {
+    process.env.NEXT_PUBLIC_LOGO_DEV_PUBLISHABLE = 'pk_test';
+    vi.resetModules();
+    const { brandMarkSources } = await import('./mark-sources');
+    const cdn = (sources: string[]) => sources.map((src) => new URL(src, 'https://app').host);
+
+    expect(
+      cdn(brandMarkSources({ logoUrl: null, websiteUrl: 'wise.example', pixels: 20 })),
+    ).toEqual(['img.logo.dev']);
+    expect(
+      cdn(
+        brandMarkSources({
+          logoUrl: '/api/v1/projects/p/logo',
+          websiteUrl: 'acme.com',
+          pixels: 20,
+        }),
+      ),
+    ).toEqual(['app', 'img.logo.dev']);
+    expect(brandMarkSources({ logoUrl: '/api/v1/projects/p/logo', pixels: 20 })).toEqual([
+      '/api/v1/projects/p/logo',
+    ]);
+    expect(brandMarkSources({ logoUrl: null, websiteUrl: null, pixels: 20 })).toEqual([]);
+    expect(brandMarkSources({ logoUrl: '', websiteUrl: 'not a url', pixels: 20 })).toEqual([]);
   });
 
   it('clamps the size to the CDN maximum', async () => {

@@ -1,14 +1,3 @@
-/**
- * `ai_referrals_snapshot_refresh`: rebuild the AI Referrals snapshots of one
- * sync window, plus the preset family anchored on the latest evidence date.
- *
- * Read phase: every canonical `ga4_source_medium_daily` row in the scanned
- * span, left-joined to its optional event and classification, in keyset
- * batches with cooperative cancel at each boundary. Write phase: one
- * transaction upserts every snapshot on `(project_id, window_start,
- * window_end, granularity)`, so a refresh never leaves a half-written family
- * and a re-run rewrites the same rows.
- */
 import { randomUUID } from 'node:crypto';
 
 import { sql } from 'kysely';
@@ -67,7 +56,6 @@ function refreshWindows(
   return windows;
 }
 
-/** `metric_count`: an additive measure, 0 when missing or not numeric. */
 function sessionCount(metrics: unknown): number {
   const value =
     metrics !== null && typeof metrics === 'object' && !Array.isArray(metrics)
@@ -129,7 +117,6 @@ export const refreshAiReferralsSnapshot: Executor = async (task, { db, checkCanc
     const anchor = await partitionAnchor(trx, task.workspace_id, projectId, SOURCE_MEDIUM);
     const epoch = await partitionEpoch(trx, { workspaceId: task.workspace_id, projectId });
     const windows = refreshWindows(windowStart, windowEnd, anchor);
-    // The family is nested and ends at the anchor, so one scan covers them all.
     if (!isNonEmpty(windows)) throw new Error('Expected at least one referral refresh window');
     const scope = { workspaceId: task.workspace_id, projectId, ...textSpan(windows) };
 
@@ -165,7 +152,6 @@ export const refreshAiReferralsSnapshot: Executor = async (task, { db, checkCanc
         windowEnd: window.end,
         granularity: window.granularity,
       });
-      // A series point covers only its own calendar bucket inside the window.
       const inBucket = (day: string, point: string) =>
         day >= window.start &&
         day <= window.end &&

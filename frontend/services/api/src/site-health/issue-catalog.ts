@@ -1,39 +1,19 @@
-/**
- * The Issues catalog a crawl's unfiltered read serves, persisted per finding
- * class on `site_issue_catalogs`.
- *
- * It is written wherever the crawl's current issue set changes, in that
- * writer's transaction: every issue-currency refresh (the terminal
- * publication, an analysis appended over a finalized one, a duplicate alias
- * retiring analyses), the site-level architecture findings, and a page rerun
- * landing in the site crawl that shows it (`issue-currency.ts`). Each write
- * replaces the crawl's rows with the groups and summary computed from the
- * issues the crawl shows (each page's latest audit, `viewIssuesSql`), so the
- * read never recomputes them. The issues stay as
- * written; each row names the crawl and versions it was computed from, and
- * `sources` keeps every group's exact issue and evaluation IDs (never served).
- *
- * `reference_snippets` keeps at most one redacted HTML reference snippet per
- * issue family: from the first affected page in URL order whose fetched facts
- * carry one. Pages keep theirs only in their bounded fetch facts; the Agent's
- * Site Health tool reads the catalog's (`mcp/evidence-site.ts`).
- */
+import { isActiveCrawl } from '@citeladder/contracts/site-health';
 import { sql } from 'kysely';
 import { z } from 'zod';
 
 import type { Database } from '../db/database.ts';
 import {
+  catalogClassKey,
   catalogItems,
-  catalogSources,
   ISSUE_FINDING_CLASSES,
   issueSummary,
   unfilteredIssues,
 } from './reads/issues.ts';
 import { viewIssuesSql } from './reads/crawl.ts';
 import { issueGroupId } from './reads/rules.ts';
-import type { Crawl } from './site-task.ts';
+import { CRAWL_COLUMNS, type Crawl } from './site-task.ts';
 
-/** Where in a page's fetched facts each issue family's reference snippet is captured. */
 const SNIPPET_FACTS: Readonly<Record<string, readonly string[]>> = {
   'web.accessibility_form_names': ['accessibility', 'controls_missing_accessible_name_snippet'],
 };
@@ -52,7 +32,6 @@ export const referenceSnippetSchema = z.object({
 });
 type IssueReferenceSnippet = z.infer<typeof referenceSnippetSchema>;
 
-/** The family's first affected page, by URL then issue id, whose facts carry a snippet at `path`. */
 async function firstSnippetRow(
   db: Database,
   crawl: Crawl,
@@ -65,20 +44,29 @@ async function firstSnippetRow(
     page_url: string;
     snippet: unknown;
   }>`
-    select i.id as issue_id, i.site_url_id, i.source_artifact_id,
-      coalesce(nullif(u.display_url, ''), u.normalized_url) as page_url,
-      f.normalized_facts #> ${family.path}::text[] as snippet
-    from site_issues i
-    join site_urls u on u.workspace_id = i.workspace_id and u.id = i.site_url_id
-    join site_fetch_artifacts f on f.workspace_id = i.workspace_id and f.id = i.source_artifact_id
-    where ${viewIssuesSql(crawl)}
-      and i.finding_class = ${family.findingClass} and i.rule_id = ${family.ruleId}
-      and jsonb_typeof(f.normalized_facts #> ${family.path}::text[]) = 'object'
-    order by u.normalized_url, i.id limit 1`.execute(db);
+    with affected as materialized (
+      select i.id, i.crawl_id, i.site_url_id, i.source_artifact_id, u.normalized_url,
+        coalesce(nullif(u.display_url, ''), u.normalized_url) as page_url
+      from site_issues i
+      join site_urls u on u.workspace_id = i.workspace_id and u.id = i.site_url_id
+      where ${viewIssuesSql(crawl)}
+        and i.finding_class = ${family.findingClass} and i.rule_id = ${family.ruleId}
+    )
+    -- The family's pages in URL order, each fetch read only until one carries a
+    -- snippet: ordering by URL first drove the plan from every project URL.
+    select x.id as issue_id, x.site_url_id, x.source_artifact_id, x.page_url, s.snippet
+    from (select * from affected order by normalized_url, id) x
+    cross join lateral (
+      select f.normalized_facts #> ${family.path}::text[] as snippet
+      from site_fetch_artifacts f
+      where f.workspace_id = ${crawl.workspace_id} and f.crawl_id = x.crawl_id
+        and f.id = x.source_artifact_id
+    ) s
+    where jsonb_typeof(s.snippet) = 'object'
+    order by x.normalized_url, x.id limit 1`.execute(db);
   return rows[0];
 }
 
-/** Each issue family's one snippet: its first affected page, by URL then issue id, that has one. */
 async function referenceSnippets(
   db: Database,
   crawl: Crawl,
@@ -102,25 +90,34 @@ async function referenceSnippets(
   return snippets;
 }
 
-export async function persistIssueCatalog(db: Database, crawl: Crawl): Promise<void> {
-  const now = new Date();
-  for (const findingClass of ISSUE_FINDING_CLASSES) {
+async function computeIssueCatalog(db: Database, crawl: Crawl) {
+  const classes = [];
+  for (const findingClass of [...ISSUE_FINDING_CLASSES, null]) {
     const filters = unfilteredIssues(findingClass);
-    // One transaction connection: the class's reads, then its write.
-    const items = await catalogItems(db, crawl, filters); // NOSONAR -- In order on the writer's connection.
-    const summary = await issueSummary(db, crawl, filters); // NOSONAR -- In order on the writer's connection.
-    const sources = await catalogSources(db, crawl, findingClass); // NOSONAR -- In order on the writer's connection.
-    const snippets = await referenceSnippets(db, crawl, findingClass); // NOSONAR -- In order on the writer's connection.
+    const items = await catalogItems(db, crawl, filters); // NOSONAR -- In order on one connection.
+    const summary = await issueSummary(db, crawl, filters); // NOSONAR -- In order on one connection.
+    const snippets = findingClass ? await referenceSnippets(db, crawl, findingClass) : []; // NOSONAR -- In order on one connection.
+    classes.push({ findingClass, items, summary, snippets });
+  }
+  return classes;
+}
+
+async function writeIssueCatalog(
+  db: Database,
+  crawl: Crawl,
+  classes: Awaited<ReturnType<typeof computeIssueCatalog>>,
+) {
+  const now = new Date();
+  for (const { findingClass, items, summary, snippets } of classes) {
     await db // NOSONAR -- In order on the writer's connection.
       .insertInto('site_issue_catalogs')
       .values({
         workspace_id: crawl.workspace_id,
         project_id: crawl.project_id,
         crawl_id: crawl.id,
-        finding_class: findingClass,
+        finding_class: catalogClassKey(findingClass),
         items: JSON.stringify(items),
         summary: JSON.stringify(summary),
-        sources: JSON.stringify(sources),
         reference_snippets: JSON.stringify(snippets),
         analyzer_version: crawl.analyzer_version,
         rule_catalog_version: crawl.rule_catalog_version,
@@ -131,7 +128,6 @@ export async function persistIssueCatalog(db: Database, crawl: Crawl): Promise<v
         conflict.columns(['crawl_id', 'finding_class']).doUpdateSet((eb) => ({
           items: eb.ref('excluded.items'),
           summary: eb.ref('excluded.summary'),
-          sources: eb.ref('excluded.sources'),
           reference_snippets: eb.ref('excluded.reference_snippets'),
           analyzer_version: eb.ref('excluded.analyzer_version'),
           rule_catalog_version: eb.ref('excluded.rule_catalog_version'),
@@ -140,4 +136,33 @@ export async function persistIssueCatalog(db: Database, crawl: Crawl): Promise<v
       )
       .execute();
   }
+}
+
+export async function persistIssueCatalog(db: Database, crawl: Crawl): Promise<void> {
+  await writeIssueCatalog(db, crawl, await computeIssueCatalog(db, crawl));
+}
+
+export async function publishRunningIssues(
+  db: Database,
+  task: { workspace_id: string; crawl_id: string },
+) {
+  const crawl = await db
+    .selectFrom('site_crawls')
+    .select(CRAWL_COLUMNS)
+    .where('workspace_id', '=', task.workspace_id)
+    .where('id', '=', task.crawl_id)
+    .executeTakeFirst();
+  if (!crawl || !isActiveCrawl(crawl.status)) return;
+  // One connection: the summary's parallel statements never crowd the runner's task slots.
+  const classes = await db.connection().execute((conn) => computeIssueCatalog(conn, crawl));
+  await db.transaction().execute(async (trx) => {
+    const locked = await trx
+      .selectFrom('site_crawls')
+      .select('status')
+      .where('workspace_id', '=', crawl.workspace_id)
+      .where('id', '=', crawl.id)
+      .forNoKeyUpdate()
+      .executeTakeFirst();
+    if (locked && isActiveCrawl(locked.status)) await writeIssueCatalog(trx, crawl, classes);
+  });
 }

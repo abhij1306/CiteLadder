@@ -12,6 +12,7 @@ import {
   CHANGE_EVIDENCE_TEXT_LIMIT,
 } from '@/lib/config/site-health';
 import { changeFieldLabel } from '@/lib/site-health/change-fields';
+import { pluralCount } from '@/lib/format';
 
 function boundedText(value: string) {
   return value.length > CHANGE_EVIDENCE_TEXT_LIMIT
@@ -22,14 +23,8 @@ function boundedText(value: string) {
 function ChangeValue({ value, depth = 0 }: Readonly<{ value: unknown; depth?: number }>) {
   if (value === null || value === undefined || value === '') return <>Not present</>;
   if (Array.isArray(value)) {
-    // An observed empty list is not an absent value.
     if (!value.length) return <>0 items</>;
-    if (depth >= CHANGE_EVIDENCE_DEPTH_LIMIT)
-      return (
-        <>
-          {value.length} {value.length === 1 ? 'item' : 'items'}
-        </>
-      );
+    if (depth >= CHANGE_EVIDENCE_DEPTH_LIMIT) return <>{pluralCount(value.length, 'item')}</>;
     return (
       <ul className={treeBranchClasses()}>
         {value.slice(0, CHANGE_EVIDENCE_LIMIT).map((item, index) => (
@@ -40,7 +35,7 @@ function ChangeValue({ value, depth = 0 }: Readonly<{ value: unknown; depth?: nu
           </li>
         ))}
         {value.length > CHANGE_EVIDENCE_LIMIT ? (
-          <li className="text-ink-muted">
+          <li className="text-ink-2">
             {value.length - CHANGE_EVIDENCE_LIMIT} more items not shown
           </li>
         ) : null}
@@ -52,7 +47,6 @@ function ChangeValue({ value, depth = 0 }: Readonly<{ value: unknown; depth?: nu
   return text === null ? <>Not present</> : <>{boundedText(text)}</>;
 }
 
-/** Persisted evidence is JSON, so anything that is not a container is a scalar. */
 function scalarText(value: unknown): string | null {
   switch (typeof value) {
     case 'string':
@@ -93,13 +87,7 @@ function changeFieldValue(key: string, value: unknown) {
 function ChangeRecord({ value, depth }: Readonly<{ value: object; depth: number }>) {
   const fields = Object.entries(value);
   if (!fields.length) return <>Not present</>;
-  if (depth >= CHANGE_EVIDENCE_DEPTH_LIMIT)
-    return (
-      <>
-        {fields.length} {fields.length === 1 ? 'field' : 'fields'}
-      </>
-    );
-  // Comparison outcomes precede capture details in the bounded content record.
+  if (depth >= CHANGE_EVIDENCE_DEPTH_LIMIT) return <>{pluralCount(fields.length, 'field')}</>;
   const rank = (key: string) => {
     const index = CONTENT_FIELD_ORDER.indexOf(key);
     return index < 0 ? CONTENT_FIELD_ORDER.length : index;
@@ -109,7 +97,7 @@ function ChangeRecord({ value, depth }: Readonly<{ value: object; depth: number 
     <dl className={treeBranchClasses()}>
       {fields.slice(0, CHANGE_EVIDENCE_LIMIT).map(([key, item]) => (
         <div key={key}>
-          <dt className="text-ink-muted inline">{boundedText(changeFieldLabel(key))}: </dt>
+          <dt className="text-ink-2 inline">{boundedText(changeFieldLabel(key))}: </dt>
           <dd className="inline [overflow-wrap:anywhere]">
             {key === 'shingles' && Array.isArray(item) ? (
               `${item.length} text fingerprints`
@@ -122,7 +110,7 @@ function ChangeRecord({ value, depth }: Readonly<{ value: object; depth: number 
       {fields.length > CHANGE_EVIDENCE_LIMIT ? (
         <div>
           <dt className="sr-only">Additional evidence</dt>
-          <dd className="text-ink-muted">
+          <dd className="text-ink-2">
             {fields.length - CHANGE_EVIDENCE_LIMIT} more fields not shown
           </dd>
         </div>
@@ -135,18 +123,13 @@ function EvidenceValue({ heading, value }: Readonly<{ heading: string; value: un
   return (
     <Stack as="section" aria-label={heading}>
       <EditorialSectionHeader title={heading} />
-      <div className={textRole('body', '[overflow-wrap:anywhere]')}>
+      <div className={textRole('body', 'text-ink-2 [overflow-wrap:anywhere]')}>
         <ChangeValue value={value} />
       </div>
     </Stack>
   );
 }
 
-/**
- * Where the change was read: each side's page evidence, linked by the crawl
- * that captured it. The implementation event has no readable name in this
- * projection, so its ID stays as a copyable detail.
- */
 function EvidenceSources({
   row,
   crawlAId,
@@ -174,7 +157,7 @@ function EvidenceSources({
       {row.implementation_event_id ? (
         <Inline>
           <span className={textRole('caption')}>Matches a declared implementation</span>
-          <CopyButton variant="ghost" value={row.implementation_event_id}>
+          <CopyButton variant="quiet" value={row.implementation_event_id}>
             Copy event ID
           </CopyButton>
         </Inline>
@@ -183,7 +166,6 @@ function EvidenceSources({
   );
 }
 
-/** One change's before and after values, in a drawer so the table never grows. */
 export function ChangeEvidenceDrawer({
   row,
   crawlAId,
@@ -201,9 +183,7 @@ export function ChangeEvidenceDrawer({
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
-      title={row ? changeFieldLabel(row.field) : 'Change evidence'}
-      eyebrow="Change evidence"
-      description={row?.normalized_url}
+      title="Change evidence"
     >
       {row ? (
         <Stack gap="section">

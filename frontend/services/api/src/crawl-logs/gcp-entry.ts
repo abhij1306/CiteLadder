@@ -1,11 +1,3 @@
-/**
- * One Pub/Sub message from a Cloud Logging sink → one log line in the
- * `gcp_log_entry` preset's field names, before `ingest()` admits it.
- *
- * Only load balancer and Cloud Run request entries carry a request; any other
- * entry, or a message that is not a readable LogEntry, is unusable and is
- * counted as a rejected line rather than failing the batch.
- */
 import { z } from 'zod';
 import { base64Text } from './base64-text.ts';
 
@@ -38,7 +30,6 @@ function decoded(data: string): unknown {
   }
 }
 
-/** The NDJSON line for a message's base64 `data`, or null when it holds no usable request. */
 export function gcpLogLine(data: string): string | null {
   const entry = logEntrySchema.safeParse(decoded(data));
   if (!entry.success || !SUPPORTED_RESOURCES.has(entry.data.resource.type)) return null;

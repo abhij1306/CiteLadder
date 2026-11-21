@@ -11,7 +11,7 @@
  */
 import { randomUUID } from 'node:crypto';
 
-import { scoringConfig } from '../analysis/scoring.ts';
+import { cohortNamesBrand, scoringConfig } from '../analysis/scoring.ts';
 import { policy } from '../config.ts';
 import { meterFor } from '../models/metering.ts';
 import type { FactCheckPolicy, PerceptionPolicy } from '../config/perception.ts';
@@ -38,6 +38,10 @@ import {
   type ModelCall,
 } from './model-call.ts';
 import { entityPassages, packageHash, type PerceptionPackage } from './passages.ts';
+import { untrackedNames, type UntrackedName } from './untracked-names.ts';
+import { listThemes } from '../projects/themes.ts';
+import { trackedEntities } from '../analysis/entity-assessment.ts';
+import { refreshNamedCandidates } from '../analysis/observed-names.ts';
 import {
   validateClaims,
   validateOutput,
@@ -45,7 +49,6 @@ import {
   type VerifiedClaim,
 } from './validate.ts';
 
-/** Outcomes that spent a model call; caps count only these. */
 const CALLED = ['classified', 'invalid_output', 'model_error'];
 
 type Outcome =
@@ -53,6 +56,7 @@ type Outcome =
       outcome: 'classified';
       entities: EntitySentiment[];
       claims: VerifiedClaim[];
+      names: UntrackedName[];
       drops: Record<string, number>;
     }
   | { outcome: 'no_mentions' }
@@ -82,6 +86,7 @@ function loadSubject(db: Database, task: QueueTask, projectId: string) {
       'audit.configuration',
       'artifact.answer_text',
       'snapshot.text as prompt',
+      'snapshot.cohort',
     ])
     .where('ra.id', '=', analysisId)
     .where('ra.workspace_id', '=', task.workspace_id)
@@ -100,7 +105,6 @@ async function alreadyPerceived(db: Database, subject: Subject, extractorVersion
   return row !== undefined;
 }
 
-/** Whether any confident claim has a frozen fact on its topic, so verification has work. */
 function needsVerification(claims: readonly VerifiedClaim[], factCheck: FrozenFactCheck) {
   const topics = checkedTopics(factCheck);
   return claims.some((claim) => !claim.low_confidence && topics.has(claim.topic));
@@ -155,6 +159,29 @@ function persist(
           })),
         )
         .execute();
+    if (outcome.names.length) {
+      await db
+        .insertInto('answer_untracked_names')
+        .values(
+          outcome.names.map((name) => ({
+            id: randomUUID(),
+            workspace_id: task.workspace_id,
+            project_id: projectId,
+            audit_id: subject.audit_id,
+            perception_id: id,
+            analysis_id: subject.analysis_id,
+            name: name.name,
+            name_key: name.name_key,
+            created_at: new Date(),
+          })),
+        )
+        .execute();
+      await refreshNamedCandidates(db, {
+        workspaceId: task.workspace_id,
+        projectId,
+        auditId: subject.audit_id,
+      });
+    }
     if (!outcome.claims.length) return;
     await db
       .insertInto('answer_claims')
@@ -174,7 +201,6 @@ function persist(
         })),
       )
       .execute();
-    // Same transaction, no network: verification follows only a committed claim set.
     if (factCheck && needsVerification(outcome.claims, factCheck))
       await enqueueTask(db, {
         workspaceId: task.workspace_id,
@@ -187,13 +213,16 @@ function persist(
   };
 }
 
-/** One classification; claims ride the same call only for a fact-checked audit. */
 function classify(
   gateway: ModelGateway,
-  pkg: PerceptionPackage,
-  settings: PerceptionPolicy,
-  claimsRequest: FactCheckPolicy | null,
+  input: {
+    pkg: PerceptionPackage;
+    settings: PerceptionPolicy;
+    claimsRequest: FactCheckPolicy | null;
+    tracked: Parameters<typeof untrackedNames>[0]['tracked'];
+  },
 ) {
+  const { pkg, settings, claimsRequest, tracked } = input;
   const { system, user } = perceptionPrompt(pkg, settings, claimsRequest);
   const request = { system, user, inputHash: packageHash(pkg), maxAttempts: settings.max_attempts };
   const classified = (
@@ -201,14 +230,20 @@ function classify(
     claims: ReturnType<typeof validateClaims>,
   ): Outcome => {
     const validated = validateOutput(pkg, value, settings);
+    const names = untrackedNames({
+      pkg,
+      names: value.untracked_businesses,
+      tracked,
+      policy: settings,
+    });
     return {
       outcome: 'classified',
       entities: validated.entities,
       claims: claims.claims,
-      drops: { ...validated.drops, ...claims.drops },
+      names: names.names ?? [],
+      drops: { ...validated.drops, ...claims.drops, ...names.drops },
     };
   };
-  // Without claims the plain schema is used, so plain perception is unchanged.
   if (!claimsRequest)
     return callStructured(gateway, { ...request, schema: perceptionOutputSchema }, (value) =>
       classified(value, { claims: [], drops: {} }),
@@ -226,7 +261,6 @@ export function answerPerception(
     const projectId = await taskProject(db, task);
     const subject = await loadSubject(db, task, projectId);
     const versions = frozenPerceptionVersions(subject.configuration);
-    // An audit admitted without perception is never classified.
     if (!versions || (await alreadyPerceived(db, subject, versions.extractor_version))) return;
     const factCheck = frozenFactCheck(subject.configuration);
     const settle = (outcome: Outcome, call: ModelCall | null = null) => ({
@@ -243,7 +277,6 @@ export function answerPerception(
     if (capped) return settle({ outcome: 'unavailable', reason: 'platform_cap' });
     const raw = gatewayFactory();
     if (!raw) return settle({ outcome: 'unavailable', reason: 'model_not_configured' });
-    // The audit froze its model: another one never classifies its answers.
     if (raw.model !== versions.model)
       return settle({ outcome: 'unavailable', reason: 'model_changed' });
     // Included in the prompt run: recorded with its tokens, not charged.
@@ -255,26 +288,29 @@ export function answerPerception(
       template_version: versions.template_version,
       language: languageCode,
       prompt: subject.prompt,
+      themes: (await listThemes(db, { workspaceId: task.workspace_id, projectId })).map(
+        ({ id, name }) => ({ id, name }),
+      ),
       entities: entityPassages({
         answer: subject.answer_text,
         languageCode,
         config,
         policy: settings,
+        promptNamesBrand: cohortNamesBrand(subject.cohort),
       }),
     };
     if (!pkg.entities.length) return settle({ outcome: 'no_mentions' });
     await checkCancelled('perception_model_call');
-    const { call, outcome } = await classify(
-      gateway,
+    const { call, outcome } = await classify(gateway, {
       pkg,
       settings,
-      factCheck ? settings.fact_check : null,
-    );
+      claimsRequest: factCheck ? settings.fact_check : null,
+      tracked: trackedEntities(config),
+    });
     return settle(outcome, call);
   };
 }
 
-/** A task that exhausted its attempts still leaves a persisted, explained outcome. */
 export async function compensatePerception(db: Database, task: QueueTask) {
   const projectId = await taskProject(db, task);
   const subject = await loadSubject(db, task, projectId);

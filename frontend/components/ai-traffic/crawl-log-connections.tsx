@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { aiTrafficMutations } from '@/lib/api/ai-traffic';
 import { useProjectContext, useWorkspaceCapability } from '@/lib/project/project-context';
@@ -8,12 +8,11 @@ import {
 } from '@/lib/ai-traffic/use-crawl-connections';
 import type { crawlSourceSchema } from '@citeladder/contracts/ai-traffic';
 import type { z } from 'zod';
+import { ActionButton } from '@/components/ui/actions';
 import { Button } from '@/components/ui/button';
-import { Dialog } from '@/components/ui/dialog';
-import { MutationNotice } from '@/components/ui/mutation-notice';
+import { StateBlock } from '@/components/ui/state-block';
+import { ConfirmDialog, Dialog, type ConfirmRequest } from '@/components/ui/dialog';
 import { mutationNoticeForError } from '@/lib/api/mutation-notice';
-import { ReadError, readErrorProps } from '@/components/ui/read-error';
-import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Stack } from '@/components/ui/layout';
 import { DisplayTime } from '@/components/ui/display-time';
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
@@ -33,11 +32,14 @@ import {
 } from '@/lib/ai-traffic/vocabulary';
 import { SinkFilterUpdates } from './gcp-pull-setup';
 import { CRAWL_LOG_SETUPS } from '@/lib/config/crawl-logs';
+import { ICONS } from '@/lib/icons';
+import { Notice, readErrorProps } from '@/components/ui/notice';
+import { Section, SectionHeader, SectionTitle } from '@/components/ui/section';
 
 const SOURCE_COLUMNS: readonly DataTableColumn[] = [
   { key: 'source', label: 'Source' },
-  { key: 'collection', label: 'Collection and sampling' },
-  { key: 'freshness', label: 'Freshness' },
+  { key: 'collection', label: 'Collection and sampling', priority: 'low' },
+  { key: 'freshness', label: 'Freshness', width: 'stamp', priority: 'low' },
   { key: 'diagnostics', label: 'Diagnostics' },
   { key: 'manage', label: 'Manage', width: 'rowActions' },
 ];
@@ -50,7 +52,6 @@ export function CrawlLogConnections({
 }: Readonly<{
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
-  /** Overview already offers Connect on its Crawlers card, so it hides an empty section. */
   headerWhenEmpty?: boolean;
 }> = {}) {
   const { activeProject } = useProjectContext(),
@@ -80,21 +81,24 @@ function Connections({
   const showHeader = headerWhenEmpty || Boolean(sources.data?.items.length);
   const { setupAvailable, unavailable } = setupState(sources);
   const connect = unavailable ? undefined : (
-    <Button
-      variant="primary"
+    <ActionButton
+      action="connectCrawlLogs"
       onClick={() => {
         setIssued(null);
         setOpen(true);
       }}
       disabled={!canManage}
-    >
-      Connect crawl logs
-    </Button>
+    />
   );
   const body = (
     <>
       {sources.isError ? (
-        <ReadError {...readErrorProps(sources)} fallback="Could not read crawl log sources" />
+        <StateBlock
+          kind="error"
+          {...readErrorProps(sources)}
+          title="Couldn't load the crawl log sources"
+          fallback="The request failed or timed out."
+        />
       ) : null}
       {sources.data ? (
         <CrawlLogAvailabilityNotice availability={sources.data.availability} />
@@ -119,11 +123,12 @@ function Connections({
           canManage={canManage}
         />
       ) : null}
-      <RevokeSourceDialog
-        source={revoking}
-        mutation={mutation}
-        onRevoke={(id, onSettled) => model.issueSource({ kind: 'revoke', id }, onSettled)}
-        onClose={() => setRevoking(null)}
+      <ConfirmDialog
+        pending={mutation.isPending}
+        onCancel={() => setRevoking(null)}
+        request={revokeRequest(revoking, (id) =>
+          model.issueSource({ kind: 'revoke', id }, () => setRevoking(null)),
+        )}
       />
       <RotateTokenDialog
         source={rotating}
@@ -132,7 +137,8 @@ function Connections({
         onClose={() => setRotating(null)}
       />
       {mutation.isError && !open ? (
-        <MutationNotice
+        <Notice
+          kind="mutation"
           notice={mutationNoticeForError(mutation.error, { action: 'update the crawl-log source' })}
         />
       ) : null}
@@ -143,11 +149,7 @@ function Connections({
           if (!next) setIssued(null);
         }}
         title="Connect crawl logs"
-        description={
-          setupAvailable
-            ? 'Choose the collection method you operate. One live source per host; uploads are backfill.'
-            : 'Crawl log collection availability'
-        }
+        description={setupAvailable ? 'One live source per host. Uploads are backfill.' : undefined}
         width="wide"
         footer={setupAvailable ? <CrawlLogSetupSubmit model={model} /> : undefined}
       >
@@ -156,28 +158,52 @@ function Connections({
       </Dialog>
     </>
   );
-  // With a header the section is a card like every other connection on the
-  // page: title left, its one action right, the sources beneath.
   if (!showHeader)
     return (
       <Stack as="section" id="crawl-log-connections" aria-label="Crawl log connections">
         {body}
       </Stack>
     );
+  // The body keeps its place in the tree, so an open setup dialog survives the read settling.
   return (
-    <Card id="crawl-log-connections" aria-label="Crawl log connections">
-      <CardHeader actions={connect}>
-        <CardTitle>Crawl logs</CardTitle>
-      </CardHeader>
+    <Section id="crawl-log-connections" aria-label="Crawl log connections">
+      <ConnectionsHead empty={sources.data?.items.length === 0} connect={connect} />
       <Stack className="empty:hidden">{body}</Stack>
-    </Card>
+    </Section>
   );
 }
-/**
- * Setup opens only on a read that says collection is available. An unavailable
- * workspace gets the explanation, not a setup it cannot complete; a pending or
- * failed read keeps the button, and the dialog explains the read.
- */
+
+function ConnectionsHead({ empty, connect }: Readonly<{ empty: boolean; connect: ReactNode }>) {
+  if (empty && connect)
+    return (
+      <StateBlock
+        kind="empty"
+        icon={ICONS.connect}
+        heading="No crawl logs connected"
+        action={connect}
+      />
+    );
+  return (
+    <SectionHeader actions={connect}>
+      <SectionTitle>Crawl logs</SectionTitle>
+    </SectionHeader>
+  );
+}
+
+function revokeRequest(
+  source: z.infer<typeof crawlSourceSchema> | null,
+  onRevoke: (id: string) => void,
+): ConfirmRequest | null {
+  if (!source) return null;
+  return {
+    title: 'Revoke crawl log source',
+    body: `Stop accepting logs for ${source.host}? New batches and uploads for this host are refused.`,
+    confirmLabel: 'Revoke source',
+    destructive: true,
+    onConfirm: () => onRevoke(source.id),
+  };
+}
+
 function setupState(sources: ReturnType<typeof useCrawlConnections>['sources']) {
   const availability = sources.data?.availability;
   return {
@@ -189,14 +215,20 @@ function SetupAvailability({ model }: Readonly<{ model: ReturnType<typeof useCra
   const { sources, mutation } = model;
   if (sources.isError)
     return (
-      <ReadError {...readErrorProps(sources)} fallback="Could not read crawl log availability" />
+      <Notice
+        kind="read"
+        {...readErrorProps(sources)}
+        title="Couldn't load crawl log availability"
+        fallback="The request failed or timed out."
+      />
     );
   if (!sources.data) return <output>Checking crawl log availability…</output>;
   if (sources.data.availability === 'available') return <CrawlLogSetup model={model} />;
   return (
     <>
       {mutation.isError ? (
-        <MutationNotice
+        <Notice
+          kind="mutation"
           notice={mutationNoticeForError(mutation.error, { action: 'update the crawl-log source' })}
         />
       ) : null}
@@ -204,7 +236,6 @@ function SetupAvailability({ model }: Readonly<{ model: ReturnType<typeof useCra
     </>
   );
 }
-/** Why a source is stalled; a failed subscription check also says which check. */
 function StallDetail({ source }: Readonly<{ source: z.infer<typeof crawlSourceSchema> }>) {
   if (!source.stall_reason) return null;
   const failure = source.pull?.verification_failure;
@@ -229,13 +260,10 @@ function SourceDiagnostics({
   canManage: boolean;
   onRotate: (source: z.infer<typeof crawlSourceSchema>) => void;
   onRevoke: (source: z.infer<typeof crawlSourceSchema>) => void;
-  /** Reopen a Google Cloud source's setup commands and subscription check. */
   onSetup: (id: string) => void;
 }>) {
-  // The sources sit in the Crawl logs card under its header, so the table is
-  // nested in that card rather than a card of its own.
   return (
-    <DataTable nested label="Crawl log source diagnostics" columns={SOURCE_COLUMNS} minWidth="lg">
+    <DataTable label="Crawl log source diagnostics" columns={SOURCE_COLUMNS}>
       {items.map((s) => (
         <TableRow key={s.id}>
           <TableCell>
@@ -297,13 +325,11 @@ function SourceDiagnostics({
                     Set up and verify
                   </Button>
                 ) : null}
-                <Button
-                  variant="secondary"
+                <ActionButton
+                  action="revoke"
                   onClick={() => onRevoke(s)}
                   aria-label={`Revoke ${s.host}`}
-                >
-                  Revoke
-                </Button>
+                />
               </>
             ) : null}
           </TableActionsCell>
@@ -318,17 +344,12 @@ type RotateTokenProps = Readonly<{
   workspaceId: string;
   onClose: () => void;
 }>;
-/** Each rotation starts fresh: a new source remounts the dialog and its mutation. */
 function RotateTokenDialog({
   source,
   ...props
 }: Omit<RotateTokenProps, 'source'> & Readonly<{ source: RotateTokenProps['source'] | null }>) {
   return source ? <RotateToken key={source.id} source={source} {...props} /> : null;
 }
-/**
- * Rotation has its own dialog and mutation: it shows only the rotation, its
- * failure with a retry, and the new token, never the new-source form.
- */
 function RotateToken({ source, projectId, workspaceId, onClose }: RotateTokenProps) {
   const rotate = useMutation(aiTrafficMutations.source({ workspaceId, projectId }));
   const run = () => rotate.mutate({ kind: 'rotate', id: source.id });
@@ -363,55 +384,12 @@ function RotateToken({ source, projectId, workspaceId, onClose }: RotateTokenPro
       }
     >
       {rotate.isError ? (
-        <MutationNotice
+        <Notice
+          kind="mutation"
           notice={mutationNoticeForError(rotate.error, { action: 'rotate the token' })}
         />
       ) : null}
       {rotate.isSuccess ? <IssuedToken issued={{ ...rotate.data, setup: source.setup }} /> : null}
-    </Dialog>
-  );
-}
-/** Revoking stops ingestion for a host, so it is confirmed by name. */
-function RevokeSourceDialog({
-  source,
-  mutation,
-  onRevoke,
-  onClose,
-}: Readonly<{
-  source: z.infer<typeof crawlSourceSchema> | null;
-  mutation: ReturnType<typeof useCrawlConnections>['mutation'];
-  onRevoke: (id: string, onSettled: () => void) => void;
-  onClose: () => void;
-}>) {
-  return (
-    <Dialog
-      open={source !== null}
-      onOpenChange={(next) => {
-        if (!next && !mutation.isPending) onClose();
-      }}
-      title="Revoke crawl log source"
-      description={source ? `Stop accepting logs for ${source.host}?` : undefined}
-      footer={
-        <>
-          <Button variant="secondary" onClick={onClose} disabled={mutation.isPending}>
-            Cancel
-          </Button>
-          <Button
-            variant="danger"
-            disabled={!source}
-            pending={mutation.isPending}
-            pendingLabel="Revoking…"
-            onClick={() => source && onRevoke(source.id, onClose)}
-          >
-            Revoke source
-          </Button>
-        </>
-      }
-    >
-      <p className="type-body">
-        New batches and uploads for this host are refused. Requests already received stay in your
-        reports.
-      </p>
     </Dialog>
   );
 }

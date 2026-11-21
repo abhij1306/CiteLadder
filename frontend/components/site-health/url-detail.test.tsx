@@ -3,6 +3,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vite-p
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
+import { figureText } from '@/test/figures';
 import { makeProject } from '@/test/fixtures/project';
 import { mswServer } from '@/test/msw-server';
 import { renderWithProviders as raw, selectionAs, type TestRole } from '@/test/render';
@@ -10,7 +11,8 @@ import type { ReactElement } from 'react';
 import { useLocation } from 'react-router-dom';
 import type { PageDetail } from '@citeladder/contracts';
 
-import { parseAgentHandoff } from '@/lib/agent/handoff';
+import { parseAgentHandoff, type AgentHandoff } from '@/lib/agent/handoff';
+import { AgentPanelProvider, useAgentPanel } from '@/lib/agent/panel-context';
 import { UrlDetail } from './url-detail';
 import {
   CRAWL,
@@ -24,7 +26,6 @@ import {
 const NEW_CRAWL = '55555555-5555-4555-8555-555555555555';
 const TASK_ID = '66666666-6666-4666-8666-666666666666';
 
-/** A resolved issue as the page's issue history lists it. */
 function resolvedIssue(id: string, title: string) {
   return {
     id,
@@ -43,7 +44,6 @@ function resolvedIssue(id: string, title: string) {
   };
 }
 
-/** Open the page's History drawer with the issue history answered by `history`. */
 async function openHistory(history: HttpResponseResolver) {
   mswServer.use(
     http.get(`/api/v1/site-crawls/${CRAWL}/pages/${URL_ID}`, () => HttpResponse.json(detail())),
@@ -55,14 +55,29 @@ async function openHistory(history: HttpResponseResolver) {
   return { user, drawer: await screen.findByRole('dialog', { name: 'Issue history' }) };
 }
 
-/** The "All issues" card, found by its heading. */
 function allIssues(heading: string): HTMLElement {
   return screen.getByRole('heading', { name: heading }).closest('section')!;
 }
 
-/** The new chat a link would start, as the Agent reads it. */
 function handoffOf(link: HTMLElement) {
   return parseAgentHandoff(new URL(link.getAttribute('href')!, 'http://x').searchParams);
+}
+
+function PanelSeedProbe() {
+  const panel = useAgentPanel();
+  return (
+    <>
+      <button type="button" onClick={() => panel?.setOpen(true)}>
+        Open agent panel
+      </button>
+      <output data-testid="panel-seed">{JSON.stringify(panel?.seed ?? null)}</output>
+    </>
+  );
+}
+
+async function openedSeed(user: ReturnType<typeof userEvent.setup>): Promise<AgentHandoff> {
+  await user.click(screen.getByRole('button', { name: 'Open agent panel' }));
+  return JSON.parse(screen.getByTestId('panel-seed').textContent!) as AgentHandoff;
 }
 
 function LocationDisplay() {
@@ -116,7 +131,11 @@ describe('UrlDetail', () => {
     );
     renderUrlDetail(<UrlDetail crawlId={CRAWL} siteUrlId={URL_ID} />);
     expect(
-      await screen.findByText('Reference: page-read-reference', {}, { timeout: 4500 }),
+      await screen.findByText(
+        "Couldn't load this page. It may not exist in this crawl.",
+        {},
+        { timeout: 4500 },
+      ),
     ).toBeInTheDocument();
     const beforeRetry = reads;
     available = true;
@@ -191,30 +210,35 @@ describe('UrlDetail', () => {
     );
     const table = within(drawer).getByRole('region', { name: 'Resolved issues' });
     expect(
-      await within(table).findByRole('heading', {
-        name: 'Resolved issues are known once this page’s current analysis finishes',
-      }),
+      await within(table).findByRole('heading', { name: 'Analysis not finished' }),
     ).toBeInTheDocument();
   });
 
   it('renders scores, delivery metrics, and severity-ordered issues', async () => {
     mswServer.use(...handlers(detail()));
+    const user = userEvent.setup();
 
     renderUrlDetail(<UrlDetail crawlId={CRAWL} siteUrlId={URL_ID} />);
 
     expect(
       await screen.findByRole('heading', { name: 'Acme Retail Online', level: 1 }),
     ).toBeInTheDocument();
+    await screen.findByRole('navigation', { name: 'Breadcrumb' });
+    expect(
+      screen
+        .getAllByText('Acme Retail Online')
+        .map((node) => (node.closest('nav') ? 'trail' : node.tagName)),
+    ).toEqual(['trail', 'H1']);
     expect(screen.getByText('Product')).toBeInTheDocument();
-    // Delivery metric: TTFB rendered with ms suffix.
     expect(screen.getByText('840ms')).toBeInTheDocument();
     expect(screen.getByText('200')).toBeInTheDocument();
 
-    // High-severity issue is ordered before the low-severity one.
     const list = allIssues('All issues (2)');
     const high = within(list).getByText('WebSite schema is missing');
     const low = within(list).getByText('FAQ schema not present');
     expect(high.compareDocumentPosition(low) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByText('expected types WebSite, found types Organization')).toBeNull();
+    await user.click(within(list).getByRole('button', { name: /WebSite schema is missing/ }));
     expect(
       screen.getByText('expected types WebSite, found types Organization'),
     ).toBeInTheDocument();
@@ -224,27 +248,32 @@ describe('UrlDetail', () => {
   it('offers re-audits only to a role that may run one', async () => {
     mswServer.use(...handlers(detail()));
     const { unmount } = renderUrlDetail(<UrlDetail crawlId={CRAWL} siteUrlId={URL_ID} />);
-    expect(await screen.findByRole('button', { name: 'Re-audit this page' })).toBeVisible();
-    expect(screen.getAllByRole('button', { name: 'Re-audit to verify' })).not.toHaveLength(0);
+    expect(await screen.findAllByRole('button', { name: /^Re-audit/ })).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Re-audit this page' })).toBeVisible();
     unmount();
 
     renderUrlDetail(<UrlDetail crawlId={CRAWL} siteUrlId={URL_ID} />, undefined, 'viewer');
     expect(
       await screen.findByRole('heading', { name: 'Acme Retail Online', level: 1 }),
     ).toBeVisible();
-    expect(screen.queryByRole('button', { name: 'Re-audit this page' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Re-audit to verify' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Re-audit/ })).toBeNull();
     expect(screen.getByRole('button', { name: 'History' })).toBeVisible();
   });
 
-  it('opens as a page detail with a way back to Pages before its title', async () => {
+  it('opens as a page detail trailed through Pages, with no back link', async () => {
     mswServer.use(...handlers(detail()));
     renderUrlDetail(<UrlDetail crawlId={CRAWL} siteUrlId={URL_ID} />);
 
-    const title = await screen.findByRole('heading', { name: 'Acme Retail Online', level: 1 });
-    const back = screen.getByRole('link', { name: 'Back to Pages' });
-    expect(back.getAttribute('href')).toMatch(/^\/site\?tab=pages/);
-    expect(back.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await screen.findByRole('heading', { name: 'Acme Retail Online', level: 1 });
+    const trail = await screen.findByRole('navigation', { name: 'Breadcrumb' });
+    expect(within(trail).getByRole('link', { name: 'Pages' }).getAttribute('href')).toMatch(
+      /^\/site\?tab=pages/,
+    );
+    expect(within(trail).getByText('Acme Retail Online').closest('li')).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+    expect(screen.queryByRole('link', { name: /^Back to/ })).not.toBeInTheDocument();
   });
 
   it('says an unknown compression is not measured rather than "none"', async () => {
@@ -277,7 +306,7 @@ describe('UrlDetail', () => {
     await screen.findByRole('heading', { name: 'Acme Retail Online', level: 1 });
     expect(screen.getAllByText('Not measured').length).toBeGreaterThan(0);
     expect(screen.queryByText(/purpose unresolved/i)).not.toBeInTheDocument();
-    expect(screen.queryByRole('img', { name: /^AEO Readiness score:/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('img', { name: /^AEO readiness score:/ })).not.toBeInTheDocument();
   });
 
   it('renders the not-measured state for a missing score, never a zero', async () => {
@@ -298,9 +327,8 @@ describe('UrlDetail', () => {
 
     await screen.findByRole('heading', { name: 'Acme Retail Online', level: 1 });
     expect(screen.getAllByText('Not measured').length).toBeGreaterThan(0);
-    // No score ring at all: a missing measurement never renders as 0.
     expect(
-      screen.queryByRole('img', { name: /^(Web Fundamentals|AEO Readiness) score:/ }),
+      screen.queryByRole('img', { name: /^(Web fundamentals|AEO readiness) score:/ }),
     ).toBeNull();
   });
 
@@ -341,12 +369,9 @@ describe('UrlDetail', () => {
     renderUrlDetail(<UrlDetail crawlId={CRAWL} siteUrlId={URL_ID} />);
 
     await screen.findByRole('heading', { name: 'Acme Retail Online', level: 1 });
-    const rings = ['Web Fundamentals score: 46', 'AEO Readiness score: 64'];
-    for (const ring of rings)
-      expect(screen.getByRole('img', { name: `${ring} out of 100` })).toBeInTheDocument();
-    // Completion is a share of the checklist, not a quality score: a plain figure, no ring.
-    expect(screen.getByText('75%')).toBeInTheDocument();
-    expect(screen.queryByRole('img', { name: /AEO checklist completion/ })).toBeNull();
+    expect(figureText('Web fundamentals')).toBe('46');
+    expect(figureText('AEO readiness')).toBe('64');
+    expect(figureText('AEO checklist completion')).toBe('75%');
   });
 
   it('preserves the AEO state when measurement coverage is unavailable', async () => {
@@ -416,10 +441,8 @@ describe('UrlDetail', () => {
     renderUrlDetail(<UrlDetail crawlId={CRAWL} siteUrlId={URL_ID} />);
 
     await screen.findByRole('heading', { name: 'Acme Retail Online', level: 1 });
-    // A 0 ms reading is an unmeasured hop, never an instant response.
     expect(screen.queryByText('0ms')).not.toBeInTheDocument();
     expect(screen.getAllByText('Not measured').length).toBeGreaterThan(0);
-    // Byte counts do NOT share the zero rule — they still render normally.
     expect(screen.getByText('39.1 KB')).toBeInTheDocument();
   });
 
@@ -471,9 +494,6 @@ describe('UrlDetail', () => {
     await screen.findByRole('heading', { name: 'Acme Retail Online', level: 1 });
     await user.click(screen.getByRole('button', { name: 'Re-audit this page' }));
 
-    // The rerun ran in a NEW crawl, so the client routes to that fresh
-    // identity's canonical detail route (with ?rerun=1 to auto-start polling
-    // on the new mount) rather than continuing to poll the terminal source.
     await waitFor(() =>
       expect(screen.getByTestId('location')).toHaveTextContent(
         `/site/crawls/${NEW_CRAWL}/pages/${URL_ID}?rerun=1`,
@@ -495,8 +515,6 @@ describe('UrlDetail', () => {
     await screen.findByRole('heading', { name: 'Acme Retail Online', level: 1 });
     await user.click(screen.getByRole('button', { name: 'Re-audit this page' }));
 
-    // `role="alert"` does not take its accessible name from its contents, so
-    // find the alert and assert on its text.
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent(
       'This page is not in your monitored set, so it can’t be re-audited.',
@@ -520,14 +538,11 @@ describe('UrlDetail', () => {
       `/site/crawls/${NEW_CRAWL}/pages/${URL_ID}?rerun=1`,
     );
 
-    // No button click: `?rerun=1` seeds polling on mount, so the fresh run's
-    // progress advances to its terminal snapshot on its own.
     await screen.findByRole('heading', { name: 'Acme Retail Online', level: 1 });
     expect(screen.getByText('Pending')).toBeInTheDocument();
     await waitFor(() => expect(getCallCount).toBeGreaterThanOrEqual(statuses.length), {
       timeout: 15_000,
     });
-    // The terminal snapshot drops the in-progress badge.
     await waitFor(() => expect(screen.queryByText('Running')).not.toBeInTheDocument());
     expect(screen.queryByText('Pending')).not.toBeInTheDocument();
   }, 20_000);
@@ -545,9 +560,8 @@ describe('UrlDetail', () => {
     await user.click(summary);
     expect(disclosure).toHaveAttribute('open');
     expect(within(disclosure).getByText('840ms')).toBeVisible();
-    // Inbound and main-content inbound are different facts and both are shown.
     expect(within(disclosure).getByText('Main-content inbound')).toBeVisible();
-    expect(screen.getByText('Modelled over 7 observed crawl pages')).toBeInTheDocument();
+    expect(screen.getByText('7 pages crawled')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'https://acme.com/collections/bags' })).toHaveAttribute(
       'href',
       `/site/crawls/${CRAWL}/pages/dddddddd-1111-4111-8111-111111111111`,
@@ -562,10 +576,10 @@ describe('UrlDetail', () => {
 
     await screen.findByRole('heading', { name: 'Acme Retail Online', level: 1 });
     await userEvent.setup().click(screen.getByText('Technical details'));
-    expect(screen.getByText('Internal links not measured for this page.')).toBeVisible();
+    expect(screen.getByText("Internal links weren't counted for this page.")).toBeVisible();
   });
 
-  it('lists every issue worst first, each card with its fix, and advisories apart', async () => {
+  it('lists every issue once, worst first, each row opening its fix, and advisories apart', async () => {
     const [low, high] = detail().issues;
     mswServer.use(
       ...handlers(
@@ -587,47 +601,60 @@ describe('UrlDetail', () => {
       ),
     );
 
+    const user = userEvent.setup();
     renderUrlDetail(<UrlDetail crawlId={CRAWL} siteUrlId={URL_ID} />);
 
     await screen.findByRole('heading', { name: 'All issues (2)' });
     const list = allIssues('All issues (2)');
-    expect(
-      within(list)
-        .getAllByRole('button')
-        .map((row) => row.textContent),
-    ).toEqual(['1WebSite schema is missingHighAEO', '2FAQ schema not presentLowAEO']);
-    // Each issue's card carries its fix and the scores it holds down.
-    const faq = screen.getByRole('region', { name: 'FAQ schema not present' });
+    const rows = within(list).getAllByRole('button', { expanded: false });
+    expect(rows.map((row) => row.textContent)).toEqual([
+      'WebSite schema is missingHighAEO',
+      'FAQ schema not presentLowAEO',
+    ]);
+    await user.click(rows[1]!);
+    await user.click(rows[0]!);
+    for (const title of ['WebSite schema is missing', 'FAQ schema not present'])
+      expect(screen.getAllByText(title)).toHaveLength(1);
+    const faq = document.getElementById(rows[1]!.getAttribute('aria-controls')!)!;
     expect(within(faq).getByText('Add FAQPage markup to the questions.')).toBeInTheDocument();
-    expect(within(faq).getByText('2/2')).toBeInTheDocument();
-    const website = screen.getByRole('region', { name: 'WebSite schema is missing' });
+    const website = document.getElementById(rows[0]!.getAttribute('aria-controls')!)!;
     expect(
       within(website)
-        .getAllByText(/^(AEO Readiness|Web Fundamentals)$/)
+        .getAllByText(/^(AEO readiness|Web fundamentals)$/)
         .map((badge) => badge.textContent),
-    ).toEqual(['AEO Readiness', 'Web Fundamentals']);
+    ).toEqual(['AEO readiness', 'Web fundamentals']);
     expect(screen.getByText('Advisories (1)')).toBeInTheDocument();
-    // The advisory is labelled as one, never with a severity.
     const advisory = screen.getByText('Missing meta description').closest('li')!;
-    expect(within(advisory).getByText('Advisory')).toBeInTheDocument();
+    expect(within(advisory).queryByText('Advisory')).toBeNull();
     expect(within(advisory).queryByText('Medium')).not.toBeInTheDocument();
-    // The page's scores lead, above its issues.
-    const score = screen.getByRole('img', { name: 'Web Fundamentals score: 46 out of 100' });
+    expect(within(advisory).getByText('AEO')).toBeInTheDocument();
+    expect(figureText('Web fundamentals')).toBe('46');
+    const score = document.querySelector('[data-figure-strip]')!;
     expect(score.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('hands the agent the page, or one issue on it, by id and never by evidence', async () => {
     mswServer.use(...handlers(detail()));
-    renderUrlDetail(<UrlDetail crawlId={CRAWL} siteUrlId={URL_ID} />);
+    const user = userEvent.setup();
+    renderUrlDetail(
+      <AgentPanelProvider>
+        <UrlDetail crawlId={CRAWL} siteUrlId={URL_ID} />
+        <PanelSeedProbe />
+      </AgentPanelProvider>,
+    );
     await screen.findByRole('heading', { name: 'Acme Retail Online', level: 1 });
 
-    const page = handoffOf(screen.getByRole('link', { name: 'Ask agent about this page' }));
+    expect(screen.queryByRole('link', { name: 'Ask agent about this page' })).toBeNull();
+    const page = await openedSeed(user);
     expect(page.context).toEqual({ target_site_url_id: URL_ID, target_url: 'https://acme.com/' });
     expect(page.prompt).toBe(
-      'Review the 2 Site Health issues on https://acme.com/, worst first, and propose exact page edits for each.',
+      'Review the 2 Website issues on https://acme.com/, worst first, and propose exact page edits for each.',
     );
-    const card = screen.getByRole('region', { name: 'WebSite schema is missing' });
-    const issue = handoffOf(within(card).getByRole('link', { name: 'Ask agent' }));
+    expect(page.skillId).toBe('technical_health');
+    const row = screen.getByRole('button', { name: /WebSite schema is missing/ });
+    await user.click(row);
+    const body = document.getElementById(row.getAttribute('aria-controls')!)!;
+    const issue = handoffOf(within(body).getByRole('link', { name: 'Ask agent' }));
     expect(issue.context).toEqual({
       issue_group_reference: { crawl_id: CRAWL, group_id: GROUP_H, site_url_id: URL_ID },
     });
@@ -636,14 +663,20 @@ describe('UrlDetail', () => {
 
   it('asks the agent why a page’s audit did not finish, rather than how ready the page is', async () => {
     mswServer.use(...handlers(detail({ analysis_status: 'error', issues: [] })));
-    renderUrlDetail(<UrlDetail crawlId={CRAWL} siteUrlId={URL_ID} />);
+    const user = userEvent.setup();
+    renderUrlDetail(
+      <AgentPanelProvider>
+        <UrlDetail crawlId={CRAWL} siteUrlId={URL_ID} />
+        <PanelSeedProbe />
+      </AgentPanelProvider>,
+    );
     await screen.findByRole('heading', { name: 'Acme Retail Online', level: 1 });
 
-    const page = handoffOf(screen.getByRole('link', { name: 'Ask agent about this page' }));
-    expect(page.prompt).toMatch(/^The Site Health audit of https:\/\/acme\.com\/ did not complete/);
+    const page = await openedSeed(user);
+    expect(page.prompt).toMatch(/^The Website audit of https:\/\/acme\.com\/ did not complete/);
   });
 
-  it('pages the issue cards two at a time and jumps to the one chosen in the list', async () => {
+  it('shows five issues until asked for all, and opens the one chosen in place', async () => {
     const [base] = detail().issues;
     const issues = ['First', 'Second', 'Third', 'Fourth', 'Fifth', 'Sixth', 'Seventh'].map(
       (name, index) => ({
@@ -657,20 +690,16 @@ describe('UrlDetail', () => {
     renderUrlDetail(<UrlDetail crawlId={CRAWL} siteUrlId={URL_ID} />);
     await screen.findByRole('heading', { name: 'All issues (7)' });
 
-    const cardTitles = () =>
-      within(screen.getByRole('region', { name: 'Issue details' }))
-        .getAllByRole('heading', { level: 3 })
-        .map((heading) => heading.textContent);
-    expect(cardTitles()).toEqual(['First issue', 'Second issue']);
-    await user.click(screen.getByRole('button', { name: 'Next page' }));
-    expect(cardTitles()).toEqual(['Third issue', 'Fourth issue']);
-
-    // The list shows five until asked for all; choosing one brings its card up.
     const list = allIssues('All issues (7)');
-    expect(within(list).queryByText('Seventh issue')).toBeNull();
+    expect(within(list).getByText('Fifth issue')).toBeInTheDocument();
+    expect(within(list).queryByText('Sixth issue')).toBeNull();
     await user.click(within(list).getByRole('button', { name: 'View all 7 issues' }));
-    await user.click(within(list).getByRole('button', { name: /Seventh issue/ }));
-    expect(cardTitles()).toEqual(['Seventh issue']);
+    const seventh = within(list).getByRole('button', { name: /Seventh issue/ });
+    await user.click(seventh);
+    expect(seventh).toHaveAttribute('aria-expanded', 'true');
+    const body = document.getElementById(seventh.getAttribute('aria-controls')!)!;
+    expect(within(body).getByRole('button', { name: 'Copy fix prompt' })).toBeVisible();
+    expect(within(list).getAllByRole('button', { expanded: true })).toEqual([seventh]);
   });
 
   it('says so plainly when a page has nothing to fix', async () => {
@@ -679,8 +708,7 @@ describe('UrlDetail', () => {
     renderUrlDetail(<UrlDetail crawlId={CRAWL} siteUrlId={URL_ID} />);
 
     expect(await screen.findByRole('heading', { name: 'All issues (0)' })).toBeInTheDocument();
-    expect(screen.getByText('No issues found on this page.')).toBeInTheDocument();
-    expect(screen.queryByRole('region', { name: 'Issue details' })).toBeNull();
+    expect(screen.getByText('No issues found.')).toBeInTheDocument();
   });
 
   it('does not call a page clean before its audit finishes', async () => {
@@ -688,9 +716,7 @@ describe('UrlDetail', () => {
 
     renderUrlDetail(<UrlDetail crawlId={CRAWL} siteUrlId={URL_ID} />);
 
-    expect(
-      await screen.findByText('Issues appear here once this page’s audit finishes.'),
-    ).toBeInTheDocument();
-    expect(screen.queryByText('No issues found on this page.')).not.toBeInTheDocument();
+    expect(await screen.findByText('Audit not finished.')).toBeInTheDocument();
+    expect(screen.queryByText('No issues found.')).not.toBeInTheDocument();
   });
 });

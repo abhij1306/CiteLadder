@@ -1,11 +1,3 @@
-/**
- * How often each leading source was used, bucketed over the selection.
- *
- * The time axis is run
- * completion (`coalesce(completed_at, created_at)`), the denominator per
- * bucket is every response observed in it, and each leading source gets a
- * dense line: a bucket where it went uncited is a real zero.
- */
 import { sql } from 'kysely';
 
 import type { Database } from '../db/database.ts';
@@ -13,7 +5,6 @@ import { wireUtc, utcText } from '../db/timestamps.ts';
 import { authorizedSelection, evidenceScope, observedAt, type RunSelection } from './selection.ts';
 import { compareText } from '../text-order.ts';
 
-/** Lines a reader can tell apart; the design system's categorical chart tokens. */
 export const SOURCE_SERIES_MAX_SERIES = 5;
 
 export type SourceDimension = 'domain' | 'url';
@@ -28,10 +19,8 @@ export type SourceSeriesResponse = {
   series: SourceSeries[];
 };
 
-/** One grouped `(source, bucket)` row; `bucket` is the UTC wire rendering. */
 type SeriesRow = { key: string; bucket: string; responses: number; citations: number };
 
-/** Fold the grouped rows into one dense series per leading source. */
 function assembleSeries(
   rows: readonly SeriesRow[],
   input: {
@@ -73,14 +62,12 @@ export async function getSourceSeries(
     dimension: SourceDimension;
     granularity: SeriesGranularity;
     domain: string | null;
-    /** One page's own line, for its detail view. */
     url?: string | null;
     sourceClass: string | null;
     limit: number;
   },
 ): Promise<SourceSeriesResponse> {
   const selection = await authorizedSelection(db, requested);
-  // Buckets are UTC days/weeks, whatever the session time zone is.
   const bucket = sql`date_trunc(${options.granularity}, ${observedAt}, 'UTC')`;
   const scope = evidenceScope(db, selection)
     .select(['ra.id as analysis_id', bucket.as('bucket')])
@@ -95,8 +82,6 @@ export async function getSourceSeries(
     .execute();
   const empty = { dimension: options.dimension, granularity: options.granularity };
   if (totalRows.length === 0) return { ...empty, buckets: [], series: [] };
-  // A URL series is keyed by page, and a page is filtered by its own format
-  // exactly as the URL table is; a publisher class would match nothing.
   const pages = options.dimension === 'url' || Boolean(options.domain);
   const key = options.dimension === 'url' ? 'citation.url' : 'citation.domain';
   let counted = db
