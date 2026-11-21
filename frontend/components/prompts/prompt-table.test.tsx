@@ -100,7 +100,7 @@ describe('PromptTable pagination', () => {
           <PromptTable
             prompts={[
               makePrompt(1, { branded: true, buyer_stage: 'consideration', topic_id: TOPIC_ID }),
-              makePrompt(2, { over_plan_limit: true }),
+              makePrompt(2),
               makePrompt(3, { topic_id: '55555555-5555-4555-8555-555555555555' }),
             ]}
             topicNames={new Map([[TOPIC_ID, 'Espresso at home']])}
@@ -116,7 +116,7 @@ describe('PromptTable pagination', () => {
         .slice(0, 2)
         .map((cell) => cell.textContent);
     expect(cells(filed)).toEqual(['Prompt number 1', 'Espresso at home']);
-    expect(cells(overLimit)).toEqual(['Prompt number 2Beyond the plan limit', '—No topic']);
+    expect(cells(overLimit)).toEqual(['Prompt number 2', '—No topic']);
     expect(
       within(overLimit!).getAllByRole('cell')[1]!.querySelector('[data-absence]'),
     ).toHaveAttribute('data-absence', 'none');

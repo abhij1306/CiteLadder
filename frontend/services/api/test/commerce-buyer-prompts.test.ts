@@ -47,7 +47,6 @@ it('saves manual prompts disabled', async () => {
 });
 
 it('files Commerce prompts under their own topic, never a same-named brand topic', async () => {
-  await grant(db, account, { value: 3 });
   const brandTopic = await topic(db, scope.projectId, 'trail MASTER');
   const topicOf = async (text: string) => {
     const row = await manualBuyerPrompt(db, scope, buyerManualInput.parse({ target, text }));

@@ -2,12 +2,10 @@ import type { ReactNode } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { CopyButton } from '@/components/ui/copy-button';
-import { TextLink } from '@/components/ui/text-link';
 import { Tooltip } from '@/components/ui/tooltip';
 import { textRole } from '@/components/ui/typography';
 import { humanizeApiError } from '@/lib/api/errors';
 import type { MutationNotice as MutationNoticeData } from '@/lib/api/mutation-notice';
-import { isPlanLimit, PLANS_HREF } from '@/lib/billing/plan-limit';
 import { cn } from '@/lib/utils';
 
 export type NoticeTone = 'info' | 'positive' | 'warning' | 'negative';
@@ -129,8 +127,6 @@ function MutationFailureNotice({ notice, onRetry, recovery, className }: Mutatio
         Try again
       </Button>
     );
-  else if (action === null && isPlanLimit(notice.code))
-    action = <TextLink href={PLANS_HREF}>See plans</TextLink>;
   return (
     <MessageNoticeView
       tone="negative"

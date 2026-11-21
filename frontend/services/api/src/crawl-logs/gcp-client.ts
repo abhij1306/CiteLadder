@@ -16,7 +16,6 @@ import { crawlLogs } from '../config/crawl-logs.ts';
 import { resolveSettingSpec, type SettingSource } from '../config/settings.ts';
 import { ApiError } from '../errors.ts';
 
-/** The reader service account; empty means the connector is unavailable here. */
 export function crawlLogReaderEmail(env: SettingSource = process.env) {
   return String(resolveSettingSpec(policy.settings.crawl_log_reader_email, env)).trim();
 }
@@ -57,7 +56,6 @@ export type GcpSubscription = z.infer<typeof subscriptionSchema>;
 export type PulledMessage = { ackId: string; messageId: string; data: string };
 export type PubSubReader = {
   subscription(name: string): Promise<GcpSubscription>;
-  /** Up to `max` messages; an empty array only when Pub/Sub answered with none. */
   pull(name: string, max: number): Promise<PulledMessage[]>;
   acknowledge(name: string, ackIds: readonly string[]): Promise<void>;
 };
@@ -73,7 +71,6 @@ function failureFor(status: number): GcpFailure {
   if (status === 400) return 'invalid';
   return 'unavailable';
 }
-/** `projects/<p>/subscriptions/<s>` with each identifier escaped for the URL path. */
 function resourcePath(name: string) {
   const [, project, , subscription] = name.split('/');
   if (!project || !subscription) throw new GcpError('invalid');
@@ -113,7 +110,6 @@ export function pubSubReader(options: {
     }
   }
   const bounded = settings.request_timeout_seconds;
-  /** A reader token, minted from the runtime identity and reused until near expiry. */
   async function token() {
     if (cached && now() < cached.refreshAt) return cached.token;
     try {
@@ -144,11 +140,9 @@ export function pubSubReader(options: {
       };
       return cached.token;
     } catch {
-      // Our own identity failed; the customer's subscription is not at fault.
       throw new GcpError('unavailable');
     }
   }
-  /** The parsed response body. */
   async function pubsub<T>(
     schema: z.ZodType<T>,
     name: string,
@@ -198,7 +192,6 @@ export function pubSubReader(options: {
     },
   };
 }
-/** The process's reader, or 409 where no reader service account is configured. */
 export function requirePubSubReader(): PubSubReader {
   const reader = defaultPubSubReader();
   if (!reader)
@@ -207,7 +200,6 @@ export function requirePubSubReader(): PubSubReader {
 }
 
 let shared: { email: string; reader: PubSubReader } | null = null;
-/** The process's reader for the configured service account, so its token cache is shared. */
 export function defaultPubSubReader(): PubSubReader | null {
   const email = crawlLogReaderEmail();
   if (!email) return null;

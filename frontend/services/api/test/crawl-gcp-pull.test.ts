@@ -14,7 +14,6 @@ import { refreshCrawlLogs } from '../src/crawl-logs/rollup.ts';
 import { ANALYTICS_LANE, TaskQueue } from '../src/queue/task-queue.ts';
 import { enqueueTask } from '../src/queue/enqueue.ts';
 
-/** An in-memory Google: metadata, IAM Credentials and one Pub/Sub subscription. */
 function fakeGoogle(
   options: {
     labels?: Record<string, string>;
@@ -33,9 +32,7 @@ function fakeGoogle(
     clock: Date.parse('2026-10-10T00:00:00Z'),
     log: [] as string[],
     labels: options.labels ?? {},
-    /** When set, `status` applies to this call only (subscription `get`, `:pull` or `:acknowledge`). */
     failing: '' as '' | 'get' | ':pull' | ':acknowledge',
-    /** Runs when an acknowledgement arrives, before it is applied. */
     onAck: async () => {},
   };
   const reply = (status: number, body: unknown) =>
@@ -155,7 +152,6 @@ describe('Google Cloud pull sources', () => {
       status: 409,
       message: 'An active live source already covers this host',
     });
-    // The database index refuses the same pair even past the service check.
     const { id } = await pullSource();
     const source = await db
       .selectFrom('crawl_log_sources')
@@ -246,7 +242,6 @@ describe('Google REST client', () => {
   });
   it.each([
     [403, 'permission_denied'],
-    // A rejected reader token is CiteLadder's failure, not the customer's.
     [401, 'unavailable'],
     [404, 'not_found'],
     [400, 'invalid'],
@@ -278,10 +273,8 @@ describe('Google REST client', () => {
   });
 });
 
-/** The persisted source row as a pull source sees it. */
 const row = (id: string) =>
   db.selectFrom('crawl_log_sources').selectAll().where('id', '=', id).executeTakeFirstOrThrow();
-/** A Google whose subscription carries this source's own nonce label. */
 async function labelled(id: string, options: Parameters<typeof fakeGoogle>[0] = {}) {
   const source = await row(id);
   return fakeGoogle({ labels: { 'citeladder-source': source.verification_nonce! }, ...options });
@@ -312,7 +305,6 @@ describe('subscription verification', () => {
     const google = await labelled(id, { ackDeadline: 30 });
     await verifyPullSource(db, await row(id), google.reader);
     const stalledAt = (await row(id)).stalled_at;
-    // A heartbeat receipt cannot lift it: only the subscription owner fixing it can.
     await ingest(db, await row(id), Buffer.alloc(0), { key: 'pull-heartbeat' });
     expect((await row(id)).stall_reason).toBe('verification_failed');
     const again = await verifyPullSource(db, await row(id), google.reader);
@@ -352,7 +344,6 @@ describe('subscription verification', () => {
       .where('id', '=', id)
       .execute();
     expect((await sourceList(db, scope(tenant))).items[0]!.pull!.filter_current).toBe(false);
-    // Another workspace naming this source's UUID finds nothing to confirm.
     await expect(confirmSinkFilter(db, scope(other), other.userId, id)).rejects.toMatchObject({
       status: 404,
     });
@@ -367,7 +358,6 @@ describe('subscription verification', () => {
 
 const GPTBOT = 'Mozilla/5.0 (compatible; GPTBot/1.2; +https://openai.com/gptbot)';
 let messageSeq = 0;
-/** A Pub/Sub message carrying one Cloud Logging entry, base64 as Pub/Sub delivers it. */
 function message(entry: Record<string, unknown>) {
   messageSeq += 1;
   return {
@@ -388,14 +378,12 @@ const lbEntry = (path: string, changes: Record<string, unknown> = {}) => ({
   },
   ...changes,
 });
-/** A verified pull source, its labelled Google and the pull executor bound to it. */
 async function verifiedSource() {
   const { tenant, id } = await pullSource();
   const google = await labelled(id);
   await verifyPullSource(db, await row(id), google.reader);
   return { tenant, id, google, executor: crawlLogPull(() => google.reader) };
 }
-/** Queue the source's pull through the tick's scheduler and run the claimed row. */
 async function runPull(
   tenant: Tenant,
   executor: ReturnType<typeof crawlLogPull>,
@@ -406,7 +394,6 @@ async function runPull(
   if (!task) throw new Error('No pull was queued');
   await executor(task, { db, maxAttempts: 3, checkCancelled: async () => {} });
 }
-/** The workspace's queued pulls, newest first. */
 const pullTasks = (workspaceId: string) =>
   db
     .selectFrom('analytics_tasks')
@@ -422,7 +409,6 @@ const pullReceipts = (id: string) =>
     .where('source_id', '=', id)
     .orderBy('received_at')
     .execute();
-/** A receipt for pulled lines, as `pullReceipts` reads it. */
 const batch = (received: number, matched: number, rejected = 0, duplicate = 0) => ({
   lines_received: received,
   lines_matched: matched,
@@ -483,7 +469,6 @@ describe('pull task', () => {
         failure: 'unavailable',
       }),
     ]);
-    // Redelivered alongside a new message, the batch has a new key; request IDs dedupe it.
     google.state.messages.push(message(lbEntry('/c')));
     google.state.status = 200;
     await runPull(tenant, executor);
@@ -501,7 +486,6 @@ describe('pull task', () => {
       pull: { verification_failure: 'permission_denied' },
     });
     const pulls = google.state.pulls;
-    // Within the day, the tick holds the stalled source back.
     await enqueueDuePulls(db, tenant.workspaceId, new Date(Date.now() + 600_000), () => true);
     expect(await pullTasks(tenant.workspaceId)).toHaveLength(1);
     expect(google.state.pulls).toBe(pulls);
@@ -590,7 +574,6 @@ describe('pull task', () => {
 describe('pull coverage', () => {
   const day = new Date(Date.now() - 3 * 86400000).toISOString().slice(0, 10);
   const start = new Date(day + 'T00:00:00Z');
-  /** Drains every `gap` minutes across the day, then one `settle` minutes after it closed. */
   async function coverageFor(
     options: {
       gap?: number;
@@ -648,7 +631,6 @@ describe('pull coverage', () => {
     [{ settle: null }, 'partial', 'pull_awaiting_settle'],
     [{ rate: 0.5 }, 'partial', 'pull_sampled'],
     [{ catalog: '0' }, 'partial', 'sink_filter_outdated'],
-    // Verified ten minutes after midnight: the drain gap alone would not notice.
     [{ verifiedLateMinutes: 10 }, 'partial', 'pull_not_live_all_day'],
   ] as const)('judges drains %j as %s (%s)', async (options, coverage, reason) => {
     expect(await coverageFor(options)).toEqual({ coverage, reason });

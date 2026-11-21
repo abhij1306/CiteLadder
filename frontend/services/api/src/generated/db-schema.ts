@@ -723,6 +723,20 @@ export interface AuditTasks {
   workspace_id: string;
 }
 
+export interface AuditTopicMetrics {
+  analyzer_version: string;
+  audit_id: string;
+  created_at: Timestamp;
+  id: string;
+  metrics: Json;
+  project_id: string;
+  source_analysis_ids: Json;
+  topic_id: string;
+  topic_name: string;
+  visibility_score: number;
+  workspace_id: string;
+}
+
 export interface BotActivityDaily {
   bot_id: string;
   canonical_url: string | null;

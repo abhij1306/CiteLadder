@@ -319,41 +319,6 @@ describe('bulk prompt actions', () => {
       ).map((row) => [row.id, row.topic_id]),
     );
 
-  it('refuses to activate prompts beyond the plan limit, in bulk or one at a time', async () => {
-    await grant(db, t.accountId, { value: 1 });
-    const start = Date.now() - 60_000;
-    const within = await prompt(db, t.setId, 'acme trail shoes', {
-      status: 'archived',
-      createdAt: new Date(start),
-    });
-    const beyond = await prompt(db, t.setId, 'acme road shoes', {
-      status: 'archived',
-      createdAt: new Date(start + 1000),
-    });
-    const refused = await post<ErrorBody>(`/prompt-sets/${t.setId}/prompts/bulk-status`, {
-      prompt_ids: [within, beyond],
-      status: 'active',
-    });
-    expect([refused.status, refused.body.error.code, refused.body.error.details]).toEqual([
-      403,
-      'occupancy_limit_exceeded',
-      { key: 'prompt_slots', excluded: 1 },
-    ]);
-    const single = await patch<ErrorBody>(`/prompts/${beyond}`, { status: 'active' });
-    expect([single.status, single.body.error.code]).toEqual([403, 'occupancy_limit_exceeded']);
-    const statuses = await db
-      .selectFrom('prompts')
-      .select(['id', 'status'])
-      .where('id', 'in', [within, beyond])
-      .execute();
-    expect(statuses.every((row) => row.status === 'archived')).toBe(true);
-    const allowed = await post<PromptSet>(`/prompt-sets/${t.setId}/prompts/bulk-status`, {
-      prompt_ids: [within],
-      status: 'active',
-    });
-    expect(allowed.body.prompts.find((row) => row.id === within)?.status).toBe('active');
-  });
-
   it('files a selection under a topic, binding only the active prompts that move', async () => {
     const trail = await topic(db, t.projectId, 'Trail gear', 'hydration packs');
     const fits = await prompt(db, t.setId, 'lightest hydration packs');

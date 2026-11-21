@@ -14,6 +14,7 @@ import {
   DEFAULT_REPETITIONS,
   promptBatches,
 } from '@/lib/runs/launch';
+import { mainPromptSet } from '@/lib/prompts/prompt-sets';
 import { useConfiguredEngines } from '@/lib/runs/use-configured-engines';
 
 import { LaunchDialogView } from './launch-dialog-view';

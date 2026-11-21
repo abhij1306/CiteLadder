@@ -157,7 +157,6 @@ export function importBrandFacts(
 ): Promise<BrandFactImportResult> {
   return db.transaction().execute(async (trx) => {
     await acquireProjectLock(trx, scope.projectId);
-    await requireFlag(trx, scope.workspaceId, 'fact_checking');
     const kept = await trx
       .selectFrom('brand_facts')
       .select(['topic', 'statement'])

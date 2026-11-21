@@ -17,7 +17,6 @@ export const ROUTE_FAMILIES = [
   'opportunities',
   'performance',
   'performance-sync',
-  'probes',
   'readiness',
   'projects',
   'overview',
@@ -36,3 +35,5 @@ export const ROUTE_FAMILIES = [
 ] as const;
 
 export type RouteFamily = (typeof ROUTE_FAMILIES)[number];
+
+export const CSP_REPORTS_PATH = '/api/v1/client-errors/csp-reports';

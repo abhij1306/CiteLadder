@@ -51,6 +51,9 @@ import {
   type FactRevision,
 } from '../perception/fact-metrics.ts';
 import { isNamed } from '../perception/passages.ts';
+import { editedMark, newestOverrides } from '../perception/verdict-overrides.ts';
+import { engineLabel } from '../config/providers.ts';
+import { listMarkets } from '../projects/markets.ts';
 import { compareText } from '../text-order.ts';
 import { scopedSelection } from './dashboard.ts';
 import { perceptionRows } from './perception.ts';
@@ -397,7 +400,6 @@ export async function accuracyClaimRows(
   selection: RunSelection,
   filters: ClaimFilters,
 ): Promise<Record<(typeof CLAIM_EXPORT_COLUMNS)[number], string>[]> {
-  await requireFlag(db, selection.workspaceId, 'fact_checking');
   const { answers, marketOf } = await selectionAnswers(db, selection, { citations: false });
   const keep = claimFilter(filters);
   const claims = answers

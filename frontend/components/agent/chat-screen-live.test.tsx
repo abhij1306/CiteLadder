@@ -6,11 +6,6 @@ import { describe, expect, it, vi } from 'vite-plus/test';
 import { mswServer } from '@/test/msw-server';
 import { expectThreadFollowsLatest } from '@/test/chat-follow';
 
-vi.mock('@/lib/billing/entitlement-context', () => ({
-  useManagedPlan: () => false,
-  useEntitlement: () => ({ hasCapability: () => true }),
-}));
-
 import { refreshAgentChat } from '@/lib/api/agent';
 import {
   CHAT,

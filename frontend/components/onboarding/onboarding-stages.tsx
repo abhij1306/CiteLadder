@@ -1,6 +1,5 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import { Controller, type UseFormReturn } from 'react-hook-form';
-import { Link } from 'react-router-dom';
 
 import { SetupStep, StepColumns, StepFindings, StepTrail } from '@/components/templates/setup-page';
 import { Button } from '@/components/ui/button';
@@ -10,7 +9,6 @@ import { Stack } from '@/components/ui/layout';
 import { MarketSelect } from '@/components/ui/market-select';
 import { type TrailStep } from '@/components/ui/rung-trail';
 import { MARKET_COUNTRIES, MARKET_LANGUAGES } from '@citeladder/contracts/markets';
-import { isPlanLimit, PLANS_HREF } from '@/lib/billing/plan-limit';
 import { discoveryActivity } from '@/lib/onboarding/discovery-activity';
 import { onboardingErrorMessage, type BrandStepValues } from '@/lib/onboarding/forms';
 import { hasConfirmedIcp, IcpAudience, IcpCategory } from './icp-confirmation';
@@ -364,12 +362,6 @@ function FailureRecovery({
   rerun,
   onEdit,
 }: Readonly<{ code: string; rerun: ReactNode; onEdit: () => void }>) {
-  if (isPlanLimit(code))
-    return (
-      <Button asChild variant="secondary">
-        <Link to={PLANS_HREF}>See plans</Link>
-      </Button>
-    );
   if (!SITE_FAILURES.has(code)) return rerun;
   return (
     <>

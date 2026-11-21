@@ -17,13 +17,10 @@ function frameAt(path: string) {
 
 describe('FirstFrame', () => {
   it('draws the shell on a shell route and only the plain ground on a flow route', () => {
-    const paths = ['/projects', '/prompts', '/login', '/register', '/workspaces', '/onboarding'];
+    const paths = ['/projects', '/prompts', '/onboarding'];
     expect(paths.map(frameAt)).toEqual([
       { path: '/projects', shell: true, sidebarRows: true },
       { path: '/prompts', shell: true, sidebarRows: true },
-      { path: '/login', shell: false, sidebarRows: false },
-      { path: '/register', shell: false, sidebarRows: false },
-      { path: '/workspaces', shell: false, sidebarRows: false },
       { path: '/onboarding', shell: false, sidebarRows: false },
     ]);
   });

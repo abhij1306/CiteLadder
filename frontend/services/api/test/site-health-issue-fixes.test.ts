@@ -10,6 +10,7 @@ import { policy } from '../src/config.ts';
 import { record } from '../src/db/json.ts';
 import { TEST_SESSION_COOKIE, sessionToken, testConfig, testDatabase } from './support.ts';
 import { SiteFixtures, type SiteSeed } from './site-health-fixtures.ts';
+import { landFinalRevisions } from './site-health-finalize-fixtures.ts';
 import type { Tenant } from './visibility-fixtures.ts';
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });

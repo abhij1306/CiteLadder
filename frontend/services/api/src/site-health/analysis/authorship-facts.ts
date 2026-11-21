@@ -1,4 +1,3 @@
-/** Author and publication dates: declared values first, then bounded visible evidence. */
 import {
   ancestors,
   attribute,
@@ -22,8 +21,8 @@ const ATTRIBUTION_PREFIX = new RegExp(a.profile_link_attribution_prefix_pattern)
 const AUTHOR_TOKENS = new Set(a.visible_author_node_tokens);
 const DATE_TOKENS = new Set(a.visible_date_node_tokens);
 const HEADING_EXCLUSIONS = new Set(a.visible_author_heading_exclusions);
+const ROLE_LABELS = new Set(a.visible_author_role_labels);
 
-/** The first "By <Name>" byline; `leading` requires it to open the text. */
 function visibleByline(text: string, leading = false) {
   const match = BYLINE.exec(text);
   if (!match || (leading && text.slice(0, match.index).trim())) return '';
@@ -32,10 +31,9 @@ function visibleByline(text: string, leading = false) {
 const visibleDate = (text: string) => DATE.exec(text)?.[0].trim() ?? '';
 function visibleAuthorName(text: string) {
   const candidate = squash(text);
-  return AUTHOR_NAME.test(candidate) ? candidate : '';
+  return AUTHOR_NAME.test(candidate) && !ROLE_LABELS.has(candidate.toLowerCase()) ? candidate : '';
 }
 
-/** Descendant text with a boundary between inline parts such as `<br>`. */
 const spacedText = (node: HtmlNode) =>
   squash([...textNodes(node)].map((part) => part.value).join(' '));
 const attributeTokens = (node: HtmlElement) =>
@@ -43,6 +41,7 @@ const attributeTokens = (node: HtmlElement) =>
     ['class', 'id', 'itemprop', 'rel']
       .map((name) => attribute(node, name))
       .join(' ')
+      .replaceAll(/([a-z0-9])([A-Z])/gu, '$1 $2')
       .toLowerCase()
       .split(/[^a-z0-9]+/u)
       .filter(Boolean),
@@ -71,14 +70,24 @@ function profileUrl(node: HtmlElement, author: string) {
 const hasAuthorToken = (tokens: Set<string>) =>
   [...tokens].some((token) => AUTHOR_TOKENS.has(token));
 
-/** A bare Title-Case heading names an author only inside an author or byline container. */
 const insideAuthorContainer = (node: HtmlElement) =>
   [...ancestors(node)].some((item) => hasAuthorToken(attributeTokens(item)));
+
+function leadingLinkedName(node: HtmlElement, name: string) {
+  for (const link of elements(node, 'a')) {
+    const linked = visibleAuthorName(spacedText(link));
+    if (linked && hasAttribute(link, 'href') && name.startsWith(`${linked} `)) return linked;
+  }
+  return name;
+}
 
 function authorCandidate(node: HtmlElement, text: string, authorTokens: boolean) {
   const byline = visibleByline(text);
   if (byline) return byline;
-  if (authorTokens) return visibleAuthorName(text);
+  if (authorTokens) {
+    const name = visibleAuthorName(text);
+    return name ? leadingLinkedName(node, name) : '';
+  }
   if (
     ['h2', 'h3'].includes(node.tagName) &&
     !HEADING_EXCLUSIONS.has(text.toLowerCase()) &&
@@ -99,7 +108,6 @@ function observedAuthor(node: HtmlElement, text: string, tokens: Set<string>) {
   return author;
 }
 
-/** Targeted visible byline and date evidence from the primary region, outside card lists. */
 function visibleValues(page: PageScope) {
   const found = { author: '', profile: '', published: '' };
   let scanned = 0;
@@ -123,7 +131,6 @@ function visibleValues(page: PageScope) {
   return found;
 }
 
-/** The page's own first `<time datetime>`: a post card's or footer's date is not the page's. */
 const firstDeclaredTime = (page: PageScope) =>
   [...elements(page.region, 'time')]
     .filter((node) => regionNodeIsVisible(node) && outsideContainers(node, page.cards))

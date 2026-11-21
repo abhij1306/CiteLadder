@@ -371,7 +371,6 @@ describe('prefetchRoute', () => {
       await prefetchRoute(client, '/settings?tab=integrations', PROJECT);
       await vi.waitFor(() =>
         expect([...new Set(requests.paths)].sort()).toEqual([
-          '/api/v1/auth/security',
           '/api/v1/integrations',
           '/api/v1/provider-catalog',
           '/api/v1/provider-connections',

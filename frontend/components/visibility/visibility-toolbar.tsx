@@ -4,6 +4,7 @@ import { IconButton } from '@/components/ui/button';
 import { engineOptionMark } from '@/components/ui/engine-mark';
 import { MastheadPrimary } from '@/components/ui/masthead-actions';
 import { Tooltip } from '@/components/ui/tooltip';
+import { CircleHelp } from '@/lib/icons';
 import type { LogicalEngine } from '@citeladder/contracts';
 import type { ProjectMarket } from '@citeladder/contracts/markets';
 import { useEngineCatalog } from '@/lib/providers/engines';

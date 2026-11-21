@@ -11,11 +11,6 @@ import { makeProject } from '@/test/fixtures/project';
 import { renderWithProviders } from '@/test/render';
 import { CHAT, PROJECT, REV1, detail, revision, skills } from '@/test/agent-chat-fixture';
 
-vi.mock('@/lib/billing/entitlement-context', () => ({
-  useManagedPlan: () => false,
-  useEntitlement: () => ({ hasCapability: () => true }),
-}));
-
 import { ChatScreen } from './chat-screen';
 
 beforeAll(() => mswServer.listen({ onUnhandledFrame: 'error' }));

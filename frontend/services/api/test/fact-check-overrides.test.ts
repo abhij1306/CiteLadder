@@ -6,7 +6,7 @@ import { factVerification } from '../src/perception/fact-verification.ts';
 import { factCheckHarness, fakeGateway, perceptionOutput } from './fact-check-support.ts';
 import type { Tenant } from './visibility-fixtures.ts';
 
-const { db, fixtures, enroll, call, confirmedFact, pilotConfiguration, analysed, drain } =
+const { db, fixtures, call, confirmedFact, pilotConfiguration, analysed, drain } =
   factCheckHarness();
 
 let tenant: Tenant;
@@ -21,7 +21,6 @@ afterAll(async () => {
 });
 
 async function checkedAudit(verdict: string, confidence: number) {
-  await enroll(tenant);
   await confirmedFact(tenant, 'pricing', 'Pro costs $59 per month.');
   const auditId = await fixtures.audit(tenant, {
     configuration: await pilotConfiguration(tenant),
@@ -73,7 +72,6 @@ describe('verdict overrides', () => {
       'fact_checking_not_in_plan',
     ]);
     const attacker = await fixtures.tenant();
-    await enroll(attacker);
     expect((await override(attacker, 'supported')).status).toBe(404);
     expect((await override(tenant, 'contradicted')).status).toBe(409);
 
@@ -156,7 +154,6 @@ describe('facts CSV import', () => {
       409,
       'fact_checking_not_in_plan',
     ]);
-    await enroll(tenant);
     await confirmedFact(tenant, 'pricing', 'Pro costs $59 per month.');
     const imported = await call(tenant, 'POST', '/brand-facts/import', {
       rows: [

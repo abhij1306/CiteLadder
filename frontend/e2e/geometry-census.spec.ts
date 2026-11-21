@@ -23,7 +23,6 @@ const PROMPT_SETS = {
           enabled: true,
           status: 'active',
           origin: 'manual',
-          over_plan_limit: false,
         },
       ],
       created_at: '2026-08-01T00:00:00Z',

@@ -170,7 +170,6 @@ export const policy = {
   brand_logos: brandLogos,
   internal_links: internalLinks,
   perception,
-  probes,
 };
 
 /** The host and port the service listens on. */

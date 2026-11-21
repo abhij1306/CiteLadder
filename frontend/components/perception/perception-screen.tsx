@@ -4,7 +4,6 @@ import type { AccuracyResponse } from '@citeladder/contracts/fact-checking';
 
 import { PerceptionView } from '@/components/perception/perception-brand';
 import { PerceptionFactChecking } from '@/components/perception/perception-factcheck';
-import { PerceptionProbe } from '@/components/perception/perception-probe';
 import { ReportPage } from '@/components/templates/report-page';
 import { FilterBar } from '@/components/ui/filter-bar';
 import type { FigureSegment } from '@/components/ui/figure-strip';
@@ -38,7 +37,7 @@ type Queries = ReturnType<typeof useVisibilityQueries>;
 export function PerceptionScreen() {
   const filters = useVisibilityFilters();
   const queries = useVisibilityQueries(filters, 'perception');
-  const { pilot, tab, setTab, items, probe } = usePerceptionTab();
+  const { pilot, tab, setTab, items } = usePerceptionTab();
   const accuracy = useAccuracy({ filters, queries, pilot });
   const factViews = useFactViews({ filters, queries, accuracy, open: tab === 'fact-checking' });
   const pageFilters = usePageFilters(filters, queries);
@@ -49,25 +48,21 @@ export function PerceptionScreen() {
     <TabsRoot value={tab} onValueChange={setTab}>
       <ReportPage
         tabs={<TabRow items={items} ariaLabel="Perception views" />}
-        filters={ready && !probe ? <FilterBar filters={pageFilters} /> : undefined}
+        filters={ready ? <FilterBar filters={pageFilters} /> : undefined}
       >
-        {probe ? null : <RunBanner queries={queries} />}
+        <RunBanner queries={queries} />
         <TabPanel value={tab} className="focus-ring">
-          {probe ? (
-            <PerceptionProbe view={probe} />
-          ) : (
-            <SelectionTab
-              ready={ready}
-              queries={queries}
-              view={
-                tab === 'fact-checking' ? (
-                  <PerceptionFactChecking query={accuracy} views={factViews} />
-                ) : (
-                  <BrandTab filters={filters} queries={queries} factFigure={brandFact} />
-                )
-              }
-            />
-          )}
+          <SelectionTab
+            ready={ready}
+            queries={queries}
+            view={
+              tab === 'fact-checking' ? (
+                <PerceptionFactChecking query={accuracy} views={factViews} />
+              ) : (
+                <BrandTab filters={filters} queries={queries} factFigure={brandFact} />
+              )
+            }
+          />
         </TabPanel>
       </ReportPage>
     </TabsRoot>
@@ -83,7 +78,6 @@ function usePerceptionTab() {
     tab,
     setTab,
     items: pilot ? PERCEPTION_TABS : PUBLIC_PERCEPTION_TABS,
-    probe: tab === 'market' || tab === 'objections' ? tab : null,
   };
 }
 

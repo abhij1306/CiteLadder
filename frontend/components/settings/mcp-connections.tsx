@@ -1,6 +1,6 @@
 import { CopyButton } from '@/components/ui/copy-button';
 import { Inline, Stack } from '@/components/ui/layout';
-import { panelClasses } from '@/components/ui/panel';
+import { wellClasses } from '@/components/ui/slip';
 import { CodeToken, textRole } from '@/components/ui/typography';
 import { EditorialSectionHeader } from '@/components/ui/workspace';
 import { claudeCodeCommand, MCP_SERVER_URL, mcpServersJson } from '@/lib/config/mcp-clients';
@@ -9,12 +9,12 @@ function Snippet({ label, value }: Readonly<{ label: string; value: string }>) {
   return (
     <Stack as="section" gap="compact">
       <Inline className="flex-wrap justify-between">
-        <h3 className={textRole('itemTitle')}>{label}</h3>
-        <CopyButton value={value} variant="ghost" copiedLabel={`${label} copied`}>
+        <h3 className={textRole('subheading')}>{label}</h3>
+        <CopyButton value={value} variant="quiet" copiedLabel={`${label} copied`}>
           Copy
         </CopyButton>
       </Inline>
-      <pre className={panelClasses('type-code overflow-x-auto border-0 whitespace-pre')}>
+      <pre className={wellClasses('type-code overflow-x-auto border-0 whitespace-pre')}>
         {/* Block, so the first line sits on the well's inset, not a line-height below it. */}
         <code className="block">{value}</code>
       </pre>
@@ -39,7 +39,7 @@ export function McpConnections() {
         <Inline>
           <span className={textRole('label', 'shrink-0')}>MCP URL</span>
           <CodeToken>{MCP_SERVER_URL}</CodeToken>
-          <CopyButton value={MCP_SERVER_URL} variant="ghost" copiedLabel="MCP URL copied">
+          <CopyButton value={MCP_SERVER_URL} variant="quiet" copiedLabel="MCP URL copied">
             Copy
           </CopyButton>
         </Inline>

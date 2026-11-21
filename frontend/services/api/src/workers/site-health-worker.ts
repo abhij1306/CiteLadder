@@ -294,6 +294,7 @@ export class SiteHealthWorker {
         queue: this.queue,
         fetcher: this.fetcher,
         settings: this.settings,
+        cadence: this.#cadence,
         signal: this.signal,
       },
       claimed,

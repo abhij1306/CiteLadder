@@ -38,7 +38,6 @@ describe('leased Google AI Overview phases', () => {
       {
         owner: 'worker',
         taskScope: t,
-        env: {},
         send: async () => {
           failNextTransaction = true;
           return Response.json({
@@ -212,7 +211,6 @@ describe('leased Google AI Overview phases', () => {
       {
         owner: 'worker',
         taskScope: t,
-        env: {},
         now: () => new Date(tick),
         send: async (input) => {
           paths.push(String(input).split('/').slice(-2).join('/'));

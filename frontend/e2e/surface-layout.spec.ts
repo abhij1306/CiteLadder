@@ -265,6 +265,7 @@ test('Agent text entry paints one focus boundary', async ({ page }) => {
   const prompt = page.locator('textarea');
   const form = prompt.locator('xpath=ancestor::form');
   const inputEdge = await prompt.evaluate((node) => getComputedStyle(node).borderColor);
+  const outerEdge = await form.evaluate((node) => getComputedStyle(node).borderColor);
   await prompt.click();
   await expect(prompt).toBeFocused();
   // The composer is the box: its frame takes the focus edge and the halo,

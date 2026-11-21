@@ -1,10 +1,10 @@
-/** Explicit crawl admission freezes policy and commits all initial work together. */
 import { randomUUID } from 'node:crypto';
 import { ACTIVE_CRAWL_STATUSES } from '@citeladder/contracts/site-health';
 import { sql, type Selectable } from 'kysely';
 import { policy } from '../config.ts';
 import { measuredTargetPages } from '../opportunities/enqueue.ts';
 import type { Database } from '../db/database.ts';
+import { timeOrderedId } from '../db/ids.ts';
 import { notFound } from '../errors.ts';
 import { record } from '../db/json.ts';
 import type {
@@ -12,7 +12,13 @@ import type {
   SiteUrls,
   WorkspaceSiteHealthRuntime,
 } from '../generated/db-schema.ts';
-import { enqueueCrawlTasks, fitTrackedSet, insertObservations } from './admission-writes.ts';
+import {
+  enqueueCrawlTasks,
+  fitTrackedSet,
+  insertObservations,
+  type CrawlTaskSeed,
+  type Observation,
+} from './admission-writes.ts';
 import { addAutomaticRoot, candidate, crawlScope, lockRuntime } from './frontier.ts';
 import { siteHealthRuntime } from './reads/runtime.ts';
 import {
@@ -59,68 +65,62 @@ export async function admissionRuntime(db: Database, workspaceId: string) {
   return runtime;
 }
 
-async function enqueueCrawlTask(
-  db: Database,
-  crawl: Crawl,
-  input: {
-    kind: string;
-    url: string;
-    siteUrlId?: string;
-    depth?: number;
-    position?: number;
-    priority?: number;
-    generation?: number;
-    delay?: number;
-  },
-) {
-  const [row] = await enqueueCrawlTasks(
-    db,
-    crawl,
-    [
-      {
-        kind: input.kind,
-        url: input.url,
-        hash: canonicalIdentity(input.url).hash,
-        siteUrlId: input.siteUrlId ?? null,
-        depth: input.depth,
-        generation: input.generation,
-        position: input.position,
-        priority: input.priority,
-        delaySeconds: input.delay,
-      },
-    ],
-    'once',
-  );
+type TaskInput = {
+  kind: string;
+  url: string;
+  siteUrlId?: string;
+  depth?: number;
+  position?: number;
+  priority?: number;
+  generation?: number;
+  delay?: number;
+};
+
+const taskSeed = (input: TaskInput): CrawlTaskSeed => ({
+  kind: input.kind,
+  url: input.url,
+  hash: canonicalIdentity(input.url).hash,
+  siteUrlId: input.siteUrlId ?? null,
+  depth: input.depth,
+  generation: input.generation,
+  position: input.position,
+  priority: input.priority,
+  delaySeconds: input.delay,
+});
+
+async function enqueueCrawlTask(db: Database, crawl: Crawl, input: TaskInput) {
+  const [row] = await enqueueCrawlTasks(db, crawl, [taskSeed(input)], 'once');
   return row?.id ?? null;
 }
 
-async function seedObservation(
-  db: Database,
-  crawl: Crawl,
-  url: Selectable<SiteUrls>,
-  rerun = false,
-) {
-  await insertObservations(db, crawl, [
-    {
-      siteUrlId: url.id,
-      sourceKind: rerun ? 'root' : url.latest_source_kind || 'link',
-      valueKind: '',
-      valuePriority: 0,
-      rewriteReason: '',
-      rewriteVersion: '',
-      depth: rerun ? 0 : url.depth,
-      observedUrl: url.normalized_url,
-      finalUrl: url.normalized_url,
-      artifactId: null,
-      parentSiteUrlId: null,
-      statusCode: null,
-      contentType: rerun ? '' : url.latest_content_type || '',
-      title: url.latest_title || '',
-    },
-  ]);
+function enqueueAnalyses(db: Database, crawl: Crawl, inputs: Omit<TaskInput, 'kind'>[]) {
+  return enqueueCrawlTasks(
+    db,
+    crawl,
+    inputs.map((input) => taskSeed({ ...input, kind: 'analyze' })),
+    'once',
+  );
 }
 
-/** Queue analysis of the active members, in fill order, within the crawl's page limit. */
+function seedObservation(url: Selectable<SiteUrls>, rerun = false): Observation {
+  return {
+    siteUrlId: url.id,
+    sourceKind: rerun ? 'root' : url.latest_source_kind || 'link',
+    valueKind: '',
+    valuePriority: 0,
+    rewriteReason: '',
+    rewriteVersion: '',
+    depth: rerun ? 0 : url.depth,
+    observedUrl: url.normalized_url,
+    finalUrl: url.normalized_url,
+    artifactId: null,
+    parentSiteUrlId: null,
+    statusCode: null,
+    contentType: rerun ? '' : url.latest_content_type || '',
+    title: url.latest_title || '',
+  };
+}
+
 async function seedMonitored(db: Database, crawl: Crawl) {
   const rows = await db
     .selectFrom('site_urls as u')
@@ -137,20 +137,14 @@ async function seedMonitored(db: Database, crawl: Crawl) {
     .orderBy(sql`m.fill_order asc nulls last`)
     .orderBy('u.normalized_url')
     .execute();
-  // Pages with a declared change still being measured go first, so a budget
-  // smaller than the monitored set never drops the page a verification awaits.
   const declared = new Set(
     await measuredTargetPages(db, { workspaceId: crawl.workspace_id, projectId: crawl.project_id }),
   );
-  // The root keeps its slot: site checks read its facts.
   const rank = (url: { id: string; normalized_url: string }) => {
     if (url.normalized_url === crawl.root_url) return 0;
     return declared.has(url.id) ? 1 : 2;
   };
-  // A stable sort: fill order holds within each rank.
   rows.sort((left, right) => rank(left) - rank(right));
-  // The budget is in pages, not tasks: site setup is no page, and a URL that
-  // already has a discover task (a sample's root) spends nothing more.
   const held = new Set(
     (
       await db
@@ -173,23 +167,23 @@ async function seedMonitored(db: Database, crawl: Crawl) {
       free -= 1;
     } else boundary ??= url;
   }
-  // Preserve the boundary observation even when no further task fits the budget.
-  await Promise.all(
-    [...seeded, ...(boundary ? [boundary] : [])].map((url) => seedObservation(db, crawl, url)),
+  await insertObservations(
+    db,
+    crawl,
+    [...seeded, ...(boundary ? [boundary] : [])].map((url) => seedObservation(url)),
   );
-  await Promise.all(
-    seeded.map((url, position) =>
-      enqueueCrawlTask(db, crawl, {
-        kind: 'analyze',
-        url: url.normalized_url,
-        siteUrlId: url.id,
-        position,
-        delay: Math.min(
-          position * Number(crawlSetting('monitored_seed_stagger_seconds')),
-          Number(crawlSetting('monitored_seed_stagger_max_seconds')),
-        ),
-      }),
-    ),
+  await enqueueAnalyses(
+    db,
+    crawl,
+    seeded.map((url, position) => ({
+      url: url.normalized_url,
+      siteUrlId: url.id,
+      position,
+      delay: Math.min(
+        position * Number(crawlSetting('monitored_seed_stagger_seconds')),
+        Number(crawlSetting('monitored_seed_stagger_max_seconds')),
+      ),
+    })),
   );
 }
 
@@ -205,22 +199,20 @@ function insertCrawl(
     root: string;
     configuration: Record<string, unknown>;
     runtime: Runtime;
-    /** How many URLs discovery may admit: a sample's cap or a full crawl's HTML-walk bound. */
     discoveryLimit: number;
-    /** How many pages a re-audit names; 0 for a crawl of the site. */
     rerunPages: number;
   },
 ) {
   const now = new Date();
   const sample = input.runtime.discovery_mode === 'sample';
   const rerun = input.rerunPages > 0;
-  // A full crawl's discovery waits for site setup: its sitemap, or an HTML walk without one.
   let discovery = sample ? 'running' : 'pending';
   if (rerun) discovery = 'completed';
   return db
     .insertInto('site_crawls')
     .values({
-      id: randomUUID(),
+      // Time-ordered: the crawl id is the month partition key of its evidence.
+      id: timeOrderedId(),
       workspace_id: input.workspaceId,
       project_id: input.projectId,
       profile_id: input.profileId,
@@ -304,7 +296,6 @@ function refreshProfile(
     .executeTakeFirstOrThrow();
 }
 
-/** The root as the first tracked page: site checks read its facts. */
 async function trackRoot(db: Database, crawl: Crawl) {
   const decision = classifyUrlAdmission(crawl.root_url, crawlScope(crawl));
   if (!decision.accepted || !decision.url) return;
@@ -361,7 +352,6 @@ export async function createCrawl(db: Database, workspaceId: string, request: Cr
   const limit = sample ? Math.min(selected.limit, discoveryCap) : tracked;
   const configuration = frozenConfiguration(scope, runtime, { ...selected, limit });
   if (!sample) {
-    // The newest full site crawl's inventory: a page rerun holds no site inventory (SH-B1).
     const previous = await db
       .selectFrom('site_crawls')
       .selectAll()
@@ -439,16 +429,15 @@ export async function createPageRerunCrawl(
     discoveryLimit: 0,
     rerunPages: urls.length,
   });
-  await Promise.all(urls.map((url) => seedObservation(db, crawl, url, true)));
-  await Promise.all(
-    urls.map((url, position) =>
-      enqueueCrawlTask(db, crawl, {
-        kind: 'analyze',
-        url: url.normalized_url,
-        siteUrlId: url.id,
-        position,
-      }),
-    ),
+  await insertObservations(
+    db,
+    crawl,
+    urls.map((url) => seedObservation(url, true)),
+  );
+  await enqueueAnalyses(
+    db,
+    crawl,
+    urls.map((url, position) => ({ url: url.normalized_url, siteUrlId: url.id, position })),
   );
   await creationEvents(
     db,

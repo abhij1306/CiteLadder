@@ -113,29 +113,6 @@ describe('Notice', () => {
 });
 
 describe('Notice kind="mutation"', () => {
-  it('sends a plan-limit refusal to billing and leaves other refusals without that route', () => {
-    const { unmount } = renderWithProviders(
-      <Notice
-        kind="mutation"
-        notice={{
-          message: 'Your plan includes 3 projects, and this workspace has 3',
-          retryable: false,
-          code: 'occupancy_limit_exceeded',
-        }}
-      />,
-    );
-    expect(screen.getByRole('link', { name: 'See plans' })).toHaveAttribute('href', '/billing');
-    unmount();
-    renderWithProviders(
-      <Notice
-        kind="mutation"
-        notice={{ message: 'That prompt already exists', retryable: false, code: 'conflict' }}
-      />,
-    );
-    expect(screen.getByText('That prompt already exists')).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'See plans' })).toBeNull();
-  });
-
   it('offers the owner recovery action in place of Try again when one is given', () => {
     const { unmount } = renderWithProviders(
       <Notice

@@ -19,6 +19,7 @@ import {
   type TaskQueue,
 } from '../queue/task-queue.ts';
 import type { SitePageFetcher } from './page-fetch.ts';
+import type { CrawlCadences } from './refresh-cadence.ts';
 import type { SiteWorkerSettings } from './runtime.ts';
 
 /**
@@ -77,6 +78,7 @@ export type SiteTaskRunner = {
   queue: TaskQueue<'site_crawl_tasks'>;
   fetcher: SitePageFetcher;
   settings: SiteWorkerSettings;
+  cadence: CrawlCadences;
   signal?: AbortSignal;
 };
 export type SiteTaskContext = SiteTaskRunner & { signal: AbortSignal; startedAt: number };

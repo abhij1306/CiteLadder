@@ -127,11 +127,7 @@
     "commerce_recommendation_observations": ["src/commerce/shelf.ts"],
     "commerce_shelf_snapshots": ["src/commerce/shelf-metrics.ts"],
     "competitor_mentions": ["src/analysis/execution.ts"],
-    "competitors": [
-      "src/projects/competitor-suggestions.ts",
-      "src/projects/competitors.ts",
-      "src/projects/logo-refresh.ts"
-    ],
+    "competitors": ["src/projects/competitors.ts", "src/projects/logo-refresh.ts"],
     "content_angle_lineages": ["src/content-gaps/refresh.ts"],
     "content_angle_members": ["src/content-gaps/refresh.ts"],
     "content_angle_owned_matches": ["src/content-gaps/refresh.ts"],

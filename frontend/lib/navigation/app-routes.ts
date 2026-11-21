@@ -1,6 +1,8 @@
+import type { LoadingShape } from '@/components/ui/skeleton-block';
 import type { IconName } from '@/lib/icons';
 import type {
   AppRouteRecord,
+  HeldTabs,
   NavDestination,
   NavEntry,
   NavPlacement,
@@ -47,12 +49,8 @@ function flow<const P extends string>(path: P, screen: Screen): AppRouteRecord &
 }
 
 /** A nav entry listed in a sidebar group and, outside Agent, the matching palette group. */
-function listed(label: string, icon: IconName, group: Exclude<SidebarGroup, 'foot'>): NavEntry {
-  return {
-    label,
-    icon,
-    placements: group === 'agent' ? ['sidebar:agent'] : [`sidebar:${group}`, `palette:${group}`],
-  };
+function listed(label: string, icon: IconName, group: SidebarGroup): NavEntry {
+  return { label, icon, placements: [`sidebar:${group}`] };
 }
 
 const screens = {
@@ -104,6 +102,26 @@ const screens = {
   aiTraffic: pick(() => import('@/components/ai-traffic/ai-traffic-screen'), 'AiTrafficScreen'),
   settings: pick(() => import('@/components/settings/settings-screen'), 'SettingsScreen'),
 } satisfies Record<string, Screen>;
+
+const chart = { kind: 'chart' } satisfies LoadingShape;
+const table = (columns: number, desktopOnly?: number): LoadingShape => ({
+  kind: 'table',
+  columns,
+  desktopOnly,
+});
+const figures = (count?: number): LoadingShape => ({ kind: 'figures', count });
+const facts = (rows: number, tagRows?: readonly number[]): LoadingShape => ({
+  kind: 'facts',
+  rows,
+  tagRows,
+});
+const cards = (
+  shapes: readonly LoadingShape[],
+  frame: Omit<Extract<RouteLoading, { kind: 'cards' }>, 'kind' | 'shapes'> = {},
+): RouteLoading => ({ kind: 'cards', shapes, ...frame });
+const held = (param: string, items: HeldTabs['items']): HeldTabs => ({ param, items });
+const tab = (value: string, label: string) => ({ value, label });
+const RECORD_LOADING = cards([facts(3)]);
 
 export const APP_ROUTES = [
   // Before the shell opens.

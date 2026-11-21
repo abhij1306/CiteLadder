@@ -1,4 +1,3 @@
-import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import type { windowBounds } from '../crawl-logs/reads.ts';
 import type { CrawlScope } from '../crawl-logs/state.ts';
@@ -20,7 +19,6 @@ export function citationRuns(
     .distinctOn('a.audit_scope')
     .where('a.workspace_id', '=', scope.workspaceId)
     .where('a.project_id', '=', scope.projectId)
-    .where('a.audit_scope', '<>', policy.probes.audit_scope)
     .where('a.status', '=', 'completed')
     .where('a.created_at', '>=', bounds.from)
     .where('a.created_at', '<', bounds.to)

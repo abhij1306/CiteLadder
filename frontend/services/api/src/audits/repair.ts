@@ -8,7 +8,6 @@ import { auditPolicy, type AuditRuntime } from './config.ts';
 import { lockAuditEnqueue, reserveAuditCapacity } from './admission.ts';
 import { auditEvent, transitionAudit } from './state.ts';
 import { compareText } from '../text-order.ts';
-import { policy } from '../config.ts';
 
 export const repairInput = auditRepairRequestSchema;
 const denied = (message: string) => new ApiError(409, message);
@@ -17,8 +16,6 @@ function repairable<Audit extends { audit_scope: string; status: string }>(
   parent: Audit | undefined,
 ) {
   if (!parent) throw notFound('Audit');
-  if (parent.audit_scope === policy.probes.audit_scope)
-    throw denied('Run a new probe instead of repairing one');
   if (!auditPolicy.constants.audit_terminal_statuses.includes(parent.status))
     throw denied('Only a terminal audit can be repaired');
   return parent;

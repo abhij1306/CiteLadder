@@ -1,4 +1,4 @@
-import { Database, Unplug } from 'lucide-react';
+import { Database, Unplug } from '@/lib/icons';
 import type { ReactNode } from 'react';
 
 import { Button } from '@/components/ui/button';

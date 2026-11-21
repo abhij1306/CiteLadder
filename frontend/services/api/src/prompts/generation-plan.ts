@@ -1,8 +1,3 @@
-/**
- * The quick-generate universe plan: a deterministic, coverage-first sample of
- * offering × facet × stage × cohort × market cells, the narrow brief a draft
- * batch receives, and the geography vocabulary admission and metrics read.
- */
 import { DENSE_SCRIPT } from '../analysis/aliases.ts';
 import { policy } from '../config.ts';
 import { record, strings } from '../db/json.ts';
@@ -27,7 +22,6 @@ const PERSONA = dimensions.indexOf('audiences');
 
 export type Slot = {
   slot_id: string;
-  /** The cohort the cell is drafted and admitted under. */
   cohort: GenerationCohort;
   topic_id: string;
   topic_name: string;
@@ -35,30 +29,17 @@ export type Slot = {
   buyer_need: Record<string, string>;
   target_buyer_stage: string;
   allowed_prompt_intents: string[];
-  /** Intents that suit the target stage: planning guidance, not an admission rule. */
   target_prompt_intents?: string[];
   evidence_ref: Record<string, unknown>;
-  /** Same-topic searches that steer phrasing; absent when the project has none. */
   grounding?: Grounding[];
-  /**
-   * A brand diagnostic cell's only claimable attributes: the topic's
-   * offerings and the attributes a person confirmed in its business map. The
-   * judge checks the draft against them; other cells carry none.
-   */
   grounded_attributes?: string[];
 };
 type Grounding = Pick<
   ObservedQuery,
   'id' | 'source' | 'text' | 'classifier_version' | 'override_id'
 >;
-/**
- * Where a facet value comes from: `confirmed` by a person in the business map,
- * `suggested` by a model or inferred buyer roles, or `requested` as a persona
- * for this run only.
- */
 type FacetSource = 'confirmed' | 'suggested' | 'requested';
 type Facet = { dimension: number; value: string; source: FacetSource };
-/** A cell's evidence review state; `not_applicable` when it carries no facet. */
 type CellReviewState = FacetSource | 'not_applicable';
 type PlanContext = Pick<GenerationContext, 'selected' | 'topics' | 'maps' | 'observed'> & {
   context: Pick<GenerationContext['context'], 'business_context'>;
@@ -68,17 +49,8 @@ const business = (context: Pick<PlanContext, 'context'>) =>
   record(context.context.business_context);
 const ATTRIBUTE = dimensions.indexOf('attributes');
 
-/**
- * `business_context.topic_offerings`: the saved offerings each recovered topic
- * was proposed from, by topic id, so a buyer-facing category keeps its
- * offerings' business-map facets whatever it is named.
- */
 export const topicLinks = z.record(z.string(), z.array(z.string())).catch({});
 
-/**
- * The offerings a topic covers: those it was proposed from, else the offering
- * it is named after.
- */
 export function topicOfferings(
   values: Record<string, unknown>,
   topic: { id: string; name: string },
@@ -87,12 +59,6 @@ export function topicOfferings(
   return linked.length ? linked : [topic.name];
 }
 
-/**
- * Each selected topic's weight in a run: how many saved offerings it covers
- * (`topicOfferings`), so the category holding most of the catalogue gets the
- * most cells and selected prompts. A topic covering one offering, or none
- * recorded, weighs one; equal weights plan and select round-robin.
- */
 export function topicWeights(
   context: Pick<PlanContext, 'selected' | 'context'>,
 ): Map<string, number> {
@@ -102,21 +68,14 @@ export function topicWeights(
   );
 }
 
-/** The reviewed market scope's share of cells that may name a market. */
 function locationShare(context: PlanContext): number {
   return G.location_policy[String(business(context).market_scope)] ?? 0;
 }
 
-/** Service areas a cell may name; none when the market scope forbids places. */
 function plannedMarkets(context: PlanContext): string[] {
   return locationShare(context) > 0 ? [...new Set(strings(business(context).service_areas))] : [];
 }
 
-/**
- * Words that name the project's places: service areas and the primary market's
- * context terms. A generated draft naming one in a
- * cell without a market is `location_unplanned`.
- */
 export function geoTerms(context: PlanContext): string[] {
   const values = business(context);
   const market =
@@ -137,11 +96,6 @@ const folded = (text: string) =>
     .normalize('NFC');
 const wordsOf = (text: string) => folded(text).match(/[\p{L}\p{N}]+/gu) ?? [];
 
-/**
- * Whether `text` names one of `terms` as whole words. A short all-capital term
- * ("US", "UK") must match its capitals, so the pronoun "us" is not a place; a
- * term in a script written without spaces matches as a substring.
- */
 export function namesPlace(text: string, terms: readonly string[]): boolean {
   const padded = ` ${wordsOf(text).join(' ')} `;
   return terms.some((term) => {
@@ -165,30 +119,20 @@ const entryFacets = (dimension: number, entries: OfferingMap[(typeof dimensions)
   }));
 const personaFacets = (values: readonly string[], source: FacetSource) =>
   values.map((value) => ({ dimension: PERSONA, value, source }));
-/** Facets with case-insensitively repeated values removed, first spelling kept. */
 const distinctFacets = (facets: readonly Facet[]) => [
   ...new Map(facets.map((facet) => [facet.value.toLowerCase(), facet])).values(),
 ];
 
 type Planner = {
   topic: GenerationContext['selected'][number];
-  /** The offering label cells carry. */
   offering: string;
-  /** The topic's facet options; every cell takes exactly one when any exist. */
   options: Facet[];
-  /** What a branded cell may attribute to the business (`Slot.grounded_attributes`). */
   claims: string[];
   cells: number;
   located: number;
   usage: Map<string, number>;
 };
 
-/**
- * The offering maps a topic draws facets from: the map named like the topic,
- * else the maps of the offerings it was proposed from (`topicOfferings`),
- * else its parent's. A map named like the topic lends its offering label; a
- * category proposed from offerings keeps its own buyer-facing name.
- */
 function topicMaps(
   context: PlanContext,
   maps: readonly OfferingMap[],
@@ -211,14 +155,6 @@ function topicMaps(
   return { maps: [], offering: topic.name };
 }
 
-/**
- * Each selected topic's facet options: its offering maps' attributes,
- * situations and audiences. The run's personas, when requested, replace the
- * audiences; otherwise inferred buyer roles stand in for missing confirmed
- * audiences. A topic without map facets falls back to those personas and
- * every audience the business map lists; only a business without any of them
- * plans bare cells.
- */
 function planners(
   context: PlanContext,
   suggestions: OfferingMap[],
@@ -266,22 +202,15 @@ function planners(
 
 const facetKey = (facet: Facet) => `${facet.dimension}:${facet.value}`;
 
-/**
- * The topic's least-used facet: fewest uses of the value, then of its
- * dimension (so attributes, situations and audiences alternate), confirmed
- * values before suggestions, then map order.
- */
 function nextFacet(plan: Planner, options: NonEmpty<Facet>): Facet {
   const used = (key: string) => plan.usage.get(key) ?? 0;
   const compare = (a: Facet, b: Facet) =>
     used(facetKey(a)) - used(facetKey(b)) ||
     used(`dimension:${a.dimension}`) - used(`dimension:${b.dimension}`) ||
     Number(a.source === 'suggested') - Number(b.source === 'suggested');
-  // The first of the least: the head of a stable sort.
   return options.reduce((best, facet) => (compare(facet, best) < 0 ? facet : best));
 }
 
-/** Planned stages weighted by the requested intent mix; equal without one. */
 function stageWeights(input: GenerationInput): [string, number][] {
   const mix = input.distribution?.intent_mix;
   return G.planned_stages.map((stage) => {
@@ -291,12 +220,6 @@ function stageWeights(input: GenerationInput): [string, number][] {
   });
 }
 
-/**
- * The next label by highest averages (Sainte-Laguë): the option whose next use
- * keeps its count closest to its weight's share. Each later counter breaks the
- * ties of the one before; remaining ties keep option order. Zero weights never
- * win.
- */
 function proportional<T extends string>(
   weights: readonly (readonly [T, number])[],
   ...counters: ((option: T) => number)[]
@@ -314,14 +237,7 @@ function proportional<T extends string>(
   return best?.option ?? null;
 }
 
-/**
- * Up to `examples_per_slot` of the topic's observed searches, those sharing
- * the most tokens with the cell's offering and facets first. Ties keep the
- * loader's ranking (Search Console impressions, then keyword volume, then
- * text): weights of different sources are never compared directly.
- */
 type TokenizedSearch = { query: ObservedQuery; tokens: Set<string> };
-/** Each topic's observed searches in loader order, tokenized once per plan. */
 const searchesByTopic = (observed: readonly ObservedQuery[]) =>
   Map.groupBy(
     observed.map((query) => ({ query, tokens: bindingTokens(query.text) })),
@@ -333,40 +249,21 @@ function groundingFor(
   need: Record<string, string>,
 ): Grounding[] {
   const cell = bindingTokens(Object.values(need).join(' '));
-  return (
-    searches
-      .map(({ query, tokens }) => ({ query, shared: sharedTokens(tokens, cell) }))
-      // A stable sort, so equal overlap keeps the loader's order.
-      .toSorted((a, b) => b.shared - a.shared)
-      .slice(0, G.observed.examples_per_slot)
-      .map(({ query: { id, source, text, classifier_version, override_id } }) => ({
-        id,
-        source,
-        text,
-        classifier_version,
-        override_id,
-      }))
-  );
+  return searches
+    .map(({ query, tokens }) => ({ query, shared: sharedTokens(tokens, cell) }))
+    .toSorted((a, b) => b.shared - a.shared)
+    .slice(0, G.observed.examples_per_slot)
+    .map(({ query: { id, source, text, classifier_version, override_id } }) => ({
+      id,
+      source,
+      text,
+      classifier_version,
+      override_id,
+    }));
 }
 
-/**
- * A branded cell asserts something about the business, so it never takes an
- * attribute only a model suggested: situations and audiences describe the
- * buyer, while an unconfirmed attribute would become a claim about the brand.
- */
 const claimable = (facet: Facet) => facet.dimension !== ATTRIBUTE || facet.source === 'confirmed';
 
-/**
- * Plan `count × overgenerate_factor` cells over the selected topics. Cohorts
- * follow the requested shares; within each cohort every topic gets a cell
- * before any gets a second, then topics share cells by `topicWeights`. Every
- * cell carries exactly one facet (the topic's least-used attribute, situation
- * or audience; a branded cell only a `claimable` one) from the first cell on.
- * The buyer stage is a label balanced per topic and across the run, weighted
- * by any requested intent mix. A market attaches to at most the scope's
- * `location_policy` share of a topic's cells. Grounding comes only from the
- * searches the request's seeds allow.
- */
 export function planSlots(
   context: PlanContext,
   input: GenerationInput,
@@ -406,8 +303,6 @@ export function planSlots(
       const plan = plans.find((item) => item.topic.id === topicId) ?? plans[index % plans.length]!;
       plan.cells += 1;
       const used = (key: string) => plan.usage.get(key) ?? 0;
-      // A topic first covers each weighted stage once; then the run keeps the
-      // requested proportions, and the topic's own counts break ties.
       const uncovered = stages.filter(([name]) => !used(`stage:${name}`));
       const stage =
         proportional(
@@ -464,26 +359,12 @@ export function planSlots(
   );
 }
 
-/**
- * A slot as a draft batch receives it: grounding becomes example wording,
- * without row identities, and a slot without grounding is sent unchanged. A
- * branded slot's grounded attributes stay with the judge: the drafter writes
- * from the cell and the brief's offerings, so it cannot stack them.
- */
 export function modelSlot({ grounding, grounded_attributes: _claims, ...slot }: Slot) {
   return grounding?.length
     ? { ...slot, buyer_search_examples: grounding.map((example) => example.text) }
     : slot;
 }
 
-/**
- * What a quick-generate draft batch knows about the business: category,
- * offerings, closed facets and register, plus the request's note for the run.
- * No prose, sources or demand signals, so the wording follows the planned cell
- * rather than the profile. Only branded cohorts see the brand's name, and only
- * comparisons its competitors' names: core drafts must name neither. The only
- * observed data a batch sees is a grounded slot's example searches.
- */
 export function generationBrief(
   context: GenerationContext,
   input: Pick<GenerationInput, 'run_context'>,

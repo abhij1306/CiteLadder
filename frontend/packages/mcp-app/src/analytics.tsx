@@ -489,7 +489,7 @@ export function Analytics({ controller }: Readonly<{ controller: Controller }>) 
         </Button>
       )}
       {state.result?.links && (
-        <Button asChild variant="ghost">
+        <Button asChild variant="quiet">
           <a href={state.result.links.onboarding} target="_blank" rel="noreferrer">
             Set up a project
           </a>

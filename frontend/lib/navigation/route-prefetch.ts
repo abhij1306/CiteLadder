@@ -160,35 +160,25 @@ const ROUTE_READS: Readonly<Partial<Record<AppRoutePath, RouteReads>>> = {
     },
   ),
   '/settings': routeReads(
-    () =>
-      Promise.all([
-        import('@/lib/api/auth'),
-        import('@/lib/api/providers'),
-        import('@/lib/api/integrations'),
-        import('@/lib/api/mcp-connections'),
-      ]),
+    () => Promise.all([import('@/lib/api/providers'), import('@/lib/api/integrations')]),
     warmSettings,
   ),
 };
 
 function warmSettings(
-  [{ authQueries }, { providerQueries }, { integrationsQueries }, { mcpConnectionQueries }]: [
-    typeof import('@/lib/api/auth'),
+  [{ providerQueries }, { integrationsQueries }]: [
     typeof import('@/lib/api/providers'),
     typeof import('@/lib/api/integrations'),
-    typeof import('@/lib/api/mcp-connections'),
   ],
   client: QueryClient,
   { workspaceId }: ProjectScope,
   search: URLSearchParams,
 ) {
-  warmQuery(client, authQueries.security());
   warmQuery(client, providerQueries.catalog());
   warmQuery(client, providerQueries.connections(workspaceId));
   warmQuery(client, providerQueries.states(workspaceId));
   const tab = search.get('tab');
   if (tab === 'integrations') warmQuery(client, integrationsQueries.connections(workspaceId));
-  if (tab === 'connections') warmQuery(client, mcpConnectionQueries.list(workspaceId));
 }
 
 async function warmPrompts(

@@ -6,7 +6,6 @@ import { LogoMark } from '@/components/ui/logo-mark';
 import { ThemeSwitch } from '@/components/ui/theme-switch';
 import { textRole } from '@/components/ui/typography';
 import type { IconGlyph } from '@/lib/icons';
-import { websiteHref } from '@/lib/config/app-link';
 import { cn } from '@/lib/utils';
 
 import { FLOW_CARD } from './notice-page';
@@ -14,7 +13,7 @@ import { FLOW_CARD } from './notice-page';
 export function FlowLogo() {
   return (
     <a
-      href={websiteHref('/')}
+      href="/"
       aria-label="CiteLadder home"
       className="focus-ring text-ink rounded-control -ms-1 inline-flex p-1"
     >

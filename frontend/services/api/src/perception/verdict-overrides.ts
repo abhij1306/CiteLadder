@@ -13,7 +13,6 @@ import { z } from 'zod';
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { chunked } from '../lists.ts';
-import { requireFlag } from '../entitlements/access.ts';
 import { ApiError, notFound } from '../errors.ts';
 import type { ProjectScope } from '../projects/brand-profile.ts';
 
@@ -77,7 +76,6 @@ export function overrideVerdict(
 ): Promise<VerdictOverride> {
   const { scope } = input;
   return db.transaction().execute(async (trx) => {
-    await requireFlag(trx, scope.workspaceId, 'fact_checking');
     const row = await trx
       .selectFrom('claim_verdicts as cv')
       .innerJoin('fact_verifications as fv', (join) =>

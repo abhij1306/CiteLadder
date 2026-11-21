@@ -17,10 +17,7 @@ describe('FlowPage', () => {
       </FlowPage>,
     );
 
-    expect(screen.getByRole('link', { name: 'CiteLadder home' })).toHaveAttribute(
-      'href',
-      'https://citeladder.com/',
-    );
+    expect(screen.getByRole('link', { name: 'CiteLadder home' })).toHaveAttribute('href', '/');
     expect(screen.queryByRole('img')).toBeNull();
     expect(screen.getByRole('button', { name: 'Switch to dark theme' })).toBeVisible();
     const main = screen.getByRole('main', { name: 'Account access' });

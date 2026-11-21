@@ -179,11 +179,7 @@ function pageTicked(
 }
 
 function rowCaption(prompt: Prompt, setName: string | undefined): string | undefined {
-  const parts = [
-    setName,
-    prompt.enabled || prompt.status === 'archived' ? '' : 'Disabled',
-    prompt.over_plan_limit ? 'Beyond the plan limit' : '',
-  ];
+  const parts = [setName, prompt.enabled || prompt.status === 'archived' ? '' : 'Disabled'];
   return parts.filter(Boolean).join(' · ') || undefined;
 }
 

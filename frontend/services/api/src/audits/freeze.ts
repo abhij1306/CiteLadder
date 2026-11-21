@@ -20,8 +20,6 @@ import { admittedFactCheck, admittedPerceptionVersions } from '../perception/adm
 import { gatewaySettings } from '../models/gateway.ts';
 import { marketLabel } from '@citeladder/contracts/markets';
 import type { Market } from '../projects/markets.ts';
-import { policy } from '../config.ts';
-import { probeEngines, probePrompts, type FrozenPrompt } from '../probes/questions.ts';
 import {
   isSearchSurface,
   searchContext,
@@ -36,7 +34,9 @@ import {
 } from '../search-surfaces/dataforseo.ts';
 
 const invalid = (message: string) => new ApiError(400, message);
-const probes = policy.probes;
+const promptSelection = (input: Pick<AuditInput, 'prompt_ids'>): 'selected' | 'set' =>
+  input.prompt_ids.length ? 'selected' : 'set';
+type FrozenPrompt = Awaited<ReturnType<typeof loadPrompts>>[number];
 
 export function marketEngines(
   requested: readonly Engine[],
@@ -372,22 +372,14 @@ async function panelOf(
     workspaceId,
     projectId,
     input,
-    market,
     settings,
   }: {
     workspaceId: string;
     projectId: string;
     input: AuditInput;
-    market: Market;
     settings: ReturnType<typeof auditSettings>;
   },
 ): Promise<{ prompts: FrozenPrompt[]; requested: Engine[]; repetitions: number }> {
-  if (input.audit_scope === probes.audit_scope)
-    return {
-      prompts: await probePrompts(db, { workspaceId, projectId }, market.country_code),
-      requested: probeEngines(input.engines.filter((engine) => canMeasure(engine, market))),
-      repetitions: probes.repetitions,
-    };
   const prompts = await loadPrompts(db, workspaceId, projectId, input, settings);
   return {
     prompts,
@@ -438,7 +430,6 @@ export async function prepareAudit(
     workspaceId,
     projectId: project.id,
     input,
-    market,
     settings,
   });
   if (requested.some((engine) => !auditPolicy.selectable_engines.includes(engine)))

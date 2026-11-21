@@ -514,7 +514,7 @@ describe('CiteLadder MCP App', () => {
     const pending = controller.fetchAnswer(`citeladder://visibility_result/${audit}`);
     await controller.select({ project_id: foreign });
     expect(controller.getSnapshot().result!.links?.application).toBe(
-      `https://app.example.test/insights?project=${foreign}`,
+      `https://app.example.test/visibility?project=${foreign}`,
     );
     fail(new Error('old fetch timed out'));
     await pending;

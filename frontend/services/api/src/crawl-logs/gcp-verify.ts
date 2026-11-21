@@ -1,11 +1,3 @@
-/**
- * Proof that a pull source's subscription belongs to the workspace that named
- * it. The reader service account is shared by every customer, so a workspace
- * could name another customer's subscription the reader can see; the label
- * `citeladder-source=<nonce>` only the owner can set closes that confused
- * deputy. Checked before the first pull and then daily; no pull runs while
- * the check fails.
- */
 import type { Selectable } from 'kysely';
 import type { z } from 'zod';
 import type { crawlVerificationFailureSchema } from '@citeladder/contracts/ai-traffic';
@@ -22,13 +14,11 @@ type PullSource = Pick<
   'id' | 'workspace_id' | 'project_id' | 'subscription' | 'verification_nonce'
 >;
 
-/** The first ownership or delivery rule the subscription breaks, or null. */
 function subscriptionFailure(
   subscription: GcpSubscription,
   nonce: string,
 ): VerificationFailure | null {
   if (subscription.labels[crawlLogs.gcp_pull.source_label] !== nonce) return 'label_mismatch';
-  // A push, BigQuery or Cloud Storage subscription delivers elsewhere; it cannot be pulled.
   if (
     subscription.pushConfig.pushEndpoint ||
     subscription.bigqueryConfig?.table ||
@@ -40,7 +30,6 @@ function subscriptionFailure(
   return null;
 }
 
-/** One subscription GET outside any transaction; a Google outage is `unavailable`. */
 async function checkSubscription(
   source: PullSource,
   reader: PubSubReader,
@@ -60,13 +49,6 @@ async function checkSubscription(
   }
 }
 
-/**
- * Check the subscription and persist the outcome. A pass records the time and
- * lifts a verification stall; a failure stalls the source with its reason. An
- * unavailable Google changes nothing: CiteLadder's outage is not the
- * customer's failure. With `actorId`, the actor's authority is rechecked when
- * the outcome is written.
- */
 export async function verifyPullSource(
   db: Database,
   source: PullSource,
@@ -79,10 +61,6 @@ export async function verifyPullSource(
   return { verified: failure === null, failure };
 }
 
-/**
- * Persist a subscription check's outcome; a pull refused for permission or a
- * missing subscription records the same failure as a check would.
- */
 export async function recordVerification(
   db: Database,
   source: Pick<PullSource, 'id' | 'workspace_id' | 'project_id'>,
@@ -117,7 +95,6 @@ export async function recordVerification(
         : {
             verification_failure: failure,
             stall_reason: 'verification_failed',
-            // A continuing verification stall keeps the time it began.
             stalled_at: verificationStall ? current.stalled_at : now,
           };
     await trx

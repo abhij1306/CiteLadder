@@ -131,18 +131,10 @@ describe('RouteLoadingScreen', () => {
       shapes: ['facts'],
     },
     {
-      path: '/settings?tab=workspace',
-      title: 'Settings',
-      tabs: labels(SETTINGS_TABS),
-      selected: 'Workspace',
-      filters: false,
-      shapes: ['facts'],
-    },
-    {
       path: '/settings?tab=unknown',
       title: 'Settings',
       tabs: labels(SETTINGS_TABS),
-      selected: 'Account',
+      selected: 'General',
       filters: false,
       shapes: ['facts'],
     },
@@ -168,7 +160,6 @@ describe('RouteLoadingScreen', () => {
       filters: false,
       shapes: ['facts', 'figures'],
     },
-    { path: '/pricing', title: 'Pricing', tabs: [], filters: false, shapes: ['facts'] },
   ])('draws $path in its loaded frame', ({ path, title, tabs, selected, filters, shapes }) => {
     const { container } = renderAt(path);
     expect(screen.getByRole('heading', { level: 1, name: title })).toBeInTheDocument();
@@ -196,12 +187,11 @@ describe('PageFrame', () => {
     };
     const report = <ReportPage>body</ReportPage>;
     expect([
-      widthAt('/billing', report),
       widthAt('/actions/a1', report),
       widthAt('/site', report),
       widthAt('/agent/chats/c1', <WorkbenchPage>body</WorkbenchPage>),
       widthAt('/issues', <RouteLoadingScreen />),
-    ]).toEqual(['compact', 'narrow', 'full', 'full', 'narrow']);
+    ]).toEqual(['narrow', 'full', 'full', 'narrow']);
   });
 
   it('stacks the masthead, the page tabs band, the filter bar band, then the content', () => {

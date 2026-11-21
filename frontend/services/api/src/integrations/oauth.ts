@@ -58,7 +58,6 @@ export function oauthReturnPath(value: string | null | undefined): string | null
   return `${url.pathname}${url.search}`;
 }
 
-/** The return path carried by a signed state, or null when absent or unverifiable. */
 export async function stateReturnPath(state: string | null | undefined): Promise<string | null> {
   if (!state) return null;
   const verified = await jwtVerify(state, key, { algorithms: ['HS256'] }).catch(() => null);
@@ -296,11 +295,6 @@ export async function completeOAuth(
   await queueCatchUp(db, workspaceId, connectedGrant);
 }
 
-/**
- * A reconnect resumes the grant's mapped properties at once rather than at the
- * next scheduled run; each sync re-reads only the days after its coverage.
- * Best effort: the scheduled dispatcher covers anything this cannot queue.
- */
 async function queueCatchUp(db: Database, workspaceId: string, grantId: string) {
   const mappings = await db
     .selectFrom('integration_property_mappings as mapping')
@@ -326,7 +320,6 @@ async function queueCatchUp(db: Database, workspaceId: string, grantId: string) 
       await enqueueSyncRun(db, target); // NOSONAR -- Each enqueue takes the workspace lock.
     } catch (error) {
       if (!(error instanceof ApiError)) throw error;
-      // Best effort: the scheduled dispatcher still covers this mapping.
       logger.info('integration_catch_up_skipped', {
         mapping_id: mapping.id,
         error_code: error.code,
@@ -335,7 +328,6 @@ async function queueCatchUp(db: Database, workspaceId: string, grantId: string) 
   }
 }
 
-/** Any authority failure reads as an invalid state; `lock` holds the workspace for the write. */
 async function requireCredentialAuthority(
   db: Database,
   workspaceId: string,

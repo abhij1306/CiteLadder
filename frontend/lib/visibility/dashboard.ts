@@ -18,6 +18,7 @@ import {
 } from '@/lib/format';
 import { AUDIT_STATES } from '@/lib/runs/status';
 import type {
+  RankingRow,
   AuditStatus,
   LogicalEngine,
   Visibility,

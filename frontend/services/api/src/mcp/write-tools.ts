@@ -256,25 +256,21 @@ async function prepareStatusChange(
     prompt_set_id: setId,
     prompt_ids: members.map((row) => row.id),
   }));
-  const { payload, inspected: slots } = await preparedChanges.update_prompts.rehearse(
+  const { payload } = await preparedChanges.update_prompts.rehearse(
     context.db,
     context.config,
     actor,
     change,
     { kind: 'status', status, groups },
-    (trx) => promptOccupancy(trx, actor.workspaceId),
+    noInspection,
   );
   const texts = quoted(changing.map((row) => row.text));
   const skipped = skippedNote(rows.length - changing.length, status);
   const preview =
     status === 'archived'
       ? `Archive ${changing.length} prompt(s): ${texts}. Future audits stop measuring them; past results stay.${skipped}`
-      : `Activate ${changing.length} prompt(s): ${texts}. Audits measure them from the next run. Prompt slots after: ${slots.used} of ${slots.allowance}.${skipped}`;
-  return prepared(
-    context,
-    { change, actor, kind: 'update_prompts', payload, preview },
-    status === 'active' ? { prompt_slots: slots } : {},
-  );
+      : `Activate ${changing.length} prompt(s): ${texts}. Audits measure them from the next run.${skipped}`;
+  return prepared(context, { change, actor, kind: 'update_prompts', payload, preview }, {});
 }
 
 const writeDefinitions = {

@@ -342,7 +342,6 @@ describe('PromptLibrary bulk actions', () => {
     id: '66666666-6666-4666-8666-666666666680',
     text: 'Best hiking boots?',
     status: 'archived',
-    over_plan_limit: true,
   });
   const bulkSet = makeSet([...rows, beyond]);
   const bulkProject = makeProject({ prompt_sets: [bulkSet] });
@@ -393,22 +392,11 @@ describe('PromptLibrary bulk actions', () => {
     );
   });
 
-  it('clears the selection when the filters change and holds Activate beyond the plan limit', async () => {
+  it('clears the selection when the filters change', async () => {
     window.history.replaceState(null, '', `/projects/${bulkProject.id}/prompts?status=archived`);
-    const { bodies, user } = renderBulk();
+    const { user } = renderBulk();
     await screen.findByRole('table', { name: 'Prompts' });
     await user.click(box('Best hiking boots?'));
-    const activate = within(screen.getByRole('toolbar', { name: 'Selected prompts' })).getByRole(
-      'button',
-      { name: 'Activate' },
-    );
-    expect(activate).toHaveAttribute('aria-disabled', 'true');
-    expect(activate).toHaveAccessibleDescription(
-      /1 selected prompt is beyond your plan's prompt limit/,
-    );
-    await user.click(activate);
-    expect(bodies).toEqual([]);
-
     await user.type(screen.getByRole('searchbox'), 'boots');
     expect(screen.queryByRole('toolbar', { name: 'Selected prompts' })).not.toBeInTheDocument();
 

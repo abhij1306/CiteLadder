@@ -10,7 +10,6 @@ import { actionRoutes } from './actions.ts';
 import { searchIntelligenceRoutes } from './search-intelligence.ts';
 import { commerceRoutes } from './commerce.ts';
 import { brandIdentityRoutes } from './brand-identity.ts';
-import { probeRoutes } from './probes.ts';
 import { promptRoutes } from './prompts.ts';
 import { internalLinkRoutes } from './internal-links.ts';
 import { siteHealthRoutes } from './site-health.ts';
@@ -53,7 +52,6 @@ export const ROUTE_MODULES: Readonly<Record<string, readonly ProductRoute[]>> = 
   'routes/search-intelligence.ts': searchIntelligenceRoutes,
   'routes/commerce.ts': commerceRoutes,
   'routes/brand-identity.ts': brandIdentityRoutes,
-  'routes/probes.ts': probeRoutes,
   'routes/prompts.ts': promptRoutes,
   'routes/integrations.ts': integrationRoutes,
   'routes/audit-schedules.ts': auditScheduleRoutes,

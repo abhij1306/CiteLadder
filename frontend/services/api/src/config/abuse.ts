@@ -161,6 +161,12 @@ export const budgets = {
     limit: abuse.client_error_client_limit,
     windowSeconds: abuse.client_error_window_seconds,
   },
+  csp_report: {
+    operation: 'client_errors.csp_report',
+    subject: 'user',
+    limit: abuse.csp_report_client_limit,
+    windowSeconds: abuse.csp_report_window_seconds,
+  },
   crawl_log_batches: {
     operation: 'crawl_logs.batch',
     subject: 'crawl_source',

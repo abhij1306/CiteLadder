@@ -45,7 +45,6 @@ export const themeQueries = {
 
 function refresh(client: QueryClient, projectId: string) {
   void client.invalidateQueries({ queryKey: queryKeys.projects.resource(projectId, 'themes') });
-  void client.invalidateQueries({ queryKey: queryKeys.projects.resource(projectId, 'probes') });
   void client.invalidateQueries({ queryKey: queryKeys.visibility.project(projectId) });
 }
 

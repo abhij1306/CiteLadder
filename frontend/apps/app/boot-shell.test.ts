@@ -66,20 +66,13 @@ describe('boot-title.js', () => {
   it('draws the shell frame on a shell page and only the bare ground on a flow page', () => {
     const shell = { sidebar: true, masthead: true };
     const ground = { sidebar: false, masthead: false };
-    const frames = [
-      '/projects',
-      '/runs/1',
-      '/login',
-      '/register',
-      '/workspaces',
-      '/onboarding',
-    ].map((path) => ({ path, frame: bootAt(path).frame }));
+    const frames = ['/projects', '/runs/1', '/onboarding'].map((path) => ({
+      path,
+      frame: bootAt(path).frame,
+    }));
     expect(frames).toEqual([
       { path: '/projects', frame: shell },
       { path: '/runs/1', frame: shell },
-      { path: '/login', frame: ground },
-      { path: '/register', frame: ground },
-      { path: '/workspaces', frame: ground },
       { path: '/onboarding', frame: ground },
     ]);
     expect(document.title).toBe('CiteLadder');

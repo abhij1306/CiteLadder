@@ -3,7 +3,7 @@ import { redirect, type RouteObject } from 'react-router-dom';
 
 import { RouteLoadingScreen } from '@/components/layout/page-shell';
 import { FirstFrame } from '@/components/layout/first-frame';
-import { APP_ROUTES } from '@/lib/navigation/app-routes';
+import { APP_ROUTES, HOME_PATH } from '@/lib/navigation/app-routes';
 import type { AppRouteRecord } from '@/lib/navigation/route-types';
 import { registerRouteChunk } from '@/lib/navigation/route-chunks';
 import { bootstrapPrivateRoutes } from '@/lib/project/bootstrap-loader';
@@ -34,7 +34,7 @@ function manifestRoute(route: AppRouteRecord): RouteObject {
 const routes: readonly AppRouteRecord[] = APP_ROUTES;
 
 export const appRoutes: RouteObject[] = [
-  { path: '/', loader: () => redirect(MODE_HOMES.dashboard) },
+  { path: '/', loader: () => redirect(HOME_PATH) },
   {
     element: <PrivateRouteLayout />,
     // Resolve the local user, workspace and project BEFORE the shell mounts, so

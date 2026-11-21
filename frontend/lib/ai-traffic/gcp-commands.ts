@@ -2,14 +2,8 @@ import { GCP_PULL_SETUP } from '@/lib/config/crawl-logs';
 
 /** A single quote inside a single-quoted POSIX shell string: close, escaped quote, reopen. */
 const QUOTE = String.raw`'\''`;
-/** A value inside single quotes for a POSIX shell. */
 const quoted = (value: string) => "'" + value.replaceAll("'", QUOTE) + "'";
 
-/**
- * The `gcloud` commands that route crawler request logs into the source's
- * subscription and let CiteLadder's reader pull it. Project and subscription
- * come from the subscription path the customer entered.
- */
 export function gcpSetupCommands(input: {
   subscription: string;
   nonce: string;

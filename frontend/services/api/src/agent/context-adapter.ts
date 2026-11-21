@@ -14,7 +14,6 @@ import { crawlability } from '../mcp/evidence-site.ts';
 import { McpInputError } from '../mcp/types.ts';
 import { fetchedPageContext } from '../page-documents/reads.ts';
 import { topicWithPrompts } from '../prompts/topics.ts';
-import { probeObjection } from '../probes/objections.ts';
 import { requestedPageUrl } from './page-url.ts';
 import { revisionRefs } from './outputs.ts';
 import type { ContextReader } from './context.ts';
@@ -98,10 +97,8 @@ async function resolvePrompts(db: OriginDb, scope: OriginScope, refs: OriginRefs
   };
 }
 async function resolveObjection(db: OriginDb, scope: OriginScope, refs: OriginRefs) {
-  if (!refs.objection_group_id) return null;
-  const objection = await probeObjection(db, scope, refs.objection_group_id);
-  if (!objection) throw new AgentError('agent_context_unavailable');
-  return objection;
+  if (refs.objection_group_id) throw new AgentError('agent_context_unavailable');
+  return null;
 }
 async function resolveOrigins(
   db: Parameters<ContextReader>[0],

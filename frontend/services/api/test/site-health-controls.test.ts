@@ -1,3 +1,4 @@
+import { sql } from 'kysely';
 import { randomUUID } from 'node:crypto';
 import { setTimeout } from 'node:timers/promises';
 import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';

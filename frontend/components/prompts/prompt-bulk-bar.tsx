@@ -66,9 +66,6 @@ export function usePromptBulk(
 }
 
 function activateHold(selected: Selected): string | null {
-  const beyond = selected.filter((prompt) => prompt.over_plan_limit).length;
-  if (beyond > 0)
-    return `${pluralCount(beyond, 'selected prompt')} ${beyond === 1 ? 'is' : 'are'} beyond your plan's prompt limit; delete prompts or upgrade to activate ${beyond === 1 ? 'it' : 'them'}`;
   if (selected.every((prompt) => prompt.status === 'active'))
     return 'These prompts are already active';
   return null;
