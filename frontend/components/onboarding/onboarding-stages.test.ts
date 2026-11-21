@@ -25,11 +25,11 @@ describe('warningCallouts', () => {
 
     expect(callouts).toEqual([
       {
-        message: 'We used the website details we could confirm. Review them before continuing.',
+        message: 'Some website details could not be confirmed.',
         rerunnable: true,
       },
       {
-        message: 'No competitors were confirmed. You can continue with none or add them yourself.',
+        message: 'No competitors were confirmed.',
         rerunnable: false,
       },
     ]);
