@@ -14,13 +14,11 @@ import { hash } from './crypto-text.ts';
 import { normalizeQuery } from './traffic/normalization.ts';
 import { stripTrailing } from './text-order.ts';
 
-/** Tracking and session parameters Site Health ignores never split a page identity. */
 const IGNORED_QUERY_KEYS: ReadonlySet<string> = new Set([
   ...siteHealth.tracking_params,
   ...siteHealth.ignored_query_keys,
 ]);
 
-/** Canonical page identity, without fetching or performing URL admission. */
 export function canonicalPage(input: string, origin?: string | null): string | null {
   try {
     let value = input.trim();
@@ -69,7 +67,6 @@ export function canonicalPage(input: string, origin?: string | null): string | n
   }
 }
 
-/** A requested path's page identity: display path, joinable URL and hash, folder and resource class. */
 export function pathIdentity(path: string, origin: string) {
   const withoutQuery = path.split(/[?#]/u)[0]!;
   const canonical = canonicalPage(withoutQuery, origin);
@@ -108,7 +105,6 @@ export function pathIdentity(path: string, origin: string) {
   };
 }
 
-/** An analytics landing path on one of the project's hosts as its joinable page, or null. */
 export function landingPage(path: string, host: string, hosts: ReadonlySet<string>) {
   const normalizedHost = host.toLowerCase();
   if (!hosts.has(normalizedHost) || path === '(not set)') return null;

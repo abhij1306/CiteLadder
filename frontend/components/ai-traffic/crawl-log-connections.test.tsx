@@ -20,7 +20,6 @@ vi.mock('@/lib/project/project-context', () => ({
 const root = '/api/v1/projects/' + project.id;
 const id = '99999999-9999-4999-8999-999999999999';
 
-/** An active, connected source; `overrides` set its setup and pull details. */
 const source = (overrides: Record<string, unknown>) => ({
   id,
   kind: 'webhook',

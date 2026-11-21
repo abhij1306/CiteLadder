@@ -1,37 +1,32 @@
-import { ArrowDown, ArrowUp, GripVertical } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
+import { useState, type KeyboardEvent, type ReactNode } from 'react';
 
 import { IconButton } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
+import { Menu, MenuContent, MenuItem, MenuTrigger } from '@/components/ui/menu';
+import { SLIP_FACE } from '@/components/ui/slip';
 import { textRole } from '@/components/ui/typography';
-import { ledgerClasses } from '@/components/ui/workspace';
+import { Ellipsis, GripVertical } from '@/lib/icons';
 import { cn } from '@/lib/utils';
 
-/** The drag type a row's position travels under; no other source sets it. */
 const ROW_DRAG_TYPE = 'application/x-citeladder-reorder-row';
+
+const KEY_STEP = new Map([
+  ['ArrowUp', -1],
+  ['ArrowDown', 1],
+]);
 
 export type ReorderItem = Readonly<{
   key: string;
-  /** Names the item in its move controls ("Move <name> up"). */
   name: string;
   content: ReactNode;
 }>;
 
-/**
- * A shared, ranked list the reader can reorder: each row is its position, its
- * content and move-up/move-down controls. The row's content carries its rank
- * (a severity badge); no score column repeats it (decision D14). Dragging a row
- * onto another is a progressive enhancement; the buttons are the complete
- * keyboard path. Rows are divided like a ledger and padded 12; below
- * `desktop` the position, content and controls stack.
- */
 export function ReorderList({
   items,
   pending,
   onMove,
 }: Readonly<{
   items: readonly ReorderItem[];
-  /** A move is being saved: dragging and the controls wait for it. */
   pending: boolean;
   onMove: (from: number, to: number) => void;
 }>) {
@@ -44,7 +39,7 @@ export function ReorderList({
       onMove(from, to);
   };
   return (
-    <ol className={ledgerClasses()}>
+    <ol className={cn(SLIP_FACE, 'divide-rule m-0 list-none divide-y overflow-hidden p-0')}>
       {items.map((item, index) => (
         <ReorderRow
           key={item.key}
@@ -76,10 +71,19 @@ function ReorderRow({
   onDropped: (dropped: string) => void;
 }>) {
   const [dragging, setDragging] = useState(false);
+  const up = { label: `Move ${index + 1}, ${item.name}, up`, disabled: pending || index === 0 };
+  const down = { label: `Move ${index + 1}, ${item.name}, down`, disabled: pending || last };
+  const onKeyDown = (event: KeyboardEvent) => {
+    const step = event.altKey ? KEY_STEP.get(event.key) : undefined;
+    if (!step || (step < 0 ? up : down).disabled) return;
+    event.preventDefault();
+    onMove(index, index + step);
+  };
   return (
-    // oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- Pointer drag is progressive enhancement; adjacent buttons provide the complete keyboard reorder path.
-    <li
+    // oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- Drag and Alt+arrow enhance the row; its "…" menu is the complete reorder path.
+    <li // NOSONAR -- Alt+arrow bubbles from the focused link; the "…" menu is the complete keyboard path.
       draggable={!pending}
+      onKeyDown={onKeyDown}
       onDragStart={(event) => {
         event.dataTransfer.setData(ROW_DRAG_TYPE, String(index));
         setDragging(true);
@@ -91,29 +95,39 @@ function ReorderRow({
         if (!pending) onDropped(event.dataTransfer.getData(ROW_DRAG_TYPE));
       }}
       className={cn(
-        'hover:overlay-hover active:overlay-pressed desktop:grid-cols-[auto_minmax(0,1fr)_auto] desktop:items-center grid gap-3 py-3 transition-colors',
+        'group hover:overlay-hover grid min-h-10 grid-cols-[1rem_1.25rem_minmax(0,1fr)_auto] items-center gap-2 ps-2 pe-2 transition-colors',
         dragging && 'opacity-60',
       )}
     >
-      <div className="flex items-center gap-2">
-        <Icon icon={GripVertical} className="text-ink-muted hover:text-ink cursor-grab" />
-        <span className={textRole('label', 'font-mono w-5 text-center')}>{index + 1}</span>
-      </div>
+      <Icon
+        icon={GripVertical}
+        className="text-ink-2 cursor-grab opacity-0 group-focus-within:opacity-100 group-hover:opacity-100"
+      />
+      <span className={textRole('body', 'text-ink-2 text-center tabular-nums')}>{index + 1}</span>
       <div className="min-w-0">{item.content}</div>
-      <div className="flex items-center justify-end gap-2">
-        <IconButton
-          icon={ArrowUp}
-          label={`Move ${item.name} up`}
-          onClick={() => onMove(index, index - 1)}
-          disabled={pending || index === 0}
-        />
-        <IconButton
-          icon={ArrowDown}
-          label={`Move ${item.name} down`}
-          onClick={() => onMove(index, index + 1)}
-          disabled={pending || last}
-        />
-      </div>
+      <Menu>
+        <MenuTrigger asChild>
+          <IconButton icon={Ellipsis} label={`Reorder ${index + 1}, ${item.name}`} />
+        </MenuTrigger>
+        <MenuContent align="end">
+          <MenuItem
+            shortcut="Alt ↑"
+            aria-label={up.label}
+            disabled={up.disabled}
+            onSelect={() => onMove(index, index - 1)}
+          >
+            Move up
+          </MenuItem>
+          <MenuItem
+            shortcut="Alt ↓"
+            aria-label={down.label}
+            disabled={down.disabled}
+            onSelect={() => onMove(index, index + 1)}
+          >
+            Move down
+          </MenuItem>
+        </MenuContent>
+      </Menu>
     </li>
   );
 }

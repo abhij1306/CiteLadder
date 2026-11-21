@@ -36,7 +36,6 @@ function wrapper(client: QueryClient) {
   return Wrapper;
 }
 
-/** The catalog read the screen makes, and the projection beside it. */
 function useScreen() {
   const catalog = useQuery({
     ...commerceQueries.catalog({ workspaceId: WORKSPACE, projectId: PROJECT }),
@@ -44,10 +43,6 @@ function useScreen() {
   return { catalog, projection: useCatalogProjection(PROJECT, catalog) };
 }
 
-/**
- * Serves the catalog reads in order (the last repeats; `null` is a failed
- * read) and the projection polls likewise.
- */
 function serve(
   catalogs: ({ products: (typeof WIDGET)[]; in_flight: number } | null)[],
   projections: number[],
@@ -122,10 +117,8 @@ describe('useCatalogProjection', () => {
     );
     const { result } = renderHook(useScreen, { wrapper: wrapper(client()) });
 
-    // The failed read is visible as the catalog's error, over its stale rows.
     await waitFor(() => expect(result.current.catalog.isError).toBe(true));
     expect(result.current.catalog.data?.products.map((row) => row.name)).toEqual(['Widget']);
-    // The next poll asks again, and the fresh catalog lands.
     await waitFor(
       () =>
         expect(result.current.catalog.data?.products.map((row) => row.name)).toEqual([

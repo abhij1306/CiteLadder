@@ -38,7 +38,6 @@ function crawlSchedule(overrides: Partial<CrawlSchedule> = {}): CrawlSchedule {
   };
 }
 
-/** A crawl that discovered its three pages but failed the analysis pass. */
 function crawl(overrides: Record<string, unknown> = {}) {
   return makeSiteCrawl({
     id: CRAWL,
@@ -108,7 +107,6 @@ function overview(crawlId = CRAWL) {
     snapshot_id: '77777777-7777-4777-8777-777777777777',
     search_eligibility: 'eligible',
     eligibility_totals: { eligible: 1, blocked: 0, unknown: 0, excluded: 0 },
-    eligibility_reasons: [],
     web_fundamentals_score: 80,
     web_fundamentals_coverage: 1,
     web_fundamentals_state: 'measured',
@@ -150,7 +148,6 @@ function overview(crawlId = CRAWL) {
   };
 }
 
-// Tests state the persisted server phase they render; backend tests own phase resolution.
 function mockRoutes(
   crawlOverrides: Record<string, unknown> = {},
   phase: SiteHealthDashboard['phase'] = 'dashboard',

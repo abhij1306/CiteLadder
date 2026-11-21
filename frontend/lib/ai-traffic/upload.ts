@@ -9,7 +9,6 @@ import { aiTrafficApi } from '@/lib/api/ai-traffic';
 import type { ApiRequestOptions } from '@/lib/api/client';
 
 type Catalog = z.infer<typeof crawlCatalogSchema>;
-/** A bounded JSON-array state machine retaining only the current object. */
 class JsonObjectArray {
   private pending = '';
   private depth = 0;
@@ -108,7 +107,6 @@ async function* arrayRecords(reader: ReadableStreamDefaultReader<string>, max: n
   }
   records.finish();
 }
-/** Streaming decoding never buffers a whole file or JSON array. */
 async function* fileLines(file: File, format: string, max: number) {
   let bytes: ReadableStream<BufferSource> = file.stream();
   if (file.name.endsWith('.gz')) bytes = bytes.pipeThrough(new DecompressionStream('gzip'));
@@ -120,7 +118,6 @@ async function* fileLines(file: File, format: string, max: number) {
     await reader.cancel();
   }
 }
-/** A line without the identifying fields is skipped, as the server rejects it alone. */
 function mappedLine(line: string, format: string, mapping: LogMapping) {
   try {
     return parseLogLine(line, format, mapping);
@@ -179,7 +176,6 @@ export async function uploadCrawlFile(input: {
     if (upload.status !== 'open') throw new Error('Upload is closed');
     if (input.resumeId && (upload.filename !== file.name || upload.size_bytes !== file.size))
       throw new Error('Resume requires the original file');
-    // Reported before the first batch, so a failure there can still be resumed.
     input.onProgress({ uploadId: upload.id, scanned: 0, matched: 0 });
     let scanned = 0,
       matched = 0,

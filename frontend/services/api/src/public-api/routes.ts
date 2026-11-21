@@ -1,9 +1,3 @@
-/**
- * Public API operations with no browser twin. Routes served on both APIs
- * declare `exposure: 'both'` beside their browser handler; these add the
- * public list pages, the batch prompt create, single-competitor writes, the
- * one-call audit launch. `app.ts` serves their OpenAPI document.
- */
 import { auditSchema, auditEstimateSchema } from '@citeladder/contracts/audits';
 import {
   competitorSchema,
@@ -55,7 +49,6 @@ const uuid = { scalar: { kind: 'uuid' }, required: true } as const;
 const optionalUuid = { scalar: { kind: 'uuid' } } as const;
 const projectPath = { project_id: uuid } as const;
 const base = { family: 'public-api', exposure: 'public' } as const;
-/** An estimate's body; the project comes from the path. */
 const projectEstimate = estimateInput.omit({ project_id: true });
 
 export const publicApiRoutes: readonly ProductRoute[] = [
@@ -187,7 +180,6 @@ export const publicApiRoutes: readonly ProductRoute[] = [
       const scope = { endpoint: 'audits', filters: { project_id: path.project_id } };
       const workspaceId = c.get('workspace').workspaceId;
       const after = cursorId(query.cursor, scope);
-      // A cursor names an audit of this project; a deleted one cannot anchor a page.
       if (
         after !== null &&
         !(await db
@@ -199,7 +191,6 @@ export const publicApiRoutes: readonly ProductRoute[] = [
           .executeTakeFirst())
       )
         throw new ApiError(400, 'Invalid cursor', { code: 'invalid_cursor' });
-      // One extra row says whether another page exists.
       const rows = await listAudits(
         db,
         workspaceId,

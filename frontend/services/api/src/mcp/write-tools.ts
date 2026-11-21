@@ -1,19 +1,19 @@
-/**
- * MCP changes, listed and callable only by a grant holding `citeladder:write`.
- * Small edits run directly; larger ones are prepared (a dry run of their
- * kind's `execute` in `confirmed-changes.ts`) and run only through
- * `confirm_change`, by that same `execute`, after the user agreed. The member's live role decides every change; the in-app Agent never
- * sees this catalogue.
- */
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
+import { actionUserStatusSchema } from '@citeladder/contracts/actions';
 import { logicalEngineSchema } from '@citeladder/contracts/providers';
 import { promptCohortSchema } from '@citeladder/contracts/project';
 import { recordSecurityEvent } from '../auth/security-events.ts';
 import { scheduleCreate } from '../audits/schedule-inputs.ts';
 import { ACTIONS_WRITE, setActionStatus } from '../commands/actions.ts';
 import { AUDITS_CANCEL, cancelAudit } from '../commands/audits.ts';
-import { addCompetitor, COMPETITORS_WRITE, removeCompetitor } from '../commands/competitors.ts';
+import {
+  acceptSuggestion,
+  addCompetitor,
+  COMPETITORS_WRITE,
+  rejectSuggestion,
+  removeCompetitor,
+} from '../commands/competitors.ts';
 import { authorize, type Authorized, type Permission } from '../commands/permission.ts';
 import { auditRuntime } from '../audits/config.ts';
 import { estimateAudit } from '../audits/estimate.ts';
@@ -44,21 +44,19 @@ import { appLink } from './links.ts';
 import { argumentProblem, inputSchema } from './tools.ts';
 import { McpInputError, type Evidence, type McpPrincipal } from './types.ts';
 
-/** The one-step changes; each is also its tool's name. */
 type DirectKind =
   | 'create_topic'
   | 'rename_topic'
   | 'update_prompt_text'
   | 'add_competitor'
   | 'remove_competitor'
+  | 'review_competitor_suggestion'
   | 'update_action_status'
   | 'cancel_audit'
   | 'delete_topic'
   | 'confirm_topics';
-/** Each change an MCP grant can make; its security event targets the project. */
 export type McpWriteKind = DirectKind | 'generate_prompts' | ConfirmedKind;
 
-/** `origin` is the app's browser origin, for links into CiteLadder screens. */
 type Context = { db: Database; config: ServiceConfig; principal: McpPrincipal; origin: string };
 type Annotations = {
   readOnlyHint: false;
@@ -104,11 +102,6 @@ const markets = marketIdList
     'Market ids from get_project_business_context; null is the default market. Omit for the default market only.',
   )
   .nullish();
-/**
- * A single-step change: authorized for the project against its command's
- * permission, run, and recorded in one transaction. `run` returns the
- * user-facing outcome.
- */
 function direct<S extends z.ZodObject<{ project_id: typeof uuid }>, P extends Permission>(
   kind: DirectKind,
   permission: P,
@@ -134,12 +127,9 @@ function direct<S extends z.ZodObject<{ project_id: typeof uuid }>, P extends Pe
   };
 }
 
-/** A new prepared change's identity, before its rehearsal. */
 const newChange = (projectId: string): PreparedChange => ({ id: randomUUID(), projectId });
-/** A rehearsal that reads nothing back. */
 const noInspection = () => Promise.resolve(null);
 
-/** A prepared change: what will happen, and the token the user's yes unlocks. */
 async function prepared(
   context: Context,
   input: Omit<Parameters<typeof issueConfirmation>[2], 'principal'> & { preview: string },
@@ -161,10 +151,6 @@ async function prepared(
 
 const quoted = (texts: readonly string[]) => texts.map((text) => `"${text}"`).join(', ');
 
-/**
- * A generation run as the user reviews it: the staged suggestions without
- * ids, what limited the run, and the CiteLadder screen where they accept.
- */
 function generated(
   origin: string,
   projectId: string,
@@ -184,8 +170,111 @@ function generated(
     admission_drops: result.admission_drops,
     quality_rejected: result.quality_rejected,
     shortfall_reason: result.shortfall_reason,
-    review_url: appLink(origin, '/prompts', projectId, { review: '1' }),
+    review_url: appLink(origin, '/prompts/build', projectId, { step: 'review' }),
   };
+}
+
+async function preparePromptChange(
+  context: Context,
+  args: {
+    project_id: string;
+    change: 'activate' | 'archive' | 'assign_topic';
+    prompt_ids: string[];
+    topic_id?: string | null;
+  },
+): Promise<Evidence> {
+  const { change: wanted, topic_id: topicId } = args;
+  if (wanted === 'assign_topic' && topicId === undefined)
+    throw new McpInputError(
+      'change assign_topic needs topic_id; pass null to take the prompts out of every topic.',
+    );
+  if (wanted !== 'assign_topic' && topicId !== undefined)
+    throw new McpInputError('topic_id goes only with change assign_topic.');
+  const actor = authorize(
+    await writeActor(context.db, context.principal, args.project_id),
+    preparedChanges.update_prompts.permission,
+  );
+  const scope = { workspaceId: actor.workspaceId, projectId: args.project_id };
+  const selection = {
+    actor,
+    scope,
+    change: newChange(args.project_id),
+    rows: await scopedPrompts(context.db, scope, args.prompt_ids),
+  };
+  if (wanted === 'assign_topic') return prepareRefile(context, selection, topicId ?? null);
+  return prepareStatusChange(context, selection, wanted === 'activate' ? 'active' : 'archived');
+}
+
+type PromptSelection = {
+  actor: Authorized<typeof PROMPTS_WRITE>;
+  scope: { workspaceId: string; projectId: string };
+  change: PreparedChange;
+  rows: Awaited<ReturnType<typeof scopedPrompts>>;
+};
+
+const skippedNote = (skipped: number, state: string) =>
+  skipped ? ` ${skipped} already ${state}.` : '';
+
+async function prepareRefile(
+  context: Context,
+  { actor, scope, change, rows }: PromptSelection,
+  target: string | null,
+): Promise<Evidence> {
+  const moving = rows.filter((row) => row.topic_id !== target);
+  if (!isNonEmpty(moving))
+    return { state: 'nothing_to_change', preview: 'These prompts are already filed there.' };
+  const { payload } = await preparedChanges.update_prompts.rehearse(
+    context.db,
+    context.config,
+    actor,
+    change,
+    { kind: 'topic', topic_id: target, prompt_ids: moving.map((row) => row.id) },
+    noInspection,
+  );
+  const topics = await listTopics(context.db, scope);
+  const name = topics.find((topic) => topic.id === target)?.name;
+  const where = name === undefined ? 'out of every topic' : `under the topic "${name}"`;
+  const skipped = skippedNote(rows.length - moving.length, 'filed there');
+  return prepared(context, {
+    change,
+    actor,
+    kind: 'update_prompts',
+    payload,
+    preview: `File ${moving.length} prompt(s) ${where}: ${quoted(moving.map((row) => row.text))}. Past runs keep the topic they had.${skipped}`,
+  });
+}
+
+async function prepareStatusChange(
+  context: Context,
+  { actor, change, rows }: PromptSelection,
+  status: 'active' | 'archived',
+): Promise<Evidence> {
+  const changing = rows.filter((row) => row.status !== status);
+  if (!isNonEmpty(changing))
+    return { state: 'nothing_to_change', preview: `These prompts are already ${status}.` };
+  const groups = [...Map.groupBy(changing, (row) => row.prompt_set_id)].map(([setId, members]) => ({
+    prompt_set_id: setId,
+    prompt_ids: members.map((row) => row.id),
+  }));
+  const { payload, inspected: slots } = await preparedChanges.update_prompts.rehearse(
+    context.db,
+    context.config,
+    actor,
+    change,
+    { kind: 'status', status, groups },
+    (trx) => promptOccupancy(trx, actor.workspaceId),
+  );
+  const texts = quoted(changing.map((row) => row.text));
+  const skipped = skippedNote(rows.length - changing.length, status);
+  const preview =
+    status === 'archived'
+      ? `Archive ${changing.length} prompt(s): ${texts}. Future audits stop measuring them; past results stay.${skipped}`
+      : `Activate ${changing.length} prompt(s): ${texts}. Audits measure them from the next run. Prompt slots after: ${slots.used} of ${slots.allowance}.${skipped}`;
+  return prepared(
+    context,
+    { change, actor, kind: 'update_prompts', payload, preview },
+    status === 'active' ? { prompt_slots: slots } : {},
+  );
 }
 
 const writeDefinitions = {
@@ -234,7 +323,7 @@ const writeDefinitions = {
   update_prompt_text: direct('update_prompt_text', PROMPTS_WRITE, {
     title: 'Edit a prompt',
     description:
-      "Replace the wording of one tracked prompt, after the user agrees, such as to fix a typo or make it read like a buyer's question. Runs at once and returns the new wording; earlier measurements keep the old wording, so results before and after the edit may not compare. To stop measuring a prompt use prepare_archive_prompts, and to add new ones prepare_add_prompts. Refused if prompt_id is not in this project.",
+      "Replace the wording of one tracked prompt, after the user agrees, such as to fix a typo or make it read like a buyer's question. Runs at once and returns the new wording; earlier measurements keep the old wording, so results before and after the edit may not compare. To stop measuring a prompt or refile it under a topic use prepare_update_prompts, and to add new ones prepare_add_prompts. Refused if prompt_id is not in this project.",
     schema: z.strictObject({
       ...project,
       prompt_id: uuid.describe('A prompt id from read_prompt_portfolio.'),
@@ -289,16 +378,35 @@ const writeDefinitions = {
       return { summary: `Stopped tracking ${competitor.name}.` };
     },
   }),
+  review_competitor_suggestion: direct('review_competitor_suggestion', COMPETITORS_WRITE, {
+    title: 'Accept or reject a competitor suggestion',
+    description:
+      'Decide one competitor suggestion that read_competitors view suggestions listed, after the user chose: accept tracks it as a competitor (its domain, or the name answers used), reject hides it from later suggestions. Runs at once and records who decided. Refused if the suggestion is not in this project, if the project has reached its competitor limit, or if it was already decided the other way; remove_competitor undoes an accept.',
+    schema: z.strictObject({
+      ...project,
+      suggestion_id: uuid.describe('A suggestion id from read_competitors view suggestions.'),
+      decision: z.enum(['accept', 'reject']).describe('accept tracks it; reject hides it.'),
+    }),
+    annotations: hints(false, true),
+    run: async (trx, actor, args) => {
+      if (args.decision === 'reject') {
+        const rejected = await rejectSuggestion(trx, actor, args.project_id, args.suggestion_id);
+        return { summary: `Rejected the suggestion ${rejected.name}.` };
+      }
+      const competitor = await acceptSuggestion(trx, actor, args.project_id, args.suggestion_id);
+      return { summary: `Now tracking ${competitor.name}.`, competitor: { id: competitor.id } };
+    },
+  }),
   update_action_status: direct('update_action_status', ACTIONS_WRITE, {
     title: 'Update an Action status',
     description:
-      'Dismiss one Action the user does not want to act on, or reopen a dismissed one. Runs at once. To record that the work was done, use prepare_declare_implemented instead.',
+      'Accept one Action the user will work on, decline one they do not want, or restore a declined one to New. Runs at once; an in-progress Action can be declined but not moved back to New, and a done one cannot change. To record that the work was done, use prepare_declare_implemented instead.',
     schema: z.strictObject({
       ...project,
       action_id: uuid.describe('An Action id from read_actions.'),
-      status: z
-        .enum(policy.opportunity.actions.ACTION_USER_STATUSES)
-        .describe('dismissed hides the Action from the open list; open restores it.'),
+      status: actionUserStatusSchema.describe(
+        'in_progress accepts the Action; dismissed declines it; open restores a declined one.',
+      ),
     }),
     annotations: hints(false, true),
     run: async (trx, actor, args) => {
@@ -325,7 +433,7 @@ const writeDefinitions = {
   delete_topic: direct('delete_topic', PROMPTS_WRITE, {
     title: 'Delete a topic',
     description:
-      'Delete one topic by name, after the user agrees, when the grouping itself is no longer wanted. Its prompts are kept, still tracked, without a topic, and its subtopics become top-level; recorded answers are kept. Runs at once and cannot be undone. To fix only the name use rename_topic; to stop measuring the prompts use prepare_archive_prompts.',
+      'Delete one topic by name, after the user agrees, when the grouping itself is no longer wanted. Its prompts are kept, still tracked, without a topic, and its subtopics become top-level; recorded answers are kept. Runs at once and cannot be undone. To fix only the name use rename_topic; to stop measuring the prompts use prepare_update_prompts.',
     schema: z.strictObject({
       ...project,
       name: topicCreate.shape.name.describe('The topic name, ignoring case.'),
@@ -395,7 +503,7 @@ const writeDefinitions = {
   generate_prompts: tool({
     title: 'Generate prompts',
     description:
-      "Run CiteLadder's prompt generator for the project, as the Prompt Builder's Generate step does, once the user agreed to the run. The suggestions are staged for review and never tracked: only the user's Accept in CiteLadder's Prompts review (review_url) activates them. Spends model calls, so call it once per agreed run: choose a new run_key for each agreed run and resend the same run_key on a retry, which returns the staged result instead of running again. distribution sets the branded and competitor-alternative shares, intent mix and personas; seed_source and seed_query_ids come from read_seed_queries; run_context is a note for this run only. A shortfall is reported with its reasons, never filled.",
+      "Run CiteLadder's prompt generator for the project, as the Prompt builder's Generate step does, once the user agreed to the run. The suggestions are staged for review and never tracked: only the user's Accept in CiteLadder's Prompt builder review (review_url) activates them. Spends model calls, so call it once per agreed run: choose a new run_key for each agreed run and resend the same run_key on a retry, which returns the staged result instead of running again. distribution sets the branded and competitor-alternative shares, intent mix and personas; seed_source and seed_query_ids come from read_seed_queries; run_context is a note for this run only. A shortfall is reported with its reasons, never filled.",
     schema: z.strictObject({
       ...project,
       prompt_set_id: promptSet,
@@ -426,7 +534,6 @@ const writeDefinitions = {
         'The read_seed_queries ids the user kept for that source; omit for all of them.',
       ),
     }),
-    // A retry with the same run_key replays the persisted run.
     annotations: hints(false, true),
     run: async (context, args) => {
       const { project_id: projectId, prompt_set_id: setId, run_key: runKey, ...request } = args;
@@ -489,7 +596,6 @@ const writeDefinitions = {
     }),
     annotations: hints(false, false),
     run: async (context, args) => {
-      // Refuse a role that cannot add before showing what would be added.
       const actor = authorize(
         await writeActor(context.db, context.principal, args.project_id),
         preparedChanges.add_prompts.permission,
@@ -503,7 +609,6 @@ const writeDefinitions = {
           text: item.text,
           topic_id: item.topic_id ?? null,
           intent: item.intent ?? '',
-          // An omitted cohort stays omitted: creation files it by brand naming.
           ...(item.cohort ? { cohort: item.cohort } : {}),
         }),
       );
@@ -542,53 +647,29 @@ const writeDefinitions = {
       );
     },
   }),
-  prepare_archive_prompts: tool({
-    title: 'Prepare to archive prompts',
+  prepare_update_prompts: tool({
+    title: 'Prepare a prompt change',
     description:
-      'Preview archiving tracked prompts so future audits stop measuring them; past results stay. Nothing changes until the user agrees and you call confirm_change.',
+      'Preview one change to tracked prompts: activate them so audits measure them, archive them so future audits stop measuring them (past results stay), or assign_topic to file them under one topic (topic_id null takes them out of every topic; past runs keep the topic they had). Every prompt id must be in the project or nothing changes; prompts already in that state are skipped. Activation and refiling are refused when a prompt does not fit its topic or the plan has no prompt slots. Nothing changes until the user agrees and you call confirm_change. Prompts cannot be deleted here; the user deletes them in CiteLadder.',
     schema: z.strictObject({
       ...project,
-      prompt_ids: z.array(uuid).min(1).max(200).describe('Prompt ids from read_prompt_portfolio.'),
+      change: z
+        .enum(['activate', 'archive', 'assign_topic'])
+        .describe('activate, archive, or assign_topic (needs topic_id).'),
+      prompt_ids: z
+        .array(uuid)
+        .min(1)
+        .max(policy.prompts.bulk_prompts_max)
+        .describe('Prompt ids from read_prompt_portfolio or read_prompt_metrics.'),
+      topic_id: uuid
+        .nullable()
+        .optional()
+        .describe(
+          'With assign_topic: a topic id from read_prompt_portfolio topics or create_topic, or null to take the prompts out of every topic.',
+        ),
     }),
     annotations: hints(true, true),
-    run: async (context, args) => {
-      const actor = authorize(
-        await writeActor(context.db, context.principal, args.project_id),
-        preparedChanges.archive_prompts.permission,
-      );
-      const rows = await scopedPrompts(
-        context.db,
-        { workspaceId: actor.workspaceId, projectId: args.project_id },
-        args.prompt_ids,
-      );
-      const active = rows.filter((row) => row.status !== 'archived');
-      if (!active.length)
-        return { state: 'nothing_to_change', preview: 'These prompts are already archived.' };
-      const groups = [...Map.groupBy(active, (row) => row.prompt_set_id)].map(
-        ([setId, members]) => ({
-          prompt_set_id: setId,
-          prompt_ids: members.map((row) => row.id),
-        }),
-      );
-      const change = newChange(args.project_id);
-      const { payload } = await preparedChanges.archive_prompts.rehearse(
-        context.db,
-        context.config,
-        actor,
-        change,
-        { groups },
-        noInspection,
-      );
-      const skipped = rows.length - active.length;
-      const skippedNote = skipped ? ` ${skipped} already archived.` : '';
-      return prepared(context, {
-        change,
-        actor,
-        kind: 'archive_prompts',
-        payload,
-        preview: `Archive ${active.length} prompt(s): ${quoted(active.map((row) => row.text))}. Future audits stop measuring them; past results stay.${skippedNote}`,
-      });
-    },
+    run: (context, args) => preparePromptChange(context, args),
   }),
   prepare_launch_audit: tool({
     title: 'Prepare to launch an audit',
@@ -757,7 +838,6 @@ const writeDefinitions = {
         preparedChanges.declare_implemented.permission,
       );
       const change = newChange(args.project_id);
-      // The dry run finds the Action only in this project.
       const { payload } = await preparedChanges.declare_implemented.rehearse(
         context.db,
         context.config,

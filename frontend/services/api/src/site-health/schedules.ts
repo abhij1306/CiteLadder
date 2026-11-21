@@ -1,8 +1,3 @@
-/**
- * A project's crawl schedule: off until the person turns it on, then one crawl
- * per cadence through ordinary crawl admission (`workers/crawl-scheduler.ts`).
- * A project without a row reads as off; reading never writes one.
- */
 import { sql, type Selectable } from 'kysely';
 import { randomUUID } from 'node:crypto';
 import {
@@ -19,7 +14,6 @@ import type { CrawlSchedules } from '../generated/db-schema.ts';
 
 export type CrawlScheduleRow = Selectable<CrawlSchedules>;
 
-/** `anchor` plus `count` cadence steps; a month step keeps the day, clamped to the month's end. */
 function stepFrom(cadence: CrawlScheduleCadence, anchor: Date, count: number) {
   const { days, months } = policy.crawl_schedules.cadences[cadence];
   const target = new Date(anchor.getTime() + days * count * DAY_MS);
@@ -30,10 +24,8 @@ function stepFrom(cadence: CrawlScheduleCadence, anchor: Date, count: number) {
   return target;
 }
 
-/** The first occurrence on the cadence from `anchor` that falls after `after`. */
 export function nextOccurrence(cadence: CrawlScheduleCadence, anchor: Date, after: Date) {
   let count = 1;
-  // A week is a fixed span, so jump straight to the step before `after`.
   const { days } = policy.crawl_schedules.cadences[cadence];
   if (days && after > anchor)
     count = Math.max(1, Math.floor((after.getTime() - anchor.getTime()) / (days * DAY_MS)));
@@ -91,11 +83,6 @@ function scheduleChange(current: CrawlScheduleRow, request: CrawlScheduleUpdateR
   };
 }
 
-/**
- * Turns the schedule on, off or to another cadence. Turning it on, or changing
- * the cadence, counts the first occurrence one step from now; saving the same
- * choice again keeps the occurrence already planned. Caller owns the transaction.
- */
 export async function updateSchedule(
   db: Database,
   workspaceId: string,
@@ -131,7 +118,6 @@ export async function updateSchedule(
   return scheduleProjection(projectId, row);
 }
 
-/** Leases up to `limit` due schedules; a live lease keeps a schedule from every other claimer. */
 export function claimDueCrawlSchedules(
   db: Database,
   options: { owner: string; at: Date; limit: number; leaseSeconds: number },

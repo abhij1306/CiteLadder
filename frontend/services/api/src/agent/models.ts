@@ -10,7 +10,6 @@ import type { AgentModel } from './model-calls.ts';
  * run in the dispatch owner's metering scope.
  */
 export function agentModels(platform: GatewaySettings, transport: Transport = defaultTransport) {
-  // Built inside the promise, so a changed model or an unconfigured gateway rejects, never throws.
   return (run: Run): Promise<AgentModel> =>
     Promise.resolve().then(() => {
       if (run.requested_model !== platform.model) throw new AgentError('model_changed');

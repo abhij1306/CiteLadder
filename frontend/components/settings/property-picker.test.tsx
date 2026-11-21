@@ -42,7 +42,31 @@ vi.mock('@/lib/project/project-context', () => ({
   }),
 }));
 
-import { PropertyPicker } from './property-picker';
+import { SelectedPropertyMark, usePropertyPicker } from './property-picker';
+
+function Picker({ connection }: Readonly<{ connection: IntegrationConnection }>) {
+  const picker = usePropertyPicker(connection);
+  return (
+    <>
+      <SelectedPropertyMark connection={connection} />
+      {picker.allowed ? (
+        <button
+          type="button"
+          onClick={picker.open}
+          disabled={picker.pending}
+          aria-label={picker.label}
+        >
+          {picker.verb}
+        </button>
+      ) : null}
+      {picker.dialog}
+    </>
+  );
+}
+
+function renderPicker(subject: IntegrationConnection) {
+  return renderWithProviders(<Picker connection={subject} />);
+}
 
 function connection(overrides: Partial<IntegrationConnection> = {}): IntegrationConnection {
   return {
@@ -61,7 +85,6 @@ function connection(overrides: Partial<IntegrationConnection> = {}): Integration
   } as IntegrationConnection;
 }
 
-// Distinct labels so a query for the label can never also match the ref.
 const properties = [
   {
     property_ref: 'sc-domain:example.com',
@@ -96,7 +119,6 @@ function mapping(propertyRef: string, status = 'active', projectId = PROJECT) {
   };
 }
 
-/** The active mapping — not account_ref — is what marks a property chosen. */
 function mockMappings(rows: unknown[] = []) {
   mswServer.use(http.get(`/api/v1/integrations/${CONN}/mappings`, () => HttpResponse.json(rows)));
 }
@@ -114,15 +136,24 @@ describe('PropertyPicker', () => {
   it('shows saved mappings without discovery controls for members and viewers', async () => {
     mayDiscover = false;
     mockMappings([mapping('sc-domain:example.com')]);
-    renderWithProviders(<PropertyPicker connection={connection()} />);
+    renderPicker(connection());
     expect(await screen.findByText('sc-domain:example.com')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Change Search Console property' })).toBeNull();
   });
-  it('flags an unselected connection instead of showing an empty ref', () => {
-    renderWithProviders(<PropertyPicker connection={connection()} />);
+  it('says the selection is unknown, not missing, when the mappings read fails', async () => {
+    mswServer.use(
+      http.get(`/api/v1/integrations/${CONN}/mappings`, () =>
+        HttpResponse.json({ error: { message: 'unavailable' } }, { status: 503 }),
+      ),
+    );
+    renderPicker(connection());
+    expect(await screen.findByText('Property unavailable')).toBeInTheDocument();
+    expect(screen.queryByText('No property selected')).toBeNull();
+  });
+  it('flags an unselected connection instead of showing an empty ref', async () => {
+    renderPicker(connection());
 
-    // The state that made syncs fail silently must be visible, not blank.
-    expect(screen.getByText('No Search Console property selected')).toBeInTheDocument();
+    expect(await screen.findByText('No property selected')).toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: 'Select Search Console property' }),
     ).toBeInTheDocument();
@@ -137,9 +168,8 @@ describe('PropertyPicker', () => {
         return HttpResponse.json(properties);
       }),
     );
-    renderWithProviders(<PropertyPicker connection={connection()} />);
+    renderPicker(connection());
 
-    // Discovery is a live upstream call — it must be lazy, not on mount.
     expect(calls).toBe(0);
 
     await ue.click(screen.getByRole('button', { name: 'Select Search Console property' }));
@@ -169,7 +199,7 @@ describe('PropertyPicker', () => {
         );
       }),
     );
-    renderWithProviders(<PropertyPicker connection={connection()} />);
+    renderPicker(connection());
 
     await ue.click(screen.getByRole('button', { name: 'Select Search Console property' }));
     await ue.click(await screen.findByText('Example (domain property)'));
@@ -195,7 +225,7 @@ describe('PropertyPicker', () => {
         return response;
       }),
     );
-    renderWithProviders(<PropertyPicker connection={connection()} />);
+    renderPicker(connection());
     try {
       await ue.click(screen.getByRole('button', { name: 'Select Search Console property' }));
       await waitFor(() => expect(calls).toBe(1));
@@ -213,9 +243,6 @@ describe('PropertyPicker', () => {
     const ue = userEvent.setup();
     mswServer.use(
       http.post(`/api/v1/integrations/${CONN}/properties`, () =>
-        // A rejected grant: the envelope's `retryable: false` is what stops
-        // the shared query policy from retrying a 5xx, so the error surfaces
-        // immediately instead of after a backoff chain.
         HttpResponse.json(
           {
             detail: 'grant rejected',
@@ -230,13 +257,13 @@ describe('PropertyPicker', () => {
         ),
       ),
     );
-    renderWithProviders(<PropertyPicker connection={connection()} />);
+    renderPicker(connection());
 
     await ue.click(screen.getByRole('button', { name: 'Select Search Console property' }));
 
-    // A broken upstream must never read as "you own no properties".
     expect(await screen.findByText('grant rejected')).toBeInTheDocument();
-    expect(screen.getByText('Support: code grant_auth_failed · ref test')).toBeInTheDocument();
+    expect(screen.getByText('Support: code grant_auth_failed')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Copy reference' })).toBeInTheDocument();
     expect(screen.queryByText(/has no Search Console property available/)).toBeNull();
   });
 
@@ -244,7 +271,7 @@ describe('PropertyPicker', () => {
     const ue = userEvent.setup();
     hasProject = false;
     mockProperties();
-    renderWithProviders(<PropertyPicker connection={connection()} />);
+    renderPicker(connection());
 
     await ue.click(screen.getByRole('button', { name: 'Select Search Console property' }));
 
@@ -255,7 +282,7 @@ describe('PropertyPicker', () => {
 
   it('offers a change for an already-selected property', async () => {
     mockMappings([mapping('sc-domain:example.com')]);
-    renderWithProviders(<PropertyPicker connection={connection()} />);
+    renderPicker(connection());
 
     expect(await screen.findByText('sc-domain:example.com')).toBeInTheDocument();
     expect(
@@ -264,15 +291,10 @@ describe('PropertyPicker', () => {
   });
 
   it('reports no selection when account_ref outlives its mapping', async () => {
-    // Mappings cascade away with their project while account_ref lives on the
-    // connection. Trusting account_ref showed a confidently "selected"
-    // property whose every sync was failing `unmapped_property`.
     mockMappings([mapping('sc-domain:example.com', 'disabled')]);
-    renderWithProviders(
-      <PropertyPicker connection={connection({ account_ref: 'sc-domain:example.com' })} />,
-    );
+    renderPicker(connection({ account_ref: 'sc-domain:example.com' }));
 
-    expect(await screen.findByText('No Search Console property selected')).toBeInTheDocument();
+    expect(await screen.findByText('No property selected')).toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: 'Select Search Console property' }),
     ).toBeInTheDocument();
@@ -280,14 +302,13 @@ describe('PropertyPicker', () => {
 
   it("shows only the active project's property, and refuses another site's property", async () => {
     const ue = userEvent.setup();
-    // The connection also serves another project; that mapping is not this row's.
     mockMappings([
       mapping('https://other.test/', 'active', '77777777-7777-4777-8777-777777777777'),
     ]);
     mockProperties();
-    renderWithProviders(<PropertyPicker connection={connection()} />);
+    renderPicker(connection());
 
-    expect(await screen.findByText('No Search Console property selected')).toBeInTheDocument();
+    expect(await screen.findByText('No property selected')).toBeInTheDocument();
     await ue.click(screen.getByRole('button', { name: 'Select Search Console property' }));
     const foreign = await screen.findByText('Another site');
     expect(foreign.closest('button')).toBeDisabled();

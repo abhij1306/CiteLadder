@@ -65,6 +65,15 @@
     "automatic_monitor_limit_key": "automatic_monitor_limit",
     "admission_policy_version": "sh-url-admission-1",
     "site_setup_priority_boost": 1000,
+    "finalize": {
+      "max_attempts": 3,
+      "priority": 1000,
+      "read_pages": 500,
+      "batch_pages": 200,
+      "projection_pages": 500,
+      "error_code": "finalize_failed",
+      "error_message": "Publishing this crawl's results failed after every retry"
+    },
     "cancel_db_conflict_retries": 3,
     "analyze_priority_boost": 1000,
     "link_rewrite": {
@@ -94,6 +103,10 @@
       "text/xml"
     ],
     "sitemap_path_suffixes": [".xml", ".xml.gz"],
+    "sitemap_index_refetch": {
+      "cache_bust_param": "cl",
+      "child_answers": ["absent", "unread"]
+    },
     "coverage_expected_value_kinds": ["about", "contact", "pricing"]
   },
   "route_patterns": [
@@ -200,6 +213,7 @@
     "architecture",
     "change_intel",
     "discover",
+    "finalize",
     "link_metrics",
     "site_setup"
   ],

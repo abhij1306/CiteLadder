@@ -1,4 +1,3 @@
-/** Typed Commerce catalog, product metrics, discovery and prompt client. */
 import { mutationOptions, queryOptions, type QueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 
@@ -65,7 +64,6 @@ export const commerceApi = {
       await apiClient.post(
         path(projectId, 'catalog/imports'),
         input,
-        // A store import fetches the storefront before it answers.
         input.source === 'shopify'
           ? { ...options, timeoutMs: COMMERCE_STORE_IMPORT_REQUEST_TIMEOUT_MS }
           : options,
@@ -102,11 +100,6 @@ export const commerceApi = {
     startInteractiveWork(path(projectId, 'competitors/discoveries/run'), options, discovery);
     return discovery;
   },
-  /**
-   * Discovery task status. Omitting `taskIds` asks the server for whatever is
-   * still in flight for the project — the only form a page reload can recover
-   * from, since ids held in component state do not survive one.
-   */
   competitorDiscoveries: async (
     projectId: string,
     taskIds?: string[],
@@ -241,9 +234,7 @@ const scoped = (scope: ProjectScope, signal?: AbortSignal) => ({
   workspaceId: scope.workspaceId,
 });
 
-/** Commerce reads: the Products screen and navigation intent share these keys. */
 export const commerceQueries = {
-  /** The catalog is the screen's navigation; while projections run, only their state polls. */
   catalog: (scope: ProjectScope) =>
     queryOptions({
       queryKey: queryKeys.commerce.catalog(scope),
@@ -255,11 +246,6 @@ export const commerceQueries = {
       queryFn: ({ signal }) =>
         commerceApi.catalogProjection(scope.projectId, scoped(scope, signal)),
     }),
-  /**
-   * One Products page for the filters' query string (`productSearch`). The
-   * project's previous page stays on screen while the next one loads, so a
-   * filter or a page turn never empties the table; another project's never does.
-   */
   products: (scope: ProjectScope, search: string, cursor: string | null) =>
     queryOptions({
       queryKey: queryKeys.commerce.products(scope, search, cursor),
@@ -268,7 +254,6 @@ export const commerceQueries = {
       placeholderData: (previous, previousQuery) =>
         retainPreviousDataForScope(scope.projectId, previous, previousQuery),
     }),
-  /** The Shopping overview; like a Products page, the project's previous one stays while the next loads. */
   overview: (scope: ProjectScope, search: string) =>
     queryOptions({
       queryKey: queryKeys.commerce.overview(scope, search),
@@ -286,10 +271,6 @@ export const commerceQueries = {
       queryKey: queryKeys.commerce.buyerPrompts(scope),
       queryFn: ({ signal }) => commerceApi.buyerPrompts(scope.projectId, scoped(scope, signal)),
     }),
-  /**
-   * One product holder's page for the window's query string (`window=30`).
-   * The previous window's page stays on screen while the next one loads.
-   */
   productDetail: (scope: ProjectScope, holderId: string, search: string) =>
     queryOptions({
       queryKey: queryKeys.commerce.productDetail(scope, holderId, search),
@@ -300,18 +281,12 @@ export const commerceQueries = {
           ? retainPreviousDataForScope(scope.projectId, previous, previousQuery)
           : undefined,
     }),
-  /**
-   * Discovery task status: the tracked ids, or, with none (after a reload),
-   * whatever the server says is still in flight.
-   */
   discoveries: (scope: ProjectScope, taskIds: readonly string[]) => {
     const queryKey = taskIds.length
       ? queryKeys.commerce.discoveryTasks(scope, taskIds)
       : queryKeys.commerce.activeDiscoveries(scope);
     return queryOptions({
       queryKey,
-      // A discovery that finished since the previous read refreshes the
-      // competitor candidates at once, rather than when every run is done.
       queryFn: async ({ client, signal }) => {
         const previous = client.getQueryData<DiscoveryTasks>(queryKey);
         const next = await commerceApi.competitorDiscoveries(
@@ -328,14 +303,6 @@ export const commerceQueries = {
 
 type DiscoveryTasks = readonly CompetitorDiscoveryTask[];
 
-/**
- * True when some discovery finished since the previous read, so its
- * candidates are worth fetching now rather than when every run is done.
- *
- * A tracked task that is terminal now and was not before (or was not read
- * yet) has finished. The reload path reads only what is still in flight, so
- * there a task that drops off the list has finished.
- */
 export function discoveryFinished(
   previous: DiscoveryTasks | undefined,
   next: DiscoveryTasks,
@@ -346,10 +313,6 @@ export function discoveryFinished(
   return [...before].some(([id, terminal]) => !terminal && !present.has(id));
 }
 
-/**
- * The project's catalog, after an import or once its projections settle.
- * `joinInFlight` keeps a read already under way rather than restarting it.
- */
 export const refreshCatalog = (
   client: QueryClient,
   projectId: string,
@@ -360,7 +323,6 @@ export const refreshCatalog = (
     { cancelRefetch: !joinInFlight },
   );
 
-/** Every Products page and Shopping overview, after the catalog or the approved competitors change. */
 const refreshProducts = (client: QueryClient, projectId: string) =>
   Promise.all(
     (['products', 'overview'] as const).map((resource) =>
@@ -368,11 +330,9 @@ const refreshProducts = (client: QueryClient, projectId: string) =>
     ),
   );
 
-/** Every product page, after a product's catalog record or a competitor's state changes. */
 const refreshProductDetails = (client: QueryClient, projectId: string) =>
   client.invalidateQueries({ queryKey: queryKeys.commerce.resource(projectId, 'product-detail') });
 
-/** Every read a catalog product's edit, archive or restore changes. */
 const refreshCatalogProduct = (client: QueryClient, projectId: string) =>
   Promise.all([
     refreshCatalog(client, projectId),
@@ -380,16 +340,13 @@ const refreshCatalogProduct = (client: QueryClient, projectId: string) =>
     refreshProductDetails(client, projectId),
   ]);
 
-/** The project's competitor candidates, after a decision or a finished discovery. */
 const refreshCompetitors = (client: QueryClient, projectId: string) =>
   client.invalidateQueries({ queryKey: queryKeys.commerce.resource(projectId, 'competitors') });
 
 const refreshBuyerPrompts = (client: QueryClient, projectId: string) =>
   client.invalidateQueries({ queryKey: queryKeys.commerce.resource(projectId, 'buyer-prompts') });
 
-/** Commerce writes; each success refreshes every read it changes. */
 export const commerceMutations = {
-  /** Stage an import for review; nothing reaches the catalog until it is applied. */
   stageImport: (scope: ProjectScope) =>
     mutationOptions({
       mutationFn: (input: CatalogImportRequest) =>
@@ -436,7 +393,6 @@ export const commerceMutations = {
       onSuccess: (_product, _input, _context, { client }) =>
         refreshCatalogProduct(client, scope.projectId),
     }),
-  /** Metered: a retry of one request sends the same key and is replayed, not run again. */
   generateBuyerPrompts: (scope: ProjectScope) =>
     mutationOptions({
       mutationFn: ({
@@ -469,17 +425,8 @@ export const commerceMutations = {
     }),
 };
 
-/** The crawl's analyzed count the cached catalog was read beside. */
 type CatalogReadCount = { readAt: number; count: number };
 
-/**
- * A running crawl enqueues projections as pages are analyzed. Record the
- * analyzed count beside the catalog read it was seen with, and re-read the
- * catalog once that count moves past the recorded one. The count lives in the
- * cache next to the catalog, so a remount over a fresh catalog still sees a
- * count that moved meanwhile, and a catalog read just now is not read again
- * for a count it already reflects.
- */
 export function followCatalogAnalysis(
   client: QueryClient,
   scope: ProjectScope,

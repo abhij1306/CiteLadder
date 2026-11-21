@@ -1,8 +1,3 @@
-/**
- * Which page a page chat may fetch (CO6, E3): one of the latest crawl's
- * content pages, or the page its Action targets. Free URL entry is a later
- * paid add-on, so any other URL is refused before anything is committed.
- */
 import { AgentError } from '../agent/contracts.ts';
 import { contentPageAnalyses } from '../content-gaps/load.ts';
 import type { Database } from '../db/database.ts';
@@ -11,7 +6,6 @@ import { actionPageUrl } from '../opportunities/targets/registry.ts';
 import { canonicalIdentity, canonicalUrl, hostTwinHash } from '../site-health/url-identity.ts';
 
 type Scope = { workspaceId: string; projectId: string };
-/** The page a chat fetches: its URL, and its crawl row when the crawl has one. */
 export type PageTarget = { url: string; siteUrlId: string | null };
 
 function identity(url: string) {
@@ -22,7 +16,6 @@ function identity(url: string) {
   }
 }
 
-/** The URL as one of the latest crawl's content pages, or null. */
 async function crawlContentPage(db: Database, scope: Scope, hashes: string[]) {
   const crawlId = await resolveCrawlId(db, scope);
   if (crawlId === null) return null;
@@ -35,10 +28,6 @@ async function crawlContentPage(db: Database, scope: Scope, hashes: string[]) {
   return row ? { url: row.normalized_url, siteUrlId: row.id } : null;
 }
 
-/**
- * Whether a URL (or its `www.` twin) is one of the latest crawl's content
- * pages (CO15): the pages whose Actions open the page workspace (E3).
- */
 export async function isContentPage(db: Database, scope: Scope, url: string): Promise<boolean> {
   const requested = identity(url.trim());
   if (!requested) return false;
@@ -48,7 +37,6 @@ export async function isContentPage(db: Database, scope: Scope, url: string): Pr
   );
 }
 
-/** The Action's own page target, when it is this URL. */
 async function actionPage(
   db: Database,
   scope: Scope,
@@ -76,10 +64,6 @@ async function actionPage(
   return { url: canonical, siteUrlId: known?.id ?? null };
 }
 
-/**
- * The page a page chat fetches, or `agent_page_unavailable`. The Action's
- * target counts only when the chat is started on that Action.
- */
 export async function resolvePageTarget(
   db: Database,
   scope: Scope,

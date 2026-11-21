@@ -14,8 +14,18 @@
       "service"
     ],
     "excessive_depth_min": 5,
-    "duplicate_metadata_min_urls": 3,
-    "duplicate_metadata_rate": 0.5,
+    "dead_end_page_kinds": [
+      "alternative",
+      "article",
+      "case_study_review",
+      "comparison",
+      "docs",
+      "faq",
+      "guide",
+      "how_to",
+      "listicle",
+      "service"
+    ],
     "unhubbed_page_kind_min_urls": 3,
     "max_pages": 500,
     "max_evidence_items": 25,

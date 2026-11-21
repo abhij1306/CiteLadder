@@ -1,4 +1,3 @@
-/** Target-aware candidate filtering over shared Site Health facts and classification. */
 import type { CommerceTarget } from '@citeladder/contracts/commerce-suite';
 import { domainMatches, normalizeDomain } from '../analysis/domains.ts';
 import { policy } from '../config.ts';
@@ -13,7 +12,6 @@ import type { SearchResult } from './discovery-provider.ts';
 const p = policy.commerce.discovery;
 const editorial = p.editorial_patterns.map((pattern) => new RegExp(pattern, 'iu'));
 export const contextText = (value: unknown) => (typeof value === 'string' ? value : '');
-/** The business's own hosts: its website and every owned domain. */
 export async function ownedHosts(db: Database, scope: { workspaceId: string; projectId: string }) {
   const project = await db
     .selectFrom('projects')
@@ -34,7 +32,6 @@ export async function ownedHosts(db: Database, scope: { workspaceId: string; pro
 }
 const belongs = (host: string, domains: readonly string[]) =>
   domains.some((domain) => domainMatches(host, domain));
-/** Whether a URL or domain is on one of the business's own hosts (`ownedHosts`). */
 export const isOwnedHost = (value: string, owned: readonly string[]) => belongs(value, owned);
 export function exclusion(url: string, title: string, owned: readonly string[]) {
   const host = normalizeDomain(url),

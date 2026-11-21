@@ -2,26 +2,23 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
-import { MutationNotice } from '@/components/ui/mutation-notice';
+import { Icon } from '@/components/ui/icon';
 import { DisplayTime } from '@/components/ui/display-time';
 import { Inline, Stack } from '@/components/ui/layout';
 import { LineDiff } from '@/components/ui/line-diff';
-import { QueryState } from '@/components/ui/query-state';
-import { ReadError } from '@/components/ui/read-error';
 import { textRole } from '@/components/ui/typography';
 import { ledgerClasses, ledgerItemClasses } from '@/components/ui/workspace';
+import { Eye, EyeOff, GitCompare } from '@/lib/icons';
 import { diffLines } from '@/lib/agent/diff';
 import { agentWriteFailure } from '@/lib/agent/errors';
 import { agentMutations, agentQueries, type AgentRevision } from '@/lib/api/agent';
 import { useAgentLinkHosts } from '@/lib/agent/link-hosts';
 import { ContentMarkdown } from '@/lib/markdown/markdown';
+import { Notice, readErrorProps } from '@/components/ui/notice';
+import { StateBlock } from '@/components/ui/state-block';
 
 type View = { id: string; mode: 'view' | 'compare' } | null;
 
-/**
- * Every revision of one document, newest first. Any earlier revision can be
- * viewed or restored; a restore appends a new revision rather than rewinding.
- */
 export function OutputHistory({
   workspaceId,
   chatId,
@@ -41,14 +38,15 @@ export function OutputHistory({
 
   if (query.isError)
     return (
-      <ReadError
-        error={query.error}
+      <Notice
+        kind="read"
+        {...readErrorProps(query)}
+        title="Couldn't load the revision history"
         fallback="Revision history could not be loaded."
-        onRetry={() => void query.refetch()}
-        pending={query.isFetching}
       />
     );
-  if (!query.data) return <QueryState kind="loading" label="Loading revisions…" />;
+  if (!query.data)
+    return <StateBlock kind="loading" label="Loading revisions…" shape={{ kind: 'list' }} />;
   const revisions = [...query.data.items].sort((a, b) => b.number - a.number);
   const current = revisions.find((revision) => revision.id === latestRevisionId);
   const toggle = (id: string, mode: 'view' | 'compare') =>
@@ -56,7 +54,7 @@ export function OutputHistory({
   return (
     <Stack gap="compact">
       {restore.isError ? (
-        <MutationNotice notice={agentWriteFailure(restore.error, 'restore the revision')} />
+        <Notice kind="mutation" notice={agentWriteFailure(restore.error, 'restore the revision')} />
       ) : null}
       <ol aria-label="Revisions" className={ledgerClasses()}>
         {revisions.map((revision) => (
@@ -106,21 +104,23 @@ function RevisionRow({
   return (
     <>
       <Inline className="flex-wrap">
-        <span className={textRole('itemTitle')}>Revision {revision.number}</span>
+        <span className={textRole('body')}>Revision {revision.number}</span>
         <span className={textRole('caption')}>
           {revisionAuthorLabel(revision.author)} · <DisplayTime value={revision.created_at} />
         </span>
         {latest ? <span className={textRole('caption')}>Current</span> : null}
         <span className="flex-1" />
-        <Button variant="ghost" aria-expanded={open === 'view'} onClick={() => onToggle('view')}>
+        <Button variant="quiet" aria-expanded={open === 'view'} onClick={() => onToggle('view')}>
+          <Icon icon={open === 'view' ? EyeOff : Eye} />
           {open === 'view' ? 'Hide' : 'View'}
         </Button>
         {latest || !current ? null : (
           <Button
-            variant="ghost"
+            variant="quiet"
             aria-expanded={open === 'compare'}
             onClick={() => onToggle('compare')}
           >
+            <Icon icon={GitCompare} />
             Compare with current
           </Button>
         )}
@@ -132,7 +132,7 @@ function RevisionRow({
       </Inline>
       {open === 'view' ? (
         <Stack gap="compact">
-          <h4 className={textRole('itemTitle')}>{revision.title}</h4>
+          <h4 className={textRole('subheading')}>{revision.title}</h4>
           <ContentMarkdown markdown={revision.body} density="compact" knownHosts={knownHosts} />
         </Stack>
       ) : null}
@@ -141,7 +141,6 @@ function RevisionRow({
   );
 }
 
-/** Who wrote a revision: a page document's first revision is the page as fetched. */
 function revisionAuthorLabel(author: AgentRevision['author']) {
   switch (author) {
     case 'user':
@@ -157,7 +156,6 @@ function revisionAuthorLabel(author: AgentRevision['author']) {
   }
 }
 
-/** What changed from this revision to the current one, line by line. */
 function RevisionDiff({
   before,
   after,
@@ -168,7 +166,7 @@ function RevisionDiff({
   );
   if (lines === null)
     return (
-      <p className={textRole('body')}>
+      <p className={textRole('body', 'text-ink-2')}>
         These revisions are too long to compare line by line. View each one instead.
       </p>
     );

@@ -1,7 +1,3 @@
-/**
- * Ads in ChatGPT Search answers: parsed from the stored Task GET envelope in
- * the derive transaction and kept apart from citations, mentions and scoring.
- */
 import { randomUUID } from 'node:crypto';
 
 import type { Database } from '../db/database.ts';
@@ -17,7 +13,6 @@ type AdOwnership =
   | { ownership: 'owned' | 'other'; competitor_id: null }
   | { ownership: 'competitor'; competitor_id: string | null };
 
-/** The ads a successful answer was parsed for, or null when ads do not apply or cannot be read. */
 export function answerAds(task: {
   id: string;
   logical_engine: string;
@@ -30,7 +25,6 @@ export function answerAds(task: {
   return parsed?.ads ?? null;
 }
 
-/** Owned beats competitor; a competitor carries its frozen id. */
 function adOwnership(advertiserDomain: string, config: ScoringConfig): AdOwnership {
   if (domainIn(advertiserDomain, config.ownedDomains))
     return { ownership: 'owned', competitor_id: null };
@@ -40,7 +34,6 @@ function adOwnership(advertiserDomain: string, config: ScoringConfig): AdOwnersh
     : { ownership: 'other', competitor_id: null };
 }
 
-/** Caller holds the derive transaction; one row per ad rank in this artifact. */
 export async function persistAds(
   db: Database,
   context: {

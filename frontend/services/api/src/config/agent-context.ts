@@ -1,4 +1,3 @@
-/** Agent context selection and content bounds. */
 export const agentContext = {
   content_context_status_included: 'included',
   content_context_status_unavailable: 'unavailable',
@@ -8,7 +7,6 @@ export const agentContext = {
   context_max_h1: 3,
   context_max_h2: 8,
   content_context_per_page_body_chars: 2000,
-  // The page the chat is about (named, handed off or typed as a URL) carries more of its copy.
   content_context_target_body_chars: 8000,
   content_context_max_chars: 24000,
   content_context_field_max_chars: 300,

@@ -23,12 +23,6 @@ export const probability = (value: unknown): number | null =>
   typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1 ? value : null;
 const logger = getLogger('app.domain.prompts.quality_judge');
 
-/**
- * The yes/no questions a draft of `cohort` is asked: core drafts add the
- * core-only ones, brand diagnostics the brand-only ones. A comparison names a
- * competitor too, and the judge's state names neither business, so it could
- * hold a competitor's feature against the tracked brand's attributes.
- */
 export const noulQuestions = (cohort: unknown) => ({
   ...Q.noul_questions,
   ...(cohort === 'core' ? Q.core_noul_questions : {}),
@@ -52,7 +46,6 @@ export function applyQualityPolicy(decision: Record<string, unknown>) {
     throw new Error('Invalid JEV thresholds');
   const answers = record(decision.answers),
     duplicate = record(decision.duplicate_of);
-  // A decision recorded without a cohort was a core draft's.
   const values = Object.keys(noulQuestions(decision.cohort ?? 'core')).map((key) => {
     const core = Object.hasOwn(Q.core_noul_questions, key);
     return {
@@ -70,8 +63,6 @@ export function applyQualityPolicy(decision: Record<string, unknown>) {
     .filter(({ value, flagBelow }) => value !== null && value < flagBelow)
     .map(({ key }) => key);
   if (duplicateP !== null && duplicateP >= thresholds.duplicate_flag_at) flags.push('duplicate_of');
-  // A core draft the judge reads as seeking understanding or setup gets advice,
-  // not named options to buy, whatever the drafter labelled it.
   const intent = record(decision.intent).choice;
   const seeksAdvice =
     (decision.cohort ?? 'core') === 'core' &&
@@ -115,10 +106,6 @@ function choice(value: unknown, allowed: readonly string[]) {
   };
 }
 
-/**
- * The JEV question set: `duplicate_of` only when the topic has prior texts,
- * `topic` only when the run spans several topics.
- */
 function jevQuestions({
   options,
   hasPrior,
@@ -156,16 +143,9 @@ function jevQuestions({
 
 type TopicOption = { key: string; topic: GenerationContext['selected'][number] };
 
-/** The run's selected topics as the judge's topic choices, keyed `t1`, `t2`, … in order. */
 const topicOptions = (context: GenerationContext): TopicOption[] =>
   context.selected.map((topic, index) => ({ key: `t${index + 1}`, topic }));
 
-/**
- * File a gated draft under the topic the judge places it in, when that is
- * another selected topic chosen with at least `topic_refile_at` probability.
- * The cell (offering, facet, stage) stays as planned; the decision records
- * the topic it was planned under. Shadow mode only records the choice.
- */
 function refile(
   draft: Draft,
   { refiled_from_topic_id: _recorded, ...decision }: Record<string, unknown>,
@@ -206,7 +186,6 @@ function logJudgeFailure(error: unknown) {
     });
 }
 
-/** All inputs are already committed. No database connection spans a JEV call. */
 export async function judgeDrafts(
   context: GenerationContext,
   drafts: Draft[],
@@ -262,7 +241,6 @@ export async function judgeDrafts(
         business: safeBusiness,
         topic: draft.slot.topic_name,
         buyer_need: draft.slot.buyer_need,
-        // A branded draft's claims are judged against what its cell may claim.
         ...(draft.slot.grounded_attributes
           ? { grounded_attributes: draft.slot.grounded_attributes }
           : {}),
@@ -294,8 +272,6 @@ export async function judgeDrafts(
         return;
       }
       calls++;
-      // Only the judge call can make a decision unavailable; a failure in
-      // applying policy is a defect and propagates, as on the cached path.
       let result: Awaited<ReturnType<JevClient['decide']>>;
       try {
         result = await judge.decide(state, questions, deadline);
@@ -337,10 +313,6 @@ export async function judgeDrafts(
 export const gatedOut = (draft: Draft) =>
   draft.decision?.mode === 'gate' && draft.decision.verdict === 'fail';
 
-/**
- * Each cohort's share of `count` by largest remainder: a single-cohort run
- * keeps the whole count in its cohort.
- */
 export function cohortQuotas(
   input: Pick<GenerationInput, 'count' | 'cohort' | 'distribution'>,
 ): Record<GenerationCohort, number> {
@@ -352,7 +324,6 @@ export function cohortQuotas(
   const quotas: Record<GenerationCohort, number> = { core: 0, brand_diagnostic: 0, comparison: 0 };
   for (const { cohort, value } of exact) quotas[cohort] = Math.floor(value);
   let left = input.count - Object.values(quotas).reduce((sum, value) => sum + value, 0);
-  // A stable sort: equal remainders keep cohort order.
   for (const { cohort, value } of exact.toSorted(
     (a, b) => b.value - Math.floor(b.value) - (a.value - Math.floor(a.value)),
   )) {
@@ -364,11 +335,6 @@ export function cohortQuotas(
   return quotas;
 }
 
-/**
- * Selection for a run: each cohort fills its own quota from its own drafts,
- * so a cohort's shortfall is reported, never filled from another cohort.
- * Topics share each quota by the plan's `topicWeights`.
- */
 export function selectRun(
   drafts: Draft[],
   input: Pick<GenerationInput, 'count' | 'cohort' | 'distribution'>,
@@ -386,14 +352,6 @@ export function selectRun(
     .sort((a, b) => drafts.indexOf(a) - drafts.indexOf(b));
 }
 
-/**
- * Up to `count` drafts, passing judgments first, then every topic once
- * before any twice, then topics by weight (highest averages, so a topic
- * weighing twice another gets about twice its prompts; unlisted topics weigh
- * one), spread across stage, intent and the cell's facets. A requested intent
- * mix already weighted the planned stages, so `balanceStages: false` keeps
- * selection from evening it out.
- */
 export function selectDrafts(
   drafts: Draft[],
   count: number,
@@ -412,15 +370,12 @@ export function selectDrafts(
     ...Object.entries(draft.slot.buyer_need).map(([key, value]) => `${key}:${value}`),
   ];
   const used = (key: string) => usage.get(key) ?? 0;
-  // An unused topic comes first; then the topic whose next prompt keeps its
-  // count closest to its weight's share (the inverse Sainte-Laguë quotient).
   const topicDemand = (draft: Draft) => {
     const taken = used(`topic:${draft.slot.topic_id}`);
     return taken ? (2 * taken + 1) / (topicWeights.get(draft.slot.topic_id) ?? 1) : 0;
   };
   const quality = (draft: Draft) =>
     draft.decision?.mode === 'gate' && draft.decision.verdict === 'pass' ? 0 : 1;
-  // A facet a person confirmed in the map or requested for this run comes first.
   const chosenByPerson = (draft: Draft) =>
     ['confirmed', 'requested'].includes(String(draft.slot.evidence_ref.review_state));
   while (remaining.length && selected.length < count) {

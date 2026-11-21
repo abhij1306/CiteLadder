@@ -30,7 +30,7 @@ it('links each record to the app screen that shows it, relative for internal rea
     observedAt: null,
     origin: 'https://app.test',
   });
-  expect(prompt.url).toBe(`https://app.test/prompts?project=${id}`);
+  expect(prompt.url).toBe(`https://app.test/prompts/${id}?project=${id}`);
 });
 
 it.each([mcpPolicy.max_document_bytes, 12000])(
@@ -100,4 +100,8 @@ it('rejects arbitrary sources and ambiguous continuation parameters', () => {
     'not a record uri',
   ])
     expect(() => parseRecordId(uri)).toThrow(McpInputError);
+  expect(() => parseRecordId('https://example.test/file')).toThrow(
+    "id must be a citeladder:// record id exactly as a read or search returned it. Read a page on the project's site with read_page_text and a page AI answers cited with read_source_url; fetch reads no other web pages.",
+  );
+  expect(parseRecordId(`citeladder://prompt/${id}`)).toEqual({ kind: 'prompt', id, part: 0 });
 });

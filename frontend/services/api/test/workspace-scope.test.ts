@@ -11,7 +11,6 @@ const fixtures = new Fixtures(db);
 let ours: string;
 let theirs: string;
 
-/** Seed a project the way a route would: only with the write capability. */
 async function project(workspace: WorkspaceContext, name: string): Promise<string> {
   workspace.require('write');
   const id = randomUUID();

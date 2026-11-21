@@ -1,9 +1,3 @@
-/**
- * Reads of a crawl's immutable projections: the Overview snapshot, the frozen
- * AEO Readiness diagnostic, the observed architecture and crawl changes.
- * Nothing is recomputed; presentation fields absent from an older frozen row
- * are filled from the config that owns them.
- */
 import {
   aeoReadinessSchema,
   architectureSchema,
@@ -43,11 +37,6 @@ const NO_COMPARABLE = {
   current_page_count_by_kind: {},
 };
 
-/**
- * The crawl's snapshot row. Each reader selects only the columns it renders:
- * the row also holds the provenance id lists (tens of thousands of ids on a
- * large crawl), which stay persisted and never reach the browser.
- */
 function snapshotOf(db: Database, crawl: Crawl) {
   return new WorkspaceScope(crawl.workspace_id)
     .selectFrom(db, 'site_health_snapshots')
@@ -59,7 +48,6 @@ const OVERVIEW_COLUMNS = [
   'id',
   'search_eligibility',
   'eligibility_totals',
-  'eligibility_reasons',
   'web_fundamentals_score',
   'web_fundamentals_coverage',
   'web_fundamentals_state',
@@ -93,10 +81,6 @@ const OVERVIEW_COLUMNS = [
   'change_summary',
 ] as const;
 
-/**
- * The frozen Web Fundamentals without provenance id lists: neither its own
- * nor each area finding's leave the database on an Overview read.
- */
 const withoutOwnIds = sql`web_fundamentals - 'source_analysis_ids' - 'source_artifact_ids' - 'source_evaluation_ids'`;
 const webFundamentals = sql<unknown>`case when jsonb_typeof(web_fundamentals -> 'areas') = 'array'
   then ${withoutOwnIds} || jsonb_build_object('areas', (
@@ -117,10 +101,6 @@ function overviewSnapshot(db: Database, crawl: Crawl) {
     .executeTakeFirst();
 }
 
-/**
- * The project's open issue count per day an audit landed, oldest first: the
- * persisted trend each landing rewrites (SH-B9), never recounted on read.
- */
 async function openIssueTrend(db: Database, workspaceId: string, projectId: string) {
   const rows = await db
     .selectFrom('site_issue_trend')
@@ -133,7 +113,6 @@ async function openIssueTrend(db: Database, workspaceId: string, projectId: stri
   return rows.reverse();
 }
 
-/** The frozen readiness diagnostic without its source analysis id list. */
 async function readinessDiagnostic(db: Database, crawl: Crawl) {
   const row = await snapshotOf(db, crawl)
     .select(sql<unknown>`aeo_readiness_diagnostic - 'source_analysis_ids'`.as('diagnostic'))
@@ -159,7 +138,6 @@ export async function overview(
     snapshot_id: snapshot.id,
     search_eligibility: snapshot.search_eligibility,
     eligibility_totals: record(snapshot.eligibility_totals),
-    eligibility_reasons: list(snapshot.eligibility_reasons),
     web_fundamentals_score: snapshot.web_fundamentals_score,
     web_fundamentals_coverage: snapshot.web_fundamentals_coverage,
     web_fundamentals_state: snapshot.web_fundamentals_state,
@@ -221,10 +199,7 @@ export async function overview(
           impact_band: impact.band,
           impact_label: impact.label,
           ...issue,
-          // The failing title from the current catalog, as the Issues catalog
-          // reads it; the persisted description states the passing expectation.
           title: ruleTitle(ruleId),
-          // The Issues tab the rule is listed under, so a link opens on it.
           section: ruleSection(ruleId),
         };
       }),
@@ -250,7 +225,6 @@ export async function overview(
   });
 }
 
-/** The frozen readiness diagnostic, with each check's current remediation actions. */
 export async function aeoReadiness(
   db: Database,
   workspaceId: string,
@@ -325,7 +299,6 @@ function unavailableArchitecture(reason: string, crawlId: string | null = null) 
   });
 }
 
-/** The crawl's newest persisted architecture model, whatever formula version wrote it. */
 export async function architecture(
   db: Database,
   workspaceId: string,
@@ -354,8 +327,6 @@ export async function architecture(
     );
   const coverageState = model.coverage_state || 'unknown';
   const linking = record(model.internal_linking);
-  // When every observed page has an inbound link the orphan count is zero,
-  // however the stored row spelled it.
   let orphans = typeof linking.orphan_page_count === 'number' ? linking.orphan_page_count : null;
   if (
     orphans === null &&
@@ -376,8 +347,6 @@ export async function architecture(
         page_count: typeof row.page_count === 'number' ? row.page_count : 0,
         median_depth: row.median_depth ?? null,
         indexable_count: typeof row.indexable_count === 'number' ? row.indexable_count : 0,
-        duplicate_metadata_count:
-          typeof row.duplicate_metadata_count === 'number' ? row.duplicate_metadata_count : 0,
         orphan_count: row.orphan_count ?? null,
       })),
     nodes: list(model.hierarchy)
@@ -398,7 +367,6 @@ export async function architecture(
   });
 }
 
-// Everything the summary renders; the source id lists stay persisted.
 const CHANGE_COLUMNS = [
   'id',
   'state',
@@ -416,10 +384,6 @@ const CHANGE_COLUMNS = [
 ] as const;
 type ChangeSnapshot = Pick<Selectable<SiteChangeSnapshots>, (typeof CHANGE_COLUMNS)[number]>;
 
-/**
- * The newest change snapshot, or the exact pair's when both crawls are named.
- * The route authorizes the project before this read.
- */
 async function changeSnapshot(
   db: Database,
   workspaceId: string,
@@ -434,7 +398,6 @@ async function changeSnapshot(
     .selectFrom(db, 'site_change_snapshots')
     .select(CHANGE_COLUMNS)
     .where('project_id', '=', projectId)
-    // Snapshots written for page reruns before they stopped writing any.
     .where('crawl_b_id', 'not in', (eb) =>
       eb
         .selectFrom('site_crawls')
@@ -448,8 +411,6 @@ async function changeSnapshot(
     if (crawls.some((crawl) => crawl.project_id !== projectId)) throw notFound('Crawl');
     query = query.where('crawl_a_id', '=', pair.a).where('crawl_b_id', '=', pair.b);
   }
-  // The newest crawl's comparison is current even when an older crawl's
-  // `change_intel` committed later; the newest snapshot of a crawl wins.
   const crawlOrder = (column: 'created_at' | 'id') =>
     sql`(select c.${sql.ref(column)} from site_crawls c
       where c.id = site_change_snapshots.crawl_b_id

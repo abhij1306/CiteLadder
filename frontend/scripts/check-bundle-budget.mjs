@@ -1,17 +1,3 @@
-/**
- * Enforce the eager-bundle byte budget.
- *
- * "Eager" is the entry chunk plus everything it reaches through STATIC imports,
- * plus the CSS the entry pulls in. That is what a cold load pays before any
- * route code runs, and it is the number that regresses silently: a single
- * `import { x } from '@/lib/api/…'` added to a shell component can drag a
- * domain's whole schema graph into the boot path without changing any file
- * anyone reads during review.
- *
- * Lazy route chunks are deliberately NOT counted. They are paid on navigation,
- * and counting them would punish the code splitting this budget exists to
- * protect.
- */
 import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
@@ -32,15 +18,6 @@ function gzipSize(file) {
   return zlib.gzipSync(fs.readFileSync(file), { level: 9 }).length;
 }
 
-/**
- * The entry and everything reachable from it through `imports` only.
- *
- * Vite's manifest separates `imports` (static — the browser fetches these
- * before the entry can execute, and Vite emits `modulepreload` for them) from
- * `dynamicImports` (a route chunk, fetched when that route is reached). The
- * distinction is the whole point of this check, so the walk follows one and
- * never the other.
- */
 function eagerChunks(manifest) {
   const entries = Object.values(manifest).filter((chunk) => chunk.isEntry);
   if (entries.length === 0) throw new Error('manifest declares no entry chunk');
@@ -110,9 +87,6 @@ function main() {
     };
     for (const [key, value] of Object.entries(measured)) {
       const limit = budget[key];
-      // A ceiling that is absent or misspelled must FAIL, not be skipped. This
-      // check exists so bytes cannot creep back silently, and a budget that
-      // quietly measures nothing is the same outcome it is meant to prevent.
       if (typeof limit !== 'number') {
         failures.push(
           `${target}: no numeric \`${key}\` budget in ${POLICY_REPOSITORY_PATH} (measured ${value} B).`,

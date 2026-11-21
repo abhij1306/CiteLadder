@@ -1,14 +1,8 @@
 import { cn } from '@/lib/utils';
 
 const CAP =
-  'bg-surface text-ink-secondary border-line border inline-flex h-5 min-w-5 items-center justify-center rounded-xs px-1 font-mono text-eyebrow font-normal tracking-normal whitespace-nowrap normal-case';
+  'border-rule text-ink-2 inline-flex h-5 min-w-5 items-center justify-center rounded-mark border px-1 type-data-sm whitespace-nowrap normal-case [[data-public-surface]_&]:bg-surface';
 
-/**
- * Kbd — a keyboard key cap in the mono face: `surface` with the xs ring, 20px
- * tall, 11px `ink-secondary`. One key as `children` ("⌘K", "Esc"), or `keys`
- * for a combination drawn as separate caps. Never on an `ink` fill: a
- * tooltip prints its shortcut as plain mono text instead.
- */
 export function Kbd({
   children,
   keys,

@@ -3,23 +3,13 @@ import { useCallback, useEffect } from 'react';
 
 import { useOptionalProjectContext, useProjectContext } from '@/lib/project/project-context';
 import { isAppRoute } from '@/lib/navigation/app-route';
-import { projectSwitchPathname } from '@/lib/navigation/app-routes';
+import { projectSwitchPathname, workspaceSwitchPathname } from '@/lib/navigation/app-routes';
 
 const PROJECT_PARAM = 'project';
 const WORKSPACE_PARAM = 'workspace';
 /** The single-use invitation token. Never propagated to another URL. */
 const INVITATION_TOKEN_PARAM = 'token';
 
-/**
- * Build a destination that carries an explicit project.
- *
- * `?project=` is the shell's selection hand-off: the arriving provider
- * resolves that exact id through the project-detail read instead of guessing
- * from a list that may predate it. Existing parameters are preserved (a
- * filter, a tab, a fragment on the caller's side) and the workspace parameter
- * is dropped — a verified project id already names its workspace, and keeping
- * both invites the contradictory pair the provider has to reject.
- */
 export function projectDestination(
   pathname: string,
   search: URLSearchParams | null,
@@ -31,10 +21,6 @@ export function projectDestination(
   return `${pathname}?${params.toString()}`;
 }
 
-/**
- * Build a destination for a workspace-only route (onboarding, workspace
- * settings), which has no project to identify itself with.
- */
 export function workspaceDestination(
   pathname: string,
   search: URLSearchParams | null,
@@ -50,7 +36,6 @@ export function workspaceDestination(
   return `${pathname}?${params.toString()}`;
 }
 
-/** The one workspace-bound destination for every additional-project entry point. */
 export function newProjectDestination(workspaceId: string | null): string {
   const params = new URLSearchParams({ new: '1' });
   return workspaceId
@@ -58,7 +43,6 @@ export function newProjectDestination(workspaceId: string | null): string {
     : `/onboarding?${params.toString()}`;
 }
 
-/** Scope a registered shell destination before it is rendered or invoked. */
 export function scopedNavigationDestination(
   href: string,
   scope: 'project' | 'workspace',
@@ -79,7 +63,6 @@ export function scopedNavigationDestination(
   return projectId ? `${projectDestination(pathname, search, projectId)}${hash}` : href;
 }
 
-/** Return the canonical destination builder for links owned by the active project. */
 export function useProjectHref() {
   const activeProjectId = useOptionalProjectContext()?.activeProjectId ?? null;
   return useCallback(
@@ -89,13 +72,6 @@ export function useProjectHref() {
   );
 }
 
-/**
- * Give a resolved project route one URL identity without remounting its shell.
- *
- * Bare app URLs may bootstrap from device selection, but once that selection
- * is authorized the address is replaced with the explicit project destination.
- * Replacement is bookkeeping, so it creates no duplicate Back entry.
- */
 export function useCanonicalProjectUrl(enabled: boolean) {
   const router = useNavigate();
   const pathname = useLocation().pathname;
@@ -114,12 +90,6 @@ export function useCanonicalProjectUrl(enabled: boolean) {
   }, [activeProjectId, enabled, pathname, router, searchParams]);
 }
 
-/**
- * View parameters that mean the same thing in every project. Everything else
- * in a query string (a run, prompt, issue, page, analysis, cursor or search)
- * may name or page through the outgoing project's records, so a switch drops
- * it rather than asking the next project for a record it does not have.
- */
 const PROJECT_NEUTRAL_PARAMS = new Set([
   'tab',
   'view',
@@ -129,12 +99,10 @@ const PROJECT_NEUTRAL_PARAMS = new Set([
   'engine',
   'status',
   'sort',
-  // Site Health catalog filters name catalog values, not records.
   'section',
   'severity',
   'category',
   'rule',
-  'finding_class',
   'page_kind',
 ]);
 
@@ -147,33 +115,10 @@ function projectSwitchParams(search: URLSearchParams | null): URLSearchParams {
 }
 
 export type SelectProjectOptions = {
-  /** Navigate to another route instead of the current one. */
   destination?: string;
-  /**
-   * Replace the current history entry rather than pushing.
-   *
-   * For a selection whose predecessor is GONE — the project was just deleted —
-   * so Back must not return to a URL naming a project that no longer exists.
-   */
   replace?: boolean;
 };
 
-/**
- * The one way the shell changes its project selection.
- *
- * Every entry point — the switcher, the command palette, the mobile shell, a
- * successful creation — goes through this so the context state, the device
- * storage and the URL can never disagree about what is selected.
- *
- * History follows intent, not mechanism:
- *
- * - choosing a DIFFERENT project is a navigation the reader took, so it
- *   pushes one entry and Back returns to the previous project;
- * - filling in an absent parameter for the selection already on screen is
- *   bookkeeping, so it replaces — otherwise Back would land on the same page
- *   minus a query string and look like it did nothing;
- * - choosing the project already in the URL does nothing at all.
- */
 export function useSelectProject() {
   const router = useNavigate();
   const pathname = useLocation().pathname;
@@ -184,13 +129,6 @@ export function useSelectProject() {
     (projectId: string, options: SelectProjectOptions = {}) => {
       const { destination, replace = false } = options;
       setActiveProjectId(projectId);
-      // A path naming the OUTGOING project's crawl or run cannot be carried
-      // over; land on that section's root instead of a guaranteed 404.
-      //
-      // Only when the project actually CHANGES. Re-selecting the project
-      // already active — the command palette, a canonical-URL fill-in — is
-      // bookkeeping, and redirecting it would throw the reader off the page
-      // detail they are reading to fix nothing.
       const switching = projectId !== activeProjectId;
       const landing = destination ?? (switching ? projectSwitchPathname(pathname) : pathname);
       const target = projectDestination(
@@ -201,9 +139,6 @@ export function useSelectProject() {
       const urlAlreadyNamesIt = searchParams?.get(PROJECT_PARAM) === projectId;
       const samePage = landing === pathname;
       if (urlAlreadyNamesIt && samePage && !replace) return;
-      // Replacing is correct when nothing the reader can usefully go BACK to is
-      // being left behind: the same project with the parameter simply absent,
-      // or an entry the caller knows is now dead (a deleted project).
       if (replace || (samePage && projectId === activeProjectId)) {
         router(target, { replace: true, preventScrollReset: true });
       } else {
@@ -234,10 +169,13 @@ export function useSelectWorkspace() {
 
   return useCallback(
     (workspaceId: string, destination?: string) => {
-      const samePage = destination === undefined || destination === pathname;
-      if (workspaceId === activeWorkspaceId && samePage) return;
+      const switching = workspaceId !== activeWorkspaceId;
+      if (!switching && (destination === undefined || destination === pathname)) return;
       setActiveWorkspaceId(workspaceId);
-      router(workspaceDestination(destination ?? pathname, searchParams, workspaceId));
+      const landing = destination ?? (switching ? workspaceSwitchPathname(pathname) : pathname);
+      const params =
+        destination === undefined && switching ? projectSwitchParams(searchParams) : searchParams;
+      router(workspaceDestination(landing, params, workspaceId));
     },
     [activeWorkspaceId, pathname, router, searchParams, setActiveWorkspaceId],
   );

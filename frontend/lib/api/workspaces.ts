@@ -15,10 +15,6 @@ import type { Workspace } from '@citeladder/contracts';
 const workspaceListSchema = z.array(workspaceSchema);
 
 export const workspacesApi = {
-  /**
-   * The person's memberships. Deliberately not workspace-scoped: it is what
-   * decides which workspaces exist.
-   */
   list: async (options?: ApiRequestOptions) => {
     const res = await apiClient.get<Workspace[]>('/workspaces', { ...options, workspaceId: null });
     return strictValidate(workspaceListSchema, res, 'workspaces.list');

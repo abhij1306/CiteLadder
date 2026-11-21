@@ -1,9 +1,9 @@
-/** The crawl contract every Site Health read shares. Nothing here writes. */
-import type { crawlCountersSchema } from '@citeladder/contracts/site-health';
+import { isActiveCrawl, type crawlCountersSchema } from '@citeladder/contracts/site-health';
 import type { z } from 'zod';
 
 import type { Database } from '../../db/database.ts';
 import { record, strings } from '../../db/json.ts';
+import type { ProjectedCrawl } from '../site-task.ts';
 import { countDisclosure, type Crawl, type FailureSummary } from './crawl.ts';
 import { crawlCounters } from './crawl-counters.ts';
 
@@ -16,8 +16,7 @@ const num = (value: unknown) => (typeof value === 'number' ? value : null);
 const text = (value: unknown, fallback: string) =>
   typeof value === 'string' && value !== '' ? value : fallback;
 
-/** The worker-written `score_summary`, or null before scoring. */
-export function scoreSummary(crawl: Crawl) {
+export function scoreSummary(crawl: ProjectedCrawl) {
   const summary = record(crawl.score_summary);
   if (Object.keys(summary).length === 0) return null;
   const byKind = Object.entries(record(summary.by_page_kind)).map(([kind, raw]) => {
@@ -47,7 +46,6 @@ export function scoreSummary(crawl: Crawl) {
     selected_count: int(summary.selected_count),
     analyzed_count: int(summary.analyzed_count),
     issue_count: int(summary.issue_count),
-    // The version the crawl was pinned to, never the current configuration.
     scoring_version: text(summary.scoring_version, crawl.scoring_version),
     classified_page_count: int(summary.classified_page_count),
     other_page_count: int(summary.other_page_count),
@@ -57,7 +55,6 @@ export function scoreSummary(crawl: Crawl) {
     classification_state: text(summary.classification_state, NOT_MEASURED),
     classification_reason_groups: record(summary.classification_reason_groups),
     classification_formula_version: text(summary.classification_formula_version, ''),
-    // The stored summary keeps its classification source id lists; no reader renders them.
     scored_page_kind_set: strings(summary.scored_page_kind_set),
     scored_page_count_by_kind: record(summary.scored_page_count_by_kind),
     by_page_kind: Object.fromEntries(byKind),
@@ -66,39 +63,14 @@ export function scoreSummary(crawl: Crawl) {
 
 const iso = (value: Date | null) => value?.toISOString() ?? null;
 
-/**
- * The crawl contract, with discovered totals redacted unless the crawl was
- * frozen with count disclosure. The inventory total is the larger of fetched
- * and admitted URLs: a sitemap crawl fetches the root once and admits many.
- */
-/**
- * The persisted site facts without the sitemap URL manifest.
- *
- * `sitemap.urls` and `sitemap.lastmod` hold every admitted sitemap URL — up to
- * `max_sitemap_admitted_urls` of them — and are the analysis-time authority for
- * sitemap membership, which page detail already reports per page. Shipping them
- * on every crawl read made the dashboard megabytes; the projection keeps their
- * size as `sitemap.url_count` and leaves the stored facts untouched.
- */
-function publicSiteFacts(facts: Record<string, unknown>) {
-  if (!('sitemap' in facts)) return facts;
-  const { urls, lastmod: _lastmod, ...sitemap } = record(facts.sitemap);
-  return {
-    ...facts,
-    sitemap: Array.isArray(urls) ? { ...sitemap, url_count: urls.length } : sitemap,
-  };
-}
-
-/** The crawl contract with its chosen counters. */
 export async function crawlProjection(
   db: Database,
-  crawl: Crawl,
+  crawl: ProjectedCrawl,
   options: { failureSummary?: FailureSummary | null } = {},
 ) {
   return projectCrawl(crawl, await crawlCounters(db, crawl), options);
 }
 
-/** The crawl's frozen robots choice and who confirmed an `ignore`. */
 function robotsChoice(crawl: Crawl) {
   const frozen = record(crawl.configuration);
   if (frozen.robots !== 'ignore')
@@ -111,9 +83,8 @@ function robotsChoice(crawl: Crawl) {
   };
 }
 
-/** The crawl contract; `counters` come from `crawlCounters`, the one chooser. */
 export function projectCrawl(
-  crawl: Crawl,
+  crawl: ProjectedCrawl,
   counters: Counters,
   options: { failureSummary?: FailureSummary | null } = {},
 ) {
@@ -134,7 +105,9 @@ export function projectCrawl(
     inventory_complete: crawl.inventory_complete,
     partial_reason: crawl.partial_reason,
     visible_url_count: crawl.admitted_url_count,
-    analyzed_count: crawl.analyzed_url_count,
+    analyzed_count: isActiveCrawl(crawl.status)
+      ? Math.max(crawl.analyzed_url_count, counters.analyzed)
+      : crawl.analyzed_url_count,
     failed_count: crawl.failed_url_count,
     discovery_requested_count: crawl.discovery_requested_count,
     analysis_requested_count: crawl.analysis_requested_count,
@@ -144,7 +117,7 @@ export function projectCrawl(
     has_more_site_urls: disclose ? !crawl.inventory_complete : null,
     score_summary: summary,
     failure_summary: options.failureSummary ?? null,
-    site_facts: crawl.site_facts === null ? null : publicSiteFacts(record(crawl.site_facts)),
+    site_facts: crawl.site_facts === null ? null : record(crawl.site_facts),
     extractor_version: crawl.extractor_version,
     analyzer_version: crawl.analyzer_version,
     rule_version: crawl.rule_catalog_version,

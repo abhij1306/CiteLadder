@@ -1,4 +1,3 @@
-/** Persisted crawl listing and the short, idempotent stop transaction. */
 import { setTimeout } from 'node:timers/promises';
 import { sql } from 'kysely';
 import type { Database } from '../db/database.ts';
@@ -17,6 +16,7 @@ import { isTerminal } from './reads/crawl.ts';
 import { crawlProjection } from './reads/crawl-projection.ts';
 import { recordCrawlEvent } from './site-task.ts';
 import { persistTerminalCounters } from './terminal-counters.ts';
+import { analyzedPageCount } from './crawl-assessment.ts';
 
 export async function listCrawls(
   db: Database,
@@ -64,17 +64,20 @@ function cancelOnce(db: Database, workspaceId: string, crawlId: string) {
       .selectAll()
       .where('workspace_id', '=', workspaceId)
       .where('id', '=', crawlId)
-      .forUpdate()
+      .forNoKeyUpdate()
       .executeTakeFirst();
     if (!crawl) throw notFound('Crawl');
     if (isTerminal(crawl)) return;
     const now = new Date();
+    // In-flight page commits hold the crawl share-locked, so this count is final.
+    const analyzed = await analyzedPageCount(trx, crawl);
     await trx
       .updateTable('site_crawls')
       .set({
         status: 'cancelled',
         completed_at: now,
         updated_at: now,
+        analyzed_url_count: analyzed,
         ...(['pending', 'running', 'stopped'].includes(crawl.discovery_status)
           ? { discovery_status: 'cancelled' }
           : {}),
@@ -98,16 +101,24 @@ function cancelOnce(db: Database, workspaceId: string, crawlId: string) {
         error_code: 'cancelled',
       })
       .where('workspace_id', '=', workspaceId)
-      .where('crawl_id', '=', crawlId)
-      .where('status', 'not in', ['succeeded', 'failed', 'cancelled'])
+      // A row another transaction holds (a claim, a heartbeat) is skipped, not
+      // waited on: its worker cancels it on the stopped crawl and recounts.
+      .where('id', 'in', (eb) =>
+        eb
+          .selectFrom('site_crawl_tasks')
+          .select('id')
+          .where('workspace_id', '=', workspaceId)
+          .where('crawl_id', '=', crawlId)
+          .where('status', 'not in', ['succeeded', 'failed', 'cancelled'])
+          .forNoKeyUpdate()
+          .skipLocked(),
+      )
       .execute();
-    // Every task is settled now, so the stopped crawl's counters are final.
     await persistTerminalCounters(trx, { ...crawl, status: 'cancelled' });
     await recordCrawlEvent(trx, crawl, 'crawl.cancelled', 'crawl cancelled', {});
   });
 }
 
-/** Replay the entire stop transaction after bounded PostgreSQL lock conflicts. */
 export function cancelCrawl(db: Database, workspaceId: string, crawlId: string) {
   return cancelWithRetry(db, workspaceId, crawlId, 0);
 }

@@ -18,11 +18,6 @@ function limitations(evidence: EarnedPageEvidence): string[] {
   return result;
 }
 
-/**
- * What the Agent needs to draft the request: the page, who is on it in its
- * own words, the prompts it answers, and what to ask for. Prompt IDs travel
- * so a declaration can freeze checks on exactly those prompts.
- */
 export function earnedPageBrief(page: SourcePageEvidence, evidence: EarnedPageEvidence) {
   const listed = competitorsOf(page);
   const names = listed.slice(0, p.EARNED_PAGE_MAX_COMPETITORS).map((e) => e.entity_name);
@@ -37,7 +32,6 @@ export function earnedPageBrief(page: SourcePageEvidence, evidence: EarnedPageEv
     page_format_method: page.page_format_method,
     page_title: page.title,
     target_theme: page.themes[0] ?? null,
-    // Outreach to a publisher, not owned content.
     suggested_skill_id: 'earned_authority',
     suggested_role: 'PR',
     ask: `Be included on this page alongside ${names.join(', ')}, with an entry comparable to theirs that links to your site.`,

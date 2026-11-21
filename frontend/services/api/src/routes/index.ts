@@ -1,4 +1,3 @@
-/** Every product route the TypeScript service serves, by family. */
 import { aiTrafficRoutes } from './ai-traffic.ts';
 import { crawlLogRoutes } from './crawl-logs.ts';
 import type { ProductRoute } from './define.ts';
@@ -11,6 +10,7 @@ import { actionRoutes } from './actions.ts';
 import { searchIntelligenceRoutes } from './search-intelligence.ts';
 import { commerceRoutes } from './commerce.ts';
 import { brandIdentityRoutes } from './brand-identity.ts';
+import { probeRoutes } from './probes.ts';
 import { promptRoutes } from './prompts.ts';
 import { internalLinkRoutes } from './internal-links.ts';
 import { siteHealthRoutes } from './site-health.ts';
@@ -29,10 +29,6 @@ import { providerRoutes } from './providers.ts';
 import { agentRoutes } from './agent.ts';
 import { clientErrorRoutes } from './client-errors.ts';
 
-/**
- * The route modules, keyed by their path below `src/`, in registration order.
- * The route-ownership gate reads this to refuse a family served by two modules.
- */
 export const ROUTE_MODULES: Readonly<Record<string, readonly ProductRoute[]>> = {
   'routes/agent.ts': agentRoutes,
   'routes/providers.ts': providerRoutes,
@@ -57,6 +53,7 @@ export const ROUTE_MODULES: Readonly<Record<string, readonly ProductRoute[]>> = 
   'routes/search-intelligence.ts': searchIntelligenceRoutes,
   'routes/commerce.ts': commerceRoutes,
   'routes/brand-identity.ts': brandIdentityRoutes,
+  'routes/probes.ts': probeRoutes,
   'routes/prompts.ts': promptRoutes,
   'routes/integrations.ts': integrationRoutes,
   'routes/audit-schedules.ts': auditScheduleRoutes,

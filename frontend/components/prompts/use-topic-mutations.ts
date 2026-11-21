@@ -5,11 +5,6 @@ import type { ProjectScope } from '@/lib/api/query-keys/scope';
 import { topicsMutations } from '@/lib/api/topics';
 import type { Topic } from '@citeladder/contracts';
 
-/**
- * The topic rail's writes: create (optionally under a parent), rename and
- * delete, with the one failure worth reporting. Each descriptor refreshes
- * the library on success.
- */
 export function useTopicMutations({
   scope,
   onDeleted,

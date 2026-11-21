@@ -108,7 +108,6 @@ describe('CategoryMatrixSheet', () => {
     await waitFor(() =>
       expect(screen.queryByText('No model provider key is configured')).toBeNull(),
     );
-    // A new request after a success gets a new key.
     fireEvent.click(screen.getByRole('button', { name: 'Generate matrix' }));
     await waitFor(() => expect(keys).toHaveLength(3));
 

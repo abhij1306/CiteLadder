@@ -1,4 +1,3 @@
-/** Landing and property-wide comparison projections share the existing referral refresh. */
 import { randomUUID } from 'node:crypto';
 import { sql } from 'kysely';
 import type { Database } from '../db/database.ts';
@@ -61,7 +60,6 @@ type Evidence = Awaited<ReturnType<typeof referralEvidence>>;
 type EvidenceRow = Evidence['rows'][number];
 const count = (m: Record<string, unknown>, key: string) =>
   typeof m[key] === 'number' && Number.isFinite(m[key]) ? (m[key] as number) : 0;
-/** The row's persisted AI source for its session source and medium, or null. */
 const aiSource = (evidence: Evidence, row: EvidenceRow, source = '', medium = '') =>
   evidence.classifications.aiSource(row.property_ref, row.day, source, medium);
 type Counts = { sessions: number; engaged_sessions: number; key_events: number };

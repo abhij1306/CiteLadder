@@ -6,7 +6,6 @@ import { projectQueries } from '@/lib/api/projects';
 
 const NONE: readonly ProjectMarket[] = [];
 
-/** The project's measurement markets, its default first; empty until loaded. */
 export function useProjectMarkets(
   projectId: string,
   workspaceId: string | null,

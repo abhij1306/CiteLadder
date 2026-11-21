@@ -8,7 +8,6 @@ import {
 import { createApp } from '../src/app.ts';
 import { policy } from '../src/config.ts';
 import { record } from '../src/db/json.ts';
-import { publishFinalPageAnalyses } from '../src/site-health/terminal-analysis.ts';
 import { TEST_SESSION_COOKIE, sessionToken, testConfig, testDatabase } from './support.ts';
 import { SiteFixtures, type SiteSeed } from './site-health-fixtures.ts';
 import type { Tenant } from './visibility-fixtures.ts';
@@ -37,7 +36,6 @@ async function request(tenant: Tenant, path: string, method = 'GET') {
   });
 }
 
-/** Land the crawl's audit the way terminal publication does: under its lock. */
 async function land(seed: SiteSeed) {
   await db.transaction().execute(async (trx) => {
     const crawl = await trx
@@ -47,11 +45,10 @@ async function land(seed: SiteSeed) {
       .where('workspace_id', '=', seed.workspaceId)
       .forUpdate()
       .executeTakeFirstOrThrow();
-    await publishFinalPageAnalyses(trx, crawl);
+    await landFinalRevisions(trx, crawl);
   });
 }
 
-/** Another crawl of the seed's project, audited at `at`. */
 async function crawlAt(seed: SiteSeed, at: Date, rerun = false): Promise<SiteSeed> {
   const crawlId = await fixtures.sibling(seed, {
     created_at: at,
@@ -61,7 +58,6 @@ async function crawlAt(seed: SiteSeed, at: Date, rerun = false): Promise<SiteSee
   return { ...seed, crawlId };
 }
 
-/** The page analyzed in `seed`'s crawl; a `missing` sitemap evaluation is an issue. */
 async function audit(
   seed: SiteSeed,
   path: string,
@@ -71,7 +67,24 @@ async function audit(
   const page = await fixtures.page(seed, path, {}, { siteUrlId, observed: true });
   const evaluationId = await fixtures.evaluation(seed, page, SITEMAP, outcome);
   if (outcome === 'satisfied') return page;
-  const rule = policy.site_health.rule_catalog.find((item) => item.rule_id === SITEMAP)!;
+  await fileIssue({ seed, page, evaluationId, ruleId: SITEMAP, evidence: {} });
+  return page;
+}
+
+async function fileIssue({
+  seed,
+  page,
+  evaluationId,
+  ruleId,
+  evidence,
+}: {
+  seed: SiteSeed;
+  page: Awaited<ReturnType<SiteFixtures['page']>>;
+  evaluationId: string;
+  ruleId: string;
+  evidence: unknown;
+}) {
+  const rule = policy.site_health.rule_catalog.find((item) => item.rule_id === ruleId)!;
   await db
     .insertInto('site_issues')
     .values({
@@ -83,12 +96,12 @@ async function audit(
       analysis_id: page.analysisId,
       evaluation_id: evaluationId,
       source_artifact_id: page.artifactId,
-      rule_id: SITEMAP,
+      rule_id: ruleId,
       dimension: rule.dimension,
       category: rule.category,
       severity: rule.severity,
       finding_class: rule.finding_class,
-      evidence: JSON.stringify({}),
+      evidence: JSON.stringify(evidence),
       description: rule.description,
       remediation: rule.remediation,
       analyzer_version: policy.site_health.versions.analyzer,
@@ -96,15 +109,13 @@ async function audit(
       created_at: new Date(),
     })
     .execute();
-  return page;
 }
 
-/** The issue group's id as the Issues list names it. */
-async function groupOf(seed: SiteSeed) {
+async function groupOf(seed: SiteSeed, ruleId = SITEMAP) {
   const response = await request(seed, `/site-crawls/${seed.crawlId}/issues`);
   expect(response.status, await response.clone().text()).toBe(200);
   const page = siteIssuesPageSchema.parse(await response.json());
-  return page.items.find((item) => item.rule_id === SITEMAP)!.group_id;
+  return page.items.find((item) => item.rule_id === ruleId)!.group_id;
 }
 
 async function progress(seed: SiteSeed, groupId: string) {
@@ -133,7 +144,6 @@ async function stateOf(seed: SiteSeed, siteUrlId: string) {
 }
 
 const at = (minutes: number) => new Date(Date.UTC(2026, 10, 1, 9, minutes));
-/** After any mark a test makes now: an audit fetched once the person said it was fixed. */
 const afterMark = (minutes: number) => new Date(Date.now() + minutes * 60_000);
 
 describe('Mark fixed (SH-B12)', () => {
@@ -158,7 +168,6 @@ describe('Mark fixed (SH-B12)', () => {
       fixed_url_count: 2,
       verified_url_count: 0,
     });
-    // Marked fixed is still open until an audit verifies it.
     expect(
       await db
         .selectFrom('site_issue_trend')
@@ -168,13 +177,11 @@ describe('Mark fixed (SH-B12)', () => {
         .execute(),
     ).toEqual([{ open_count: 2 }]);
 
-    // A crawl that fetched /a before the mark finds the issue: the mark stands.
     const before = await crawlAt(seed, at(5), true);
     await audit(before, '/a', 'missing', a.id);
     await land(before);
     expect(await stateOf(seed, a.id)).toBe('marked_fixed');
 
-    // Audits after the mark decide: /a passes and resolves, /b still fails and reopens.
     const verify = await crawlAt(seed, afterMark(1), true);
     await audit(verify, '/a', 'satisfied', a.id);
     await land(verify);
@@ -183,6 +190,46 @@ describe('Mark fixed (SH-B12)', () => {
     await land(recheck);
     expect(await progress(full, groupId)).toEqual({ affected: 2, fixed: 1, verified: 1, rerun: 0 });
     expect(await stateOf(seed, b.id)).toBe('open');
+  });
+
+  it('counts a site-level finding by the pages its evidence names, not the homepage it is filed on', async () => {
+    const rule = 'architecture.duplicate_titles';
+    const seed = await fixtures.crawl('completed');
+    const full = await crawlAt(seed, at(0));
+    const home = await fixtures.page(full, '/', {}, { observed: true });
+    await fileIssue({
+      seed: full,
+      page: home,
+      evaluationId: await fixtures.evaluation(full, home, rule, 'missing'),
+      ruleId: rule,
+      evidence: {
+        count: 16,
+        duplicate_set_count: 3,
+        duplicate_sets: [],
+        page_kind_counts: { about_contact: 5, docs: 5, service: 6 },
+        coverage_state: 'complete',
+      },
+    });
+    await land(full);
+    const groupId = await groupOf(full, rule);
+    expect(await progress(full, groupId)).toEqual({
+      affected: 16,
+      fixed: 0,
+      verified: 0,
+      rerun: null,
+    });
+    const marked = await request(
+      full,
+      `/site-crawls/${full.crawlId}/issues/${groupId}/mark-fixed`,
+      'POST',
+    );
+    expect(marked.status, await marked.clone().text()).toBe(200);
+    expect(await progress(full, groupId)).toEqual({
+      affected: 16,
+      fixed: 16,
+      verified: 0,
+      rerun: null,
+    });
   });
 
   it('counts each tracked page at its latest audit, a page verified since the crawl still among M', async () => {
@@ -195,13 +242,11 @@ describe('Mark fixed (SH-B12)', () => {
     await fixtures.monitor(seed, [a.id, b.id, c.id]);
     const groupId = await groupOf(full);
 
-    // A re-audit after the crawl verifies /a and finds the issue on /c.
     const rerun = await crawlAt(seed, at(10), true);
     await audit(rerun, '/a', 'satisfied', a.id);
     await audit(rerun, '/c', 'missing', c.id);
     await land(rerun);
 
-    // The crawl now shows the issue on /b and /c; /a counts as fixed and verified.
     expect(await progress(full, groupId)).toEqual({ affected: 3, fixed: 1, verified: 1, rerun: 2 });
   });
 
@@ -220,7 +265,6 @@ describe('Mark fixed (SH-B12)', () => {
     for (const [path, method] of paths)
       expect((await request(foreign, path, method)).status).toBe(404);
     expect(await progress(full, groupId)).toMatchObject({ fixed: 0 });
-    // An issue the crawl does not have is not found either.
     expect(
       (
         await request(
@@ -238,7 +282,6 @@ describe('Re-run all (SH-B12)', () => {
     vi.stubEnv('SITE_HEALTH_MONITORED_URL_LIMIT', '10');
   }
 
-  /** /a and /b tracked and failing, /c failing but untracked, /d tracked and since resolved. */
   async function issueOnFourPages() {
     const seed = await fixtures.crawl('completed');
     const full = await crawlAt(seed, at(0));
@@ -287,7 +330,6 @@ describe('Re-run all (SH-B12)', () => {
         .map((siteUrlId) => ({ task_kind: 'analyze', site_url_id: siteUrlId })),
     );
 
-    // While that re-audit runs, another is refused and adds no work (SH-B4).
     const again = await request(full, path, 'POST');
     expect(again.status).toBe(409);
     expect(await again.json()).toMatchObject({ error: { code: 'crawl_already_active' } });

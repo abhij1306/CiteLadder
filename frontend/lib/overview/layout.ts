@@ -1,14 +1,24 @@
-/**
- * The Overview widget catalog and the edits a layout allows. Each edit returns
- * a new widget list; the caller saves it against the layout's version.
- */
 import {
   overviewWidgetKeySchema,
   type OverviewWidget,
   type OverviewWidgetKey,
 } from '@citeladder/contracts/overview';
 
-/** Widgets the layout does not show yet, in catalog order. */
+export function overviewRows(widgets: readonly OverviewWidget[]): OverviewRow[] {
+  const rows: OverviewRow[] = [];
+  for (const widget of widgets) {
+    const last = rows.at(-1);
+    if (widget.size === 'half' && last?.length === 1 && last[0].size === 'half') {
+      rows[rows.length - 1] = [last[0], widget];
+    } else {
+      rows.push([widget]);
+    }
+  }
+  return rows;
+}
+
+export type OverviewRow = readonly [OverviewWidget] | readonly [OverviewWidget, OverviewWidget];
+
 export function addableWidgets(widgets: readonly OverviewWidget[]): OverviewWidgetKey[] {
   const shown = new Set(widgets.map((widget) => widget.key));
   return overviewWidgetKeySchema.options.filter((key) => !shown.has(key));
@@ -20,7 +30,6 @@ export function addWidget(widgets: readonly OverviewWidget[], key: OverviewWidge
     : [...widgets, { key, size: 'half' as const }];
 }
 
-/** The last widget stays: an Overview with nothing on it is not a layout. */
 export function removeWidget(widgets: readonly OverviewWidget[], index: number) {
   return widgets.length > 1 ? widgets.filter((_, position) => position !== index) : [...widgets];
 }

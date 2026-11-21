@@ -1,9 +1,3 @@
-/**
- * Persisted AI referral classifications, the one source every referral
- * breakdown reads (OD3): the headline, the landing and source breakdowns and
- * Performance agree until a reclassification writes new rows. Nothing here
- * classifies live.
- */
 import { sql } from 'kysely';
 
 import { policy } from '../config.ts';
@@ -21,7 +15,6 @@ const arities: Record<string, number> = Object.fromEntries(
   ]),
 );
 
-/** A GA4 row's dimension values; the first absorbs separators inside it (a landing path). */
 export function dimensionParts(dataset: string, dimensionKey: string): NonEmpty<string> {
   const split = dimensionKey.split(policy.integrations.dimension_separator);
   const arity = arities[dataset];
@@ -32,7 +25,6 @@ export function dimensionParts(dataset: string, dimensionKey: string): NonEmpty<
   ];
 }
 
-/** A classified GA4 source/medium metric row. */
 export type ClassifiedRow = {
   property_ref: string;
   date: string;
@@ -44,7 +36,6 @@ export type ClassifiedRow = {
 const key = (propertyRef: string, day: string, source: string, medium: string) =>
   JSON.stringify([propertyRef, day, source, medium]);
 
-/** Sessions' AI source by property, day, source and medium, from that day's classified source/medium row. */
 export class ReferralClassifications {
   private readonly sources = new Map<string, string | null>();
 
@@ -58,13 +49,11 @@ export class ReferralClassifications {
     }
   }
 
-  /** The persisted AI source, or null when the pair is not an AI referral or is not yet classified. */
   aiSource(propertyRef: string, day: string, source: string, medium: string): string | null {
     return this.sources.get(key(propertyRef, day, source, medium)) ?? null;
   }
 }
 
-/** The persisted classifications of the scope's selected GA4 source/medium rows. */
 export async function readReferralClassifications(
   db: Database,
   scope: PartitionScope,

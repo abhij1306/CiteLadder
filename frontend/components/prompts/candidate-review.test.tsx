@@ -1,11 +1,17 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { ComponentProps } from 'react';
 import { describe, expect, it, vi } from 'vite-plus/test';
 
 import { TooltipProvider } from '@/components/ui/tooltip';
 import type { PromptCandidate } from '@citeladder/contracts';
 
-import { CandidateReview } from './candidate-review';
+import { CandidateReview, useCandidateSelection } from './candidate-review';
+
+function Review(props: Readonly<Omit<ComponentProps<typeof CandidateReview>, 'selection'>>) {
+  const selection = useCandidateSelection(props.candidates);
+  return <CandidateReview {...props} selection={selection} />;
+}
 
 const candidate = (id: string, text: string): PromptCandidate => ({
   id,
@@ -31,7 +37,7 @@ const candidates = [trailShoes, flatFeet];
 describe('CandidateReview', () => {
   it('associates distinct quality states with selectable suggestions', async () => {
     render(
-      <CandidateReview
+      <Review
         candidates={[
           { ...trailShoes, quality_status: 'unavailable' },
           { ...flatFeet, quality_status: 'judged' },
@@ -39,72 +45,65 @@ describe('CandidateReview', () => {
           { ...candidate('d', 'Which shoes suit a first marathon?'), quality_status: 'not_judged' },
         ]}
         topics={[]}
-        onAccept={vi.fn()}
         onReject={vi.fn()}
       />,
     );
     const choices = screen.getAllByRole('checkbox', { name: /Select “/ });
-    const descriptions = choices.map((choice) => {
-      expect(choice).toHaveAccessibleDescription();
-      expect(choice).toBeEnabled();
-      return document.getElementById(choice.getAttribute('aria-describedby')!)?.textContent;
-    });
-    // Disabled judging and skipped/failed checks must not become the same state.
-    expect(new Set(descriptions).size).toBe(4);
+    choices.forEach((choice) => expect(choice).toBeEnabled());
+    expect(
+      choices.map((choice) => {
+        const id = choice.getAttribute('aria-describedby');
+        return id ? document.getElementById(id)?.textContent : null;
+      }),
+    ).toEqual([
+      'Quality check unavailable. Review carefully.',
+      null,
+      'Quality checking was off for this batch',
+      'Not quality checked',
+    ]);
     await userEvent.setup().click(choices[2]!);
-    expect(screen.getByRole('button', { name: /accept selected/i })).toBeEnabled();
+    expect(screen.getByRole('button', { name: /reject selected/i })).toBeEnabled();
   });
-  it('accepts only the selected suggestions and rejects after select-all', async () => {
+  it('rejects only the selected suggestions, then every one after select-all', async () => {
     const user = userEvent.setup();
-    const onAccept = vi.fn();
     const onReject = vi.fn();
-    render(
-      <CandidateReview
-        candidates={candidates}
-        topics={[]}
-        onAccept={onAccept}
-        onReject={onReject}
-      />,
-    );
+    render(<Review candidates={candidates} topics={[]} onReject={onReject} />);
 
-    const accept = screen.getByRole('button', { name: /accept selected/i });
-    expect(accept).toBeDisabled();
+    const reject = screen.getByRole('button', { name: /reject selected/i });
+    expect(reject).toBeDisabled();
 
     await user.click(screen.getByRole('checkbox', { name: /which running shoes/i }));
-    expect(screen.getByRole('checkbox', { name: /select all/i })).toHaveAttribute(
-      'aria-checked',
-      'mixed',
-    );
-    await user.click(accept);
-    expect(onAccept).toHaveBeenCalledWith(['b']);
+    const all = screen.getByRole('checkbox', { name: /select all/i });
+    expect(all).toHaveAttribute('aria-checked', 'mixed');
+    await user.click(reject);
+    expect(onReject).toHaveBeenLastCalledWith(['b']);
 
-    // The selection survives the request (a failure can be retried).
-    await user.click(screen.getByRole('button', { name: /reject selected/i }));
-    expect(onReject).toHaveBeenCalledWith(['b']);
+    await user.click(all);
+    await user.click(reject);
+    expect(onReject).toHaveBeenLastCalledWith(['a', 'b']);
   });
 
   it('shows quality flags as advisory labels without hiding the suggestion', () => {
     render(
-      <CandidateReview
+      <Review
         candidates={[{ ...trailShoes, quality_status: 'judged', quality_flags: ['natural'] }]}
         topics={[]}
-        onAccept={vi.fn()}
         onReject={vi.fn()}
       />,
     );
 
     expect(screen.getByText('best trail shoes for wet weather')).toBeInTheDocument();
-    expect(screen.getByText('May read unnaturally')).toBeInTheDocument();
-    expect(screen.getByRole('checkbox', { name: /best trail shoes/i })).toBeEnabled();
+    const choice = screen.getByRole('checkbox', { name: /best trail shoes/i });
+    expect(choice).toHaveAccessibleDescription('Needs your review · May read unnaturally');
+    expect(choice).toBeEnabled();
   });
 
   it('tags only suggestions whose phrasing your search data informed', () => {
     render(
       <TooltipProvider>
-        <CandidateReview
+        <Review
           candidates={[{ ...trailShoes, grounded: true }, flatFeet]}
           topics={[]}
-          onAccept={vi.fn()}
           onReject={vi.fn()}
         />
       </TooltipProvider>,
@@ -115,6 +114,5 @@ describe('CandidateReview', () => {
       true,
       false,
     ]);
-    expect(screen.getAllByRole('button', { name: 'About search data' })).toHaveLength(1);
   });
 });

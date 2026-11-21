@@ -1,36 +1,5 @@
-/**
- * Site Health issue presentation helpers (Slice 8) — PURE.
- *
- * Maps the backend issue projection (severity, dimension, rule label) onto the
- * design-system badge families and display copy used by the grouped Issues
- * catalog (mockup 710) and the per-URL detail (mockup 711). No transport, no
- * React — screens render these view-models directly.
- *
- * Product rules encoded here:
- *   - severity → the existing status-badge palette (high=danger, medium=warning,
- *     low/info=info) so the catalog never invents a new colour system;
- *   - the catalog title is the API's CURRENT display label, which already falls
- *     back to the raw `rule_id` when the rule is unknown — the frontend applies
- *     the same fallback defensively for a blank title;
- *   - severity summary tiles read the API-owned `severity_counts` map with a
- *     stable order (high → medium → low), never a client re-count.
- */
 import type { IssueSeverity, IssueDimension } from '@citeladder/contracts';
-import type { PriorityValue, StatusValue } from '@/components/ui/badge';
-
-/** Map an issue severity onto a status-badge value (shared palette). */
-export function severityBadgeValue(severity: IssueSeverity): StatusValue {
-  switch (severity) {
-    case 'critical':
-    case 'high':
-      return 'danger';
-    case 'medium':
-      return 'warning';
-    default:
-      // low / info
-      return 'info';
-  }
-}
+import type { PriorityValue } from '@/components/ui/status-mark';
 
 /**
  * A ranked action's severity read as its priority (High, Medium, Low): the
@@ -57,16 +26,10 @@ const SEVERITY_LABEL: Record<IssueSeverity, string> = {
   info: 'Info',
 };
 
-/** Short sentence-case severity label for a badge (High / Medium / Low / …).
- *
- * The catalog exposes a three-tier vocabulary: `critical` folds into High so
- * badges, chips, and filters all agree (no separate "Critical" tier in the UI).
- */
 export function severityLabel(severity: IssueSeverity): string {
   return SEVERITY_LABEL[severity];
 }
 
-/** Severity ordering rank (lower = more severe) for client-side sorting. */
 const SEVERITY_RANK: Record<IssueSeverity, number> = {
   critical: 0,
   high: 1,
@@ -75,45 +38,47 @@ const SEVERITY_RANK: Record<IssueSeverity, number> = {
   info: 4,
 };
 
-/** Rank for ordering issues by severity (most severe first). */
 export function severityRank(severity: IssueSeverity): number {
   return SEVERITY_RANK[severity] ?? 99;
 }
 
 const SCORE_ROLE_LABEL: Readonly<Record<string, string>> = {
-  web_fundamentals: 'Web Fundamentals',
-  aeo_readiness: 'AEO Readiness',
+  web_fundamentals: 'Web fundamentals',
+  aeo_readiness: 'AEO readiness',
 };
 
-/**
- * The page score a finding counts against (the catalog's `score_roles`), by
- * the name the score carries on screen; a role without a name shows as sent,
- * so it never reads as counting toward nothing.
- */
 export function scoreRoleLabels(roles: readonly string[]): string[] {
   return roles.map((role) => SCORE_ROLE_LABEL[role] ?? role);
 }
 
-/** Short dimension label for a badge (Web fundamentals / AEO). */
 export function dimensionLabel(dimension: IssueDimension): string {
   return dimension === 'aeo' ? 'AEO' : 'Web fundamentals';
 }
 
-/**
- * The display title for an issue group / row. The backend already resolves the
- * current rule label (falling back to the raw `rule_id`), but a defensive blank
- * title also falls back to `rule_id` so a row never renders empty.
- */
 export function issueTitle(issue: { title: string; rule_id: string }): string {
   const title = issue.title.trim();
   return title.length > 0 ? title : issue.rule_id;
 }
 
-/**
- * Read one severity's group count from the API-owned `severity_counts` map.
- * `critical` folds into `high` so the tiles match the three-tier catalog UI;
- * a missing key is 0 (never a fabricated total).
- */
+export function sentences(text: string): string[] {
+  const source = text.trim();
+  const found: string[] = [];
+  let start = 0;
+  for (let index = 0; index < source.length; index += 1) {
+    const next = source[index + 1] ?? ' ';
+    if ('.!?'.includes(source[index] ?? '') && next.trim() === '') {
+      found.push(source.slice(start, index + 1).trim());
+      start = index + 1;
+    }
+  }
+  found.push(source.slice(start).trim());
+  return found.filter(Boolean);
+}
+
+export function firstSentence(text: string): string {
+  return sentences(text)[0] ?? text.trim();
+}
+
 export function severityCount(counts: Record<string, number>, severity: IssueSeverity): number {
   if (severity === 'high') {
     return (counts.high ?? 0) + (counts.critical ?? 0);

@@ -3,12 +3,6 @@ import { UNSAFE_DataRouterContext, useBlocker, type Location } from 'react-route
 
 import { ConfirmDialog } from '@/components/ui/dialog';
 
-/**
- * Warns before unsaved edits are discarded: the browser's own prompt on tab
- * close or reload, and a confirmation before an in-app navigation that leaves
- * the screen (another path, or another project). Navigation within the screen,
- * such as a tab held in the URL, passes.
- */
 export function UnsavedChangesGuard({ when }: Readonly<{ when: boolean }>) {
   useEffect(() => {
     if (!when) return;
@@ -16,11 +10,6 @@ export function UnsavedChangesGuard({ when }: Readonly<{ when: boolean }>) {
     window.addEventListener('beforeunload', warn);
     return () => window.removeEventListener('beforeunload', warn);
   }, [when]);
-  // Blocking needs the data router the app runs in; a plain router (an
-  // isolated component render) keeps the tab-close warning alone. The router
-  // consults only its last-registered blocker, so only an unsaved guard
-  // registers one: a clean guard mounted later (another output on the same
-  // chat) must not displace it.
   const dataRouter = useContext(UNSAFE_DataRouterContext);
   return dataRouter && when ? <NavigationGuard /> : null;
 }

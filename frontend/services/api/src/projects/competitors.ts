@@ -1,11 +1,3 @@
-/**
- * The tracked competitors' one writer: add, rename or re-alias, remove one at
- * a time, or save the project editor's whole list as a diff.
- *
- * Every write takes the same project row lock as suggestion accepts, so the
- * project ceiling and case-insensitive name uniqueness hold under concurrent
- * writers.
- */
 import { randomUUID } from 'node:crypto';
 
 import { competitorSchema } from '@citeladder/contracts/project';
@@ -36,7 +28,6 @@ export const competitorUpdate = competitorUpdateRequestSchema.extend({
   domains: competitorInput.shape.domains.unwrap().optional(),
 });
 
-/** A tracked competitor on the wire. */
 export function competitorView(
   projectId: string,
   row: Pick<Selectable<Competitors>, 'id' | 'name' | 'aliases' | 'domains' | 'logo_asset_id'>,
@@ -50,7 +41,6 @@ export function competitorView(
   };
 }
 
-/** The project row lock every competitor writer takes first, or 404. */
 export async function lockProject(db: Database, scope: ProjectScope): Promise<void> {
   const project = await db
     .selectFrom('projects')
@@ -93,6 +83,42 @@ export async function listCompetitors(db: Database, scope: ProjectScope): Promis
   return (await competitorsOf(db, scope)).map((row) => competitorView(scope.projectId, row));
 }
 
+export function insertCompetitor(
+  trx: Database,
+  {
+    scope,
+    tracked,
+    fields,
+  }: Readonly<{
+    scope: ProjectScope;
+    tracked: number;
+    fields: Readonly<{ name: string; aliases: readonly string[]; domains: readonly string[] }>;
+  }>,
+): Promise<Selectable<Competitors>> {
+  if (tracked >= MAX_COMPETITORS)
+    throw new ApiError(
+      409,
+      `This project tracks the maximum of ${MAX_COMPETITORS} competitors. Remove one to add another.`,
+      { code: 'competitor_limit' },
+    );
+  const now = new Date();
+  return trx
+    .insertInto('competitors')
+    .values({
+      id: randomUUID(),
+      workspace_id: scope.workspaceId,
+      project_id: scope.projectId,
+      name: fields.name,
+      aliases: JSON.stringify(cleanList(fields.aliases)),
+      domains: JSON.stringify(cleanList(fields.domains)),
+      logo_asset_id: null,
+      created_at: now,
+      updated_at: now,
+    })
+    .returningAll()
+    .executeTakeFirstOrThrow();
+}
+
 export function addCompetitor(
   db: Database,
   scope: ProjectScope,
@@ -102,24 +128,11 @@ export function addCompetitor(
     await lockProject(trx, scope);
     const rows = await competitorsOf(trx, scope);
     refuseDuplicate(rows, input.name);
-    if (rows.length >= MAX_COMPETITORS)
-      throw new ApiError(409, `A project can have at most ${MAX_COMPETITORS} competitors`);
-    const now = new Date();
-    const row = await trx
-      .insertInto('competitors')
-      .values({
-        id: randomUUID(),
-        workspace_id: scope.workspaceId,
-        project_id: scope.projectId,
-        name: input.name,
-        aliases: JSON.stringify(cleanList(input.aliases)),
-        domains: JSON.stringify(cleanList(input.domains)),
-        logo_asset_id: null,
-        created_at: now,
-        updated_at: now,
-      })
-      .returningAll()
-      .executeTakeFirstOrThrow();
+    const row = await insertCompetitor(trx, {
+      scope,
+      tracked: rows.length,
+      fields: { name: input.name, aliases: input.aliases, domains: input.domains },
+    });
     return competitorView(scope.projectId, row);
   });
 }
@@ -159,17 +172,8 @@ export function updateCompetitor(
   });
 }
 
-/** One editor row: a tracked competitor's `id`, or none for a new one. */
 export type CompetitorListItem = z.output<typeof competitorInput> & { id?: string };
 
-/**
- * Save the editor's whole list as a diff, so a kept competitor's ID, logo and
- * creation time survive; only its name, aliases and domains change. A row
- * names its competitor by `id` (a rename) or, without one, by a tracked
- * name (case-insensitively). Other rows are added and competitors left out
- * are removed. An `id` the project does not track is a 404. Joins the
- * caller's transaction.
- */
 export function saveCompetitorList(
   db: Database,
   scope: ProjectScope,

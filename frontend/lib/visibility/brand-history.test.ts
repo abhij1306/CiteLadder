@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vite-plus/test';
-import { toChartPoints } from '@/lib/visibility/trends';
+import { visibilityQueries } from '@/lib/api/visibility-queries';
+import { rangeToFrom, toChartPoints } from '@/lib/visibility/trends';
 import type { VisibilityTrendPoint } from '@citeladder/contracts';
 
 function point(
@@ -59,7 +60,50 @@ describe('measurement history', () => {
     expect(toChartPoints([point(0.5), changed], 'sov')[1]?.breakBefore).toBe(true);
   });
 
+  it("plots win rate and sentiment from the brand's own row, gapping sentiment under the classified minimum", () => {
+    const withBrand = (classified: number, winRate: number | null) => ({
+      ...point(0.5),
+      rankings: [
+        { name: 'Globex', is_brand: false, win_rate: 0.9, sentiment: null },
+        {
+          name: 'Acme',
+          is_brand: true,
+          win_rate: winRate,
+          sentiment: { mentions: 30, classified, positive: 15, negative: 5, net_sentiment: 50 },
+        },
+      ],
+    });
+    const points = [
+      withBrand(20, 0.25),
+      withBrand(19, null),
+      { ...point(0.5), rankings: [] },
+    ] as VisibilityTrendPoint[];
+    expect([
+      toChartPoints(points, 'win_rate').map((item) => item.value),
+      toChartPoints(points, 'sentiment').map((item) => item.value),
+    ]).toEqual([
+      [25, null, null],
+      [50, null, null],
+    ]);
+  });
+
   it('returns no fabricated points for empty history', () => {
     expect(toChartPoints([], 'sov')).toEqual([]);
+  });
+});
+
+describe('range presets', () => {
+  it('resolves a preset to the same day-aligned bound across mounts', () => {
+    const scope = { workspaceId: 'w-1', projectId: 'p-1' };
+    const keyAt = (now: string) =>
+      visibilityQueries.trends(scope, { from: rangeToFrom('90d', new Date(now)) }).queryKey;
+    expect(keyAt('2026-11-18T14:00:57.928Z')).toEqual(keyAt('2026-11-18T14:01:19.126Z'));
+    expect(rangeToFrom('90d', new Date('2026-11-18T14:00:57.928Z'))).toBe(
+      '2026-08-20T00:00:00.000Z',
+    );
+    expect(rangeToFrom('1y', new Date('2026-11-18T23:59:59.999Z'))).toBe(
+      '2025-11-18T00:00:00.000Z',
+    );
+    expect(rangeToFrom('all', new Date('2026-11-18T14:00:57.928Z'))).toBeUndefined();
   });
 });

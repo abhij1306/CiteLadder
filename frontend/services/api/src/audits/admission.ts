@@ -8,7 +8,6 @@ import { auditPolicy, type AuditRuntime } from './config.ts';
 
 export type FrozenAudit = Awaited<ReturnType<typeof prepareAudit>>;
 
-/** The workspace enqueue lock every audit launch and repair takes before admission. */
 export function lockAuditEnqueue(db: Database, workspaceId: string) {
   return subjectXactLock(db, `audit-enqueue:${workspaceId}`);
 }
@@ -22,7 +21,6 @@ export async function reserveAuditCapacity(
   runtime: AuditRuntime,
   at: Date,
 ) {
-  // A launch's per-market audits count as one active run, and never against themselves.
   let launches = db
     .selectFrom('audits')
     .select(sql<string>`count(distinct coalesce(launch_id, id))`.as('count'))

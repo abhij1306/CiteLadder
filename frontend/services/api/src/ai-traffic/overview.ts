@@ -1,10 +1,3 @@
-/**
- * The AI Traffic overview: crawler activity, AI referrals and owned citations
- * observed in tracked answers, for one reporting window.
- *
- * The three persisted reads are independent and run concurrently on the pool;
- * the window is resolved once, in the project's reporting timezone.
- */
 import type { z } from 'zod';
 import type {
   aiTrafficOverviewSchema,
@@ -28,13 +21,6 @@ const TRACKED_CITATIONS_LABEL = "Observed in CiteLadder's tracked answers";
 
 type TrackedCitations = z.input<typeof trackedCitationsSchema>;
 
-/**
- * The owned-citation facts that audit finalization persisted on each audit
- * scope's newest completed run inside the window, summed across scopes. The
- * read never counts citation rows: a selected run without its fact is
- * `not_computed`, and a window without a completed run is
- * `no_completed_run`; neither becomes zero.
- */
 async function trackedCitations(
   db: Database,
   scope: CrawlScope,
@@ -68,9 +54,6 @@ export async function aiTrafficOverview(
   query: CrawlReadOptions,
 ): Promise<z.input<typeof aiTrafficOverviewSchema>> {
   const options = await withReportingTimezone(db, scope, query);
-  // One window for all three reads, resolved before any starts (an invalid
-  // one is the caller's 422): explicit dates win over a preset, as
-  // `crawlWindow` decides, so referrals never read a preset beside them.
   const window = crawlWindow(options);
   const explicit = Boolean(options.start_date && options.end_date);
   const [crawl, referrals, citations] = await Promise.all([

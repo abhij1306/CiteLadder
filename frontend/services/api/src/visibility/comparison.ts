@@ -1,12 +1,3 @@
-/**
- * A selected run against its baseline: the nearest compatible earlier run,
- * or the one the reader named.
- *
- * Runs compare exactly when their frozen measurement
- * identity and versions match and both are fully covered; otherwise they
- * compare only on the like-for-like prompt/model/repetition cells both runs
- * answered, and say so in `status`.
- */
 import type { visibilityComparisonSchema } from '@citeladder/contracts/visibility';
 import type { z } from 'zod';
 
@@ -55,7 +46,6 @@ export function emptyComparison(
   };
 }
 
-/** The run being compared: its identity, completion and selected aggregate. */
 export type SelectedRun = {
   auditId: string;
   workspaceId: string;
@@ -66,26 +56,18 @@ export type SelectedRun = {
   metrics: Metrics;
 };
 
-type Selector = { cohort: string; engine: string | null };
+type Selector = { cohort: string; engine: string | null; topicId?: string | null };
 
-/** The frozen context two runs must share before any cell can be matched. */
 const panelFreeKey = (configuration: unknown) =>
   frozenComparisonKey(configuration, null, false, false);
 
-/**
- * The selected run against its baseline. A reader-named baseline is compared
- * directly; otherwise the baseline is the one audit finalization persisted for
- * the run, cohort and engine (`baselines.ts`), so every surface that reads it
- * (Visibility, Overview) names the same run, and no read walks the history.
- * A finalized run with no persisted baseline reads as `baseline_pending`,
- * never as having none.
- */
 export async function compareSelection(
   db: Database,
   scope: RunScope,
   current: SelectedRun,
-  selector: Selector & { baselineId: string | null },
+  requested: Selector & { baselineId: string | null },
 ): Promise<VisibilityComparison> {
+  const selector = { ...requested, topicId: scope.topicId ?? null };
   if (selector.baselineId) return walkBaseline(db, scope, current, selector);
   if (current.completedAt === null) return emptyComparison();
   const persisted = await persistedBaseline(db, current, selector);
@@ -98,6 +80,7 @@ export async function compareSelection(
     toAt: null,
     auditId: persisted.baseline_audit_id,
   });
+  if (previous === undefined && scope.topicId) return emptyComparison();
   const comparison =
     key !== null && previous !== undefined
       ? await candidateComparison(db, current, previous, selector, key)
@@ -106,7 +89,6 @@ export async function compareSelection(
   return { ...comparison, skipped_runs: persisted.skipped_runs };
 }
 
-/** The baseline audit finalization persisted for the run and selector, if any. */
 export function persistedBaseline(
   db: Database,
   current: Pick<SelectedRun, 'auditId' | 'workspaceId'>,
@@ -122,12 +104,6 @@ export function persistedBaseline(
     .executeTakeFirst();
 }
 
-/**
- * Walk back from the selected run to the first compatible baseline: the one
- * rule every comparison follows. The walk stops at the first match, so only
- * the recent end of the history is read; an explicitly named baseline may be
- * older and is always reachable. Audit finalization persists its result.
- */
 async function walkBaseline(
   db: Database,
   scope: RunScope,
@@ -136,7 +112,6 @@ async function walkBaseline(
 ): Promise<VisibilityComparison> {
   const key = frozenComparisonKey(current.configuration, selector.engine);
   if (key === null) return emptyComparison({ status: 'identity_unavailable' });
-  // Nothing precedes a run that never completed.
   if (current.completedAt === null) return emptyComparison();
   const candidates = await loadMeasuredRuns(db, scope, {
     fromAt: null,
@@ -151,11 +126,6 @@ async function walkBaseline(
   });
 }
 
-/**
- * The walk over loaded earlier runs, oldest first, for a completed run whose
- * frozen key is `key`: the first compatible candidate, newest first, is the
- * baseline; each incompatible one passed over is counted as skipped.
- */
 export async function nearestBaseline(
   db: Database,
   current: SelectedRun & { completedAt: string },
@@ -229,7 +199,6 @@ function exactComparison(
   });
 }
 
-/** One scored answer, keyed by the like-for-like cell it fills. */
 export type ComparisonCell = {
   brandMentioned: boolean;
   ownedCited: boolean;
@@ -238,11 +207,6 @@ export type ComparisonCell = {
 
 export type CellRun = { auditId: string; configuration: unknown; workspaceId: string };
 
-/**
- * Each run's scored answers keyed by frozen prompt, route, retrieval,
- * repetition and versions. An answer with no frozen retrieval state, model or
- * score cannot be matched and is left out.
- */
 export async function loadComparisonCells(
   db: Database,
   runs: { current: CellRun; previous: CellRun },
@@ -273,6 +237,7 @@ export async function loadComparisonCells(
     .where('ra.audit_id', 'in', [current.auditId, previous.auditId])
     .where('ra.cohort', 'in', [...selectedCohorts(selector.cohort)]);
   if (selector.engine) query = query.where('ra.logical_engine', '=', selector.engine);
+  if (selector.topicId) query = query.where('prompt.topic_id', '=', selector.topicId);
   const cells = new Map<string, Map<string, ComparisonCell>>([
     [current.auditId, new Map()],
     [previous.auditId, new Map()],
@@ -307,13 +272,11 @@ export async function loadComparisonCells(
   return cells;
 }
 
-/** The prompt part of a cell key: the prompt identity and its frozen text. */
 export function cellPrompt(key: string): string {
   const [identity, text] = JSON.parse(key) as [string, string];
   return JSON.stringify([identity, text]);
 }
 
-/** An aggregate of matched answers, shaped like a stored snapshot. */
 function cellMetrics(rows: readonly ComparisonCell[], configuration: unknown): Metrics {
   const config = record(configuration);
   const brand =
@@ -350,7 +313,6 @@ function cellMetrics(rows: readonly ComparisonCell[], configuration: unknown): M
   };
 }
 
-/** Compare only the cells both runs answered, or null when they share none. */
 export function compareCells(
   after: ReadonlyMap<string, ComparisonCell>,
   before: ReadonlyMap<string, ComparisonCell>,
@@ -384,7 +346,6 @@ export function compareCells(
   });
 }
 
-/** Whether two runs share the frozen context cells can be matched within. */
 export function sharesCellContext(current: unknown, previous: unknown): boolean {
   const context = panelFreeKey(current);
   return context !== null && context === panelFreeKey(previous);
@@ -405,7 +366,6 @@ async function matchedComparison(
   return compareCells(cells.get(current.auditId)!, cells.get(previous.auditId)!, runs);
 }
 
-/** Apply a comparison's movement to the selected ranking rows, in place. */
 export function applyRankingComparison(
   rankings: RankingRow[],
   comparison: VisibilityComparison,
@@ -433,7 +393,6 @@ export function applyRankingComparison(
   }
 }
 
-/** Answers per competitor that named it while the brand went unnamed. */
 export async function competitorGaps(
   db: Database,
   input: {
@@ -441,6 +400,7 @@ export async function competitorGaps(
     auditIds: readonly string[];
     cohort: string;
     engine: string | null;
+    topicId?: string | null;
   },
 ): Promise<Map<string, number>> {
   if (input.auditIds.length === 0) return new Map();
@@ -453,6 +413,18 @@ export async function competitorGaps(
     .where('ra.brand_mentioned', '=', false)
     .where('ra.cohort', 'in', [...selectedCohorts(input.cohort)]);
   if (input.engine) query = query.where('ra.logical_engine', '=', input.engine);
+  if (input.topicId) {
+    const topicId = input.topicId;
+    query = query.where(({ exists, selectFrom }) =>
+      exists(
+        selectFrom('audit_tasks as task')
+          .innerJoin('audit_prompt_snapshots as snapshot', 'snapshot.id', 'task.prompt_snapshot_id')
+          .select('task.id')
+          .whereRef('task.id', '=', 'ra.task_id')
+          .where('snapshot.topic_id', '=', topicId),
+      ),
+    );
+  }
   const rows = await query.groupBy('mention.competitor_name').execute();
   return new Map(rows.map((row) => [row.competitor_name, Number(row.gaps)]));
 }

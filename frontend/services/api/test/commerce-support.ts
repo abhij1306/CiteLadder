@@ -123,10 +123,6 @@ async function commercePrompt(
   return { promptId, candidateId };
 }
 
-/**
- * Import a catalog CSV the way a person does: stage it, then apply it with
- * every proposed category. Returns the applied import's results.
- */
 export async function importCatalog(
   db: Database,
   scope: CommerceScope,
@@ -137,7 +133,6 @@ export async function importCatalog(
   return applyImport(db, scope, staged.import_id, []);
 }
 
-/** Deterministic persisted catalog pages and targets on disposable PostgreSQL. */
 export async function commerceFixture<T>(phase: string, ...args: string[]): Promise<T> {
   const db = testDatabase();
   try {

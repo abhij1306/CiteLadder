@@ -16,7 +16,6 @@ import { si } from './requests.ts';
 type Connection = Selectable<ProviderConnections>;
 type Run = Selectable<SearchIntelligenceRuns>;
 
-/** The workspace's own DataForSEO connections a review may use: active, tested ok and keyed. */
 export function workspaceConnections(db: Database, workspace: WorkspaceScope) {
   return workspace
     .selectFrom(db, 'provider_connections')
@@ -49,7 +48,6 @@ export async function reviewConnection(
   return connection;
 }
 
-/** The run's frozen connection while it is still the one reviewed; undefined once it changed. */
 export function runConnection(db: Database, run: Run) {
   return db
     .selectFrom('provider_connections')

@@ -20,6 +20,8 @@ import { admittedFactCheck, admittedPerceptionVersions } from '../perception/adm
 import { gatewaySettings } from '../models/gateway.ts';
 import { marketLabel } from '@citeladder/contracts/markets';
 import type { Market } from '../projects/markets.ts';
+import { policy } from '../config.ts';
+import { probeEngines, probePrompts, type FrozenPrompt } from '../probes/questions.ts';
 import {
   isSearchSurface,
   searchContext,
@@ -34,13 +36,8 @@ import {
 } from '../search-surfaces/dataforseo.ts';
 
 const invalid = (message: string) => new ApiError(400, message);
+const probes = policy.probes;
 
-/**
- * The requested engines that run in this market. An engine with no location
- * control (the Gemini API) cannot measure an additional market and is not
- * applicable there, never failed; a search surface without DataForSEO support
- * for the market's location and language refuses the run before any spend.
- */
 export function marketEngines(
   requested: readonly Engine[],
   market: Market,
@@ -48,8 +45,6 @@ export function marketEngines(
 ) {
   const engines: Engine[] = [],
     notApplicable: Engine[] = [];
-  // A market without a language searches in the default; one with a language
-  // searches in its primary subtag (pt-BR is pt) or is refused, never swapped.
   const language = market.language_code.trim()
     ? searchLanguageOf(market.language_code)
     : searchPolicy.constants.default_language_code;
@@ -81,6 +76,15 @@ export function marketEngines(
     });
   return { engines, notApplicable };
 }
+
+export function canMeasure(engine: Engine, market: Market) {
+  try {
+    const context = searchContext(market.country_code, market.language_code);
+    return marketEngines([engine], market, context).engines.length > 0;
+  } catch {
+    return false;
+  }
+}
 export type FrozenRoute = {
   logical_engine: Engine;
   transport_provider: string;
@@ -103,7 +107,11 @@ export async function launchPrompts(
     .selectFrom('prompts as p')
     .innerJoin('prompt_sets as s', 's.id', 'p.prompt_set_id')
     .innerJoin('projects as project', 'project.id', 's.project_id')
+    .leftJoin('topics as topic', (join) =>
+      join.onRef('topic.id', '=', 'p.topic_id').onRef('topic.workspace_id', '=', 'p.workspace_id'),
+    )
     .selectAll('p')
+    .select('topic.name as topic_name')
     .where('project.workspace_id', '=', workspaceId)
     .where('project.id', '=', projectId)
     .where('p.enabled', '=', true)
@@ -171,6 +179,41 @@ function usableCandidate(
     return false;
   }
 }
+export function byokRoutes(db: Database, workspaceId: string) {
+  return db
+    .selectFrom('provider_routes as r')
+    .innerJoin('provider_connections as c', 'c.id', 'r.connection_id')
+    .select([
+      'r.logical_engine',
+      'r.transport_provider',
+      'r.transport_model',
+      'c.id as connection_id',
+      'c.base_url',
+      'c.paused_at',
+      'c.pause_until',
+      'c.last_test_status',
+      sql<boolean>`c.api_key_encrypted <> ''`.as('has_key'),
+    ])
+    .where('r.workspace_id', '=', workspaceId)
+    .where('c.workspace_id', '=', workspaceId)
+    .where('c.credential_source', '=', 'byok')
+    .where('r.active', '=', true)
+    .where('c.active', '=', true)
+    .orderBy('r.is_default', 'desc')
+    .orderBy('r.created_at')
+    .orderBy('r.id')
+    .execute();
+}
+export function usableRoute<Candidate extends RouteCandidate>(
+  candidates: readonly Candidate[],
+  engine: Engine,
+  { providerSettings, at }: { providerSettings: ProviderSettings; at: Date },
+) {
+  const provider = providerPolicy.routes[engine].transport_provider;
+  return candidates.find((candidate) =>
+    usableCandidate(candidate, engine, provider, providerSettings, at),
+  );
+}
 type SearchProject = {
   serp_location_code: number;
   serp_language_code: string;
@@ -214,36 +257,12 @@ async function freezeRoutes({
   providerSettings: ProviderSettings;
   at: Date;
 }) {
-  const candidates = await db
-    .selectFrom('provider_routes as r')
-    .innerJoin('provider_connections as c', 'c.id', 'r.connection_id')
-    .select([
-      'r.logical_engine',
-      'r.transport_provider',
-      'r.transport_model',
-      'c.id as connection_id',
-      'c.base_url',
-      'c.paused_at',
-      'c.pause_until',
-      'c.last_test_status',
-      sql<boolean>`c.api_key_encrypted <> ''`.as('has_key'),
-    ])
-    .where('r.workspace_id', '=', workspaceId)
-    .where('c.workspace_id', '=', workspaceId)
-    .where('c.credential_source', '=', 'byok')
-    .where('r.active', '=', true)
-    .where('c.active', '=', true)
-    .orderBy('r.is_default', 'desc')
-    .orderBy('r.created_at')
-    .orderBy('r.id')
-    .execute();
+  const candidates = await byokRoutes(db, workspaceId);
   const routes: FrozenRoute[] = [];
   for (const engine of engines) {
     const catalog = providerPolicy.routes[engine];
     const observed = surfaceKindOf(engine) !== 'llm';
-    const selected = candidates.find((candidate) =>
-      usableCandidate(candidate, engine, catalog.transport_provider, providerSettings, at),
-    );
+    const selected = usableRoute(candidates, engine, { providerSettings, at });
     if (!selected)
       throw new ApiError(400, `No active provider route configured for ${engine}`, {
         code: 'execution_credentials_unavailable',
@@ -347,10 +366,39 @@ function parseSeed(randomSeed: string | null | undefined) {
     throw invalid('random_seed must be an integer');
   }
 }
+async function panelOf(
+  db: Database,
+  {
+    workspaceId,
+    projectId,
+    input,
+    market,
+    settings,
+  }: {
+    workspaceId: string;
+    projectId: string;
+    input: AuditInput;
+    market: Market;
+    settings: ReturnType<typeof auditSettings>;
+  },
+): Promise<{ prompts: FrozenPrompt[]; requested: Engine[]; repetitions: number }> {
+  if (input.audit_scope === probes.audit_scope)
+    return {
+      prompts: await probePrompts(db, { workspaceId, projectId }, market.country_code),
+      requested: probeEngines(input.engines.filter((engine) => canMeasure(engine, market))),
+      repetitions: probes.repetitions,
+    };
+  const prompts = await loadPrompts(db, workspaceId, projectId, input, settings);
+  return {
+    prompts,
+    requested: [...new Set(input.engines)],
+    repetitions: input.repetitions ?? settings.audit_repetitions,
+  };
+}
+
 type PrepareOptions = {
   search?: ReturnType<typeof searchSettings>;
   at?: Date;
-  /** The market to measure from; the project's default when omitted. */
   selected?: Market | null;
 };
 export async function prepareAudit(
@@ -377,7 +425,6 @@ export async function prepareAudit(
     country_code: stored.country_code,
     language_code: stored.language_code,
   };
-  // The run measures from its market: every frozen country, language and search context below.
   const project = {
     ...stored,
     country_code: market.country_code,
@@ -387,12 +434,16 @@ export async function prepareAudit(
   const mode = input.benchmark_mode ?? project.benchmark_mode;
   if (!auditPolicy.benchmark_modes.includes(mode))
     throw invalid(`Unsupported benchmark mode: ${mode}`);
-  const prompts = await loadPrompts(db, workspaceId, project.id, input, settings);
-  const requested = [...new Set(input.engines)];
+  const { prompts, requested, repetitions } = await panelOf(db, {
+    workspaceId,
+    projectId: project.id,
+    input,
+    market,
+    settings,
+  });
   if (requested.some((engine) => !auditPolicy.selectable_engines.includes(engine)))
     throw invalid('An engine is unavailable');
   const { engines, notApplicable } = marketEngines(requested, market, project);
-  const repetitions = input.repetitions ?? settings.audit_repetitions;
   assertRepetitions(repetitions);
   if (prompts.length * repetitions * engines.length > settings.max_tasks_per_audit)
     throw invalid('Audit exceeds the task limit');
@@ -444,7 +495,6 @@ export async function prepareAudit(
     unintended_domains: unintended.map((row) => row.domain),
     competitors,
     products_services: profile?.products_services ?? [],
-    // Analysis matches names under this frozen policy, never the live one.
     entity_matching: frozenEntityMatching(
       projectEntityMatching(profile?.business_context, strings(profile?.products_services), [
         { name: brandName, aliases: aliases.map((row) => row.alias) },
@@ -470,16 +520,15 @@ export async function prepareAudit(
     anthropic_max_uses: providerSettings.anthropicMaxUses,
     openai_max_tool_calls: providerSettings.openaiMaxToolCalls,
     slot_order_version: 'mt19937-v1',
-    // Perception results carry the versions and model in force at admission (brand audits only).
     perception: admittedPerceptionVersions({
       auditScope: input.audit_scope,
       factCheck,
       model: gatewaySettings().model,
     }),
-    // Fact-checking pilot: the confirmed fact revisions this audit checks against.
     fact_check: factCheck,
     panel_id: panelHash.slice(0, 16),
     panel_hash: panelHash,
+    prompt_selection: promptSelection(input),
     prompt_hashes: promptRows.map((row) => createHash('sha256').update(row.text).digest('hex')),
     engine_routes: Object.fromEntries(
       routes.map((route) => [
@@ -493,7 +542,7 @@ export async function prepareAudit(
           commerce_measurement: await freezeCommerceContext(
             db,
             { workspaceId, projectId: project.id },
-            prompts.map((prompt) => prompt.id),
+            prompts.flatMap((prompt) => (prompt.id ? [prompt.id] : [])),
           ),
         }
       : {}),
@@ -512,7 +561,6 @@ export async function prepareAudit(
     searchTimeoutSeconds: search.timeoutSeconds,
   };
 }
-/** Integer-seeded slot order, including unsigned 64-bit seeds. */
 export function auditSlots(
   prompts: number,
   engines: readonly Engine[],

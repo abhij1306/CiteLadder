@@ -147,7 +147,6 @@ describe('bounded formats', () => {
     expect(() => decodedBody(Buffer.from([255]), undefined)).toThrow(/UTF-8/);
   });
 });
-/** One CloudFront standard logging (v2) JSON record, as Firehose delivers it. */
 const cloudfront = (changes: Record<string, unknown> = {}) => ({
   'timestamp(ms)': String(now.getTime()),
   date: now.toISOString().slice(0, 10),
@@ -231,7 +230,6 @@ describe('sanitized durable admission', () => {
       lines_matched: 1,
       lines_rejected: 1,
     });
-    // An identifiable line with an invalid status proves the format, though nothing is admitted.
     const invalid = await ingest(
       db,
       source,
@@ -340,7 +338,6 @@ describe('sanitized durable admission', () => {
       requests: null,
       connection: 'awaiting_data',
     });
-    // Crawl admission has its own authenticated bound, above the ordinary API limit.
     const large = await send(
       custom.source.id,
       custom.token,
@@ -456,7 +453,6 @@ describe('sanitized durable admission', () => {
         .executeTakeFirstOrThrow();
     const first = await revokedAt();
     await mutateSource(db, scope(a.tenant), a.tenant.userId, a.source.id, 'revoke');
-    // A repeated revoke keeps the original coverage boundary.
     expect(await revokedAt()).toEqual(first);
     expect((await send(a.source.id, rotated.token!, body(event()))).status).toBe(409);
     expect(
@@ -478,13 +474,11 @@ describe('sanitized durable admission', () => {
       const refused = await send(a.source.id, a.token, Buffer.alloc(0));
       expect(refused.status).toBe(429);
       expect(Number(refused.headers.get('retry-after'))).toBeGreaterThan(0);
-      // A retried accepted key still receives its stored receipt after the quota is spent.
       const replay = await send(a.source.id, a.token, Buffer.alloc(0), key);
       expect(replay.status).toBe(202);
       const receiptId = async (response: Response) =>
         ((await response.json()) as { id: string }).id;
       expect(await receiptId(replay)).toBe(await receiptId(accepted));
-      // An upload retry of an accepted sequence is the same replay.
       const u = await setup('upload');
       const upload = await createUpload(
         db,
@@ -597,7 +591,6 @@ describe('verification vocabulary', () => {
     expect(
       verifyBot(bot, '2001:db8::1', snapshot, new Date(now.getTime() - 48 * 3600000), now),
     ).toMatchObject({ verification: 'verified', verification_basis: 'later_snapshot' });
-    // Ranges published later cannot prove an older request came from elsewhere.
     expect(
       verifyBot(bot, '203.0.113.1', snapshot, new Date(now.getTime() - 48 * 3600000), now),
     ).toMatchObject({
@@ -653,7 +646,6 @@ describe('uploads, coverage and serialized recomputation', () => {
       { date: lastDay, complete: false },
     ]);
     await refreshCrawlLogs(db, scope(tenant));
-    // The screen waits for processing by comparing these two server times.
     const processed = await db
       .selectFrom('crawl_log_sources')
       .select('last_processed_at')
@@ -746,7 +738,6 @@ describe('uploads, coverage and serialized recomputation', () => {
         .where('workspace_id', '=', tenant.workspaceId)
         .execute(),
     ).toHaveLength(0);
-    // A second file spanning that day completes and declares only the days no other source owns.
     const backfill = await createSource(db, scope(tenant), tenant.userId, {
       setup: 'upload',
       origin: source.origin,
@@ -946,7 +937,6 @@ describe('uploads, coverage and serialized recomputation', () => {
 describe('persisted analytics and coverage decisions', () => {
   it('requires a whole unsampled day with bounded receipt gaps before showing measured zero', async () => {
     const { tenant, source } = await setup();
-    // Exercise the oldest unfrozen calendar day, including its early receipts.
     const day = new Date(
         now.getTime() - (crawlLogs.retention_days - crawlLogs.rollup_freeze_margin_days) * 86400000,
       )
@@ -1004,7 +994,6 @@ describe('persisted analytics and coverage decisions', () => {
     const today = new Intl.DateTimeFormat('en-CA', { timeZone }).format(new Date());
     const day = (offset: number) =>
       new Date(Date.parse(today) - offset * 86400000).toISOString().slice(0, 10);
-    // Every closed day is complete; the day in progress can only be partial.
     await db
       .insertInto('crawl_log_coverage_daily')
       .values(
@@ -1103,7 +1092,6 @@ describe('persisted analytics and coverage decisions', () => {
     expect(page.next_cursor).not.toBeNull();
     const next = await activityPage(db, scope(tenant), { limit: 1, cursor: page.next_cursor });
     expect(next.items[0]!.id).not.toBe(page.items[0]!.id);
-    // The Agent shrinks or widens a page; the cursor still resumes after the same row.
     const wider = await activityPage(db, scope(tenant), { limit: 5, cursor: page.next_cursor });
     expect(wider.items[0]!.id).toBe(next.items[0]!.id);
     await expect(
@@ -1173,7 +1161,6 @@ describe('persisted analytics and coverage decisions', () => {
       cursor = next.next_cursor;
     } while (cursor);
     expect(activityRows.length).toBeGreaterThan(1);
-    // One-row batches: every row after the first continues from the previous batch's keyset.
     crawlLogs.export_batch_rows = 1;
     const all = await app.request(
       '/api/v1/projects/' + tenant.projectId + '/ai-traffic/activity/export',

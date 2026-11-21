@@ -42,15 +42,10 @@ function project(id: string, name: string, workspaceId = WORKSPACE_A) {
   });
 }
 
-/** What the list carries for a project: the switcher's fields, never its full view. */
 function summary({ id, name, brand_name, website_url }: ReturnType<typeof project>) {
   return { id, name, brand_name, website_url, brand: { logo_url: null } };
 }
 
-/**
- * The workspace's projects as the API serves them: summaries on the list, each
- * full view on its own detail read, and 404 for any other id.
- */
 function served(...projects: ReturnType<typeof project>[]) {
   return [
     http.get('/api/v1/projects', () => HttpResponse.json(projects.map(summary))),
@@ -63,7 +58,6 @@ function served(...projects: ReturnType<typeof project>[]) {
   ];
 }
 
-/** The default membership answer: one workspace, which is the shipped shape. */
 function workspaceList(...ids: string[]) {
   return http.get('/api/v1/workspaces', () =>
     HttpResponse.json((ids.length ? ids : [WORKSPACE_A]).map((id) => workspace(id, `WS ${id}`))),
@@ -120,8 +114,6 @@ beforeAll(() => mswServer.listen({ onUnhandledFrame: 'error' }));
 beforeEach(() => {
   search = new URLSearchParams();
   window.localStorage.clear();
-  // No logo refresh handler: every fixture lacks a logo, and an unhandled
-  // request fails the test, so opening the app must not fetch logos.
   mswServer.use(workspaceList());
 });
 afterEach(() => mswServer.resetHandlers());
@@ -151,36 +143,20 @@ describe('ProjectProvider', () => {
     renderProvider();
 
     await waitFor(() => expect(screen.getByTestId('active')).toHaveTextContent('Acme'));
-    // Carried ON the request, not read off a mutable global at send time — so a
-    // retry cannot pick up a workspace the reader has since left.
     expect(headers).toContain(WORKSPACE_A);
   });
 
   it('resolves a workspace that owns no projects at all', async () => {
-    // The regression this whole change exists for: the workspace used to be
-    // derived from the active project, so a workspace with none had no
-    // identity — and every workspace-scoped read fell back to the backend's
-    // default, including the allowance check that decides whether the reader
-    // may create their FIRST project.
     mswServer.use(http.get('/api/v1/projects', () => HttpResponse.json([])));
 
     renderProvider();
 
     await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('empty'));
     expect(screen.getByTestId('workspace')).toHaveTextContent(WORKSPACE_A);
-    // Remembered so the next visit can scope its requests in the first render
-    // instead of waiting a round trip for the membership list. A convenience,
-    // never an authorization input — the backend still checks every request.
     expect(window.localStorage.getItem(ACTIVE_WORKSPACE_STORAGE_KEY)).toBe(WORKSPACE_A);
   });
 
   it('holds the URL workspace after the canonical replace stops naming it', async () => {
-    // `projectDestination` drops `?workspace=` when it writes `?project=`, and
-    // the shell does exactly that rewrite the moment a project resolves. With
-    // the workspace remembered only in the address, the render in between fell
-    // back to the FIRST membership and asked for its project list — a request
-    // against a workspace the reader is not looking at, and a loader flash
-    // before the project detail pulled it back.
     const headers: (string | null)[] = [];
     mswServer.use(
       workspaceList(WORKSPACE_A, WORKSPACE_B),
@@ -202,7 +178,6 @@ describe('ProjectProvider', () => {
     const view = renderProvider();
     await waitFor(() => expect(screen.getByTestId('active')).toHaveTextContent('Beta'));
 
-    // The rewrite the shell performs: `?workspace=` out, `?project=` in.
     search = new URLSearchParams({ project: PROJECT_2 });
     view.rerender(
       <ProjectProvider>
@@ -244,7 +219,6 @@ describe('ProjectProvider', () => {
 
     await waitFor(() => expect(screen.getByTestId('active')).toHaveTextContent('Globex'));
     mswServer.events.removeListener('request:start', record);
-    // The list carries summaries, so each opened project is one detail read.
     expect(paths.sort()).toEqual([
       '/api/v1/projects',
       `/api/v1/projects/${PROJECT_1}`,
@@ -274,23 +248,9 @@ describe('ProjectProvider', () => {
     await waitFor(() => expect(screen.getByTestId('active')).toHaveTextContent('Globex'));
   });
 
-  /**
-   * The bug that cost a user their first project.
-   *
-   * Onboarding commits the project and navigates to `/projects?project=<id>`.
-   * The list cached at that moment predates the project, so resolving the
-   * active project FROM the list produced either the previous project or, on
-   * a first project, nothing at all — which read as an empty account, bounced
-   * the reader back to a blank `/onboarding`, and then refused their second
-   * attempt because the first project had existed all along.
-   *
-   * The explicit id is now resolved directly, so a list that has not caught up
-   * cannot contradict it.
-   */
   it('uses an explicit ?project= that the cached list does not contain yet', async () => {
     search = new URLSearchParams({ project: PROJECT_2 });
     mswServer.use(
-      // The pre-create list: settled, successful, and missing the new project.
       http.get('/api/v1/projects', () => HttpResponse.json([project(PROJECT_1, 'Acme')])),
       http.get(`/api/v1/projects/${PROJECT_2}`, () =>
         HttpResponse.json(project(PROJECT_2, 'Globex')),
@@ -315,8 +275,6 @@ describe('ProjectProvider', () => {
 
     renderProvider();
 
-    // Substituting `projects[0]` here would silently show a DIFFERENT project
-    // than the link asked for, which is how a shared link quietly lies.
     await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('unavailable'));
     expect(screen.getByTestId('active')).toHaveTextContent('none');
   });
@@ -332,15 +290,10 @@ describe('ProjectProvider', () => {
 
     renderProvider();
 
-    // Combining one project's id with another workspace's limits is how a
-    // request ends up authorized against one tenancy and budgeted against
-    // another. It is rejected rather than reconciled.
     await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('unavailable'));
   });
 
   it('falls back to the first project when a settled list omits a stored one', async () => {
-    // The bound on device storage: an id left behind by a deleted project must
-    // not hold the context on a dead id forever.
     window.localStorage.setItem(ACTIVE_PROJECT_STORAGE_KEY, PROJECT_2);
     mswServer.use(...served(project(PROJECT_1, 'Acme')));
 
@@ -358,16 +311,12 @@ describe('ProjectProvider', () => {
 
     renderProvider();
 
-    // The shared retry policy makes two further attempts with backoff before
-    // the failure is final, so this waits past that rather than racing it.
     await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('error'), {
       timeout: 10_000,
     });
   });
 
   it('offers retry when the list fails even though a stored project’s view answers', async () => {
-    // Only the list says what the workspace holds; the remembered project's
-    // own view answering must not leave pickers waiting on a list that failed.
     window.localStorage.setItem(ACTIVE_PROJECT_STORAGE_KEY, PROJECT_1);
     mswServer.use(
       http.get('/api/v1/projects', () =>

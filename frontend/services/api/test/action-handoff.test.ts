@@ -1,8 +1,3 @@
-/**
- * The message an Action's Agent chat opens with (AS3): each approach branch's
- * template, filled from the Action's own evidence, with a plainer sentence
- * when a fact is missing. Pure: grouping runs on members, nothing is stored.
- */
 import { randomUUID } from 'node:crypto';
 
 import { describe, expect, it } from 'vitest';
@@ -38,10 +33,10 @@ function member(
     source_issue_ids: [],
     source_metric_ids: [],
     facts: extra.facts ?? NO_HANDOFF_FACTS,
+    grouping: 'improve_pages',
   };
 }
 
-/** The one Action the members group into, as its handoff. */
 function handoffOf(...members: ActionMember[]) {
   const [group, ...rest] = groupMembers(members);
   if (!group || rest.length) throw new Error('Expected the members to form one Action');
@@ -103,12 +98,11 @@ describe('Action handoff message', () => {
     );
   });
 
-  it('names the Site Health issue of a technical fix', () => {
+  it('names the regressed signal of a technical fix', () => {
     expect(
-      handoffOf(
-        member('missing_structured_data', 'Missing structured data on owned page', page('/a')),
-      ).message,
-    ).toBe('Fix "Missing structured data on owned page" on https://acme.test/a.');
+      handoffOf(member('site_change_critical_regression', 'The page title regressed', page('/a')))
+        .message,
+    ).toBe('Fix "The page title regressed" on https://acme.test/a.');
   });
 
   it('names the angle of a content gap, and hands the page to its workflow', () => {
@@ -164,11 +158,10 @@ describe('Action handoff message', () => {
   it('writes a crawled URL that carries two encoding layers as a reader reads it', () => {
     const crawled = page('/Categories/Women/Women%2527s-Clothing/Womens-Maxi-Dress');
     expect(
-      handoffOf(member('missing_structured_data', 'Missing structured data', crawled)).message,
+      handoffOf(member('site_change_potential_regression', 'A signal regressed', crawled)).message,
     ).toBe(
-      'Fix "Missing structured data" on https://acme.test/Categories/Women/Women\'s-Clothing/Womens-Maxi-Dress.',
+      'Fix "A signal regressed" on https://acme.test/Categories/Women/Women\'s-Clothing/Womens-Maxi-Dress.',
     );
-    // An Action read without a persisted handoff opens about its label the same way.
     expect(
       readHandoff(null, 'https://www.bestandless.com.au/Categories/Women/Women%2527s-Clothing'),
     ).toEqual({

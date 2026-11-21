@@ -2,12 +2,9 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vite-plus/test';
 
-import { AllFilters } from '@/components/ui/all-filters';
-import { FilterBar } from '@/components/ui/filter-bar';
-import { SegmentedControl } from '@/components/ui/tabs';
+import { FiltersMenu } from '@/components/ui/filters-menu';
 
 import { sourceTableFilters } from './source-filters';
-import { sourceTableToolbar } from './source-toolbar';
 
 const TYPES = [
   { token: 'editorial', label: 'Editorial' },
@@ -16,11 +13,19 @@ const TYPES = [
 
 describe('Sources filters', () => {
   it('lists the page-only filters for URLs alone, and keeps a set filter with one option', () => {
-    const filters = (dimension: 'domain' | 'url', typeValue: string | null, types = TYPES) =>
+    const filters = (
+      dimension: 'domain' | 'url',
+      typeValue: string | null,
+      types = TYPES,
+      standing: { gapOnly: boolean; onChange: () => void } | null = {
+        gapOnly: true,
+        onChange: vi.fn(),
+      },
+    ) =>
       sourceTableFilters({
         dimension,
         type: { value: typeValue, options: types, onChange: vi.fn() },
-        standing: { value: 'gap', onChange: vi.fn() },
+        standing,
         domain: { value: null, options: ['a.com', 'b.com'], onChange: vi.fn() },
       }).map((filter) => `${filter.label}: ${filter.valueLabel}`);
 
@@ -30,7 +35,7 @@ describe('Sources filters', () => {
       'Standing: Gaps: competitors listed, not you',
       'Domain: All domains',
     ]);
-    // One option is nothing to choose between, unless it is already filtering.
+    expect(filters('url', 'ugc', TYPES, null)).toEqual(['URL type: UGC', 'Domain: All domains']);
     expect(filters('domain', null, [TYPES[0]!])).toEqual([]);
     expect(filters('domain', 'editorial', [TYPES[0]!])).toEqual(['Domain type: Editorial']);
   });
@@ -39,47 +44,17 @@ describe('Sources filters', () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     render(
-      <AllFilters
+      <FiltersMenu
         filters={sourceTableFilters({
           dimension: 'url',
           type: { value: null, options: [], onChange: vi.fn() },
-          standing: { value: 'near_miss', onChange },
+          standing: { gapOnly: true, onChange },
           domain: null,
         })}
       />,
     );
-    await user.click(screen.getByRole('button', { name: 'All filters (1)' }));
+    await user.click(screen.getByRole('button', { name: 'Filters (1)' }));
     await user.keyboard('{ArrowDown}{ArrowRight}{Enter}');
     expect(onChange.mock.calls).toEqual([[null]]);
-  });
-
-  it('leads the table toolbar with the Domains | URLs switch, before the search', () => {
-    render(
-      <FilterBar
-        {...sourceTableToolbar({
-          dimension: 'domain',
-          view: (
-            <SegmentedControl
-              value="domain"
-              onChange={vi.fn()}
-              options={[
-                { value: 'domain', label: 'Domains' },
-                { value: 'url', label: 'URLs' },
-              ]}
-              ariaLabel="Source dimension"
-            />
-          ),
-          search: '',
-          onSearch: vi.fn(),
-          rows: [],
-          domain: null,
-        })}
-      />,
-    );
-    const toolbar = screen.getByRole('group', { name: 'Search and filters' });
-    const inOrder = [...toolbar.querySelectorAll('[role="radio"], input, button:not([role])')].map(
-      (control) => control.getAttribute('aria-label') ?? control.textContent,
-    );
-    expect(inOrder).toEqual(['Domains', 'URLs', 'Search domains', 'Export']);
   });
 });

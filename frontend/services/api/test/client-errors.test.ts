@@ -11,7 +11,10 @@ import {
   testDatabase,
 } from './support.ts';
 
-const config = testConfig({ ABUSE_CLIENT_ERROR_CLIENT_LIMIT: '3' });
+const config = testConfig({
+  ABUSE_CLIENT_ERROR_CLIENT_LIMIT: '3',
+  ABUSE_CSP_REPORT_CLIENT_LIMIT: '2',
+});
 const db = testDatabase(config);
 const fixtures = new Fixtures(db);
 const app = createApp(config, db);
@@ -33,24 +36,57 @@ async function clearClientBudget() {
     .deleteFrom('usage_windows')
     .where('subject_kind', '=', 'user')
     .where('subject_hash', '=', createHash('sha256').update(userId.toLowerCase()).digest('hex'))
-    .where('operation', '=', 'client_errors.report')
+    .where('operation', 'in', ['client_errors.report', 'client_errors.csp_report'])
     .execute();
 }
 
-async function send(body: unknown, headers: Record<string, string> = { cookie }) {
+async function post(
+  path: string,
+  body: unknown,
+  {
+    headers = {},
+    event = 'client.error',
+  }: { headers?: Record<string, string>; event?: string } = {},
+) {
   const records: Record<string, unknown>[] = [];
   const restore = setLogSink((line) => records.push(JSON.parse(line) as Record<string, unknown>));
   try {
-    const response = await app.request('/api/v1/client-errors', {
+    const response = await app.request(path, {
       method: 'POST',
       headers: { 'content-type': 'application/json', ...headers },
       body: typeof body === 'string' ? body : JSON.stringify(body),
     });
-    return { status: response.status, records: records.filter((r) => r.event === 'client.error') };
+    return { status: response.status, records: records.filter((r) => r.event === event) };
   } finally {
     setLogSink(restore);
   }
 }
+
+const send = (body: unknown, headers: Record<string, string> = { cookie }) =>
+  post('/api/v1/client-errors', body, { headers });
+
+const REPORTS_JSON = { 'content-type': 'application/reports+json' };
+const sendCsp = (body: unknown, headers: Record<string, string> = REPORTS_JSON) =>
+  post('/api/v1/client-errors/csp-reports', body, { headers, event: 'client.csp_violation' });
+
+const violation = {
+  type: 'csp-violation',
+  age: 12,
+  url: 'https://app.citeladder.test/projects?search=private',
+  user_agent: 'Mozilla/5.0',
+  body: {
+    documentURL: 'https://app.citeladder.test/projects?search=private#top',
+    blockedURL: 'https://evil.example/x.js?token=abc',
+    effectiveDirective: 'require-trusted-types-for',
+    disposition: 'report',
+    sourceFile: 'https://app.citeladder.test/app-assets/chat-a1.js?v=2',
+    lineNumber: 4,
+    columnNumber: 18,
+    sample: 'HTMLScriptElement src|https://evil.example/x.js?token=abc',
+    statusCode: 200,
+    originalPolicy: "require-trusted-types-for 'script'; report-to csp",
+  },
+};
 
 beforeAll(async () => {
   userId = await fixtures.user();
@@ -114,7 +150,6 @@ describe('client error sink', () => {
       expect(result.status).toBe(204);
       reporters.push(result.records.map((r) => [r.user_id, r.workspace_id]));
     }
-    // No header never falls back to the user's own workspace; a foreign one is never trusted.
     expect(reporters).toEqual([[[userId, null]], [[userId, null]]]);
   });
 
@@ -160,5 +195,105 @@ describe('client error sink', () => {
     const statuses = [];
     for (let i = 0; i < 4; i++) statuses.push((await send(report)).status);
     expect(statuses).toEqual([204, 204, 204, 429]);
+  });
+
+  it('logs a slow interaction at info with its phases and scripts, and refuses query strings in them', async () => {
+    const slow = {
+      kind: 'slow_interaction',
+      route: '/agent',
+      release: 'abc123',
+      event: 'click',
+      target: 'button',
+      duration_ms: 320,
+      input_delay_ms: 30,
+      processing_ms: 220,
+      presentation_ms: 70,
+      scripts: [
+        {
+          source: 'https://app.citeladder.test/app-assets/chat-a1.js',
+          invoker: 'BUTTON#send.onclick',
+          duration_ms: 180,
+        },
+      ],
+    };
+    const logged = await post('/api/v1/client-errors', slow, { event: 'client.slow_interaction' });
+    expect(logged).toEqual({
+      status: 204,
+      records: [
+        expect.objectContaining({
+          level: 'info',
+          logger: 'api.client_errors',
+          route: '/agent',
+          event: 'client.slow_interaction',
+          duration_ms: 320,
+          scripts: slow.scripts,
+          user_id: null,
+        }),
+      ],
+    });
+    const refused = { ...slow, scripts: [{ ...slow.scripts[0], source: '/app-assets/a.js?v=2' }] };
+    await clearClientBudget();
+    expect((await send(refused)).status).toBe(422);
+  });
+});
+
+describe('content security policy report sink', () => {
+  it('logs each violation without query strings, page text or other report types', async () => {
+    const result = await sendCsp([
+      violation,
+      { type: 'deprecation', age: 1, url: violation.url, body: { id: 'x', message: 'old' } },
+      {
+        ...violation,
+        body: {
+          ...violation.body,
+          effectiveDirective: 'script-src-elem',
+          disposition: 'enforce',
+          sample: 'send(name || document.cookie)',
+        },
+      },
+    ]);
+    expect(result).toEqual({
+      status: 204,
+      records: [
+        expect.objectContaining({
+          level: 'warning',
+          logger: 'api.client_errors',
+          directive: 'require-trusted-types-for',
+          disposition: 'report',
+          document: 'https://app.citeladder.test/projects',
+          blocked: 'https://evil.example/x.js',
+          source: 'https://app.citeladder.test/app-assets/chat-a1.js',
+          line: 4,
+          column: 18,
+          sink: 'HTMLScriptElement src',
+        }),
+        expect.objectContaining({
+          directive: 'script-src-elem',
+          disposition: 'enforce',
+          sink: null,
+        }),
+      ],
+    });
+  });
+
+  it('refuses another media type, a malformed violation, an oversized batch and an oversized body', async () => {
+    const statuses = [];
+    for (const [body, headers] of [
+      [[violation], { 'content-type': 'application/json' }],
+      [[{ ...violation, body: { ...violation.body, disposition: 'block' } }], REPORTS_JSON],
+      [Array.from({ length: 21 }, () => violation), REPORTS_JSON],
+      [JSON.stringify([{ type: 'x', padding: 'x'.repeat(70000) }]), REPORTS_JSON],
+    ] as const) {
+      await clearClientBudget();
+      statuses.push((await sendCsp(body, headers)).status);
+    }
+    expect(statuses).toEqual([415, 422, 422, 413]);
+  });
+
+  it('throttles one client past its own budget, apart from error reports', async () => {
+    const statuses = [];
+    for (let i = 0; i < 3; i++) statuses.push((await sendCsp([violation])).status);
+    statuses.push((await send(report)).status);
+    expect(statuses).toEqual([204, 204, 429, 204]);
   });
 });

@@ -1,8 +1,3 @@
-/**
- * Search Console clicks per day on the member's query or page rise against
- * the latest daily window that ended before the declaration day. Sync
- * windows differ in length, so windows compare as daily rates.
- */
 import { sql } from 'kysely';
 import { policy } from '../../config.ts';
 import { WorkspaceScope } from '../../db/workspace-scope.ts';
@@ -15,7 +10,6 @@ import { dayOf, once } from './read-context.ts';
 
 const o = policy.opportunity.opportunities;
 
-/** The query a member names, else its page; null when it names neither. */
 function scopeOf(member: MemberFacts): { scope: 'page' | 'query'; key: string } | null {
   if (member.target_theme) return { scope: 'query', key: member.target_theme };
   if (member.target_url) return { scope: 'page', key: member.target_url };
@@ -73,14 +67,9 @@ export const trafficMetricCheck: CheckModule<'traffic_metric'> = {
     }
     return checks;
   },
-  /**
-   * Clicks per day in a window that starts after the go-live day (that day is
-   * partly before the change, and its UTC date can differ from the user's).
-   */
   async read(ctx, source, check) {
     const d = ctx.declaration;
     const { scope, scope_key: key } = check;
-    // Rows declared before scoping carry only a project total.
     if (!scope || !key) return outcome(ctx.reading, 'unavailable', 'not_page_scoped');
     const snapshot = await once(ctx, 'traffic_snapshot', () =>
       ctx.scope

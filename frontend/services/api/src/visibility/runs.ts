@@ -1,24 +1,18 @@
-/**
- * A project's measured runs: each dashboard-ready brand run with its
- * persisted `MetricSnapshot` and frozen routes.
- *
- * Every trend, range and baseline read walks
- * this one list. A source's folding identity comes only from frozen audit
- * fields, never from live configuration.
- */
 import { sql } from 'kysely';
 
 import { frozenComparisonKey } from '../analysis/comparison.ts';
+import { modelProvenanceFor, type ModelProvenance } from '../analysis/provenance.ts';
 import {
+  askedWholeSet,
   auditFrozenRetrievalEnabled,
-  modelProvenanceFor,
-  type ModelProvenance,
-} from '../analysis/provenance.ts';
+  readFrozenConfiguration,
+} from '../audits/frozen-configuration.ts';
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { storedInstant, timestamptz, utcTextOf } from '../db/timestamps.ts';
 import type { ParsedDatetime } from '../http/datetimes.ts';
 import { onlyOf } from '../lists.ts';
+import type { RunSelection } from './selection.ts';
 import {
   cohortMetrics,
   engineMetrics,
@@ -38,35 +32,26 @@ export type MeasuredRun = {
   scoringRuleVersion: string;
   visibilityScore: number;
   metrics: unknown;
-  /** UTC text with microseconds (`utcText`): it orders as it compares. */
   snapshotCreatedAt: string;
   configuration: unknown;
   completedAt: string;
   provenance: ModelProvenance[];
 };
 
-/**
- * A project's runs in one measurement market. Markets never mix in a
- * projection: an omitted or `null` market is the project default.
- */
-export type RunScope = { workspaceId: string; projectId: string; marketId?: string | null };
+export type RunScope = {
+  workspaceId: string;
+  projectId: string;
+  marketId?: string | null;
+  topicId?: string | null;
+};
 export const marketOf = (scope: { marketId?: string | null }) => scope.marketId ?? null;
 
-/** A request timestamp, or a stored one read back as `utcText`. */
 export type Instant = ParsedDatetime | string;
 
 function instantOperand(value: Instant) {
   return typeof value === 'string' ? storedInstant(value) : timestamptz(value);
 }
 
-/**
- * The project's measured runs completed inside the inclusive window, oldest
- * first. `newest` bounds the read to that many most recent runs: a caller
- * walking back to the nearest match needs the recent end, not a project's
- * whole history on every dashboard load. `olderThan` continues such a walk
- * below the oldest run (an audit ID) of the previous page. `newerThan` reads
- * the runs after one run instead, oldest first, and `oldest` bounds that read.
- */
 export async function loadMeasuredRuns(
   db: Database,
   scope: RunScope,
@@ -77,20 +62,27 @@ export async function loadMeasuredRuns(
     olderThan?: string;
     newerThan?: string;
     oldest?: number;
-    /** Only this run, still under every scope condition. */
     auditId?: string;
   },
 ): Promise<MeasuredRun[]> {
+  const topicId = scope.topicId ?? null;
+  const measured = (column: string) => sql.ref(`${topicId ? 'topic' : 'snapshot'}.${column}`);
   let query = db
     .selectFrom('metric_snapshots as snapshot')
     .innerJoin('audits as audit', 'audit.id', 'snapshot.audit_id')
+    .leftJoin('audit_topic_metrics as topic', (join) =>
+      join
+        .onRef('topic.audit_id', '=', 'audit.id')
+        .on('topic.workspace_id', '=', scope.workspaceId)
+        .on(sql<boolean>`topic.topic_id = ${topicId}`),
+    )
     .select([
-      'snapshot.id as snapshot_id',
+      sql<string>`${measured('id')}`.as('snapshot_id'),
       'snapshot.audit_id',
       'snapshot.analyzer_version',
       'snapshot.scoring_rule_version',
-      'snapshot.visibility_score',
-      'snapshot.metrics',
+      sql<number>`${measured('visibility_score')}`.as('visibility_score'),
+      sql<unknown>`${measured('metrics')}`.as('metrics'),
       utcTextOf(sql.ref('snapshot.created_at')).as('snapshot_created_at'),
       'audit.status',
       'audit.configuration',
@@ -104,6 +96,7 @@ export async function loadMeasuredRuns(
     .where('audit.audit_scope', '=', visibility.brand_audit_scope)
     .where('audit.status', 'in', visibility.dashboard_audit_statuses)
     .where('audit.completed_at', 'is not', null);
+  if (topicId) query = query.where('topic.id', 'is not', null);
   if (window.auditId !== undefined) query = query.where('audit.id', '=', window.auditId);
   if (window.fromAt) query = query.where('audit.completed_at', '>=', instantOperand(window.fromAt));
   if (window.toAt) query = query.where('audit.completed_at', '<=', instantOperand(window.toAt));
@@ -145,7 +138,28 @@ export async function loadMeasuredRuns(
   }));
 }
 
-/** Each of the workspace's runs' frozen engine routes. */
+export async function periodTrendSelection(
+  db: Database,
+  selection: RunSelection,
+): Promise<RunSelection | null> {
+  const [pooled] = selection.auditIds ?? [];
+  if (pooled === undefined || (selection.fromAt === null && selection.toAt === null)) return null;
+  const run = await db
+    .selectFrom('audits')
+    .select('market_id')
+    .where('workspace_id', '=', selection.workspaceId)
+    .where('id', '=', pooled)
+    .executeTakeFirstOrThrow();
+  const runs = await loadMeasuredRuns(
+    db,
+    { ...selection, marketId: run.market_id },
+    { fromAt: selection.fromAt, toAt: selection.toAt, newest: visibility.selection_max_runs },
+  );
+  if (runs.length === 0) return null;
+  const auditIds = runs.map((measured) => measured.auditId);
+  return { ...selection, auditId: null, auditIds, fromAt: null, toAt: null };
+}
+
 export async function engineSnapshots(
   db: Database,
   workspaceId: string,
@@ -172,11 +186,6 @@ export async function engineSnapshots(
   return routes;
 }
 
-/**
- * The persisted composite for this selection, or nothing. Only the core
- * cohort across every engine stores one; a slice has no composite, and the
- * prompt composite is a different measure that must not stand in for it.
- */
 export function selectedScore(
   storedScore: number,
   metrics: Metrics,
@@ -187,15 +196,16 @@ export function selectedScore(
   return cohort === visibility.core_cohort && engine === null ? storedScore : null;
 }
 
-/** One measured run projected for folding: a trend point, a range or a baseline. */
 export type TrendSource = {
   snapshotId: string;
   auditId: string;
   completedAt: string;
   logicalEngine: string | null;
   transportModel: string | null;
-  retrievalEnabled: boolean | null;
+  retrievalEnabled: boolean;
   modelProvenance: ModelProvenance[];
+  panelHash: string | null;
+  wholeSet: boolean;
   analyzerVersion: string;
   scoringRuleVersion: string;
   totalCompleted: number;
@@ -205,7 +215,6 @@ export type TrendSource = {
   promptPerformanceScore: number | null;
 };
 
-/** The singular frozen model, or null when the source spans several. */
 function sourceModel(provenance: readonly ModelProvenance[], engine: string | null): string | null {
   if (engine !== null) {
     return provenance.find((item) => item.logical_engine === engine)?.transport_model ?? null;
@@ -214,10 +223,6 @@ function sourceModel(provenance: readonly ModelProvenance[], engine: string | nu
   return onlyOf(models) ?? null;
 }
 
-/**
- * One run as a folding source, or null when an engine-filtered request asks
- * for an engine the run did not measure: a missing engine emits no point.
- */
 export function trendSource(
   run: MeasuredRun,
   engine: string | null,
@@ -234,13 +239,14 @@ export function trendSource(
     transportModel: sourceModel(run.provenance, engine),
     retrievalEnabled: auditFrozenRetrievalEnabled(run.configuration),
     modelProvenance: run.provenance,
+    panelHash: readFrozenConfiguration(run.configuration).panel_hash ?? null,
+    wholeSet: askedWholeSet(run.configuration),
     analyzerVersion: run.analyzerVersion,
     scoringRuleVersion: run.scoringRuleVersion,
     totalCompleted: metricCount(metrics.total_completed),
     visibilityScore: selectedScore(run.visibilityScore, metrics, cohort, engine),
     metrics,
     comparisonKey: frozenComparisonKey(run.configuration, engine),
-    // The preserved prompt composite: a different measure from the score.
     promptPerformanceScore: promptPerformance(metrics),
   };
 }

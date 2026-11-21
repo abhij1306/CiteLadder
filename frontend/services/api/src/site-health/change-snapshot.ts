@@ -1,8 +1,3 @@
-/**
- * Change intelligence: select the comparable earlier crawl, assemble both
- * crawls' persisted page evidence, and append one immutable comparison with
- * exact source provenance. Reads persisted evidence only; no network I/O.
- */
 import { createHash, randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { TERMINAL_CRAWL_STATUSES } from '@citeladder/contracts/site-health';
@@ -49,18 +44,12 @@ function crawlScopeHash(crawl: Pick<Crawl, 'configuration'>) {
   );
 }
 type CrawlScope = Pick<Crawl, 'root_url' | 'configuration'>;
-/** Same origin and frozen scope: Changes and the snapshot's change summary compare only such crawls. */
 export const sameScope = (a: CrawlScope, b: CrawlScope) =>
   rootOrigin(a) === rootOrigin(b) && crawlScopeHash(a) === crawlScopeHash(b);
 const sameVersions = (a: Crawl, b: Crawl) =>
   a.analyzer_version === b.analyzer_version && a.extractor_version === b.extractor_version;
 const complete = (crawl: Crawl) => crawl.status === 'completed' && crawl.inventory_complete;
 
-/**
- * The newest earlier crawl under the same origin, scope and versions. Without
- * one, the immediate predecessor is kept so the snapshot can name the exact
- * non-comparable boundary.
- */
 async function previousComparableCrawl(db: Database, crawlB: Crawl) {
   const candidates = await db
     .selectFrom('site_crawls')
@@ -133,7 +122,6 @@ type Evaluation = {
   evidence: unknown;
 };
 
-/** Each analysis's change-tracked rule evaluations, from its exact source ids. */
 async function evaluations(db: Database, workspaceId: string, rows: PageRow[]) {
   const owner = new Map(
     rows.flatMap((row) => (row.source_evaluation_ids ?? []).map((id) => [id, row.analysisId])),
@@ -157,13 +145,11 @@ async function evaluations(db: Database, workspaceId: string, rows: PageRow[]) {
   return byAnalysis;
 }
 
-/** Whether the stored text is the whole primary content, by its extraction provenance. */
 function textCoverage(facts: Record<string, unknown>, content: string): [string, string | null] {
   if (!content.trim()) return ['unknown', 'no_usable_text'];
   if (facts.primary_content_truncated) return ['partial', 'primary_content_truncated'];
   return ['complete', null];
 }
-/** Shingled primary content with the extraction's completeness provenance. */
 export function contentRecord(facts: Record<string, unknown>, extractorVersion: string) {
   const content = scalarText(facts.primary_content_text);
   const words = content.toLowerCase().match(/[\p{L}\p{N}_]+/gu) ?? [];
@@ -222,7 +208,6 @@ function changePage(row: PageRow, rules: Map<string, Evaluation> | undefined): C
       canonical: scalarText(facts.canonical_url),
       robots_noindex: Boolean(record(facts.robots).noindex),
       json_ld_present: Boolean(record(facts.structured_data).has_json_ld),
-      // Extracted internal anchors, without scheduling reachability probes.
       internal_link_count: Array.isArray(anchors)
         ? anchors.filter((anchor) => record(anchor).is_internal).length
         : 0,
@@ -246,12 +231,10 @@ export function declaredCheckField(check: Record<string, unknown>): [string | nu
   ];
 }
 const uuidText = (value: unknown) => scalarText(value).toLowerCase();
-/** A check's target page; an untargeted check applies to a single-target event's page. */
 function checkTarget(check: Record<string, unknown>, targets: Set<string>) {
   if (check.target_site_url_id != null) return uuidText(check.target_site_url_id);
   return onlyOf(targets) ?? null;
 }
-/** The field a check now satisfies on its target page, keyed for linkage. */
 function satisfiedCheck(raw: unknown, targets: Set<string>, byUrl: Map<string, ChangePage>) {
   const check = record(raw);
   const target = checkTarget(check, targets);
@@ -263,7 +246,6 @@ function satisfiedCheck(raw: unknown, targets: Set<string>, byUrl: Map<string, C
   if (!isDeepStrictEqual(actual, value)) return null;
   return { key: expectedKey(page.siteUrlId, field), value: page.fields[field] };
 }
-/** Declared implementations whose checks crawl B's evidence now satisfies; the newest wins. */
 async function expectedChanges(db: Database, crawlA: Crawl, crawlB: Crawl, pagesB: ChangePage[]) {
   const expected = new Map<string, ExpectedChange>();
   if (!crawlB.completed_at) return expected;
@@ -302,7 +284,6 @@ function comparisonState(
   if (!pagesA.length || !pagesB.length) return [p.state_unavailable, p.reason_no_usable_evidence];
   return [p.state_available, null];
 }
-/** Identity of the exact compared evidence; unchanged inputs reuse their snapshot. */
 function sourceHash(crawlA: Crawl | null, crawlB: Crawl, all: ChangePage[]) {
   // Fixed-width UUID pairs: joined-string order is tuple order.
   const sources = all
@@ -336,10 +317,6 @@ async function insertObservations(
   }
 }
 
-/**
- * The pages A analyzed that B did not, but whose URL B's inventory still
- * observed: unanalyzed in B (deselected, failed, beyond a limit), not removed.
- */
 async function observedInventory(
   db: Database,
   crawlB: Crawl,
@@ -361,13 +338,6 @@ async function observedInventory(
   return new Set(rows.map((row) => row.site_url_id));
 }
 
-/**
- * The snapshot crawl B's supersedes: the project's newest snapshot of a crawl
- * no newer than B, by crawl order, so a delayed `change_intel` of an older
- * crawl never supersedes a later crawl's snapshot. The caller holds the
- * project's snapshot lock, so two writers never pick the same predecessor
- * from a stale read.
- */
 function predecessorSnapshot(db: Database, crawlB: Crawl) {
   return db
     .selectFrom('site_change_snapshots as s')
@@ -391,10 +361,7 @@ function predecessorSnapshot(db: Database, crawlB: Crawl) {
     .executeTakeFirst();
 }
 
-/** Build, or return unchanged, the immutable comparison of crawl B with its predecessor. */
 async function persistChangeSnapshot(db: Database, crawlB: Crawl): Promise<string> {
-  // One snapshot writer per project at a time: the predecessor read and the
-  // insert are one step.
   await subjectXactLock(db, `site-change-snapshots:${crawlB.project_id}`);
   const crawlA = await previousComparableCrawl(db, crawlB);
   const b = await pages(db, crawlB);
@@ -471,7 +438,6 @@ async function persistChangeSnapshot(db: Database, crawlB: Crawl): Promise<strin
   return id;
 }
 
-/** The `change_intel` task: the snapshot and its analytics handoff commit with the task. */
 export async function runChangeIntel(db: Database, crawl: Crawl) {
   // A rerun still hands its page to verification and Opportunities, but it
   // writes no comparison: against a full crawl it would read as every other

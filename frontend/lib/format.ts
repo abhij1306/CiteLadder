@@ -15,56 +15,78 @@ import type { z } from 'zod';
 
 import type { snapshotGranularitySchema } from '@citeladder/contracts/analytics';
 
-/** Snapshot bucket granularity — mirrors the backend contract vocabulary. */
 type BucketGranularity = z.infer<typeof snapshotGranularitySchema>;
 
-export type DataAvailabilityState =
-  | 'not_measured'
-  | 'not_run'
-  | 'pending'
-  | 'not_set'
-  | 'unavailable'
-  | 'not_applicable'
-  | 'unknown';
+export const ABSENCE_STATES = [
+  'not_measured',
+  'not_connected',
+  'not_set',
+  'not_run',
+  'none',
+  'not_applicable',
+  'unavailable',
+  'too_few',
+] as const;
 
-const availabilityLabels: Readonly<Record<DataAvailabilityState, string>> = {
+export type DataAvailabilityState = (typeof ABSENCE_STATES)[number];
+
+const availabilityLabels: Record<DataAvailabilityState, string> = {
   not_measured: 'Not measured',
-  not_run: 'Not run',
-  pending: 'Being prepared',
+  not_connected: 'Not connected',
   not_set: 'Not set',
-  unavailable: 'Unavailable',
+  not_run: 'Not run yet',
+  none: 'None',
   not_applicable: 'Not applicable',
-  unknown: 'Unknown',
+  unavailable: 'Unavailable',
+  too_few: 'Too few',
 };
 
-/** Human-readable product vocabulary for explicit missing-data states. */
 export function availabilityLabel(state: DataAvailabilityState): string {
   return availabilityLabels[state];
 }
 
-/** A persisted fraction (0.125) as a percentage ("12.5%"); null is not measured. */
-export function formatPercent(fraction: number | null, decimals = 0): string {
-  if (fraction === null) return availabilityLabel('not_measured');
-  return `${(fraction * 100).toFixed(decimals)}%`;
+export type Absent = Readonly<{ absent: DataAvailabilityState }>;
+
+export type Formatted = string | Absent;
+
+export function absent(state: DataAvailabilityState = 'not_measured'): Absent {
+  return { absent: state };
 }
 
-/**
- * The mark a missing MEASUREMENT renders as, everywhere it is shown.
- *
- * `not_measured` is the one availability state with no words on screen: a
- * metric card, a table cell and a chart label all print this dash, because the
- * phrase said the same thing at every figure on the page and crowded out the
- * figures that WERE measured. The words stay the accessible name — every
- * renderer pairs the mark with `availabilityLabel('not_measured')` in sr-only
- * text, so nothing is lost to a screen reader.
- *
- * It must never be an empty string: a blank and a measured zero look identical,
- * and those are opposite findings.
- *
- * Workflow states a reader can ACT on — "Not run", "Failed", "Not set" — keep
- * their words. Those are answers, not absent numbers.
- */
-export const MISSING_MARK = '–';
+export function isAbsent(value: unknown): value is Absent {
+  return typeof value === 'object' && value !== null && 'absent' in value;
+}
+
+export function formattedText(value: Formatted): string {
+  return isAbsent(value) ? availabilityLabel(value.absent) : value;
+}
+
+export const ABSENCE_MARK = '—';
+
+export function formatPercent(fraction: number): string;
+export function formatPercent(fraction: number | null): Formatted;
+export function formatPercent(fraction: number | null): Formatted {
+  if (fraction === null) return absent();
+  return percentText(fraction);
+}
+
+export function percentText(fraction: number): string {
+  return `${(fraction * 100).toFixed(1)}%`;
+}
+
+export function formatAmount(amount: number, currency: string | null): string {
+  if (currency && /^[A-Z]{3}$/u.test(currency)) {
+    try {
+      return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amount);
+    } catch {}
+  }
+  const number = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(amount);
+  return currency ? `${number} ${currency}` : number;
+}
+
+export function formatMean(value: number): string {
+  return value.toFixed(1);
+}
 
 export const GRANULARITY_OPTIONS: readonly { value: BucketGranularity; label: string }[] = [
   { value: 'day', label: 'Day' },
@@ -72,14 +94,12 @@ export const GRANULARITY_OPTIONS: readonly { value: BucketGranularity; label: st
   { value: 'month', label: 'Month' },
 ] as const;
 
-/** `2026-07-23` → `Jul 23` (series bucket labels + active-run windows). */
 export function formatShortDate(isoDay: string): string {
   const date = new Date(`${isoDay}T00:00:00Z`);
   if (Number.isNaN(date.getTime())) return isoDay;
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
 }
 
-/** `2026-07-23` → `Jul 23, 2026` (window labels in notes). */
 export function formatWindowDate(isoDay: string): string {
   const date = new Date(`${isoDay}T00:00:00Z`);
   if (Number.isNaN(date.getTime())) return isoDay;
@@ -91,97 +111,128 @@ export function formatWindowDate(isoDay: string): string {
   });
 }
 
-/** A persisted instant, rendered in the selected display timezone. */
+export function formatMonth(isoMonth: string): string {
+  const date = new Date(`${isoMonth.slice(0, 7)}-01T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return isoMonth;
+  return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' });
+}
+
+const dateFormats = new Map<string, Intl.DateTimeFormat>();
+
+function dateFormat(variant: string, options: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
+  const key = `${variant}\u0000${options.timeZone}`;
+  let format = dateFormats.get(key);
+  if (!format) {
+    format = new Intl.DateTimeFormat('en-US', options);
+    dateFormats.set(key, format);
+  }
+  return format;
+}
+
 export function formatDisplayTimestamp(timestamp: string, timeZone: string): string {
   const date = new Date(timestamp);
   if (Number.isNaN(date.getTime())) return timestamp;
   try {
-    return new Intl.DateTimeFormat('en-US', {
+    return dateFormat('instant', {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
       hour: '2-digit',
       minute: '2-digit',
       timeZone,
-      timeZoneName: 'short',
     }).format(date);
   } catch {
     return timeZone === 'UTC' ? timestamp : formatDisplayTimestamp(timestamp, 'UTC');
   }
 }
 
-/** Date portion of a persisted instant, using the same display timezone. */
+export function formatStripTimestamp(timestamp: string, timeZone: string): string {
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return timestamp;
+  try {
+    const parts = dateFormat('strip', {
+      day: 'numeric',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+      timeZone,
+    }).formatToParts(date);
+    const part = (type: Intl.DateTimeFormatPartTypes) =>
+      parts.find((item) => item.type === type)?.value ?? '';
+    return `${part('day')} ${part('month')} ${part('hour')}:${part('minute')}`;
+  } catch {
+    return timeZone === 'UTC' ? timestamp : formatStripTimestamp(timestamp, 'UTC');
+  }
+}
+
+export function formatStripDay(isoDay: string): string {
+  const date = new Date(`${isoDay}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return isoDay;
+  const parts = dateFormat('strip-day', {
+    day: 'numeric',
+    month: 'short',
+    timeZone: 'UTC',
+  }).formatToParts(date);
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((item) => item.type === type)?.value ?? '';
+  return `${part('day')} ${part('month')}`;
+}
+
 export function formatDisplayDate(timestamp: string, timeZone: string): string {
   const date = new Date(timestamp);
   if (Number.isNaN(date.getTime())) return timestamp;
   try {
-    return new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeZone }).format(date);
+    return dateFormat('date', { dateStyle: 'medium', timeZone }).format(date);
   } catch {
     return timeZone === 'UTC' ? timestamp : formatDisplayDate(timestamp, 'UTC');
   }
 }
 
-/** Time-of-day portion of a persisted instant, with its zone, in the same display timezone. */
 export function formatDisplayTime(timestamp: string, timeZone: string): string {
   const date = new Date(timestamp);
   if (Number.isNaN(date.getTime())) return timestamp;
   try {
-    return new Intl.DateTimeFormat('en-US', {
+    return dateFormat('time', {
       hour: '2-digit',
       minute: '2-digit',
       timeZone,
-      timeZoneName: 'short',
     }).format(date);
   } catch {
     return timeZone === 'UTC' ? timestamp : formatDisplayTime(timestamp, 'UTC');
   }
 }
 
-/** Compact chart label for a persisted instant. */
 export function formatDisplayShortDate(timestamp: string, timeZone: string): string {
   const date = new Date(timestamp);
   if (Number.isNaN(date.getTime())) return timestamp;
   try {
-    return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone }).format(
-      date,
-    );
+    return dateFormat('short-date', { month: 'short', day: 'numeric', timeZone }).format(date);
   } catch {
     return timeZone === 'UTC' ? timestamp : formatDisplayShortDate(timestamp, 'UTC');
   }
 }
 
-export function formatScore(score: number | null): string {
-  return score === null || Number.isNaN(score)
-    ? availabilityLabel('not_measured')
-    : `${Math.round(score)}`;
-}
-
-/** Convert the shared unavailable sentinel to a nullable display value. */
-export function measured(value: string): string | null {
-  return value === availabilityLabel('not_measured') ? null : value;
+export function formatScore(score: number | null): Formatted {
+  return score === null || Number.isNaN(score) ? absent() : `${Math.round(score)}`;
 }
 
 const numberFormat = new Intl.NumberFormat('en-US');
 
-/** Whole-number grouping for counts (`1,162,000`). */
 export function formatCount(value: number): string {
   return numberFormat.format(value);
 }
 
-/** A grouped count with its noun, pluralized with a trailing `s` (`1 answer`, `1,200 answers`). */
 export function pluralCount(count: number, noun: string): string {
   return `${formatCount(count)} ${noun}${count === 1 ? '' : 's'}`;
 }
 
-/** Percent-encoding layers a crawled URL can carry (`%2527` is `'` encoded twice). */
+export function endSentence(text: string): string {
+  return /[.!?]$/.test(text) ? text : `${text}.`;
+}
+
 const MAX_URL_DECODE_PASSES = 3;
 
-/**
- * A URL or path as a reader reads it: percent-escapes decoded, layer by
- * layer, so `/Women%2527s-Clothing` shows as `/Women's-Clothing`. Display
- * only; the stored value is never changed. A layer with a malformed escape
- * is shown as it is.
- */
 export function readableUrl(value: string): string {
   let current = value;
   for (let pass = 0; pass < MAX_URL_DECODE_PASSES; pass += 1) {
@@ -197,12 +248,6 @@ export function readableUrl(value: string): string {
   return current;
 }
 
-/**
- * A web address as a short title: its host without `www.`, then its last
- * path segment, readable, with `…` for any segments between
- * (`bestandless.com.au/…/Womens-Maxi-Dress`). The query and fragment are
- * dropped. Anything that is not an http(s) URL is only made readable.
- */
 export function shortUrlTitle(value: string): string {
   let url: URL;
   try {
@@ -216,4 +261,76 @@ export function shortUrlTitle(value: string): string {
   const last = segments.at(-1);
   if (last === undefined) return host;
   return `${host}${segments.length > 1 ? '/…' : ''}/${readableUrl(last)}`;
+}
+
+function originOf(value: string): string | null {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:' ? url.origin : null;
+  } catch {
+    return null;
+  }
+}
+
+export function sharedOrigin(values: readonly string[]): string | null {
+  const [first, ...rest] = values.map(originOf);
+  if (first === undefined || first === null) return null;
+  return rest.every((origin) => origin === first) ? first : null;
+}
+
+/** ISO 3166-1 alpha-3 to alpha-2, each pair run together: Search Console reports alpha-3. */
+const ALPHA3_TO_ALPHA2 = new Map(
+  `AFGAF ALAAX ALBAL DZADZ ASMAS ANDAD AGOAO AIAAI ATAAQ ATGAG ARGAR ARMAM ABWAW AUSAU AUTAT
+  AZEAZ BHSBS BHRBH BGDBD BRBBB BLRBY BELBE BLZBZ BENBJ BMUBM BTNBT BOLBO BESBQ BIHBA BWABW
+  BVTBV BRABR IOTIO BRNBN BGRBG BFABF BDIBI CPVCV KHMKH CMRCM CANCA CYMKY CAFCF TCDTD CHLCL
+  CHNCN CXRCX CCKCC COLCO COMKM COGCG CODCD COKCK CRICR CIVCI HRVHR CUBCU CUWCW CYPCY CZECZ
+  DNKDK DJIDJ DMADM DOMDO ECUEC EGYEG SLVSV GNQGQ ERIER ESTEE SWZSZ ETHET FLKFK FROFO FJIFJ
+  FINFI FRAFR GUFGF PYFPF ATFTF GABGA GMBGM GEOGE DEUDE GHAGH GIBGI GRCGR GRLGL GRDGD GLPGP
+  GUMGU GTMGT GGYGG GINGN GNBGW GUYGY HTIHT HMDHM VATVA HNDHN HKGHK HUNHU ISLIS INDIN IDNID
+  IRNIR IRQIQ IRLIE IMNIM ISRIL ITAIT JAMJM JPNJP JEYJE JORJO KAZKZ KENKE KIRKI PRKKP KORKR
+  KWTKW KGZKG LAOLA LVALV LBNLB LSOLS LBRLR LBYLY LIELI LTULT LUXLU MACMO MDGMG MWIMW MYSMY
+  MDVMV MLIML MLTMT MHLMH MTQMQ MRTMR MUSMU MYTYT MEXMX FSMFM MDAMD MCOMC MNGMN MNEME MSRMS
+  MARMA MOZMZ MMRMM NAMNA NRUNR NPLNP NLDNL NCLNC NZLNZ NICNI NERNE NGANG NIUNU NFKNF MKDMK
+  MNPMP NORNO OMNOM PAKPK PLWPW PSEPS PANPA PNGPG PRYPY PERPE PHLPH PCNPN POLPL PRTPT PRIPR
+  QATQA REURE ROURO RUSRU RWARW BLMBL SHNSH KNAKN LCALC MAFMF SPMPM VCTVC WSMWS SMRSM STPST
+  SAUSA SENSN SRBRS SYCSC SLESL SGPSG SXMSX SVKSK SVNSI SLBSB SOMSO ZAFZA SGSGS SSDSS ESPES
+  LKALK SDNSD SURSR SJMSJ SWESE CHECH SYRSY TWNTW TJKTJ TZATZ THATH TLSTL TGOTG TKLTK TONTO
+  TTOTT TUNTN TURTR TKMTM TCATC TUVTV UGAUG UKRUA AREAE GBRGB USAUS UMIUM URYUY UZBUZ VUTVU
+  VENVE VNMVN VGBVG VIRVI WLFWF ESHEH YEMYE ZMBZM ZWEZW XKKXK`
+    .split(/\s+/u)
+    .map((pair) => [pair.slice(0, 3), pair.slice(3)] as const),
+);
+
+let regionNames: Intl.DisplayNames | undefined;
+
+export function formatCountry(code: string): string {
+  const upper = code.trim().toUpperCase();
+  const alpha2 = ALPHA3_TO_ALPHA2.get(upper) ?? (/^[A-Z]{2}$/u.test(upper) ? upper : null);
+  if (!alpha2) return upper;
+  regionNames ??= new Intl.DisplayNames(['en'], { type: 'region' });
+  return regionNames.of(alpha2) ?? upper;
+}
+
+export function ownOrigin(url: string, website: string | null | undefined): string | null {
+  try {
+    return isOwnHost(new URL(url).host, website) ? originOf(url) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function isOwnHost(host: string, website: string | null | undefined): boolean {
+  const bare = (value: string) => value.toLowerCase().replace(/^www\./u, '');
+  try {
+    return Boolean(website) && bare(host) === bare(new URL(website ?? '').host);
+  } catch {
+    return false;
+  }
+}
+
+export function urlCellText(value: string, origin: string | null): string {
+  const readable = readableUrl(value);
+  if (origin === null || originOf(value) !== origin || !value.startsWith(origin)) return readable;
+  const path = readableUrl(value.slice(origin.length));
+  return path === '' ? '/' : path;
 }

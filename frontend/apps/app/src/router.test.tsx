@@ -1,16 +1,15 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { useEffect, useState } from 'react';
 import { createMemoryRouter, Outlet, RouterProvider } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 
 const bootstrap = vi.hoisted(() => vi.fn());
-// This file is about chunk download and shell persistence across a navigation.
-// The real bootstrap loader would issue the session and workspace reads, which
-// belong to `bootstrap-loader.test.ts`; here they would only make the route
-// wait on a request nothing answers. The session wait these tests care about is
-// modelled by the `PrivateRouteLayout` stub below.
+const sessionRead = vi.hoisted(() => ({ fails: false }));
 vi.mock('@/lib/project/bootstrap-loader', () => ({
-  bootstrapPrivateRoutes: () => null,
+  bootstrapPrivateRoutes: () => {
+    if (sessionRead.fails) throw new Error('session read failed');
+    return null;
+  },
 }));
 vi.mock('@/components/auth/auth-routes', () => ({
   LoginRoute: () => <h1>Sign in</h1>,
@@ -37,6 +36,7 @@ vi.mock('@/components/projects/projects-screen', () => ({
 beforeEach(() => {
   vi.resetModules();
   bootstrap.mockClear();
+  sessionRead.fails = false;
 });
 
 async function privateRouter() {
@@ -67,15 +67,15 @@ describe('application route recovery', () => {
     render(<RouterProvider router={router} />);
 
     await screen.findByRole('button', { name: 'Finish session' });
-    // The bootstrap effect flushes asynchronously after the button paints.
     await waitFor(() => expect(bootstrap).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(download).toHaveBeenCalledTimes(1));
     expect(screen.queryByRole('heading', { name: 'Issues' })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Finish session' }));
     const shell = screen.getByRole('region', { name: 'Application shell' });
-    // The wait is the route's own frame: its titled identity band and one box.
-    expect(await screen.findByRole('status', { name: 'Loading…' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('status', { name: 'Loading the issue summary' }),
+    ).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 1, name: 'Issues' })).toBeInTheDocument();
     await act(async () => finish({ IssuesScreen: () => <p>Issue catalog</p> }));
     expect(await screen.findByText('Issue catalog')).toBeInTheDocument();
@@ -112,16 +112,37 @@ describe('application route recovery', () => {
     router.dispose();
   });
 
+  it('shows a failed session read as a page with its main region, a reload and a way to Overview', async () => {
+    sessionRead.fails = true;
+    const router = await privateRouter();
+    render(<RouterProvider router={router} />);
+
+    const heading = await screen.findByRole('heading', {
+      level: 1,
+      name: 'This page could not be opened',
+    });
+    const main = screen.getByRole('main');
+    expect(main).toHaveAttribute('id', 'main');
+    expect(within(main).getAllByRole('heading')).toEqual([heading]);
+    expect(within(main).getByRole('button', { name: 'Reload page' })).toBeInTheDocument();
+    expect(within(main).getByRole('link', { name: 'Go to Overview' })).toHaveAttribute(
+      'href',
+      '/projects',
+    );
+    expect(screen.queryByText(/session read failed/)).not.toBeInTheDocument();
+    router.dispose();
+  });
+
   it('answers an unknown application address with a not-found screen inside the shell', async () => {
     const { appRoutes } = await import('./router');
     const router = createMemoryRouter(appRoutes, { initialEntries: ['/setting'] });
     render(<RouterProvider router={router} />);
 
     fireEvent.click(await screen.findByRole('button', { name: 'Finish session' }));
-    expect(
-      await screen.findByRole('heading', { name: 'There is no page at this address' }),
-    ).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'Application shell' })).toBeInTheDocument();
+    const heading = await screen.findByRole('heading', { level: 1, name: 'Page not found' });
+    const shell = screen.getByRole('region', { name: 'Application shell' });
+    expect(within(shell).getAllByRole('heading')).toEqual([heading]);
+    expect(screen.getByText(/There is no page at this address/)).toBeInTheDocument();
     router.dispose();
   });
 });

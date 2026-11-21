@@ -1,43 +1,38 @@
-/**
- * Sanitised Markdown renderer for AI-generated content (Content vertical).
- *
- * The model output is UNTRUSTED. Defences, all local to this module:
- *   - raw HTML is never parsed (no `rehype-raw`; react-markdown escapes it),
- *   - URLs pass `safeUrlTransform` (./safe-url) — only http/https/mailto survive
- *     (`javascript:`/`data:`/etc. are neutralised to an empty href),
- *   - links open in a new tab with `rel="noopener noreferrer"`; given
- *     `knownHosts`, a link to any other host first asks the person to confirm
- *     the full address (a prompt-injected page can make the model put project
- *     data in a link),
- *   - a restricted component map (no images, no iframes) with token-only
- *     classes so the output inherits the app theme.
- */
 import {
   createContext,
+  memo,
   useContext,
   useMemo,
   useState,
   type ComponentPropsWithoutRef,
   type MouseEvent,
+  type ReactNode,
 } from 'react';
 import ReactMarkdown, { type Components, type ExtraProps } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
 import { ConfirmDialog } from '@/components/ui/dialog';
 import { Stack } from '@/components/ui/layout';
+import { useScrollFrame } from '@/components/ui/scroll-edges';
 import { InlineFigure } from '@/components/ui/typography';
 import { cn } from '@/lib/utils';
 
 import { highlightPlugin, type Highlight } from './highlight';
+import { phraseChipsPlugin } from './phrase-chips';
 import { leavesForUnknownHost, safeUrlTransform } from './safe-url';
+
+const NO_CHIPS: readonly PhraseChip[] = [];
 
 type LeaveGuard = Readonly<{
   knownHosts: readonly string[];
   confirmLeave: (href: string) => void;
 }>;
 
-/** Set only by a `ContentMarkdown` given `knownHosts`; links read it to decide. */
 const LeaveGuardContext = createContext<LeaveGuard | null>(null);
+
+export type LinkChip = (href: string, children: ReactNode) => ReactNode | null;
+
+const LinkChipContext = createContext<LinkChip | null>(null);
 
 function MarkdownLink({
   node: _node,
@@ -46,6 +41,7 @@ function MarkdownLink({
   ...props
 }: Readonly<ComponentPropsWithoutRef<'a'> & ExtraProps>) {
   const guard = useContext(LeaveGuardContext);
+  const chip = useContext(LinkChipContext)?.(href ?? '', children) ?? null;
   const confirm =
     guard !== null && href !== undefined && leavesForUnknownHost(href, guard.knownHosts);
   // Ctrl/Cmd/Shift-click fire `click`; a middle click fires only `auxclick`.
@@ -54,6 +50,7 @@ function MarkdownLink({
     event.preventDefault();
     guard?.confirmLeave(href ?? '');
   };
+  if (chip !== null) return <>{chip}</>;
   return (
     <a
       {...props}
@@ -68,10 +65,41 @@ function MarkdownLink({
   );
 }
 
-/** Restricted component map (no props closed over, so it is stable across renders). */
+export type PhraseChip = Readonly<{ text: string; node: ReactNode }>;
+
+const ChipsContext = createContext<readonly PhraseChip[]>([]);
+
+function MarkdownSpan({
+  node: _node,
+  children,
+  ...props
+}: Readonly<ComponentPropsWithoutRef<'span'> & ExtraProps & { 'data-chip'?: string }>) {
+  const chips = useContext(ChipsContext);
+  const chip = props['data-chip'] === undefined ? undefined : chips[Number(props['data-chip'])];
+  if (chip) return <>{chip.node}</>;
+  return <span {...props}>{children}</span>;
+}
+
+type HastNode = Readonly<{ type: string; tagName?: string; value?: string; children?: HastNode[] }>;
+
+function hastText(node: HastNode): string {
+  if (node.type === 'text') return node.value ?? '';
+  return (node.children ?? []).map(hastText).join('');
+}
+
+function hastHeads(node: HastNode): string[] {
+  if (node.tagName === 'th') return [hastText(node).trim()];
+  return (node.children ?? []).flatMap(hastHeads);
+}
+
+function tableName(node: HastNode | undefined): string {
+  const heads = node ? hastHeads(node).filter(Boolean) : [];
+  if (heads.length === 0) return 'Table';
+  const shown = heads.slice(0, 3).join(', ');
+  return `Table: ${shown}${heads.length > 3 ? ', …' : ''}`;
+}
+
 const MARKDOWN_COMPONENTS: Components = {
-  // Generated headings begin below the route-owned page title. The raw
-  // Markdown remains untouched for copy and export.
   h1: ({ node: _node, children, ...props }) => <h2 {...props}>{children}</h2>,
   h2: ({ node: _node, children, ...props }) => <h3 {...props}>{children}</h3>,
   h3: ({ node: _node, children, ...props }) => <h4 {...props}>{children}</h4>,
@@ -80,45 +108,63 @@ const MARKDOWN_COMPONENTS: Components = {
   h6: ({ node: _node, children, ...props }) => <h6 {...props}>{children}</h6>,
   // Untrusted output: never render images (remote-fetch beacon risk).
   img: () => null,
-  table: ({ node: _node, ...props }) => (
-    <div className="prose-table-frame">
-      <table {...props} />
-    </div>
-  ),
+  table: ({ node, ...props }) => <MarkdownTable name={tableName(node)} {...props} />,
+  th: ({ node: _node, ...props }) => <th {...props} scope="col" />,
   // Forward the remaining DOM props (id, aria-describedby,
   // data-footnote-*) so GFM footnote back-links keep working; `node`
   // is react-markdown's AST handle, not a DOM attribute.
   a: MarkdownLink,
+  // Markdown never makes a span (raw HTML is escaped); only chip slots do.
+  span: MarkdownSpan,
 };
 
-/** Render untrusted Markdown safely (GFM tables/lists, no raw HTML). */
-export function ContentMarkdown({
-  markdown,
-  density = 'default',
-  highlights = [],
-  knownHosts,
-}: Readonly<{
-  markdown: string;
-  density?: 'default' | 'compact';
-  /** Exact phrases to mark where they appear whole inside one text run. */
-  highlights?: readonly Highlight[];
-  /**
-   * Hosts a link may open directly (each also covers its subdomains); a link
-   * anywhere else opens only after a "You're leaving CiteLadder" confirm that
-   * shows its full address. Omitted, every link opens directly.
-   */
-  knownHosts?: readonly string[];
-}>) {
-  const content = markdown ?? '';
-  const [leaving, setLeaving] = useState<string | null>(null);
-  const guard = useMemo<LeaveGuard | null>(
-    () => (knownHosts ? { knownHosts, confirmLeave: setLeaving } : null),
-    [knownHosts],
+function MarkdownTable({
+  name,
+  ...props
+}: Readonly<{ name: string } & ComponentPropsWithoutRef<'table'>>) {
+  const { ref, region, frame } = useScrollFrame({ label: name });
+  return (
+    <div {...frame} className="prose-table-frame grid min-w-0">
+      <div ref={ref} {...region} className="overflow-x-auto">
+        <table {...props} aria-label={name} />
+      </div>
+    </div>
   );
-  const body = (
-    // Generated Markdown can contain unbreakable URLs, code, and wide tables.
-    // Text wraps to the column; a table that still cannot fit scrolls inside
-    // its own frame, never as one scrollbar at the bottom of a long result.
+}
+
+type MarkdownBodyProps = Readonly<{
+  content: string;
+  density: 'default' | 'compact';
+  chipTexts: readonly string[];
+  highlights: readonly Highlight[];
+}>;
+
+function sameItems<T>(a: readonly T[], b: readonly T[], same: (x: T, y: T) => boolean) {
+  return (
+    a.length === b.length &&
+    a.every((item, i) => {
+      const other = b[i];
+      return other !== undefined && same(item, other);
+    })
+  );
+}
+
+function sameBody(a: MarkdownBodyProps, b: MarkdownBodyProps) {
+  return (
+    a.content === b.content &&
+    a.density === b.density &&
+    sameItems(a.chipTexts, b.chipTexts, (x, y) => x === y) &&
+    sameItems(a.highlights, b.highlights, (x, y) => x.text === y.text && x.tone === y.tone)
+  );
+}
+
+const MarkdownBody = memo(function MarkdownBody({
+  content,
+  density,
+  chipTexts,
+  highlights,
+}: MarkdownBodyProps) {
+  return (
     <div
       className={cn(
         'prose-content min-w-0 w-full max-w-full [overflow-wrap:anywhere]',
@@ -127,7 +173,10 @@ export function ContentMarkdown({
     >
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
-        rehypePlugins={highlights.length ? [highlightPlugin(highlights)] : []}
+        rehypePlugins={[
+          ...(chipTexts.length ? [phraseChipsPlugin(chipTexts)] : []),
+          ...(highlights.length ? [highlightPlugin(highlights)] : []),
+        ]}
         urlTransform={safeUrlTransform}
         components={MARKDOWN_COMPONENTS}
       >
@@ -135,10 +184,51 @@ export function ContentMarkdown({
       </ReactMarkdown>
     </div>
   );
-  if (!guard) return body;
+}, sameBody);
+
+export function ContentMarkdown({
+  markdown,
+  density = 'default',
+  highlights = [],
+  chips = NO_CHIPS,
+  knownHosts,
+  linkChip,
+}: Readonly<{
+  markdown: string;
+  density?: 'default' | 'compact';
+  highlights?: readonly Highlight[];
+  chips?: readonly PhraseChip[];
+  knownHosts?: readonly string[];
+  linkChip?: LinkChip;
+}>) {
+  const content = markdown ?? '';
+  const [leaving, setLeaving] = useState<string | null>(null);
+  const guard = useMemo<LeaveGuard | null>(
+    () => (knownHosts ? { knownHosts, confirmLeave: setLeaving } : null),
+    [knownHosts],
+  );
+  const body = (
+    <MarkdownBody
+      content={content}
+      density={density}
+      chipTexts={chips.map((chip) => chip.text)}
+      highlights={highlights}
+    />
+  );
+  const phrased = chips.length ? (
+    <ChipsContext.Provider value={chips}>{body}</ChipsContext.Provider>
+  ) : (
+    body
+  );
+  const chipped = linkChip ? (
+    <LinkChipContext.Provider value={linkChip}>{phrased}</LinkChipContext.Provider>
+  ) : (
+    phrased
+  );
+  if (!guard) return chipped;
   return (
     <LeaveGuardContext.Provider value={guard}>
-      {body}
+      {chipped}
       <ConfirmDialog
         request={
           leaving === null
@@ -168,3 +258,51 @@ export function ContentMarkdown({
     </LeaveGuardContext.Provider>
   );
 }
+
+const asParagraph: Components['p'] = ({ children }) => <p>{children}</p>;
+const asCell: Components['td'] = ({ children }) => <>{children} </>;
+const TEXT_ELEMENTS = [
+  'p',
+  'ul',
+  'ol',
+  'li',
+  'blockquote',
+  'pre',
+  'code',
+  'br',
+  'h1',
+  'h2',
+  'h3',
+  'h4',
+  'h5',
+  'h6',
+  'tr',
+  'th',
+  'td',
+];
+const TEXT_COMPONENTS: Components = {
+  h1: asParagraph,
+  h2: asParagraph,
+  h3: asParagraph,
+  h4: asParagraph,
+  h5: asParagraph,
+  h6: asParagraph,
+  tr: asParagraph,
+  th: asCell,
+  td: asCell,
+};
+
+export const MarkdownText = memo(function MarkdownText({
+  markdown,
+}: Readonly<{ markdown: string }>) {
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      allowedElements={TEXT_ELEMENTS}
+      unwrapDisallowed
+      components={TEXT_COMPONENTS}
+    >
+      {markdown}
+    </ReactMarkdown>
+  );
+});

@@ -82,7 +82,7 @@ describe('durable onboarding', () => {
         provider: '',
         model: '',
         method: 'recorded-test',
-        extracted_fields: '{}',
+        extracted_fields: JSON.stringify({ themes: ['Price', 'Delivery speed'] }),
         field_confidence: '{}',
         evidence: '[]',
         warnings: '[]',
@@ -105,8 +105,6 @@ describe('durable onboarding', () => {
     const worker = new DiscoveryWorker(db, { fetcher, gateway: null, env: {} });
     const target = { workspaceId: a.workspaceId, discoveryId: selected.id };
     expect(await worker.claim('foreign', { ...target, workspaceId: b.workspaceId })).toBeNull();
-    // Keep the other row leased so the background claimant competes for the
-    // exact interactive task rather than legitimately taking unrelated work.
     const held = await worker.claim('other-workspace', {
       workspaceId: b.workspaceId,
       discoveryId: older.id,
@@ -120,7 +118,6 @@ describe('durable onboarding', () => {
     expect(claims.filter(Boolean)).toHaveLength(1);
     const claimed = claims.find((task) => task !== null)!;
     expect(claimed.discovery_id).toBe(selected.id);
-    // Finish the contender's lease, then a terminal replay must acquire nothing.
     await worker.finish(claimed, claimed.lease_owner!, null, null);
     expect(await worker.runOnce('replay', target)).toBe(false);
   });
@@ -234,7 +231,6 @@ describe('durable onboarding', () => {
         .where('workspace_id', '=', t.workspaceId)
         .execute();
       await createDiscovery(db, t.workspaceId, input, randomUUID());
-      // The daily window counts every admitted discovery, finished or not.
       await expect(createDiscovery(db, t.workspaceId, input, randomUUID())).rejects.toMatchObject({
         status: 429,
       });
@@ -428,7 +424,6 @@ describe('durable onboarding', () => {
     const started = (await response.json()) as { id: string; status: string };
     expect(started.status).toBe('queued');
     expect(started.id).not.toBe(failed.id);
-    // A replayed key returns the same run even once the source can no longer be rerun.
     await db
       .updateTable('brand_discoveries')
       .set({ status: 'project_created' })
@@ -490,10 +485,20 @@ describe('durable onboarding', () => {
       category: 'Analytics consultancy',
       field_sources: { category: 'reviewed', primary_market: 'reviewed' },
     });
+    expect(
+      await db
+        .selectFrom('project_themes')
+        .select(['name', 'source', 'workspace_id'])
+        .where('project_id', '=', projectId)
+        .orderBy('position')
+        .execute(),
+    ).toEqual([
+      { name: 'Price', source: 'research', workspace_id: t.workspaceId },
+      { name: 'Delivery speed', source: 'research', workspace_id: t.workspaceId },
+    ]);
     await expect(
       completeDiscovery(db, t.workspaceId, t.userId, row.id, completion, 'different'),
     ).rejects.toMatchObject({ status: 409 });
-    // Deleting the project removes the research that created it.
     await db.deleteFrom('projects').where('id', '=', projectId).execute();
     await expect(discoveryRow(db, t.workspaceId, row.id)).rejects.toMatchObject({ status: 404 });
   });
@@ -625,7 +630,6 @@ describe('durable onboarding', () => {
       lease_expires_at: new Date(Date.now() + 60_000),
     };
     const network: WebsiteFetcher = async (url, options) => {
-      // The stalled slot's lease was reclaimed (one attempt) and re-claimed by the same owner.
       await db
         .updateTable('brand_discovery_tasks')
         .set(reclaimed)
@@ -695,7 +699,6 @@ describe('durable onboarding', () => {
       .where('id', '=', task.id)
       .executeTakeFirstOrThrow();
     expect(retry).toMatchObject({ status: 'retry_wait', attempt_count: 1, lease_owner: null });
-    // The runner lane waits for a retry due soon instead of idling until the tick.
     const due = await worker.nextDue();
     expect(due!.getTime()).toBeLessThanOrEqual(retry.available_at.getTime());
     await db

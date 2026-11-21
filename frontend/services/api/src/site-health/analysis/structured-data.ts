@@ -1,9 +1,3 @@
-/**
- * Bounded JSON-LD and microdata facts. Each recognized schema.org type an
- * object or microdata item declares becomes one block with its
- * required-property contract, the enrichment fields the page-kind schema
- * checks read, and Product/Offer claims.
- */
 import {
   attribute,
   childElements,
@@ -41,7 +35,6 @@ export type SchemaBlock = {
   type: string;
   syntax: 'json-ld' | 'microdata';
   entity_index?: number;
-  /** The JSON-LD property nesting this object (`publisher`, `author`…); '' at the top level. */
   parent_property?: string;
   required: string[];
   present: string[];
@@ -79,7 +72,6 @@ const emptyProductValues = (): ProductValues => {
   return values as ProductValues;
 };
 
-/** `"https://schema.org/Article"` and `"Article"` name the same type. */
 function cleanType(value: unknown): string {
   if (typeof value !== 'string') return '';
   let token = stripTrailing(value.trim(), '/');
@@ -91,13 +83,11 @@ const cleanTypes = (value: unknown) => [
   ...new Set((Array.isArray(value) ? value : [value]).map(cleanType).filter(Boolean)),
 ];
 
-/** A JSON-LD object and the property that nests it: '' at the top level or in `@graph`. */
 type NestedJsonLd = { object: JsonObject; parentProperty: string };
 
 function* jsonObjects(node: unknown, depth = 0, parentProperty = ''): Generator<NestedJsonLd> {
   if (depth > limits.jsonld_depth) return;
   if (Array.isArray(node)) {
-    // A list's items keep the property that holds the list.
     for (const child of node) yield* nestedObjects(child, depth, parentProperty);
     return;
   }
@@ -107,7 +97,6 @@ function* jsonObjects(node: unknown, depth = 0, parentProperty = ''): Generator<
     yield* nestedObjects(child, depth, key === '@graph' ? '' : key);
 }
 
-/** The JSON-LD objects within one child value, a level deeper. */
 function* nestedObjects(
   child: unknown,
   depth: number,
@@ -117,7 +106,6 @@ function* nestedObjects(
     yield* jsonObjects(child, depth + 1, parentProperty);
 }
 
-/** A dotted one-level path; a list collapses to its first object. */
 function pathValue(object: unknown, path: string): unknown {
   let current = object;
   for (const segment of path.split('.')) {
@@ -139,7 +127,6 @@ function firstString(value: unknown): string {
     }
   return '';
 }
-/** One explicit relationship URL (`@id` or `url`), never guessed from a name. */
 function relationshipUrl(value: unknown): string {
   if (typeof value === 'string') return value.trim();
   if (isObject(value)) return relationshipUrl(value['@id'] || value.url);
@@ -163,7 +150,6 @@ function breadcrumbItems(value: unknown) {
   return urls;
 }
 
-/** Stable scalar evidence strings, deduplicated and bounded. */
 function values(value: unknown): string[] {
   const found: string[] = [];
   if (Array.isArray(value)) for (const item of value) found.push(...values(item));
@@ -223,16 +209,11 @@ function enrichment(object: JsonObject, type: string) {
     is_part_of_url: bounded(relationshipUrl(object.isPartOf), limits.same_as_chars),
     main_entity_id: bounded(relationshipUrl(object.mainEntity), limits.same_as_chars),
     main_entity_of_page_id: bounded(relationshipUrl(object.mainEntityOfPage), limits.same_as_chars),
-    // Only a BreadcrumbList's items are a trail; a CollectionPage's ItemList lists children.
     breadcrumb_items: type === 'BreadcrumbList' ? breadcrumbItems(object.itemListElement) : [],
     product: productEnrichment(object),
   };
 }
 
-/**
- * One block per recognized type. A JSON-LD block names the object it came from;
- * a microdata item has no JSON-LD object, so it carries no entity index.
- */
 function objectBlocks(
   { object, parentProperty }: NestedJsonLd,
   origin: { syntax: 'json-ld'; entityIndex: number } | { syntax: 'microdata' },
@@ -257,12 +238,7 @@ function objectBlocks(
     });
 }
 
-/**
- * Every schema.org type the page declares, recognized or not: a page marked up
- * only as `SoftwareApplication` or `Event` has structured data even though no
- * deeper check reads that type.
- */
-export function declaredSchemaTypes(objects: NestedJsonLd[], root: HtmlNode, maxTypes: number) {
+function declaredSchemaTypes(objects: NestedJsonLd[], root: HtmlNode, maxTypes: number) {
   const types = new Set(objects.flatMap(({ object }) => cleanTypes(object['@type'])));
   for (const node of elements(root))
     if (hasAttribute(node, 'itemscope'))
@@ -273,22 +249,24 @@ export function declaredSchemaTypes(objects: NestedJsonLd[], root: HtmlNode, max
   return [...types].sort(compareText).slice(0, maxTypes);
 }
 
-/** Every object in the page's JSON-LD scripts, in document order, each script parsed once. */
-export function jsonLdObjects(raw: string[]): NestedJsonLd[] {
+function jsonLdObjects(raw: string[]) {
   const objects: NestedJsonLd[] = [];
+  let invalid = 0;
   for (const body of raw) {
+    if (!body.trim()) continue;
     let parsed: unknown;
     try {
       parsed = JSON.parse(body.trim());
     } catch {
-      continue; // A malformed block cannot discard the others.
+      invalid++;
+      continue;
     }
     objects.push(...jsonObjects(parsed));
   }
-  return objects;
+  return { objects, invalid };
 }
 
-export function jsonLdBlocks(objects: NestedJsonLd[], maxBlocks: number): SchemaBlock[] {
+function jsonLdBlocks(objects: NestedJsonLd[], maxBlocks: number): SchemaBlock[] {
   const blocks: SchemaBlock[] = [];
   for (const [entityIndex, object] of objects.entries()) {
     blocks.push(...objectBlocks(object, { syntax: 'json-ld', entityIndex }));
@@ -297,7 +275,6 @@ export function jsonLdBlocks(objects: NestedJsonLd[], maxBlocks: number): Schema
   return blocks;
 }
 
-/** The attribute that holds a URL-valued microdata property, by element. */
 const URL_VALUE_ATTRIBUTES: Record<string, string> = {
   a: 'href',
   area: 'href',
@@ -312,11 +289,6 @@ const URL_VALUE_ATTRIBUTES: Record<string, string> = {
   object: 'data',
 };
 
-/**
- * A microdata URL value (a URL property or `itemid`) as the absolute URL the
- * microdata model defines, resolved against the document base; an empty or
- * unresolvable one is kept as written.
- */
 function absoluteUrl(value: string, baseUrl: string) {
   if (!value) return value;
   try {
@@ -343,7 +315,6 @@ function microdataValue(node: HtmlElement, baseUrl: string) {
   return squash(textContent(node));
 }
 
-/** The elements whose `itemprop` belongs to this item: a nested item keeps its own. */
 function* itemProperties(item: HtmlElement): Generator<HtmlElement> {
   const pending = childElements(item).toReversed();
   while (pending.length) {
@@ -357,16 +328,11 @@ function* itemProperties(item: HtmlElement): Generator<HtmlElement> {
 const propertyNames = (node: HtmlElement) =>
   attribute(node, 'itemprop').split(/\s+/u).map(cleanType).filter(Boolean);
 
-/** A nested item is its own object, within the JSON-LD depth bound; any other property is text. */
 function propertyValue(property: HtmlElement, depth: number, baseUrl: string): unknown {
   if (!hasAttribute(property, 'itemscope')) return microdataValue(property, baseUrl);
   return depth < limits.jsonld_depth ? microdataObject(property, baseUrl, depth + 1) : undefined;
 }
 
-/**
- * One microdata item as the JSON-LD object it is equivalent to, so both
- * syntaxes meet one property contract. A repeated property becomes a list.
- */
 function microdataObject(item: HtmlElement, baseUrl: string, depth = 0): JsonObject {
   const properties = new Map<string, unknown[]>([
     ['@type', attribute(item, 'itemtype').split(/\s+/u).filter(Boolean)],
@@ -376,7 +342,6 @@ function microdataObject(item: HtmlElement, baseUrl: string, depth = 0): JsonObj
   for (const property of itemProperties(item)) {
     const value = propertyValue(property, depth, baseUrl);
     if (isEmpty(value)) continue;
-    // A property name never overwrites the item's own `@type` or `@id`.
     for (const name of propertyNames(property).filter((name) => !name.startsWith('@'))) {
       const list = properties.get(name);
       if (list) list.push(value);
@@ -388,12 +353,7 @@ function microdataObject(item: HtmlElement, baseUrl: string, depth = 0): JsonObj
   );
 }
 
-/**
- * Each recognized `itemtype` is a block holding its item's own properties,
- * read as the equivalent JSON-LD object. A nested item is a block under the
- * property that holds it.
- */
-export function microdataBlocks(root: HtmlNode, maxBlocks: number, baseUrl: string): SchemaBlock[] {
+function microdataBlocks(root: HtmlNode, maxBlocks: number, baseUrl: string): SchemaBlock[] {
   const blocks: SchemaBlock[] = [];
   for (const node of elements(root)) {
     if (!hasAttribute(node, 'itemscope') || !attribute(node, 'itemtype').trim()) continue;
@@ -407,11 +367,7 @@ export function microdataBlocks(root: HtmlNode, maxBlocks: number, baseUrl: stri
   return blocks;
 }
 
-/**
- * The preferred Product observations merged into one fact. Nested variant
- * Products are skipped when an identity- or offer-bearing Product exists.
- */
-export function productFacts(blocks: SchemaBlock[]) {
+function productFacts(blocks: SchemaBlock[]) {
   const all = blocks.filter((block) => block.type === 'Product');
   const preferred = all.filter(
     (block) =>
@@ -439,4 +395,24 @@ export function productFacts(blocks: SchemaBlock[]) {
     returns ||= Boolean(product.returns);
   }
   return { schema_product_count: chosen.length, ...merged, shipping, returns };
+}
+
+export function structuredDataFacts(root: HtmlNode, maxBlocks: number, baseUrl: string) {
+  const raw = [...elements(root, 'script')]
+    .filter((node) => attribute(node, 'type').toLowerCase() === 'application/ld+json')
+    .map(textContent);
+  const { objects, invalid } = jsonLdObjects(raw);
+  const jsonLd = jsonLdBlocks(objects, maxBlocks);
+  const microdata = microdataBlocks(root, maxBlocks, baseUrl);
+  const blocks = [...jsonLd, ...microdata].slice(0, maxBlocks);
+  return {
+    blocks,
+    count: blocks.length,
+    has_json_ld: jsonLd.length > 0,
+    has_microdata: microdata.length > 0,
+    invalid_json_ld_count: invalid,
+    types: [...new Set(blocks.map((block) => block.type))].sort(compareText),
+    declared_types: declaredSchemaTypes(objects, root, maxBlocks),
+    product: productFacts(blocks),
+  };
 }

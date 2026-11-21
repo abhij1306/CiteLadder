@@ -16,7 +16,6 @@ import { getLogger } from './logging.ts';
 const logger = getLogger('api.errors');
 
 const INTERNAL_ERROR_MESSAGE = 'An unexpected error occurred';
-// Configuration is typed against the contracts' machine-code vocabulary.
 const INTERNAL_ERROR_CODE = asApiErrorCode(policy.errors.internal_error_code);
 
 type Envelope = {
@@ -33,7 +32,6 @@ function isRetryableStatus(status: number): boolean {
   return policy.errors.retryable_statuses.includes(status) || (status >= 500 && status <= 599);
 }
 
-/** The status's canonical code, or the fallback for an unmapped status. */
 function defaultCode(status: number): ApiErrorCode {
   const codes: Record<string, string> = policy.errors.status_default_code;
   return asApiErrorCode(codes[String(status)] ?? policy.errors.fallback_code);
@@ -56,7 +54,6 @@ function errorEnvelope(input: {
   return { error };
 }
 
-/** The coded failure every route raises. */
 export class ApiError extends Error {
   readonly status: ContentfulStatusCode;
   readonly code: ApiErrorCode;
@@ -87,12 +84,10 @@ export class ApiError extends Error {
   }
 }
 
-/** The repeated 404, message exactly "{resource} not found". */
 export function notFound(resource: string): ApiError {
   return new ApiError(404, `${resource} not found`);
 }
 
-/** A 409 whose machine reason is its code and whose message is a human sentence. */
 export function conflict(code: ApiErrorCode, message: string): never {
   throw new ApiError(409, message, { code });
 }
@@ -121,8 +116,6 @@ export const onError: ErrorHandler = (error, c) => {
     );
   }
   if (error instanceof HTTPException) {
-    // The framework's own failures (malformed input a middleware refused),
-    // use the configured status defaults.
     const status = error.status as ContentfulStatusCode;
     const message = error.message || statusPhrase(error.getResponse());
     return c.json(
@@ -151,7 +144,6 @@ export const onError: ErrorHandler = (error, c) => {
   );
 };
 
-/** Unknown path: a coded routing 404. */
 export const onNotFound: NotFoundHandler = (c) =>
   c.json(
     errorEnvelope({

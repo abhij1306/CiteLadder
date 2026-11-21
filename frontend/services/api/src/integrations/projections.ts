@@ -1,4 +1,3 @@
-/** Dataset-aware successor admission, inside the sync completion transaction. */
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { enqueueCoalesced, enqueueTask } from '../queue/enqueue.ts';
@@ -12,11 +11,6 @@ type CompletedSync = {
   resync_seq: number;
 };
 
-/**
- * A refresh rebuilds its window's snapshots from every stored row, so one still
- * queued for the same window already covers this run; a started one gets a
- * successor. Imports of GSC and GA4, or a burst of syncs, share one refresh.
- */
 async function enqueueTrafficRefresh(trx: Database, run: CompletedSync) {
   const start = run.window_start.slice(0, 10);
   const end = run.window_end.slice(0, 10);

@@ -1,6 +1,5 @@
-import { UnavailableValue } from '@/components/ui/unavailable-value';
+import { Absence } from '@/components/ui/absence';
 import type { PageDetail } from '@citeladder/contracts';
-import { ICONS } from '@/lib/icons';
 import { AuditScores } from './overview-metrics';
 
 export function UrlScoreSummary({ detail }: Readonly<{ detail: PageDetail }>) {
@@ -8,15 +7,13 @@ export function UrlScoreSummary({ detail }: Readonly<{ detail: PageDetail }>) {
     <AuditScores
       metrics={[
         {
-          title: 'Web Fundamentals',
+          title: 'Web fundamentals',
           value: detail.web_fundamentals_score,
-          icon: ICONS.siteHealth,
           unavailable: scoreUnavailableState(detail.web_fundamentals_state),
         },
         {
-          title: 'AEO Readiness',
+          title: 'AEO readiness',
           value: detail.aeo_readiness_score,
-          icon: ICONS.visibility,
           unavailable: scoreUnavailableState(
             detail.aeo_measurement_state,
             detail.aeo_measurement_reason,
@@ -26,8 +23,7 @@ export function UrlScoreSummary({ detail }: Readonly<{ detail: PageDetail }>) {
           title: 'AEO checklist completion',
           value:
             detail.aeo_measurement_coverage === null ? null : detail.aeo_measurement_coverage * 100,
-          valueUnit: 'plain-percent',
-          icon: ICONS.reports,
+          valueUnit: 'percent',
           unavailable: scoreUnavailableState(
             detail.aeo_measurement_state,
             detail.aeo_measurement_reason,
@@ -40,14 +36,11 @@ export function UrlScoreSummary({ detail }: Readonly<{ detail: PageDetail }>) {
 
 function scoreUnavailableState(state: string, reason?: string) {
   if (state === 'limited_evidence') {
-    return <span className="type-caption">Limited evidence</span>;
+    return <Absence state="not_measured" label="Limited evidence" />;
   }
-  if (state === 'excluded') {
-    return <span className="type-caption">Excluded</span>;
-  }
-  // The page's kind has no AEO checklist: a fact about the page, not a missing measurement.
+  if (state === 'excluded') return <Absence state="not_applicable" label="Excluded" />;
   if (reason === 'unsupported_purpose_checklist') {
-    return <span className="type-caption">No AEO checklist for this page kind</span>;
+    return <Absence state="not_applicable" label="No AEO checklist for this page kind" />;
   }
-  return <UnavailableValue state="not_measured" />;
+  return <Absence state="not_measured" />;
 }

@@ -11,23 +11,6 @@ import { performanceMutations, type PerformanceSyncEnqueueResponse } from '@/lib
 import { useProjectScope } from '@/lib/project/active-project-scope';
 import { isSyncInFlight, pollSyncRun } from '@/lib/integrations/status';
 
-/**
- * "Sync now" for the Performance surface: enqueue one integrations run per
- * active mapped connection, poll each to terminal, then invalidate the
- * projections the completed runs refreshed.
- *
- * The window each run covers is decided server-side and is INCREMENTAL — it
- * extends what the connection already imported rather than re-fetching a
- * fixed trailing window — so repeated syncs accumulate history instead of
- * rewriting the same dates.
- *
- * A terminal sync run means the IMPORT finished, NOT that the projection did:
- * the snapshot refresh (and, for referral datasets, ingest -> classify ->
- * referral snapshot) runs on the analytics worker afterwards. Each polled run
- * reports `processing` while the project still has those tasks queued, so the
- * batch stays in flight — Sync disabled, banner up — until the reports are
- * rebuilt, and the screen refetches once at that point.
- */
 export function usePerformanceSync() {
   const { workspaceId, projectId } = useProjectScope();
   const scopeKey = `${workspaceId}:${projectId}`;
@@ -39,13 +22,8 @@ export function usePerformanceSync() {
   const currentBatch = batch?.scopeKey === scopeKey ? batch : null;
   const runs = currentBatch?.runs ?? [];
   const startedAt = currentBatch?.startedAt ?? null;
-  const notice =
-    currentBatch && !runs.length
-      ? 'Nothing to sync yet. Connect a data source and choose its property above.'
-      : null;
+  const notice = currentBatch && !runs.length ? 'Nothing to sync yet.' : null;
   const mutation = useMutation(performanceMutations.syncNow({ workspaceId, projectId }));
-  // The batch belongs to the project it was started for: a late answer for a
-  // project the reader has since left is never polled here.
   const start = () => {
     const requested = scopeKey;
     mutation.mutate(undefined, {
@@ -64,8 +42,6 @@ export function usePerformanceSync() {
   const settled =
     enqueued &&
     runQueries.every((query) => query.data !== undefined && !isSyncInFlight(query.data));
-  // Only a finished batch has an outcome, and it succeeded only if every run
-  // in it did — one failure is a failed batch.
   let outcome: 'succeeded' | 'failed' | null = null;
   if (settled) {
     const allSucceeded = runQueries.every((query) => query.data?.status === 'succeeded');
@@ -83,7 +59,6 @@ export function usePerformanceSync() {
   };
 }
 
-/** Refetch every imported read once, when the batch's reports have been rebuilt. */
 function useRefreshWhenSettled(settled: boolean) {
   const client = useQueryClient();
   useEffect(() => {

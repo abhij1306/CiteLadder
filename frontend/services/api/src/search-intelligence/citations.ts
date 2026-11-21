@@ -1,9 +1,3 @@
-/**
- * Citation matches: which AI-answer citations in selected visibility audits
- * come from a domain that links to the project (a published referring-domain
- * dataset). The result is an immutable derived dataset identified by its exact
- * inputs, so repeating a selection returns the dataset already derived.
- */
 import { asApiErrorCode } from '@citeladder/contracts/error-codes';
 import { createHash, randomUUID } from 'node:crypto';
 
@@ -37,25 +31,15 @@ type Citation = {
   analyzer_version: string;
 };
 
-/** A citation's best URL: canonical, then resolved, then as cited. */
 const citedUrl = (citation: Citation) =>
   citation.canonical_url || citation.resolved_url || citation.url;
 
-/**
- * The derivation's identity: the parent and every audit and citation it
- * reviewed, sorted. Stored derivations were keyed by this exact JSON.
- */
 function selectionHash(parentId: string, auditIds: string[], citationIds: string[]): string {
   return sha256(
     JSON.stringify({ audit_ids: auditIds, citation_ids: citationIds, parent_dataset_id: parentId }),
   );
 }
 
-/**
- * Matches are only as complete as the referring domains they were read against:
- * an unknown list stays unknown, a cut one is partial, and only a complete list
- * with no match is a definite empty.
- */
 function matchCoverage(parent: { coverage: string; truncated: boolean }, matches: number) {
   if (parent.coverage === 'unknown') return 'unknown';
   if (parent.truncated || parent.coverage === 'partial') return 'partial';
@@ -180,8 +164,6 @@ export function deriveCitationMatches(
       })
       .returningAll()
       .executeTakeFirstOrThrow();
-    // One statement per chunk keeps each insert under PostgreSQL's 65,535
-    // bind parameters; the chunks commit together in this transaction.
     for (const chunk of chunksOf(matches, MATCH_INSERT_CHUNK)) {
       await trx // NOSONAR -- Sequential inserts share one transaction.
         .insertInto('search_intelligence_rows')

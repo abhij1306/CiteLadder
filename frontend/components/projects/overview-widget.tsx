@@ -3,15 +3,9 @@ import type { ReactNode } from 'react';
 import type { OverviewWidgetKey } from '@citeladder/contracts/overview';
 import type { CommandCenter, Project } from '@citeladder/contracts';
 
-import {
-  CompanyFacts,
-  Movement,
-  ProgressProofCard,
-  ProjectStateCard,
-  RankedActionsCard,
-  Track,
-} from './dashboard-sections';
+import { CompanyFacts, Movement, ProjectStateCard, RankedActionsCard } from './dashboard-sections';
 import { NextAction } from './next-action-card';
+import { reached } from './overview-start';
 import { MissingPrompts } from './missing-prompts';
 import {
   AiTrafficWidget,
@@ -30,10 +24,8 @@ type WidgetProps = {
   actions: ReturnType<typeof useCommandCenterActions>;
 };
 
-/** Every widget by its layout key; a key with no entry fails the type check. */
 const WIDGETS: Record<OverviewWidgetKey, (props: WidgetProps) => ReactNode> = {
   project_state: ({ data }) => <ProjectStateCard data={data} />,
-  citation_share: ({ data }) => <Track data={data} />,
   movement: ({ data }) => <Movement data={data} />,
   next_action: ({ data }) => <NextAction data={data} />,
   missing_prompts: ({ project }) => (
@@ -46,7 +38,6 @@ const WIDGETS: Record<OverviewWidgetKey, (props: WidgetProps) => ReactNode> = {
       onMove={actions.move}
     />
   ),
-  progress_proof: ({ data }) => <ProgressProofCard data={data} />,
   company_facts: ({ data }) => <CompanyFacts data={data} />,
   visibility_trend: ({ project }) => <VisibilityTrendWidget project={project} />,
   share_of_voice: ({ project }) => <ShareOfVoiceWidget project={project} />,
@@ -57,7 +48,24 @@ const WIDGETS: Record<OverviewWidgetKey, (props: WidgetProps) => ReactNode> = {
   search_console: ({ project }) => <SearchConsoleWidget project={project} />,
 };
 
-/** One Overview widget by its layout key. */
+const SHOWS_BEFORE_RUN: Partial<Record<OverviewWidgetKey, (data: CommandCenter) => boolean>> = {
+  company_facts: ({ facts }) =>
+    Boolean(
+      facts.positioning.trim() ||
+      facts.description.trim() ||
+      facts.target_audience.trim() ||
+      facts.products_services.length,
+    ),
+  ranked_actions: ({ actions }) => actions.length > 0,
+  ai_traffic: ({ loop }) => reached(loop.connected),
+  search_console: ({ loop }) => reached(loop.connected),
+};
+
+export function widgetShows(key: OverviewWidgetKey, data: CommandCenter): boolean {
+  if (data.measurement) return true;
+  return SHOWS_BEFORE_RUN[key]?.(data) ?? false;
+}
+
 export function OverviewWidgetView({
   widgetKey,
   ...props

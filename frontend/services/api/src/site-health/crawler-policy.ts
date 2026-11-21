@@ -1,4 +1,3 @@
-/** The catalog's robots projection for Site Health, evaluated by the acquisition parser. */
 import type { z } from 'zod';
 import type { crawlerBotFactSchema } from '@citeladder/contracts/site-health';
 import { policy } from '../config.ts';
@@ -17,7 +16,6 @@ const unknownSample: SamplePolicy = {
 const allowed = (robots: RobotsPolicy, tokens: readonly string[], url: string) =>
   tokens.every((token) => robots.allows(url, token));
 
-/** Root permission and group match, published from the full response before the walk. */
 export function crawlerRootFacts(
   robots: RobotsPolicy,
   origin: string,
@@ -39,7 +37,6 @@ export function crawlerRootFacts(
   });
 }
 
-/** Permission over a bounded set of known URLs; a truncated body cannot be judged. */
 export function crawlerSamplePolicy(
   robots: RobotsPolicy,
   tokens: readonly string[],

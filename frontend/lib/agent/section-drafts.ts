@@ -1,9 +1,5 @@
 import { useSyncExternalStore } from 'react';
 
-/**
- * Unsaved section edits, held for the life of the pane so switching revision or
- * document does not drop them. A draft lives until it is saved or discarded.
- */
 const drafts = new Map<string, string>();
 const listeners = new Set<() => void>();
 
@@ -30,7 +26,6 @@ export function clearSectionDraft(key: string): void {
   if (drafts.delete(key)) emit();
 }
 
-/** The draft for one section, or undefined when none is kept. */
 export function useSectionDraft(key: string): string | undefined {
   return useSyncExternalStore(
     subscribe,
@@ -39,7 +34,6 @@ export function useSectionDraft(key: string): string | undefined {
   );
 }
 
-/** Test seam: forget every draft. */
 export function resetSectionDrafts(): void {
   drafts.clear();
   emit();

@@ -10,8 +10,6 @@ import { MarketSelect } from './market-select';
 function renderSelect(overrides?: Partial<Parameters<typeof MarketSelect>[0]>) {
   const onChange = vi.fn();
   const onBlur = vi.fn();
-  // Stateful harness: mirrors react-hook-form round-tripping the committed
-  // value back into the `value` prop.
   function Harness() {
     const [value, setValue] = useState(overrides?.value ?? 'US');
     return (
@@ -69,7 +67,7 @@ describe('MarketSelect', () => {
 
     const input = screen.getByRole('combobox', { name: /^country$/i });
     await user.click(input);
-    await user.type(input, 'aus'); // Australia, Austria
+    await user.type(input, 'aus');
     await user.keyboard('{ArrowDown}{Enter}');
 
     expect(onChange).toHaveBeenCalledWith('AT');
@@ -87,8 +85,6 @@ describe('MarketSelect', () => {
     expect(onChange).not.toHaveBeenCalled();
     expect(input).toHaveValue('United States');
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
-    // Escape closes the list but keeps focus in the input, so the field has not
-    // been left — reporting a blur here would mark it touched mid-edit.
     expect(onBlur).not.toHaveBeenCalled();
   });
 

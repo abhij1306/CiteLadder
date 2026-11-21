@@ -1,10 +1,3 @@
-/**
- * Workspace isolation over the route registry, for every browser route whose
- * path names a resource outside `/projects/{project_id}` (those are covered in
- * `request-access.test.ts`). Each route family, keyed by the path up to its
- * first parameter, has a factory for one real resource of another workspace;
- * a family without one fails the test, so a new family cannot opt out.
- */
 import { randomUUID } from 'node:crypto';
 
 import { afterAll, beforeAll, expect, it } from 'vitest';
@@ -165,7 +158,6 @@ async function providerConnection(owner: SiteSeed) {
   return connection.id;
 }
 
-/** One real resource of the owner's workspace per route family. */
 const FACTORIES: Record<string, (owner: SiteSeed) => Promise<string>> = {
   '/api/v1/actions/{action_id}': async (owner) => {
     const row = actionRow(
@@ -219,14 +211,14 @@ const FACTORIES: Record<string, (owner: SiteSeed) => Promise<string>> = {
   '/api/v1/workspaces/{workspace_id}': async (owner) => owner.workspaceId,
 };
 
-/**
- * A valid body for each write that validates its body before authorizing the
- * resource, so the request reaches the workspace check; `{}` otherwise.
- */
 const revision = { base_revision_id: randomUUID() };
 const promptBody = { text: 'Which tool suits isolation?', cohort: 'core' };
 const BODIES: Record<string, unknown> = {
-  'POST /api/v1/agent/chats/{chat_id}/messages': { message: 'Hello', mentions: [] },
+  'POST /api/v1/agent/chats/{chat_id}/messages': {
+    message: 'Hello',
+    mentions: [],
+    attachments: [{ kind: 'pasted_text', text: 'Pasted' }],
+  },
   'POST /api/v1/agent/chats/{chat_id}/outputs/{output_id}/revisions': {
     ...revision,
     title: 'Draft',
@@ -289,7 +281,6 @@ afterAll(async () => {
 it('has a resource factory for every registered route family outside a project path', () => {
   const families = [...new Set(ROUTES.map((route) => route.family))];
   expect(families.filter((family) => !FACTORIES[family])).toEqual([]);
-  // The registry, not a hand list: these families come from the route contracts.
   expect(families).toContain('/api/v1/api-keys/{key_id}');
 });
 

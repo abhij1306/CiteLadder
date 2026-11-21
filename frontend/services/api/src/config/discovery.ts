@@ -1,4 +1,3 @@
-/** Discovery policy and queue admission bounds. */
 import native from './discovery.json' with { type: 'json' };
 
 // keenable_api_key is a plain runtime string: resolve only in discovery and never log settings.

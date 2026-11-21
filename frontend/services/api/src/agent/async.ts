@@ -17,11 +17,6 @@ export async function abortable<T>(work: () => Promise<T>, signal: AbortSignal):
   }
 }
 
-/**
- * The database as a read that `signal` can stop: once it aborts (the read
- * timeout, Stop or a lost lease), every later query, transactions included,
- * throws its reason instead of running. A query already sent finishes.
- */
 export function stoppableReads(db: Database, signal: AbortSignal): Database {
   const stop: KyselyPlugin = {
     transformQuery: ({ node }) => {

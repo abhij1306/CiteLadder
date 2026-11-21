@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Database } from '../db/database.ts';
 import { ApiError, notFound } from '../errors.ts';
+import { labelEndedLaunch } from '../probes/launch-end.ts';
 import { auditPolicy } from './config.ts';
 
 /** Caller holds the audit row lock; status and its event commit together. */
@@ -14,7 +15,7 @@ export async function transitionAudit(
 ) {
   const audit = await db
     .selectFrom('audits')
-    .select(['id', 'status'])
+    .select(['id', 'status', 'project_id', 'audit_scope', 'launch_id'])
     .where('workspace_id', '=', workspaceId)
     .where('id', '=', auditId)
     .forUpdate()
@@ -41,6 +42,13 @@ export async function transitionAudit(
     { status: target },
     at,
   );
+  if (auditPolicy.constants.audit_terminal_statuses.includes(target))
+    await labelEndedLaunch(db, {
+      workspaceId,
+      projectId: audit.project_id,
+      scope: audit.audit_scope,
+      launchId: audit.launch_id,
+    });
 }
 export function auditEvent(
   db: Database,

@@ -1,4 +1,3 @@
-/** Brand logo acquisition and cache policy. */
 export const brandLogos = {
   status_ready: 'ready',
   status_failed: 'failed',

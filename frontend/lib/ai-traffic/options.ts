@@ -16,15 +16,10 @@ import type { z } from 'zod';
 
 import type { AiReferralsRangeParams } from '@/lib/api/ai-traffic';
 import type { snapshotGranularitySchema } from '@citeladder/contracts/analytics';
-/**
- * Date-range presets. `latest` sends no bounds — the backend serves the
- * project's latest persisted snapshot at the requested granularity, so the
- * default landing always renders the freshest projection. A bounded preset
- * sends its token and the backend resolves the newest persisted snapshot of
- * that length; when none exists the empty payload comes back, which the
- * screen surfaces honestly rather than recomputing.
- */
 export type AiReferralsRange = 'latest' | '30d' | '90d' | '1y';
+
+/** Every sync writes the 30-day preset, so an empty default means nothing synced yet. */
+export const DEFAULT_RANGE: AiReferralsRange = '30d';
 
 export const RANGE_OPTIONS: readonly { value: AiReferralsRange; label: string }[] = [
   { value: 'latest', label: 'Latest synced window' },
@@ -37,25 +32,10 @@ export function rangeLabel(value: AiReferralsRange): string {
   return RANGE_OPTIONS.find((option) => option.value === value)?.label ?? value;
 }
 
-/**
- * Resolve a range preset into the API query params it sends.
- *
- * A bounded preset sends its `range` TOKEN, never a `from`/`to` computed
- * here. That is the fix for the defect this surface shipped with: provider
- * data lags, so every sync window ends YESTERDAY while a browser computing
- * "last 30 days" anchors on TODAY — and the backend selected a snapshot by
- * exact window. The bounded presets therefore matched nothing and rendered
- * empty, every time. The server now resolves the newest persisted snapshot
- * of the preset's LENGTH and reports the window it actually served.
- *
- * `latest` still sends nothing at all, so the backend serves the project's
- * freshest persisted snapshot.
- */
 export function rangeToParams(range: AiReferralsRange): AiReferralsRangeParams {
   return range === 'latest' ? {} : { range };
 }
 
-/** Snapshot bucket granularity — mirrors the backend contract vocabulary. */
 export type AiReferralsGranularity = z.infer<typeof snapshotGranularitySchema>;
 
 const BUCKET_NOUN: Record<AiReferralsGranularity, string> = {
@@ -64,7 +44,6 @@ const BUCKET_NOUN: Record<AiReferralsGranularity, string> = {
   month: 'month',
 };
 
-/** Bucket-count badge label ("13 weeks", "1 day"). */
 export function bucketCountLabel(granularity: AiReferralsGranularity, count: number): string {
   const noun = BUCKET_NOUN[granularity];
   return `${count} ${noun}${count === 1 ? '' : 's'}`;

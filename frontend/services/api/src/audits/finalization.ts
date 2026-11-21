@@ -23,11 +23,6 @@ function tallyStatusCounts(statusCounts: { status: string; count: string }[]) {
   return { completed, failed, open };
 }
 
-/**
- * Root lock serializes progress and finalization. Once every task settled, the run moves
- * through analyzing, derives its metrics (analysis owns that), runs the caller's Commerce
- * projection, completes, refreshes comparison baselines and queues downstream insights.
- */
 export function finalizeAudit(
   db: Database,
   workspaceId: string,
@@ -46,7 +41,6 @@ export function finalizeAudit(
       .executeTakeFirst();
     if (!audit || policy.audits.constants.audit_terminal_statuses.includes(audit.status))
       return null;
-    // Every settled task calls this; count by status so progress costs one aggregate, not a row load.
     const statusCounts = await trx
       .selectFrom('audit_tasks')
       .select((eb) => ['status', eb.fn.countAll<string>().as('count')])
@@ -131,9 +125,6 @@ export function finalizeAudit(
     await transitionAudit(trx, workspaceId, auditId, 'reporting', at, 'aggregating metrics');
     const status = metric.total_failed ? 'partially_completed' : 'completed';
     await transitionAudit(trx, workspaceId, auditId, status, at, `audit ${status}`);
-    // The run's comparable baseline, by the one comparison rule, for every
-    // surface that reads it. It runs once the run reads as measured, so later
-    // runs it refreshes find it among their candidates.
     await persistComparisonBaselines(trx, { workspaceId, auditId });
     await enqueueCoalesced(trx, {
       ...insightsRefresh,

@@ -331,7 +331,6 @@ describe('A3 integration partition replacement', () => {
       keyEvents: 1,
     });
     await classify(source);
-    // A classification written under earlier rules: today's rules would not call this source AI.
     await db
       .updateTable('referral_classifications')
       .set({ is_ai_referral: true, ai_source: 'chatgpt' })
@@ -554,7 +553,6 @@ describe('A3 integration partition replacement', () => {
       });
       return read.referral_volume[0]?.value;
     };
-    // Revision 0 observed no AI referral, and the cancelled run does not hide that.
     expect(await aiReferralVolume()).toBe(0);
     const truncated = await imported(first.dataset, first, 2);
     await asOwner((owner) =>
@@ -570,7 +568,6 @@ describe('A3 integration partition replacement', () => {
         .execute(),
     );
     expect(await quality()).toEqual({ revision: 0, flags: ['partition_fallback'] });
-    // The fallback revision is complete evidence: its zero stays observed.
     expect(await aiReferralVolume()).toBe(0);
   });
   it('classifies session-attributed landings, excludes other hosts and redacted paths, and scopes reads to the workspace', async () => {

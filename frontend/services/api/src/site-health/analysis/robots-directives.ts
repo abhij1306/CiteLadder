@@ -1,10 +1,8 @@
-/** Robots meta and X-Robots-Tag directives, keeping snippet controls distinct. */
 import { attribute, elements, type HtmlNode } from '../../web-evidence/html.ts';
 import { compareText } from '../../text-order.ts';
 import { analysisPolicy } from './policy.ts';
 
 const HEADER_AGENTS = new Set(analysisPolicy.facts.search_robots_header_agents);
-/** The robots meta names that bind the search crawler: the generic one and its own. */
 const META_AGENTS = new Set(['robots', ...HEADER_AGENTS]);
 const COLON_DIRECTIVES = new Set([
   'max-snippet',
@@ -26,7 +24,6 @@ const tokens = (value: string) =>
     .map((token) => token.trim().toLowerCase())
     .filter(Boolean);
 
-/** One header line's directives; an agent prefix scopes the following ones to that agent. */
 function lineDirectives(line: string, directives: Set<string>) {
   let applies = true;
   for (const token of tokens(line)) {

@@ -120,7 +120,6 @@ describe('configured model gateway', () => {
         usage: { input_tokens: 12, output_tokens: 5 },
       });
       expect(JSON.parse(String(io.fetch.mock.calls[0]![1]!.body))).toMatchObject({ stream: true });
-      // Without a listener the request stays buffered.
       await gateway.complete('s', 'u');
       expect(JSON.parse(String(io.fetch.mock.calls[1]![1]!.body)).stream).toBeUndefined();
     }),
@@ -184,7 +183,6 @@ describe('configured model gateway', () => {
         json_schema: { name: 'response', strict: true, schema },
       });
       expect(bodies[0].messages[1].content).toBe('question');
-      // The refusing destination is asked with the schema in the prompt, now and later.
       expect(bodies.slice(1).map((body) => body.response_format)).toEqual([undefined, undefined]);
       expect(bodies[2].messages[1].content).toBe(
         `next\n\nReturn only JSON matching this schema:\n${JSON.stringify(schema)}`,
@@ -267,7 +265,6 @@ describe('configured model gateway', () => {
         messages: [{ role: 'user', content: 'question' }],
         output_config: { format: { type: 'json_schema', schema } },
       });
-      // Provider failures keep the gateway's codes, so retry decisions stay the same.
       await expect(gateway.complete('system', 'next')).rejects.toMatchObject({
         code: 'http',
         status: 429,
@@ -412,7 +409,6 @@ describe('configured model gateway', () => {
         stop: 'tool_use',
         finish_status: 'tool_use',
         toolCalls: [{ id: 'toolu_1', name: 'read_visibility', input: { limit: 5 } }],
-        // The compaction step's own tokens are billed on top of the answer's.
         usage: {
           input_tokens: 1030,
           cached_input_tokens: 100,
@@ -439,7 +435,6 @@ describe('configured model gateway', () => {
           },
         ],
       });
-      // The thinking block keeps its signature so the next call can replay it unchanged.
       expect(result.blocks[0]).toMatchObject({
         type: 'thinking',
         thinking: 'Need visibility.',
@@ -453,7 +448,6 @@ describe('configured model gateway', () => {
       const [, init] = io.fetch.mock.calls[0]!;
       expect(new Headers(init!.headers).get('anthropic-beta')).toContain('compact-2026-01-12');
       expect(JSON.parse(String(init!.body))).toMatchObject({
-        // An hour-long cache, so a pause between turns still reads the chat from cache.
         system: [
           { type: 'text', text: 'contract', cache_control: { type: 'ephemeral', ttl: '1h' } },
         ],
@@ -573,7 +567,6 @@ describe('configured model gateway', () => {
           compactAtTokens: 80_000,
           previousResponseId: null,
           webSearches: 3,
-          // A call held for less than the route's cap is sent with its own.
           maxOutputTokens: 5_000,
         },
         undefined,
@@ -585,7 +578,6 @@ describe('configured model gateway', () => {
         text: 'Uniform prices start at $10.',
         usage: { input_tokens: 10, output_tokens: 12, web_search_requests: 1 },
       });
-      // The result and citations replay byte for byte, encrypted content included.
       expect(JSON.stringify(answer.blocks.slice(1))).toBe(JSON.stringify([result, cited]));
       expect(events).toEqual([
         { id: 'srvtoolu_1', name: 'web_search', status: 'started' },
@@ -652,7 +644,6 @@ describe('configured model gateway', () => {
         },
       ]),
     );
-    // Before the newest compaction everything is ignored, so nothing there is marked.
     const compactedLast = cachedMessages([
       { role: 'user', content: [{ type: 'text', text: 'Question' }] },
       { role: 'assistant', content: [{ type: 'compaction', content: 'Summary' }] },
@@ -742,7 +733,6 @@ describe('configured model gateway', () => {
           effort: 'low',
           compactAtTokens: 80_000,
           previousResponseId: null,
-          // Chat completions have no hosted search: the allowance offers nothing.
           webSearches: 2,
         },
         undefined,
@@ -762,7 +752,6 @@ describe('configured model gateway', () => {
           cached_input_tokens: 30,
           cache_write_input_tokens: 0,
         },
-        // Chat completions have no cache diagnosis to report.
         cache: { reason: 'not_requested' },
       });
       expect(deltas).toEqual(['Reading both.']);
@@ -778,7 +767,6 @@ describe('configured model gateway', () => {
           },
         ],
       });
-      // Thinking cannot cross to chat completions; tool results precede the user's text.
       expect(body.messages).toEqual([
         { role: 'system', content: 'contract' },
         { role: 'user', content: 'Context\n\nQuestion' },

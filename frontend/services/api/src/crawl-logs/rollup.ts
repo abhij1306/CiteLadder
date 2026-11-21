@@ -93,8 +93,6 @@ export async function refreshCrawlLogs(
       .where('status', '=', 'accepted')
       .where(sql<boolean>`(lines_matched>0 or lines_duplicate>0 or lines_unmatched>0 or heartbeat)`)
       .where('received_at', '>=', sql<Date>`${floor}::timestamp at time zone ${tz}`);
-    // Only receipts received on, or carrying lines from, the refreshed days decide their coverage,
-    // plus the settling drain a pull source needs after a refreshed day closes.
     if (span.length) {
       const from = sql<Date>`${span[0]}::date::timestamp at time zone ${tz}`,
         to = sql<Date>`(${span.at(-1)}::date + 1)::timestamp at time zone ${tz}`;
@@ -112,7 +110,6 @@ export async function refreshCrawlLogs(
       .where('project_id', '=', scope.projectId)
       .where('updated_at', '>=', sql<Date>`${floor}::timestamp at time zone ${tz}`)
       .execute();
-    // PostgreSQL supplies timezone-aware midnight boundaries, including DST days.
     const days = await sql<ReportingDay>`select to_char(d,'YYYY-MM-DD') as day,
       d::timestamp at time zone ${tz} as start,(d+interval '1 day')::timestamp at time zone ${tz} as end
       from generate_series(${floor},(${now}::timestamptz at time zone ${tz})::date,interval '1 day') d`.execute(
@@ -129,7 +126,6 @@ export async function refreshCrawlLogs(
         scope,
       ),
     );
-    // Bound statements and serialize them on the same transaction connection.
     for (let i = 0; i < coverage.length; i += crawlLogs.insert_rows_per_statement)
       await trx
         .insertInto('crawl_log_coverage_daily')
@@ -252,7 +248,6 @@ function coverageRows(
     ];
   });
 }
-/** A webhook or upload day: the decision and the longest wait between receipts. */
 function liveCoverage(
   source: Source,
   day: ReportingDay,

@@ -1,15 +1,12 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Prompt, Topic } from '@citeladder/contracts';
 
 import { Button } from '@/components/ui/button';
-import { Callout } from '@/components/ui/callout';
 import { ChecklistField } from '@/components/ui/checklist-field';
 import { Dialog } from '@/components/ui/dialog';
-import { EmptyState } from '@/components/ui/empty-state';
 import { Field } from '@/components/ui/field';
-import { MutationNotice } from '@/components/ui/mutation-notice';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Select } from '@/components/ui/select';
 import { agentWriteFailure } from '@/lib/agent/errors';
@@ -23,29 +20,14 @@ import { ANALYZE_PAGE_SEARCH_DEBOUNCE_MS } from '@/lib/config/agent';
 import { readableUrl } from '@/lib/format';
 import { useProjectHref } from '@/lib/navigation/project-destination';
 import { useProjectScope } from '@/lib/project/active-project-scope';
-
-/**
- * Analyze a page (CO6): the Actions header's button and its dialog. Pick one
- * of the latest crawl's content pages, a topic that has prompts and the
- * prompts to optimize the page for; Generate action creates or reuses the
- * page's Action and opens the new chat, which reads the live page first.
- */
-export function AnalyzePageButton() {
-  const [open, setOpen] = useState(false);
-  return (
-    <>
-      <Button variant="secondary" onClick={() => setOpen(true)}>
-        Analyze a page
-      </Button>
-      {/* Mounted only while open, so each opening starts from empty choices. */}
-      {open ? <AnalyzePageDialog onClose={() => setOpen(false)} /> : null}
-    </>
-  );
-}
+import { useDebounced } from '@/lib/use-debounced';
+import { Notice, readErrorProps } from '@/components/ui/notice';
+import { StateBlock } from '@/components/ui/state-block';
+import { Spinner } from '@/components/ui/spinner';
 
 type TopicChoice = Readonly<{ topic: Topic; prompts: readonly Prompt[] }>;
 
-function AnalyzePageDialog({ onClose }: Readonly<{ onClose: () => void }>) {
+export function AnalyzePageDialog({ onClose }: Readonly<{ onClose: () => void }>) {
   const { workspaceId, projectId } = useProjectScope();
   const scope = { workspaceId, projectId };
   const [page, setPage] = useState<AnalyzablePage | null>(null);
@@ -63,7 +45,6 @@ function AnalyzePageDialog({ onClose }: Readonly<{ onClose: () => void }>) {
   const pickTopic = (id: string) => {
     setTopicId(id);
     const prompts = topics.choices.find((choice) => choice.topic.id === id)?.prompts ?? [];
-    // Every prompt of the topic starts selected.
     setPromptIds(new Set(prompts.map((prompt) => prompt.id)));
   };
   const generate = () => {
@@ -91,7 +72,6 @@ function AnalyzePageDialog({ onClose }: Readonly<{ onClose: () => void }>) {
         if (!next && !analyze.isPending) onClose();
       }}
       title="Analyze a page"
-      description="Pick a page and the prompts it should answer."
       footer={
         <>
           <Button onClick={onClose} disabled={analyze.isPending}>
@@ -108,9 +88,9 @@ function AnalyzePageDialog({ onClose }: Readonly<{ onClose: () => void }>) {
         </>
       }
     >
-      {access.canSend ? null : <Callout tone="info">{access.message}</Callout>}
+      {access.canSend ? null : <Notice tone="info">{access.message}</Notice>}
       {analyze.isError ? (
-        <MutationNotice notice={agentWriteFailure(analyze.error, 'start the analysis')} />
+        <Notice kind="mutation" notice={agentWriteFailure(analyze.error, 'start the analysis')} />
       ) : null}
       <PageField scope={scope} page={page} onPick={setPage} />
       <TopicField
@@ -136,10 +116,6 @@ function AnalyzePageDialog({ onClose }: Readonly<{ onClose: () => void }>) {
   );
 }
 
-/**
- * The project's topics that hold active prompts, each with those prompts,
- * from the same reads as the Prompts screen.
- */
 function useTopicChoices(scope: ProjectScope) {
   const topicsQuery = useQuery(topicsQueries.list(scope));
   const setsQuery = useQuery(promptsQueries.sets(scope));
@@ -158,16 +134,6 @@ function useTopicChoices(scope: ProjectScope) {
   return { choices, state };
 }
 
-function useDebounced(value: string) {
-  const [debounced, setDebounced] = useState(value);
-  useEffect(() => {
-    const timer = window.setTimeout(() => setDebounced(value), ANALYZE_PAGE_SEARCH_DEBOUNCE_MS);
-    return () => window.clearTimeout(timer);
-  }, [value]);
-  return debounced;
-}
-
-/** A page's path as a reader reads it; the whole address when it cannot be parsed. */
 function pagePath(url: string) {
   try {
     const parsed = new URL(url);
@@ -177,11 +143,6 @@ function pagePath(url: string) {
   }
 }
 
-/**
- * The content page, searched on the server: the latest crawl's content pages
- * whose address or title matches, at most the server's cap. The picked page
- * stays an option while a later search leaves it out.
- */
 function PageField({
   scope,
   page,
@@ -192,34 +153,28 @@ function PageField({
   onPick: (page: AnalyzablePage) => void;
 }>) {
   const [search, setSearch] = useState('');
-  const searched = useDebounced(search);
+  const searched = useDebounced(search, ANALYZE_PAGE_SEARCH_DEBOUNCE_MS);
   const query = useQuery({
     ...actionsQueries.analyzablePages(scope, searched),
-    // A new search keeps the last matches on screen until its own land.
     placeholderData: (previous) => previous,
   });
   const items = query.data?.items ?? [];
   const pages =
     page && !items.some((item) => item.site_url_id === page.site_url_id) ? [page, ...items] : items;
-  if (query.isPending) return <EmptyState variant="inline" title="Loading your content pages…" />;
+  if (query.isPending) return <Spinner label="Loading your content pages…" showLabel />;
   if (query.isError)
-    return <Callout tone="negative">Your content pages could not be loaded.</Callout>;
+    return (
+      <Notice
+        kind="read"
+        {...readErrorProps(query)}
+        title="Couldn't load your content pages"
+        fallback="Your content pages could not be loaded."
+      />
+    );
   if (query.data.crawl_id === null)
-    return (
-      <EmptyState
-        variant="inline"
-        title="No crawl yet"
-        description="Analyze a page reads the content pages of your latest crawl. Run a crawl in Site Health first."
-      />
-    );
+    return <StateBlock kind="empty" inline message="No crawl yet" />;
   if (pages.length === 0 && search.trim() === '')
-    return (
-      <EmptyState
-        variant="inline"
-        title="No content pages"
-        description="Your latest crawl found no articles, guides or other content pages."
-      />
-    );
+    return <StateBlock kind="empty" inline message="No content pages in your latest crawl." />;
   return (
     <Field label="Page" hint={pageHint(items.length, query.data.truncated)}>
       {(control) => (
@@ -246,8 +201,8 @@ function PageField({
 }
 
 function pageHint(count: number, truncated: boolean) {
-  if (truncated) return `Showing the first ${count} matches. Search to narrow them.`;
-  return count === 0 ? 'No content pages match this search.' : undefined;
+  if (truncated) return `First ${count} matches`;
+  return count === 0 ? 'No matches.' : undefined;
 }
 
 function TopicField({
@@ -261,18 +216,23 @@ function TopicField({
   value: string;
   onPick: (id: string) => void;
 }>) {
-  if (state === 'loading') return <EmptyState variant="inline" title="Loading your topics…" />;
-  if (state === 'error') return <Callout tone="negative">Your topics could not be loaded.</Callout>;
+  if (state === 'loading') return <Spinner label="Loading your topics…" showLabel />;
+  if (state === 'error') return <Notice tone="negative">Your topics could not be loaded.</Notice>;
   if (choices.length === 0)
     return (
-      <EmptyState
-        variant="inline"
-        title="No topics with prompts"
-        description="Add prompts to a topic on the Prompts page first."
+      <StateBlock
+        kind="empty"
+        inline
+        message={
+          <>
+            <span className="type-emphasis">No topics with prompts</span> Add prompts to a topic on
+            the Prompts page first.
+          </>
+        }
       />
     );
   return (
-    <Field label="Topic" hint="Only topics with prompts are listed.">
+    <Field label="Topic">
       {(control) => (
         <Select
           {...control}
@@ -303,7 +263,6 @@ function PromptsField({
   return (
     <ChecklistField
       label="Prompts"
-      help="The page is improved to answer these prompts."
       count={`${selected.size} of ${prompts.length}`}
       note={selected.size === 0 ? 'Choose at least one prompt.' : undefined}
       items={prompts.map((prompt) => ({

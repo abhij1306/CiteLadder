@@ -44,7 +44,6 @@ async function repriceArtifact(
     return appended ? 'appended' : 'missing';
   });
 }
-/** Operator-selected persisted artifacts; every append uses its authorized workspace and honest version pair. */
 export async function repriceExecutions(db: Database, request: RepricingRequest) {
   if (request.formulaVersion !== costPolicy.formula_version)
     throw new Error('Requested formula is not computed by this build');

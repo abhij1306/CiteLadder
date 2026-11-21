@@ -1,12 +1,3 @@
-/**
- * Catalog sources (commerce improvement PR 6, CM3): the CSV template, a
- * Merchant Center feed file and a Shopify storefront's `products.json`, each
- * parsed into the same catalog items that the one admission path
- * (`import.ts`) writes. Pure: no database, no network.
- *
- * A row that cannot become a product is a `rejected` item with its reason; a
- * file that cannot be read at all is refused as a whole (422).
- */
 import { CATALOG_TEMPLATE_REQUIRED } from '@citeladder/contracts/commerce-requests';
 import type {
   CatalogCategoryProposal,
@@ -28,7 +19,6 @@ export type CatalogFormat = CatalogImportStage['source_format'];
 const limits = policy.commerce.catalog_sources;
 
 const amount = z.number().nonnegative().max(999999999999.99);
-/** One product's catalog fields, as every source supplies them. */
 export const catalogValuesSchema = z
   .object({
     canonical_url: z
@@ -48,7 +38,6 @@ export const catalogValuesSchema = z
   .partial();
 export type CatalogValues = z.output<typeof catalogValuesSchema>;
 
-/** One sellable variant of a product, as its source listed it. */
 export type CatalogVariant = {
   title: string;
   sku: string;
@@ -57,7 +46,6 @@ export type CatalogVariant = {
   url: string;
 };
 
-/** A category path, top first; each segment is a category name. */
 export type CategoryPath = readonly string[];
 
 export type CatalogItem =
@@ -82,10 +70,6 @@ const text = (value: unknown): string => {
   return '';
 };
 
-/**
- * A price as feeds write it: `59.00`, `59.00 EUR` or `EUR 59.00`. Thousands
- * separators and currency symbols are ambiguous and refused, never guessed.
- */
 export function parsePrice(value: string): { amount: number; currency: string } {
   const match = /^(?:([A-Z]{3})\s+)?(\d{1,12}(?:\.\d{1,2})?)(?:\s+([A-Z]{3}))?$/u.exec(
     value.trim().toUpperCase(),
@@ -99,7 +83,6 @@ export function parsePrice(value: string): { amount: number; currency: string } 
   return { amount: Number(number), currency: before ?? after ?? '' };
 }
 
-/** `A > B` into its category names; empty segments and non-names are dropped. */
 function categoryPath(value: string): CategoryPath {
   const segments = value
     .split('>')
@@ -112,7 +95,6 @@ function categoryPath(value: string): CategoryPath {
   return segments;
 }
 
-/** Distinct non-empty paths, in first-seen order. */
 function pathsOf(values: readonly string[]): CategoryPath[] {
   const paths = new Map<string, CategoryPath>();
   for (const path of values.map(categoryPath))
@@ -145,7 +127,6 @@ function rowItem(
   }
 }
 
-/** A delimited file's records by lower-cased header (`g:` prefixes dropped). */
 function delimitedRecords(content: string): { header: string[]; rows: Record<string, string>[] } {
   const delimiter = (content.split('\n', 1)[0] ?? '').includes('\t') ? '\t' : ',';
   let rows: string[][];
@@ -177,7 +158,6 @@ function boundedRows<T>(rows: T[]): T[] {
   return rows;
 }
 
-/** The CSV template: `title` and `brand` required, the other columns optional. */
 function parseTemplate(content: string): CatalogItem[] {
   const { header, rows } = delimitedRecords(content);
   const missing = CATALOG_TEMPLATE_REQUIRED.filter((name) => !header.includes(name));
@@ -208,7 +188,6 @@ function parseTemplate(content: string): CatalogItem[] {
   );
 }
 
-/** One Merchant Center item, by Google's field names. */
 type FeedItem = { row_number: number; fields: Record<string, string>; product_types: string[] };
 
 const xml = new XMLParser({
@@ -246,7 +225,6 @@ function xmlFeed(content: string): FeedItem[] {
   });
 }
 
-/** Content API JSON (`offerId`, `price: {value, currency}`) or Google's snake_case names. */
 function jsonFeed(content: string): FeedItem[] {
   let document: unknown;
   try {
@@ -282,7 +260,6 @@ function delimitedFeed(content: string): FeedItem[] {
   }));
 }
 
-/** One feed item as a variant of its item group. */
 function feedVariant(item: FeedItem) {
   const { fields } = item;
   if (!fields.title) throw new RowError('title is required');
@@ -301,7 +278,6 @@ function feedVariant(item: FeedItem) {
   };
 }
 
-/** One product from a Merchant Center item group (or a lone item). */
 function feedProduct(group: NonEmpty<FeedItem>, grouped: boolean): CatalogItem {
   const [first, ...rest] = group;
   return rowItem(first.row_number, () => {
@@ -335,7 +311,6 @@ function feedProduct(group: NonEmpty<FeedItem>, grouped: boolean): CatalogItem {
   });
 }
 
-/** A Merchant Center feed: CSV, TSV, XML (RSS or Atom) or JSON; `item_group_id` groups variants. */
 function parseMerchantFeed(content: string): CatalogItem[] {
   const start = content.replace(/^\uFEFF/u, '').trimStart();
   let items: FeedItem[];
@@ -369,7 +344,6 @@ const shopifyProduct = z.object({
 });
 const shopifyPage = z.object({ products: z.array(z.unknown()) });
 
-/** The stored payload of a storefront fetch: the store host and each page body as fetched. */
 const shopifyPayloadSchema = z.object({ store: z.string(), pages: z.array(z.string()) });
 
 function shopifyItem(store: string, rowNumber: number, raw: unknown): CatalogItem {
@@ -413,14 +387,12 @@ function shopifyItem(store: string, rowNumber: number, raw: unknown): CatalogIte
   });
 }
 
-/** A fetched storefront's products, numbered in page order. */
 function parseShopifyPayload(content: string): CatalogItem[] {
   const payload = shopifyPayloadSchema.parse(JSON.parse(content));
   const products = payload.pages.flatMap((page) => shopifyPage.parse(JSON.parse(page)).products);
   return boundedRows(products).map((raw, index) => shopifyItem(payload.store, index + 1, raw));
 }
 
-/** Parse a staged import's stored content by its format. */
 export function catalogItems(format: CatalogFormat, content: string): CatalogItem[] {
   if (!content.trim()) refuse('The file is empty');
   switch (format) {
@@ -439,11 +411,6 @@ export function catalogItems(format: CatalogFormat, content: string): CatalogIte
 
 type TreeNode = { key: string; name: string; parent_key: string | null };
 
-/**
- * The category tree the items propose, keyed like `commerce_categories`
- * (one category per name). A name keeps the first parent a path gives it; a
- * parent that would make a cycle is not taken.
- */
 export function proposedTree(items: readonly CatalogItem[]): Map<string, TreeNode> {
   const nodes = new Map<string, TreeNode>();
   const ancestors = (key: string | null) => {
@@ -473,7 +440,6 @@ export function proposedTree(items: readonly CatalogItem[]): Map<string, TreeNod
   return nodes;
 }
 
-/** The category names an item joins: each path up to its first excluded category. */
 export function keptCategories(paths: readonly CategoryPath[], excluded: ReadonlySet<string>) {
   const names = new Map<string, string>();
   for (const path of paths)
@@ -485,7 +451,6 @@ export function keptCategories(paths: readonly CategoryPath[], excluded: Readonl
   return [...names.values()];
 }
 
-/** The proposed tree as the review step shows it: depth-first, by name. */
 export function treeProposal(
   items: readonly CatalogItem[],
   existing: ReadonlySet<string>,

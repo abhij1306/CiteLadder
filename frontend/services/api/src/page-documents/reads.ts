@@ -1,7 +1,3 @@
-/**
- * Persisted reads of page fetches: a chat's fetch state and a snapshot's
- * page-local checks for the Agent's context. Reads never fetch.
- */
 import { z } from 'zod';
 
 import { agentPageFetchSchema } from '@citeladder/contracts/agent';
@@ -22,10 +18,6 @@ const checkSchema = z.object({
   display_applicability: z.boolean(),
 });
 
-/**
- * The checks the SEO tab shows (E5): those Site Health displays, failing ones
- * first, each in catalog order, with the rule's title.
- */
 function shownChecks(evaluations: unknown) {
   const checks = z
     .array(checkSchema)
@@ -41,7 +33,6 @@ function shownChecks(evaluations: unknown) {
   return [...checks.filter((check) => check.failing), ...checks.filter((check) => !check.failing)];
 }
 
-/** The chat's latest snapshot, newest first. */
 function latestSnapshot(db: Database, workspaceId: string, chatId: string) {
   return db
     .selectFrom('page_snapshots')
@@ -54,12 +45,6 @@ function latestSnapshot(db: Database, workspaceId: string, chatId: string) {
     .executeTakeFirst();
 }
 
-/**
- * A page chat's fetch: `reading` while its task is active, then how it ended.
- * A task that ended without a snapshot (an internal failure its compensation
- * has not recorded yet) reads as failed, never as still reading. Null for a
- * chat that never fetched a page.
- */
 export async function pageFetchView(
   db: Database,
   chat: { workspace_id: string; id: string },
@@ -78,11 +63,6 @@ export async function pageFetchView(
   return { status: 'done', outcome: 'failed', fetched_at: null, checks: [] };
 }
 
-/**
- * One snapshot of the project as Agent context: the page it fetched, when, and
- * the page-local Site Health checks that did not pass on it. Null when the
- * snapshot is not the project's.
- */
 export async function fetchedPageContext(
   db: Database,
   scope: { workspaceId: string; projectId: string },
@@ -112,7 +92,6 @@ export async function fetchedPageContext(
     outcome: snapshot.outcome,
     outcome_reason: snapshot.outcome_reason,
     page_kind: snapshot.page_kind,
-    // Re-run on this fetch; checks that need the whole crawl keep the crawl's finding.
     scope: 'page-local Site Health checks on the fetched page',
     checks_run: checks.length,
     failing_checks: checks

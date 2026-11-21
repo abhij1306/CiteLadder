@@ -1,12 +1,3 @@
-/**
- * Site-level findings: architecture rules and sitewide links.
- *
- * Site-level findings are judged over the whole crawl and persisted ONCE,
- * against the homepage, with the pages (or page kinds, or link targets) they
- * found in the evidence (`siteLevelFindingSchema`). Shown as an occurrence
- * they read as "the homepage is buried too deeply"; the pages in the evidence
- * are the affected pages. Pure.
- */
 import {
   siteLevelFinding,
   siteLevelRuleSchema,
@@ -19,15 +10,14 @@ type PageListFinding = Extract<SiteLevelFinding, { evidence: { pages: unknown } 
 type LinkTargetFinding = Extract<SiteLevelFinding, { evidence: { targets: unknown } }>;
 type EvidenceTarget = LinkTargetFinding['evidence']['targets'][number];
 
-/** The rules whose evidence lists affected pages. */
 export const pageListRules: readonly SiteLevelRule[] = siteLevelRuleSchema.extract([
   'architecture.excessive_depth',
   'architecture.breadcrumb_hierarchy_conflict',
   'architecture.orphan_pages',
   'architecture.parentless_detail_pages',
   'architecture.unreachable_from_home',
+  'architecture.dead_end_pages',
 ]).options;
-/** Every rule whose finding is persisted once for the site. */
 export const siteLevelRules: readonly SiteLevelRule[] = siteLevelRuleSchema.options;
 
 type EvidencePage = Readonly<{
@@ -35,14 +25,11 @@ type EvidencePage = Readonly<{
   url: string;
   title: string | null;
   pageKind: string | null;
-  /** Shortest click path from the homepage, only where depth is the finding. */
   clicksFromHome: number | null;
 }>;
 
-/** A group of affected pages under one path prefix, largest first. */
 type EvidenceSection = Readonly<{ pathPrefix: string; pageCount: number }>;
 
-/** Where a sitewide link goes wrong, spelled as the link's outcome. */
 type LinkOutcome =
   | Readonly<{ kind: 'status'; statusCode: number | null }>
   | Readonly<{ kind: 'redirect'; finalUrl: string; hops: number }>
@@ -55,6 +42,12 @@ type LinkTarget = Readonly<{
   pages: readonly EvidencePage[];
 }>;
 
+type DuplicateSet = Readonly<{
+  text: string;
+  pageCount: number;
+  pages: readonly EvidencePage[];
+}>;
+
 export type SiteLevelEvidence =
   | Readonly<{
       kind: 'pages';
@@ -63,12 +56,12 @@ export type SiteLevelEvidence =
       sections: readonly EvidenceSection[];
     }>
   | Readonly<{
-      kind: 'page_kinds';
-      pageKinds: readonly Readonly<{ pageKind: string; pageCount: number }>[];
+      kind: 'duplicate_sets';
+      total: number;
+      sets: readonly DuplicateSet[];
     }>
   | Readonly<{
       kind: 'link_targets';
-      /** Distinct pages carrying a failing link. */
       total: number;
       targets: readonly LinkTarget[];
     }>;
@@ -120,22 +113,33 @@ function linkTargets(finding: LinkTargetFinding): LinkTarget[] {
   }));
 }
 
-/** The pages, page kinds or link targets a site-level finding names; `null` for a per-page rule. */
+const countedPages = (counts: Readonly<Record<string, number>>) =>
+  Object.values(counts).reduce((sum, count) => sum + count, 0);
+
 export function siteLevelEvidence(ruleId: string, evidence: unknown): SiteLevelEvidence | null {
   const finding = siteLevelFinding(ruleId, evidence);
   if (finding === null) return null;
   switch (finding.rule_id) {
-    case 'architecture.duplicate_metadata_in_page_kind':
-    case 'architecture.unhubbed_page_kind': {
-      const duplicates = finding.rule_id === 'architecture.duplicate_metadata_in_page_kind';
+    case 'architecture.duplicate_titles':
+    case 'architecture.duplicate_meta_descriptions':
       return {
-        kind: 'page_kinds',
-        pageKinds: finding.evidence.page_kinds.map((row) => ({
-          pageKind: row.page_kind,
-          pageCount: duplicates ? row.duplicate_metadata_count : row.page_count,
+        kind: 'duplicate_sets',
+        total: finding.evidence.count,
+        sets: finding.evidence.duplicate_sets.map((set) => ({
+          text: set.text,
+          pageCount: set.page_count,
+          pages: set.pages.map((page) => evidencePage(page, false)),
         })),
       };
-    }
+    case 'architecture.unhubbed_page_kind':
+      return {
+        kind: 'pages',
+        total: countedPages(finding.evidence.page_kind_counts),
+        pages: finding.evidence.page_kinds.flatMap((row) =>
+          row.pages.map((page) => evidencePage(page, false)),
+        ),
+        sections: [],
+      };
     case 'technical.sitewide_broken_link':
     case 'technical.sitewide_link_redirect':
       return { kind: 'link_targets', total: finding.evidence.count, targets: linkTargets(finding) };
@@ -149,11 +153,9 @@ export function siteLevelEvidence(ruleId: string, evidence: unknown): SiteLevelE
   }
 }
 
-/** A page count in words: `1 page`, `158 pages`. */
 export const pageCountLabel = (count: number) =>
   `${String(count)} ${count === 1 ? 'page' : 'pages'}`;
 
-/** Where a sitewide link lands, as the reader would fix it: `404`, `/new`, `redirect loop`. */
 export function linkOutcomeLabel(outcome: LinkOutcome, origin: string | null): string {
   switch (outcome.kind) {
     case 'status':
@@ -171,24 +173,13 @@ export function linkOutcomeLabel(outcome: LinkOutcome, origin: string | null): s
   }
 }
 
-/**
- * A site-level finding's facts, one per thing it names:
- *
- * - a page list: its sections when it groups pages by path
- *   (`/blogs/testimonials (158 pages)`), otherwise each page's path, with its
- *   depth where depth is the finding;
- * - page kinds: each affected kind;
- * - sitewide links: each link, where it lands, and on how many pages.
- *
- * Empty for a per-page rule.
- */
 export function siteLevelFacts(ruleId: string, evidence: unknown): string[] {
   const listed = siteLevelEvidence(ruleId, evidence);
   switch (listed?.kind) {
     case undefined:
       return [];
-    case 'page_kinds':
-      return listed.pageKinds.map((row) => row.pageKind);
+    case 'duplicate_sets':
+      return listed.sets.map((set) => `“${set.text}” (${pageCountLabel(set.pageCount)})`);
     case 'link_targets':
       return listed.targets.map((target) => {
         const origin = originOf(target.url);

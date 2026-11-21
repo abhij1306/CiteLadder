@@ -1,4 +1,3 @@
-/** Source of the optional Firehose transformation Lambda that keeps recognized crawler records. */
 import { matchesCrawlerUserAgent } from '../src/config/crawlers.ts';
 
 type Catalog = {
@@ -8,7 +7,6 @@ type Catalog = {
 
 export function firehoseFilterSource(catalog: Catalog): string {
   const bots = JSON.stringify(
-    // Robots-only tokens have no user agent to match.
     catalog.bots.filter((b) => b.ua_patterns.length).map((b) => ({ ua_patterns: b.ua_patterns })),
     null,
     2,

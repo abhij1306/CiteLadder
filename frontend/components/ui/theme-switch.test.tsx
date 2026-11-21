@@ -23,7 +23,6 @@ describe('ThemeSwitch', () => {
     const user = userEvent.setup();
     render(<ThemeSwitch />);
 
-    // No stored choice: the device's (light) theme shows and nothing is saved.
     expect(themeCookie()).toBeUndefined();
     await user.click(screen.getByRole('button', { name: 'Switch to dark theme' }));
     expect(document.documentElement).toHaveAttribute('data-theme', 'dark');

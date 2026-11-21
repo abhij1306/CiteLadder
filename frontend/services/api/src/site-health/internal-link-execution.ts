@@ -1,4 +1,3 @@
-/** Request-bound execution of one authorized analysis through the existing queue owner. */
 import { sql } from 'kysely';
 import { policy, type ServiceConfig } from '../config.ts';
 import { loadWorkerSettings } from '../config/analytics.ts';

@@ -17,7 +17,6 @@ const WORKSPACE_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const WORKSPACE_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 
 function wrapper(client: QueryClient, workspaceId = WORKSPACE_A) {
-  // A run page renders under the gate's project, scoped to its workspace.
   const project = makeProject({ workspace_id: workspaceId });
   function Wrapper({ children }: { children: ReactNode }) {
     return (
@@ -103,11 +102,9 @@ describe('useRunExecutions', () => {
     });
     await waitFor(() => expect(result.current.data?.[0]?.status).toBe('running'));
 
-    // The audit poll returned the same progress: no list read.
     rerender({ audit: progress(0) });
     expect(reads).toBe(1);
 
-    // One execution settled: the list is read once more and shows it.
     rerender({ audit: progress(1) });
     await waitFor(() => expect(result.current.data?.[0]?.status).toBe('succeeded'));
     expect(reads).toBe(2);

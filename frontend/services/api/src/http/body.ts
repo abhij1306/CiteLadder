@@ -1,4 +1,3 @@
-/** zod validation with the published status/code/location/type error contract. */
 import type { Context } from 'hono';
 import { z } from 'zod';
 import { ApiError } from '../errors.ts';
@@ -7,7 +6,6 @@ import { parseRequestDate } from './datetimes.ts';
 
 const dateFields = new WeakMap<z.ZodType, Set<string>>();
 
-/** Top-level `format: date` fields, derived once per schema. */
 function datesOf(schema: z.ZodType): Set<string> {
   let fields = dateFields.get(schema);
   if (!fields) {
@@ -22,7 +20,6 @@ function datesOf(schema: z.ZodType): Set<string> {
   return fields;
 }
 
-/** The published 422 `type` token for one zod issue at the received value `at`. */
 function issueType(issue: z.core.$ZodIssue, at: unknown, dateField: boolean): string {
   if (at === undefined && issue.path.length > 0) return 'missing';
   const malformed = issue.code === 'invalid_type' || issue.code === 'invalid_format';
@@ -45,17 +42,21 @@ function issueType(issue: z.core.$ZodIssue, at: unknown, dateField: boolean): st
   }
 }
 
-export async function readBody<T extends z.ZodType>(c: Context, schema: T): Promise<z.output<T>> {
-  const value = await readOptionalBody(c, schema);
+type JsonMedia = 'application/json' | 'application/reports+json';
+
+export async function readBody<T extends z.ZodType>(
+  c: Context,
+  schema: T,
+  media: JsonMedia = 'application/json',
+): Promise<z.output<T>> {
+  const value = await readOptionalBody(c, schema, media);
   if (value === null)
     throw new RequestValidationError([{ loc: [], message: 'Field required', type: 'missing' }]);
   return value;
 }
 
-/** Whether the request declares a JSON body (`application/json`, any parameters such as charset). */
-function declaresJson(c: Context): boolean {
-  const media = c.req.header('content-type')?.split(';')[0]?.trim().toLowerCase();
-  return media === 'application/json';
+function declares(c: Context, media: JsonMedia): boolean {
+  return c.req.header('content-type')?.split(';')[0]?.trim().toLowerCase() === media;
 }
 
 /**
@@ -66,15 +67,15 @@ function declaresJson(c: Context): boolean {
 export async function readOptionalBody<T extends z.ZodType>(
   c: Context,
   schema: T,
+  media: JsonMedia = 'application/json',
 ): Promise<z.output<T> | null> {
   let value: unknown;
   const raw = await c.req.text();
   if (!raw) return null;
-  if (!declaresJson(c)) throw new ApiError(415, 'Content-Type must be application/json');
+  if (!declares(c, media)) throw new ApiError(415, `Content-Type must be ${media}`);
   try {
     value = JSON.parse(raw);
   } catch (error) {
-    // Keep the parser's input location, not its runtime-specific wording.
     const position =
       error instanceof SyntaxError ? /position (\d+)/u.exec(error.message)?.[1] : undefined;
     const offset = position === undefined ? raw.length : Number(position);

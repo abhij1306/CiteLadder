@@ -1,4 +1,3 @@
-/** Append-only query/page projections over bounded, latest-revision evidence. */
 import { randomUUID } from 'node:crypto';
 import { sql } from 'kysely';
 
@@ -43,12 +42,6 @@ export function latestQuerySnapshot(db: Database, scope: DemandScope) {
     .executeTakeFirst();
 }
 
-/**
- * The selected revision's rows: one per identity, because the partition rule
- * selects one resync_seq and `uq_integration_metric_row_identity` admits one
- * row per identity within it (a repeated provider row is dropped on insert).
- * Truncation keeps the highest-impression rows, newest first.
- */
 async function sourceRows(db: Database, scope: DemandScope) {
   const rows = await new WorkspaceScope(scope.workspaceId)
     .selectFrom(db, 'integration_metric_rows')
@@ -123,7 +116,6 @@ async function sourceMaterial(db: Database, scope: DemandScope) {
     throw new Error('Integration partitions changed during Demand projection; retry');
   const key = (r: (typeof material)[number]) =>
     [r.source.day, r.source.dataset, r.source.dimension_key, r.source.id].join('\0');
-  // Truncate in priority order, then project in a stable identity order.
   const selected = material
     .slice(0, p.QUERY_EVIDENCE_MAX_ROWS)
     .sort((a, b) => compareText(key(a), key(b)));

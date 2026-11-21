@@ -1,18 +1,3 @@
-/**
- * Replay-safe public writes. Every public POST that creates or spends needs an
- * `Idempotency-Key`: the first request claims the key, a retry with the same
- * body receives the stored response, and the same key with another body (or
- * while the first is still running) is 409 `idempotency_conflict`.
- *
- * The claim commits before the work runs. A refused attempt (a coded 4xx)
- * releases it, so a corrected retry runs again. A server failure keeps it, since
- * its write may have committed, and records the outcome as unknown: a retry gets
- * a non-retryable 409 `idempotency_outcome_unknown` instead of a second write. A
- * claim still without an outcome after `idempotency.in_progress_max_seconds`
- * (the process died before recording one) answers the same. Successful
- * responses are stored and replayed; every record is kept for
- * `idempotency.retention_hours` (purged by the runner).
- */
 import { createHash, randomUUID } from 'node:crypto';
 
 import type { Context } from 'hono';
@@ -25,7 +10,6 @@ import { ApiError } from '../errors.ts';
 const P = policy.public_api;
 const CONFLICT = 'idempotency_conflict';
 const OUTCOME_UNKNOWN = 'idempotency_outcome_unknown';
-/** The status a failed attempt records: its write may or may not have committed. */
 const FAILED_STATUS = 500;
 const REPLAYED_HEADER = 'idempotent-replayed';
 
@@ -73,9 +57,6 @@ export async function withIdempotency(
   try {
     response = await run();
   } catch (error) {
-    // A coded 4xx is a refusal before any write; anything else may follow a
-    // commit, so the claim stays, marked failed, and a retry cannot repeat
-    // the write.
     if (error instanceof ApiError && error.status < 500) await release();
     else await record(FAILED_STATUS, null);
     throw error;
@@ -134,7 +115,6 @@ async function replay(
   return Response.json(prior.response_body, { status: prior.status_code, headers });
 }
 
-/** Delete a bounded batch of records past retention. */
 export function purgeApiIdempotency(
   db: Database,
   now: Date,

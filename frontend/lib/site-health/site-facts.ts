@@ -1,4 +1,3 @@
-/** Narrow persisted facts only; bot labels and purposes arrive from the catalog writer. */
 import { robotsFactsSchema } from '@citeladder/contracts/site-health';
 import { z } from 'zod';
 

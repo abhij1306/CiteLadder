@@ -56,7 +56,6 @@ type Dependencies = {
   judge: () => JevClient | null;
   /** Generation records its own and the judge's provider calls. */
   meter?: (db: Database, workspaceId: string) => Meter;
-  /** Drafting stops starting batches, and cuts in-flight ones, when this aborts. */
   deadline?: () => AbortSignal;
 };
 const defaults: Dependencies = { gateway: createModelGateway, judge: createJevClient };
@@ -69,7 +68,6 @@ type Staging = {
   now: Date;
 };
 
-/** Gate-rejected drafts keep a text-free outcome row for calibration. */
 function candidateRow(draft: Draft, { workspaceId, setId, runId, now }: Staging) {
   const gated = gatedOut(draft);
   const retentionHours = gated
@@ -110,7 +108,6 @@ function stampRun(suggestion: OfferingMap, runId: string) {
     entry.source = { ...entry.source, generation_run_id: runId };
 }
 
-/** Store suggested maps only for still-confirmed offerings that have no facets yet. */
 async function mergeMapSuggestions(
   trx: Database,
   { workspaceId, runId, now }: Staging,
@@ -167,7 +164,6 @@ function stage(
     await acquireProjectLock(trx, context.project.id);
     await acquirePromptSetLock(trx, context.set.id);
     const set = await scopedPromptSet(trx, workspaceId, context.set.id);
-    // A concurrent repeat of the same key stages once; the loser replays it.
     const prior = idempotencyKey
       ? await replay(trx, workspaceId, set.id, input, idempotencyKey)
       : null;
@@ -203,7 +199,6 @@ function stage(
       .where('disposition', '=', 'pending')
       .execute();
     const known = new Set([...tracked, ...pending].map((row) => row.normalized_text_hash));
-    // Live texts drafted since the context read: admission saw the rest.
     const read = new Set([
       ...context.prompts.map((row) => row.normalized_text_hash),
       ...context.candidates.map((row) => row.normalized_text_hash),
@@ -240,7 +235,6 @@ function stage(
       requested_count: input.count,
       requested_topic_ids: wantedTopics(input),
       cohort: input.cohort,
-      // The run's own steering, frozen as requested, and the quotas it set.
       run_context: input.run_context || null,
       requested_distribution: input.distribution ?? null,
       cohort_quotas: cohortQuotas(input),
@@ -259,7 +253,6 @@ function stage(
         admitted: distribution(output.drafts, geo),
         selected: distribution(selected, geo),
       },
-      // What drafting worked from: the narrow generation brief.
       brand_context_hash: createHash('sha256')
         .update(JSON.stringify(output.reference))
         .digest('hex'),
@@ -301,10 +294,6 @@ function stage(
   });
 }
 
-/**
- * A run's response from its staged rows (pending and gate-rejected): the same
- * shape whether the run was just staged or replayed for a repeated key.
- */
 async function runResponse(
   db: Database,
   scope: ProjectScope,
@@ -332,16 +321,9 @@ async function runResponse(
   };
 }
 
-/** Persisted run fields read back with the response contract's own schemas. */
 const recorded = promptGenerateResponseSchema.shape;
-/** Every input that changes a run, including its distribution, note and seeds. */
 const sameRequest = (a: GenerationInput, b: GenerationInput) => requestKey(a) === requestKey(b);
 
-/**
- * The response of an earlier run with this key, from persisted rows only: its
- * still-pending candidates and recorded counts. A key reused for a different
- * request is a conflict; a run past candidate retention is not replayed.
- */
 async function replay(
   db: Database,
   workspaceId: string,
@@ -407,14 +389,9 @@ export async function generatePrompts(
     const prior = await replay(db, workspaceId, setId, input, idempotencyKey);
     if (prior) return prior;
   }
-  // Request-shape checks need no topics; ownership of named topics is checked
-  // with the project's topics in the context read, before any model call.
   validateRequest(input);
-  // A comparison share needs a competitor; refuse before topic recovery can
-  // spend a model call or write topics for a request that would fail anyway.
   if (cohortShares(input).comparison > 0) await requireCompetitor(db, workspaceId, setId);
   const meter = (dependencies.meter ?? meterFor)(db, workspaceId);
-  // Configured only once the set is authorized.
   let metered: ModelGateway | undefined;
   const gatewayFor = () => {
     metered ??= meter.gateway(dependencies.gateway(), 'prompt_generation');
@@ -422,8 +399,6 @@ export async function generatePrompts(
   };
   const deadline = (dependencies.deadline ?? draftDeadline)();
   try {
-    // Only a run over every topic proposes topics for a project that has
-    // none: a request naming topics needs them to exist already.
     const recovery = wantedTopics(input).length
       ? null
       : await recoverTopics(
@@ -447,8 +422,6 @@ export async function generatePrompts(
     });
     const output = await generateDrafts(context, input, gateway, deadline);
     const judge = dependencies.judge();
-    // Judge calls are platform-paid, so each generation spends its bounded
-    // call count before judging.
     if (judge && output.drafts.length)
       await spendBudget(db, budget('prompt_judge_calls', process.env), workspaceId, {
         amount: Math.min(
@@ -475,7 +448,6 @@ export async function generatePrompts(
   }
 }
 
-/** The customer-facing error for a provider failure; operator detail stays in logs. */
 function generationFailure(error: ModelError) {
   if (error.code === 'not_configured')
     return new ApiError(503, "Prompt generation isn't available on this deployment yet", {

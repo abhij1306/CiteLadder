@@ -8,11 +8,6 @@ import {
   hasConfirmedIcp,
 } from '@/components/onboarding/icp-confirmation';
 
-/**
- * The step renders the two halves in different places now — what you sell leads
- * at full width, the audience questions sit beside the found competitors — so
- * the test mounts both together, which is what the reader still sees.
- */
 function IcpConfirmation(props: Parameters<typeof IcpCategory>[0]) {
   return (
     <>
@@ -52,8 +47,6 @@ function profile(overrides: Partial<DiscoveryProfile> = {}): DiscoveryProfile {
 
 describe('hasConfirmedIcp', () => {
   it('gates only on what the screen actually shows', () => {
-    // Positioning and audience are no longer asked for here, so they must not
-    // block a user on a field they were never presented with.
     expect(hasConfirmedIcp(profile())).toBe(true);
     expect(hasConfirmedIcp(profile({ positioning: '', target_audience: '' }))).toBe(true);
     expect(hasConfirmedIcp(profile({ category: '   ' }))).toBe(false);
@@ -83,9 +76,6 @@ describe('IcpConfirmation', () => {
       />,
     );
 
-    // Three suggestions plus the explicit escape hatch. Matched by exact name:
-    // a loose regex counted the escape chip too, because "None of these"
-    // contains "one".
     for (const name of ['Product feed management platform', 'One', 'Two']) {
       expect(screen.getByRole('radio', { name })).toBeVisible();
     }
@@ -106,10 +96,9 @@ describe('IcpConfirmation', () => {
       />,
     );
 
-    // A database value was the first thing a new customer read on this screen.
     expect(screen.queryByRole('radio', { name: /brand_audit_services/ })).toBeNull();
-    expect(screen.getByRole('radio', { name: 'Brand Audit Services' })).toBeVisible();
-    expect(screen.getByRole('radio', { name: 'Marketing Consulting' })).toBeVisible();
+    expect(screen.getByRole('radio', { name: 'Brand audit services' })).toBeVisible();
+    expect(screen.getByRole('radio', { name: 'Marketing consulting' })).toBeVisible();
   });
 
   it('stores the discovered token, not the label it displays', async () => {
@@ -126,16 +115,13 @@ describe('IcpConfirmation', () => {
       />,
     );
 
-    // Humanising is a display concern; round-tripping the prettified string
-    // back into the payload would change what the project is built from.
-    await user.click(screen.getByRole('radio', { name: 'Marketing Consulting' }));
+    await user.click(screen.getByRole('radio', { name: 'Marketing consulting' }));
     expect(onChange).toHaveBeenCalledWith(
       expect.objectContaining({ category: 'marketing_consulting' }),
     );
   });
 
-  it('names the escape hatch for what it is when there is nothing to reject', () => {
-    // With no suggestions on screen, "None of these" refers to an empty set.
+  it('names the way out for what it is when there is nothing to reject', () => {
     render(
       <IcpConfirmation
         profile={profile({ category: '', category_aliases: [] })}
@@ -147,7 +133,6 @@ describe('IcpConfirmation', () => {
   });
 
   it('offers one regional choice and keeps every choice on screen after selection', async () => {
-    // Regression: selecting a scope made the rest of the options vanish.
     const onChange = vi.fn();
     const { rerender } = render(<IcpConfirmation profile={profile()} onChange={onChange} />);
 
@@ -173,9 +158,6 @@ describe('IcpConfirmation', () => {
   });
 
   it('drops the rejected suggestion so it cannot be submitted silently', async () => {
-    // Regression: "None of these" only flipped the input on. The rejected
-    // category stayed in the payload, the field looked empty, and Create
-    // project stayed enabled — so the user shipped the label they rejected.
     const onChange = vi.fn();
     const { rerender } = render(<IcpConfirmation profile={profile()} onChange={onChange} />);
     expect(hasConfirmedIcp(profile())).toBe(true);

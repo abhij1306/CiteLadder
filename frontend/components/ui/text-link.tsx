@@ -1,9 +1,9 @@
 import type { ComponentPropsWithRef, ReactNode } from 'react';
 import { Slot, Slottable } from '@radix-ui/react-slot';
-import { ArrowRight, ArrowUpRight } from 'lucide-react';
 import { ProjectLink } from '@/components/ui/project-link';
 import { ExternalHttpLink } from '@/components/ui/external-http-link';
 import { textRole, type TextRole } from '@/components/ui/typography';
+import { ArrowRight, ArrowUpRight } from '@/lib/icons';
 import { parseAbsoluteHttpUrl } from '@/lib/safe-http-url';
 import { cn } from '@/lib/utils';
 
@@ -39,47 +39,51 @@ export type TextLinkTone = 'ink' | 'prose' | 'muted';
 
 const TONE: Record<TextLinkTone, string> = {
   ink: 'text-ink',
-  prose: 'text-accent-ink',
-  muted: 'text-ink-secondary hover:text-ink',
+  prose: 'text-accent-text',
+  muted: 'text-ink-2 hover:text-ink',
 };
 
+const APP_REST =
+  '[:root:not([data-public-surface])_&]:decoration-transparent [:root:not([data-public-surface])_&]:hover:decoration-current [:root:not([data-public-surface])_&]:focus-visible:decoration-current';
+
 const UNDERLINE = {
-  prose: 'decoration-current hover:decoration-2',
-  sentence: 'decoration-line-control hover:decoration-current',
-  standing: 'decoration-transparent hover:decoration-current focus-visible:decoration-current',
+  prose: cn('decoration-current hover:decoration-2', APP_REST),
+  ink: cn(
+    'decoration-control-line hover:decoration-current focus-visible:decoration-current',
+    APP_REST,
+  ),
+  hover:
+    'text-ink decoration-transparent hover:decoration-current focus-visible:decoration-current',
 } as const;
 
-function underline(tone: TextLinkTone, text: TextLinkText) {
-  if (tone === 'prose') return UNDERLINE.prose;
-  return tone === 'ink' && text === 'inherit' ? UNDERLINE.sentence : UNDERLINE.standing;
+export type TextLinkUnderline = 'always' | 'hover';
+
+function lineClasses(tone: TextLinkTone, underline: TextLinkUnderline) {
+  if (underline === 'hover') return UNDERLINE.hover;
+  return cn(TONE[tone], tone === 'prose' ? UNDERLINE.prose : UNDERLINE.ink);
 }
 
-function textLinkClasses({ tone, text }: Readonly<{ tone: TextLinkTone; text: TextLinkText }>) {
+function textLinkClasses({
+  tone,
+  text,
+  underline,
+}: Readonly<{ tone: TextLinkTone; text: TextLinkText; underline: TextLinkUnderline }>) {
   const recipe = cn(
-    'focus-ring rounded-2xs underline decoration-1 underline-offset-3 transition-[color,text-decoration-color]',
-    TONE[tone],
-    underline(tone, text),
+    'focus-ring rounded-mark underline decoration-1 underline-offset-3 transition-[color,text-decoration-color]',
+    lineClasses(tone, underline),
   );
   return text === 'inherit' ? recipe : textRole(text, recipe);
 }
 
-/**
- * Where the link goes. Each variant takes only the props it reads: a project
- * scope means nothing to an external URL, and under `asChild` the child link
- * owns its destination.
- */
 type TextLinkTarget =
   | {
       variant?: 'internal';
-      /** An app route. */
       href?: string | null;
-      /** The project the route belongs to, when not the active one. */
       projectId?: string | null;
       asChild?: false;
     }
   | {
       variant: 'external';
-      /** An http(s) URL. */
       href?: string | null;
       projectId?: never;
       asChild?: false;
@@ -88,7 +92,6 @@ type TextLinkTarget =
       variant?: TextLinkVariant;
       href?: never;
       projectId?: never;
-      /** Apply the recipe (and glyphs) to the single child link instead. */
       asChild: true;
     };
 
@@ -97,6 +100,7 @@ type TextLinkProps = Readonly<
     TextLinkTarget & {
       tone?: TextLinkTone;
       text?: TextLinkText;
+      underline?: TextLinkUnderline;
       children: ReactNode;
     }
 >;
@@ -108,9 +112,24 @@ type TextLinkProps = Readonly<
 function withGlyphs(variant: TextLinkVariant, children: ReactNode): ReactNode[] {
   const label = <Slottable key="label">{children}</Slottable>;
   if (variant === 'external') {
+    const glyph = (
+      <ArrowUpRight
+        key="glyph"
+        className="ms-0.5 inline size-3.5 align-[-2px] [:root:not([data-public-surface])_&]:ms-2"
+        aria-hidden
+      />
+    );
+    const split = typeof children === 'string' ? /^(.*\s)?(\S+)\s*$/su.exec(children) : null;
     return [
-      label,
-      <ArrowUpRight key="glyph" className="ms-0.5 inline size-3.5 align-[-2px]" aria-hidden />,
+      ...(split
+        ? [
+            split[1] ?? '',
+            <span key="tail" className="whitespace-nowrap">
+              {split[2]}
+              {glyph}
+            </span>,
+          ]
+        : [label, glyph]),
       ' ',
       <span key="note" className="sr-only">
         (opens in a new tab)
@@ -123,7 +142,8 @@ function withGlyphs(variant: TextLinkVariant, children: ReactNode): ReactNode[] 
 export function TextLink({
   variant = 'internal',
   tone = 'ink',
-  text = 'control',
+  text = 'body',
+  underline = 'always',
   href,
   projectId,
   asChild = false,
@@ -134,14 +154,14 @@ export function TextLink({
   if (variant === 'external' && !asChild && !parseAbsoluteHttpUrl(href)) {
     return (
       <span
-        className={text === 'inherit' ? className : textRole(text, className)}
+        className={cn(text === 'inherit' ? className : textRole(text, className), 'no-underline')}
         title={props.title}
       >
         {children}
       </span>
     );
   }
-  const classes = cn(textLinkClasses({ tone, text }), className);
+  const classes = cn(textLinkClasses({ tone, text, underline }), className);
   const content = withGlyphs(variant, children);
   if (asChild) {
     return (
@@ -164,14 +184,6 @@ export function TextLink({
   );
 }
 
-/**
- * ArrowLink — a standalone "go there" link: the label and an `arrow-right` in
- * `ink`, 16/24 medium, 8px apart. On hover the label underlines (1px, 4px
- * offset) and the arrow moves 2px right in 120ms; under reduced motion only
- * the underline appears. Without `href` it renders a span for the last line
- * of a card that is itself the link (the card's hover drives it). An app
- * route is scoped to the active project through `ProjectLink`.
- */
 export function ArrowLink({
   href,
   projectId,
@@ -179,16 +191,16 @@ export function ArrowLink({
 }: Readonly<{ href?: string; projectId?: string | null; children: ReactNode }>) {
   const content = (
     <>
-      <span className="underline decoration-transparent decoration-1 underline-offset-4 transition-[text-decoration-color] group-hover:decoration-current">
+      <span className="decoration-control-line underline decoration-1 underline-offset-4 transition-[text-decoration-color] [@media(hover:hover)_and_(pointer:fine)]:group-hover:decoration-current">
         {children}
       </span>
       <ArrowRight
         aria-hidden
-        className="size-4 shrink-0 transition-transform group-hover:translate-x-0.5 motion-reduce:transition-none motion-reduce:group-hover:translate-x-0"
+        className="size-3.5 shrink-0 transition-transform motion-reduce:transition-none motion-safe:[@media(hover:hover)_and_(pointer:fine)]:group-hover:translate-x-0.5"
       />
     </>
   );
-  const classes = 'text-ink inline-flex items-center gap-2 rounded-xs text-label-lg no-underline';
+  const classes = 'text-ink inline-flex items-center gap-2 rounded-mark text-label-lg no-underline';
   if (!href) return <span className={classes}>{content}</span>;
   return (
     <ProjectLink href={href} projectId={projectId} className={cn(classes, 'group focus-ring')}>

@@ -4,15 +4,6 @@ import { pageKindSchema, siteCrawlSchema, siteUrlSourceSchema } from './crawl.ts
 import { responseObject, uuid } from './core.ts';
 import { cursorPageSchema } from './pagination.ts';
 
-// The exact frozen pack identity an understanding was produced under. Shown in
-// the "why this role?" disclosure so a result is always attributable to one
-// reviewed pack version rather than to "the classifier" in general.
-// Nullable analysis-summary fields shared by inventory rows and analyzed-page
-// summary rows (null until analysis completes for that URL). `page_kind`
-// joins them: it is stamped by the analysis classifier, so an unanalyzed row
-// has no classification yet (null — the UI renders `Not measured`, never a guessed type).
-// `aeo_measurement_reason` is empty for classified pages and carries
-// `page_purpose_unresolved` for a successful `other` abstention.
 export const analysisSummaryFields = {
   issue_count: z.number().int().nullable(),
   web_fundamentals_score: z.number().nullable(),
@@ -23,20 +14,11 @@ export const analysisSummaryFields = {
   aeo_measurement_state: z.enum(['measured', 'limited_evidence', 'not_measured', 'excluded']),
   aeo_measurement_reason: z.string(),
   main_content_indexable: z.boolean().nullable(),
-  // The analyzed fetch was made despite a robots.txt exclusion, because the
-  // crawl ignored robots.txt. False for every other page.
   robots_excluded: z.boolean(),
   last_audited: z.string().nullable(),
   page_kind: pageKindSchema.nullable(),
-  // Bounded industry-role fields on list rows. These are pack-defined IDs, not
-  // a fixed enum, so they stay plain strings — the UI must never title-case an
-  // unknown namespaced ID as though it were a reviewed label. Absent entirely
-  // when the pack classifier never ran for the row.
 };
 
-// One lightweight inventory row. Ordering is URL-only. The analysis summary
-// measurement fields and `last_audited` are null/unmeasured until analysis
-// completes for that URL.
 export const inventoryRowSchema = responseObject({
   site_url_id: uuid(),
   normalized_url: z.string(),
@@ -54,13 +36,11 @@ export const inventoryRowSchema = responseObject({
 export const inventoryPageSchema = cursorPageSchema(inventoryRowSchema);
 export const siteCrawlListPageSchema = cursorPageSchema(siteCrawlSchema);
 
-// Workspace-wide monitored quota usage (counts every active monitored row).
 export const monitoredQuotaSchema = responseObject({
   used: z.number().int(),
   limit: z.number().int(),
 });
 
-// One persistent monitored-set row.
 const monitoredUrlSchema = responseObject({
   site_url_id: uuid(),
   normalized_url: z.string(),
@@ -72,7 +52,6 @@ const monitoredUrlSchema = responseObject({
   deselected_at: z.string().nullable(),
 });
 
-// `GET /projects/{id}/monitored-urls` — the system-picked set + quota; nothing edits it.
 export const monitoredUrlsResponseSchema = responseObject({
   project_id: uuid(),
   monitored_urls: z.array(monitoredUrlSchema),

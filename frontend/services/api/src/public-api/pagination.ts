@@ -1,8 +1,3 @@
-/**
- * Public list pages: `cursor` + `limit` in, `{items, next_cursor}` out. A
- * cursor is the keyset of the page's last item (`http/keyset-cursor.ts`),
- * bound to its endpoint and filters.
- */
 import { z } from 'zod';
 
 import { policy } from '../config.ts';
@@ -24,14 +19,12 @@ export function pageSchema<Item extends z.ZodType>(item: Item) {
   return z.object({ items: z.array(item), next_cursor: z.string().nullable() });
 }
 
-/** Where a page cursor is valid: its endpoint and filter values. */
 export type PageScope = { endpoint: string; filters: Record<string, unknown> };
 
 function invalidCursor(message: string): ApiError {
   return new ApiError(400, message, { code: 'invalid_cursor' });
 }
 
-/** The ID of the item a cursor follows, or 400 `invalid_cursor`. */
 export function cursorId(cursor: string | null, scope: PageScope): string | null {
   if (cursor === null || cursor === '') return null;
   try {
@@ -48,10 +41,6 @@ export function nextCursor(scope: PageScope, lastId: string): string {
   return encodeKeysetCursor(scope.endpoint, scope.filters, [lastId]);
 }
 
-/**
- * Page an owner's already-ordered, bounded list by item ID: the page after
- * the cursor's item. A cursor naming an item no longer present is 400.
- */
 export function pageAfter<Item extends { id: string }>(
   items: readonly Item[],
   page: { cursor: string | null; limit: number },

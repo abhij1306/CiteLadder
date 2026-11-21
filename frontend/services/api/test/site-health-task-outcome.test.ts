@@ -14,7 +14,6 @@ afterAll(async () => {
   await db.destroy();
 });
 
-/** A failed discover task with `errorCode`, whose one fetch answered `status`. */
 async function failed(seed: SiteSeed, errorCode: string, status: number | null) {
   const id = await fixtures.task(seed, 'discover');
   await db
@@ -58,7 +57,6 @@ const CASES = {
   admission: ['url_admission_rejected', null],
   pdf: ['unsupported_content_type', 200],
   bot: ['bot_blocked', 403],
-  // A code category wins over the fetch's status.
   botOnMissingPage: ['bot_blocked', 404],
   missing: ['http_4xx', 404],
   removed: ['http_4xx', 410],

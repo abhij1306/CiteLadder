@@ -13,11 +13,8 @@ import { policy } from '../config.ts';
 const cfg = policy.projects;
 const profile = policy.brand_identity;
 const text = (max: number) => z.string().trim().max(max);
-/** Domains are stored as `varchar(255)`, so a longer one is a 422, not a database error. */
 const domainList = z.array(text(255));
-/** Every alias is compiled into a matcher run over each answer, so the set stays bounded. */
 const aliasList = z.array(text(profile.alias_max_chars)).max(profile.max_entity_aliases);
-/** The confirmed category buyers would search for. */
 export const categoryInput = z.string().trim().min(1).max(profile.category_max_chars);
 export const competitorInput = competitorRequestSchema.extend({
   name: text(255).min(1),
@@ -90,8 +87,6 @@ export const projectUpdate = projectUpdateRequestSchema.extend({
     .array(competitorListItemRequestSchema.extend(competitorInput.shape))
     .max(profile.max_project_competitors)
     .optional(),
-  // Matching policies to save, by brand or competitor name; names the
-  // project no longer tracks are dropped on save.
   entity_matching: z
     .array(
       entityMatchingRequestSchema.extend({

@@ -36,7 +36,6 @@ beforeEach(async () => {
     scope(),
     'link,title,price,brand\nhttps://owned.example/products/tool,Kitchen tool,40,Acme\n',
   );
-  // The import's answer-matching backfill runs first, so these workers see only discovery work.
   const backfill = await db
     .selectFrom('analytics_tasks')
     .select('id')
@@ -47,7 +46,6 @@ beforeEach(async () => {
     owner: 'discovery-test-setup',
     taskScope: { workspaceId: t.workspaceId, taskIds: backfill.map((row) => row.id) },
   }).runOnce();
-  // The import and its backfill also ask for an Opportunity refresh; that is not discovery work.
   await db
     .deleteFrom('analytics_tasks')
     .where('workspace_id', '=', t.workspaceId)
@@ -80,7 +78,6 @@ const candidates = () =>
     .execute();
 const queueTask = (id: string) =>
   db.selectFrom('analytics_tasks').selectAll().where('id', '=', id).executeTakeFirstOrThrow();
-/** This test's discovery tasks; workers claim only these from the shared database. */
 let queued: string[] = [];
 const enqueueTargets = async (targets: Parameters<typeof enqueueDiscoveries>[2]['targets']) => {
   const { task_ids } = await enqueueDiscoveries(db, scope(), { targets });
@@ -118,7 +115,6 @@ const successful: CompetitorSearch = async () => ({
 it('bounds daily competitor discovery targets per workspace before queueing work', async () => {
   vi.stubEnv('ABUSE_COMMERCE_DISCOVERIES_PER_WORKSPACE_DAILY', '2');
   try {
-    // A repeated target is one discovery and spends one unit of the window.
     await enqueueDiscoveries(db, scope(), { targets: [target, target] });
     await enqueue();
     await expect(enqueueDiscoveries(db, scope(), { targets: [target] })).rejects.toMatchObject({

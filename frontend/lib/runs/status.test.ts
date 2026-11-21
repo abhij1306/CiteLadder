@@ -8,7 +8,6 @@ import {
   classificationBadgeValue,
   executionFailureReason,
   executionStatusLabel,
-  formatDateTime,
   pollAudits,
   schedulePauseReason,
 } from './status';
@@ -58,12 +57,5 @@ describe('failure and pause reasons', () => {
       schedulePauseReason('weird_new_code'),
     );
     expect(schedulePauseReason('weird_new_code')).not.toContain('weird_new_code');
-  });
-});
-
-describe('formatDateTime', () => {
-  it('renders a placeholder for null and echoes an unparseable value', () => {
-    expect(formatDateTime(null)).toBe('Unknown');
-    expect(formatDateTime('not-a-date')).toBe('not-a-date');
   });
 });

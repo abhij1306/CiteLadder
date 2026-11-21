@@ -16,7 +16,6 @@ function profileDraft(profile: BrandProfile | null | undefined): BrandProfileDra
   };
 }
 
-/** The editable profile fields, from the contract that owns them. */
 const DRAFT_FIELDS = brandProfileDraftSchema.keyof().options;
 const IDENTITY_FIELDS = [
   'category',
@@ -50,30 +49,13 @@ function identityUpdate(identity: IdentityFacets, saved: IdentityFacets) {
   };
 }
 
-const sameOffering = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
-
-/** The offerings with a typed but not yet added entry appended, so Save never drops it. */
-function withPending(offerings: readonly string[], pending: string): string[] {
-  const value = pending.trim();
-  return value && !offerings.some((item) => sameOffering(item, value))
-    ? [...offerings, value]
-    : [...offerings];
-}
-
 type Edits = Readonly<{
   draft: Partial<BrandProfileDraft>;
   identity: Partial<IdentityFacets>;
-  pendingOffering: string;
 }>;
 
-const NO_EDITS: Edits = { draft: {}, identity: {}, pendingOffering: '' };
+const NO_EDITS: Edits = { draft: {}, identity: {} };
 
-/**
- * The company profile's editable draft across the Context tabs that edit it,
- * and its one save. Edits are kept as the fields the reader touched over the
- * persisted profile, so a background refresh of an untouched field shows
- * through and is never sent back stale. The page places the save action.
- */
 export function useBrandProfileForm({
   projectId,
   workspaceId,
@@ -81,7 +63,6 @@ export function useBrandProfileForm({
 }: Readonly<{
   projectId: string;
   workspaceId: string;
-  /** The persisted profile; none yet (or still loading) edits an empty draft. */
   profile: BrandProfile | null | undefined;
 }>) {
   const [edits, setEdits] = useState<Edits>(NO_EDITS);
@@ -95,14 +76,7 @@ export function useBrandProfileForm({
   const submit = () =>
     save.mutate(
       {
-        ...changed(
-          DRAFT_FIELDS,
-          {
-            ...draft,
-            products_services: withPending(draft.products_services, edits.pendingOffering),
-          },
-          savedDraft,
-        ),
+        ...changed(DRAFT_FIELDS, draft, savedDraft),
         ...identityUpdate(identity, savedIdentity),
       },
       {
@@ -113,10 +87,16 @@ export function useBrandProfileForm({
       },
     );
 
+  const dirty =
+    Object.keys(changed(DRAFT_FIELDS, draft, savedDraft)).length > 0 ||
+    Object.keys(identityUpdate(identity, savedIdentity)).length > 0;
   return {
     draft,
     identity,
-    pendingOffering: edits.pendingOffering,
+    dirty,
+    empty:
+      Object.values(savedDraft).every((value) => value.length === 0) &&
+      Object.values(savedIdentity).every((value) => !value),
     saving: save.isPending,
     error: save.error,
     notice,
@@ -131,8 +111,6 @@ export function useBrandProfileForm({
         ...current,
         identity: { ...current.identity, ...changed(IDENTITY_FIELDS, next, identity) },
       })),
-    setPendingOffering: (pendingOffering: string) =>
-      setEdits((current) => ({ ...current, pendingOffering })),
   };
 }
 

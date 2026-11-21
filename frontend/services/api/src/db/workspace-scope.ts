@@ -1,28 +1,8 @@
-/**
- * Workspace-scoped reads (invariant: every project-owned read and write is
- * workspace-authorized).
- *
- * A `WorkspaceScope` exists only after membership was verified (see
- * `auth/workspace.ts`), and product tables are reached through it so the
- * `workspace_id` predicate cannot be forgotten. Only tables that carry a
- * `workspace_id` column are accepted, which the compiler enforces.
- *
- * Deliberately read-only: a generic write entry point would also admit the
- * append-only evidence and attempt tables. Writes arrive with the route family
- * that owns them, scoped to that owner's tables.
- */
 import { sql, type SelectQueryBuilder, type SqlBool } from 'kysely';
 
 import type { Database } from './database.ts';
 import type { DB } from '../generated/db-schema.ts';
 
-/**
- * The scope a command names its record in: the workspace, and the project
- * when the caller named one (a public API path, an MCP call or a browser route
- * under `/projects/{project_id}`). Owners then find the record only in that
- * project. A browser flat route (`/prompts/{id}`) names none: a session's
- * authority is the whole workspace.
- */
 export type RecordScope = { workspaceId: string; projectId: string | null };
 
 export type WorkspaceTable = {

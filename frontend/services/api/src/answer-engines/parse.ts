@@ -18,7 +18,6 @@ const objects = (value: unknown): ObjectValue[] =>
     ? value.filter((item) => objectSchema.safeParse(item).success).map(object)
     : [];
 const text = (value: unknown) => (typeof value === 'string' ? value.trim() : '');
-/** Missing, malformed and negative counters remain unknown; reported zero remains zero. */
 export function usageCount(value: unknown): number | null {
   if (typeof value !== 'number' && typeof value !== 'string') return null;
   if (typeof value === 'string' && !/^\+?\d+$/u.test(value.trim())) return null;
@@ -199,7 +198,6 @@ function answerText(blocks: ObjectValue[], transport: string) {
     .join('\n\n');
 }
 
-/** Provider objects never pass through: only observable answer/search evidence is retained. */
 export function parseAnswer(payload: unknown, request: AnswerRequest, latencyMs = 0): Answer {
   const source = objectSchema.parse(payload);
   const transport = request.transport_provider;

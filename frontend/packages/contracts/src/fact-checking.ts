@@ -3,12 +3,6 @@ import { z } from 'zod';
 const responseObject = <Shape extends z.ZodRawShape>(shape: Shape) => z.object(shape);
 const uuid = () => z.uuid();
 
-// ---------------------------------------------------------------------------
-// Fact-checking (gated pilot): user-owned brand facts, and the verdicts on the
-// factual claims answers make about the brand. Projections over persisted
-// `answer_claims` / `claim_verdicts`; missing data is a state, never a zero.
-// ---------------------------------------------------------------------------
-
 export const factTopicSchema = z.enum([
   'pricing',
   'plans',
@@ -19,7 +13,6 @@ export const factTopicSchema = z.enum([
   'specs',
   'company',
 ]);
-// Only `confirmed` facts are checked against; `retired` keeps the history.
 export const factStatusSchema = z.enum(['draft', 'confirmed', 'retired']);
 
 export const brandFactSchema = responseObject({
@@ -28,19 +21,19 @@ export const brandFactSchema = responseObject({
   statement: z.string(),
   source_url: z.string().nullable(),
   status: factStatusSchema,
-  // Increments on every change; an edit must name the revision it read.
   revision: z.number().int(),
   updated_at: z.string(),
 });
 
-// `enabled` is false for a workspace outside the fact-checking pilot; the
-// list is then empty and writes are refused.
 export const brandFactListSchema = responseObject({
   enabled: z.boolean(),
   facts: z.array(brandFactSchema),
+  limits: responseObject({
+    statement_max_chars: z.number().int(),
+    facts_import_max_rows: z.number().int(),
+  }),
 });
 
-// A claim's verdict against the confirmed facts frozen when its run started.
 export const claimVerdictSchema = z.enum([
   'supported',
   'contradicted',
@@ -48,9 +41,6 @@ export const claimVerdictSchema = z.enum([
   'not_covered',
 ]);
 
-// Why a claim has no verdict. `model_omitted` is a claim the checker was sent
-// but left out of its answer; `model_changed` is a deployment model other than
-// the one the audit froze, so the answer was not read.
 export const claimUnavailableReasonSchema = z.enum([
   'model_not_configured',
   'platform_cap',
@@ -61,11 +51,6 @@ export const claimUnavailableReasonSchema = z.enum([
   'model_changed',
 ]);
 
-// `value`: at least one verdict. `not_enabled`: the workspace is outside the
-// pilot. `no_facts`: no selected run had confirmed facts when it started.
-// `no_claims`: answers named the brand without a checkable factual claim.
-// `pending`: claims are waiting for extraction or verification.
-// `unavailable`: nothing could be checked (see `reason`).
 const accuracyStateSchema = z.enum([
   'value',
   'not_enabled',
@@ -75,25 +60,22 @@ const accuracyStateSchema = z.enum([
   'unavailable',
 ]);
 
-// Every extracted brand claim lands in exactly one bucket.
 export const accuracyCoverageSchema = responseObject({
   claims: z.number().int(),
   supported: z.number().int(),
   contradicted: z.number().int(),
   inconclusive: z.number().int(),
   not_covered: z.number().int(),
-  // Claims or verdicts below the confidence floor; never counted as verdicts.
   low_confidence: z.number().int(),
   pending: z.number().int(),
   unavailable: z.array(
     responseObject({ reason: claimUnavailableReasonSchema, count: z.number().int() }),
   ),
-  // Answers naming the brand whose claims are not extracted yet, or could not be.
   answers_pending: z.number().int(),
   answers_unavailable: z.number().int(),
+  edited: z.number().int(),
 });
 
-// supported ÷ (supported + contradicted); null when neither occurred.
 export const accuracyScoreSchema = responseObject({
   accuracy: z.number().nullable(),
   coverage: accuracyCoverageSchema,
@@ -111,8 +93,6 @@ const factReferenceSchema = responseObject({
   source_url: z.string().nullable(),
 });
 
-// One claim an answer made about the brand: its quote is an exact substring
-// of the answer, and `facts` are the frozen fact revisions the verdict cites.
 export const accuracyClaimSchema = responseObject({
   claim: z.string(),
   topic: factTopicSchema,
@@ -123,14 +103,17 @@ export const accuracyClaimSchema = responseObject({
   facts: z.array(factReferenceSchema),
   logical_engine: z.string(),
   prompt: z.string(),
-  // Link target: `/runs/{run_id}?execution={execution_id}`.
   run_id: uuid(),
   execution_id: uuid(),
   observed_at: z.string(),
+  verdict_id: uuid().nullable(),
+  edited: z
+    .object({ model_verdict: claimVerdictSchema, note: z.string().nullable(), at: z.string() })
+    .nullable(),
 });
 
-// URLs cited in answers that carry a contradicted claim: cited alongside the
-// claim, never shown to be its source.
+export const overrideVerdictSchema = z.enum(['supported', 'contradicted', 'inconclusive']);
+
 const accuracyCitedSchema = responseObject({
   domain: z.string(),
   answers: z.number().int(),
@@ -141,7 +124,6 @@ const accuracyTrendPointSchema = responseObject({
   audit_id: uuid(),
   completed_at: z.string(),
   score: accuracyScoreSchema,
-  // False when the templates, metrics version or fact set differ from the previous point's.
   comparable: z.boolean(),
 });
 
@@ -157,19 +139,71 @@ export const accuracyResponseSchema = responseObject({
   trend: z.array(accuracyTrendPointSchema),
 });
 
+const factClaimCountsSchema = z.discriminatedUnion('kind', [
+  responseObject({
+    kind: z.literal('raised'),
+    claims: z.number().int(),
+    supported: z.number().int(),
+    contradicted: z.number().int(),
+    inconclusive: z.number().int(),
+    last_raised_at: z.string(),
+  }),
+  responseObject({ kind: z.literal('not_raised') }),
+  responseObject({ kind: z.literal('pending') }),
+]);
+
+export const accuracyFactSchema = responseObject({
+  revision_id: uuid(),
+  fact_id: uuid(),
+  revision: z.number().int(),
+  topic: factTopicSchema,
+  statement: z.string(),
+  counts: factClaimCountsSchema,
+});
+
+export const accuracyFactListSchema = responseObject({
+  enabled: z.boolean(),
+  facts: z.array(accuracyFactSchema),
+});
+
 export const accuracyClaimPageSchema = responseObject({
   items: z.array(accuracyClaimSchema),
   next_cursor: z.string().nullable(),
 });
 
-// The brand claims of one execution, with offsets for highlighting.
 export const executionClaimSchema = accuracyClaimSchema
-  .omit({ logical_engine: true, prompt: true, run_id: true, execution_id: true, observed_at: true })
+  .omit({
+    logical_engine: true,
+    prompt: true,
+    run_id: true,
+    execution_id: true,
+    observed_at: true,
+    verdict_id: true,
+    edited: true,
+  })
   .extend({
     // Code-point offsets into the answer text.
     start: z.number().int(),
     end: z.number().int(),
   });
+
+export const verdictOverrideSchema = responseObject({
+  verdict_id: uuid(),
+  model_verdict: claimVerdictSchema,
+  verdict: overrideVerdictSchema,
+  note: z.string().nullable(),
+  at: z.string(),
+});
+
+export const brandFactImportResultSchema = responseObject({
+  rows: z.array(
+    z.discriminatedUnion('kind', [
+      responseObject({ index: z.number().int(), kind: z.literal('created'), fact_id: uuid() }),
+      responseObject({ index: z.number().int(), kind: z.literal('duplicate') }),
+      responseObject({ index: z.number().int(), kind: z.literal('invalid'), message: z.string() }),
+    ]),
+  ),
+});
 
 export type FactTopic = z.infer<typeof factTopicSchema>;
 export type FactStatus = z.infer<typeof factStatusSchema>;
@@ -180,4 +214,10 @@ export type AccuracyResponse = z.infer<typeof accuracyResponseSchema>;
 export type AccuracyCoverage = z.infer<typeof accuracyCoverageSchema>;
 export type AccuracyScore = z.infer<typeof accuracyScoreSchema>;
 export type AccuracyClaim = z.infer<typeof accuracyClaimSchema>;
+export type AccuracyFact = z.infer<typeof accuracyFactSchema>;
+export type AccuracyFactList = z.infer<typeof accuracyFactListSchema>;
 export type ExecutionClaim = z.infer<typeof executionClaimSchema>;
+export type AccuracyClaimPage = z.infer<typeof accuracyClaimPageSchema>;
+export type OverrideVerdict = z.infer<typeof overrideVerdictSchema>;
+export type VerdictOverride = z.infer<typeof verdictOverrideSchema>;
+export type BrandFactImportResult = z.infer<typeof brandFactImportResultSchema>;

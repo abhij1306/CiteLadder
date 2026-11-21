@@ -1,4 +1,3 @@
-/** Optional search transports. Candidate pages are acquired by Site Health. */
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { policy } from '../config.ts';
@@ -116,7 +115,6 @@ export function competitorSearch(
           }),
         };
       } catch (error) {
-        // Keenable is the fallback; the outcome records `provider_failed` if it is unavailable too.
         logSearchFailure('tavily', error, startedAt);
         failed = true;
       }

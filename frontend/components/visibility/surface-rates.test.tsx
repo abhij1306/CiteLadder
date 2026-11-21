@@ -6,13 +6,6 @@ import type { AioRate, SurfaceRates } from '@citeladder/contracts';
 
 import { SurfaceRatesPanel } from './surface-rates';
 
-/**
- * A rate published without its denominator gets read as whichever rate the
- * reader already had in mind, and a rate with nothing to divide is UNKNOWN,
- * not zero. Both failures are silent — the number looks fine either way — so
- * they are what this file locks down.
- */
-
 function rate(overrides: Partial<AioRate> = {}): AioRate {
   return {
     numerator: 0,
@@ -61,18 +54,19 @@ describe('AI Overview rates', () => {
   it('publishes the three confusable rates as three different numbers', () => {
     panel(rates());
 
-    // The worked example: 100 observations, 40 overviews, 10 naming the brand.
-    // All three are true and none of them alone is "how visible are we".
-    expect(screen.getByText('40%')).toBeVisible();
-    expect(screen.getByText('25%')).toBeVisible();
-    expect(screen.getByText('10%')).toBeVisible();
+    expect(screen.getByText('40.0%')).toBeVisible();
+    expect(screen.getByText('25.0%')).toBeVisible();
+    expect(screen.getByText('10.0%')).toBeVisible();
   });
 
   it('states what each number divided by', () => {
     panel(rates());
 
-    expect(screen.getByText('40 of 100 searches we successfully observed')).toBeVisible();
-    expect(screen.getByText('10 of 40 searches that showed an overview')).toBeVisible();
+    for (const basis of [
+      /40 of 100 searches we successfully observed/,
+      /10 of 40 searches that showed an overview/,
+    ])
+      expect(screen.getByRole('button', { description: basis })).toHaveAccessibleName(/^Basis of /);
   });
 
   it('renders an empty denominator as unavailable, never as 0%', () => {
@@ -88,6 +82,8 @@ describe('AI Overview rates', () => {
         competitor_mention_rates: [
           {
             name: 'Globex',
+            logo_url: null,
+            website_url: null,
             rate: rate({
               numerator: 1,
               denominator: 40,
@@ -97,6 +93,8 @@ describe('AI Overview rates', () => {
           },
           {
             name: 'Initech',
+            logo_url: null,
+            website_url: null,
             rate: rate({
               numerator: 30,
               denominator: 40,
@@ -108,10 +106,6 @@ describe('AI Overview rates', () => {
       }),
     );
 
-    // The shared denominator is stated once above the list, but the
-    // numerators are what separate these two. Percentages alone made a
-    // competitor named in one overview look like the same kind of claim as
-    // one named in thirty.
     expect(screen.getByText('1 of 40')).toBeVisible();
     expect(screen.getByText('30 of 40')).toBeVisible();
   });

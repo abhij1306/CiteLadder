@@ -1,8 +1,3 @@
-/**
- * Workspace-scoped persisted Opportunity reads. Reads render what refreshes
- * persisted; none of them recomputes, refreshes a source or repairs state.
- */
-
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { WorkspaceScope } from '../db/workspace-scope.ts';
@@ -55,7 +50,9 @@ function filtered(db: Database, scope: Scope, filters: OpportunityFilters) {
     .where('opportunities.superseded_at', 'is', null);
   if (filters.type) query = query.where('opportunities.opportunity_type', '=', filters.type);
   if (filters.severity) query = query.where('opportunities.severity', '=', filters.severity);
-  query = query.where(opportunityStatusClause(filters.status));
+  query = query.where(
+    opportunityStatusClause(filters.status === null ? null : validateStatus(filters.status)),
+  );
   if (filters.rule_id) query = query.where('opportunities.rule_id', '=', filters.rule_id);
   if (filters.min_priority !== null)
     query = query.where('opportunities.priority_score', '>=', filters.min_priority);
@@ -78,14 +75,12 @@ function badCursor(error: unknown): never {
   throw new ApiError(400, error.message, { code: 'invalid_cursor' });
 }
 
-/** A cursor's score, or an invalid cursor. */
 function cursorScore(text: string): number {
   const score = Number(text);
   if (text === '' || !Number.isFinite(score)) throw new InvalidCursorError('invalid cursor');
   return score;
 }
 
-/** The project's persisted action order, or `undefined` when nobody has reordered. */
 export function readOpportunityOrder(db: Database, scope: Scope) {
   return new WorkspaceScope(scope.workspaceId)
     .selectFrom(db, 'opportunity_orders')
@@ -95,10 +90,6 @@ export function readOpportunityOrder(db: Database, scope: Scope) {
 }
 type OpportunityOrder = Awaited<ReturnType<typeof readOpportunityOrder>>;
 
-/**
- * Live-row catalog page, ordered by priority then UUID; the caller has
- * authorized the project. A caller that already read the order passes it in.
- */
 export async function listOpportunities(
   db: Database,
   scope: Scope,
@@ -152,7 +143,6 @@ export async function listOpportunities(
   return { items: orderedItems(rows, order?.ordered_keys ?? null), next_cursor: nextCursor };
 }
 
-/** One row, live or superseded, with its full evidence and provenance. */
 export async function getOpportunity(db: Database, workspaceId: string, opportunityId: string) {
   const row = await new WorkspaceScope(workspaceId)
     .selectFrom(db, 'opportunities')

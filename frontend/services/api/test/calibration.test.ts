@@ -10,7 +10,6 @@ it('separates gate outcomes from reviewed outcomes and excludes older question s
       ...Object.fromEntries(
         Object.keys(policy.models.quality.noul_questions).map((key) => [key, 0.01]),
       ),
-      // Flagged under its own provisional threshold (0.4), not the shared one (0.35).
       names_a_business: 0.38,
     },
   };

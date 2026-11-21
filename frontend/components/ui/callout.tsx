@@ -1,45 +1,29 @@
 import type { ReactNode } from 'react';
-import { AlertTriangle, CheckCircle2, Info, XCircle, type LucideIcon } from 'lucide-react';
 
 import { Icon } from '@/components/ui/icon';
+import { AlertTriangle, CheckCircle2, Info, XCircle, type IconGlyph } from '@/lib/icons';
 import { cn } from '@/lib/utils';
 
 export type CalloutTone = 'neutral' | 'info' | 'positive' | 'warning' | 'negative';
 
-/**
- * Each tone's fill, icon and the word a screen reader hears first. Text on a
- * status tint is that status colour (the pair its token names); neutral is
- * the contextual inset (D51: `surface-sunken` inside a container, a bordered
- * `surface` box on the page ground, where sunken would not show) with an
- * `ink` title and `ink-secondary` body. Every tone keeps a 1px border, so a
- * neutral and a status callout are the same size.
- */
-const TONE: Record<CalloutTone, { box: string; title: string; icon: LucideIcon; word: string }> = {
+const TONE: Record<CalloutTone, { box: string; title: string; icon: IconGlyph; word: string }> = {
   neutral: {
-    box: 'surface-inset text-ink-secondary',
+    box: 'surface-inset text-ink-2',
     title: 'text-ink',
     icon: Info,
     word: 'Note',
   },
-  info: { box: 'bg-info-soft text-info', title: '', icon: Info, word: 'Info' },
+  info: { box: 'bg-info-wash text-info', title: '', icon: Info, word: 'Info' },
   positive: {
-    box: 'bg-positive-soft text-positive',
+    box: 'bg-positive-wash text-positive',
     title: '',
     icon: CheckCircle2,
     word: 'Success',
   },
-  warning: { box: 'bg-warning-soft text-warning', title: '', icon: AlertTriangle, word: 'Warning' },
-  negative: { box: 'bg-negative-soft text-negative', title: '', icon: XCircle, word: 'Error' },
+  warning: { box: 'bg-warning-wash text-warning', title: '', icon: AlertTriangle, word: 'Warning' },
+  negative: { box: 'bg-negative-wash text-negative', title: '', icon: XCircle, word: 'Error' },
 };
 
-/**
- * Callout — an in-page message that stays until the condition changes: a
- * data caveat, a finished crawl, failed checks. `radius-md`, 12/16px padding,
- * the tone's 16px icon 8 before its text, 14/20 text with a 500-weight title
- * bound 4 over its sentence, and one optional
- * action at the right. Say what is true, then what to do. Negative and
- * warning callouts are announced as alerts; the rest as status.
- */
 export function Callout({
   tone = 'neutral',
   title,
@@ -50,19 +34,14 @@ export function Callout({
 }: Readonly<{
   tone?: CalloutTone;
   title?: ReactNode;
-  /** One or two sentences. */
   children?: ReactNode;
-  /** A secondary Button or a TextLink. */
   action?: ReactNode;
-  /** Overrides the tone's icon. */
-  icon?: LucideIcon;
+  icon?: IconGlyph;
   className?: string;
 }>) {
   if (children == null && title == null) return null;
   const style = TONE[tone];
   const word = <span className="sr-only">{`${style.word}: `}</span>;
-  // A negative or warning callout interrupts (alert); the rest are a polite
-  // status, which the native <output> carries.
   const urgent = tone === 'negative' || tone === 'warning';
   const Root = urgent ? 'div' : 'output';
   return (
@@ -70,7 +49,7 @@ export function Callout({
       role={urgent ? 'alert' : undefined}
       data-callout-tone={tone}
       className={cn(
-        'flex items-start gap-2 rounded-md border border-transparent px-4 py-3 text-body-sm',
+        'flex items-start gap-2 rounded-control border border-transparent px-4 py-3 text-body-sm',
         style.box,
         className,
       )}

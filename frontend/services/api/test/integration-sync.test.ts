@@ -35,10 +35,6 @@ beforeAll(async () => {
 afterEach(() => {
   vi.useRealTimers();
 });
-/**
- * Pins the clock to the next `hour` o'clock UTC, after the fixtures' grants
- * start, and returns days relative to that UTC day.
- */
 function pinNextUtcHour(hour: number) {
   const at = new Date();
   at.setUTCHours(24 + hour, 0, 0, 0);
@@ -357,7 +353,6 @@ describe('integration sync API and immutable windows', () => {
     await expect(enqueueSyncRun(db, { ...target, syncKind: 'scheduled' })).rejects.toMatchObject({
       status: 409,
     });
-    // An explicit window is a different range, so it is still admitted.
     expect(
       (await enqueue(target, { window_start: '2026-07-01', window_end: '2026-07-01' })).status,
     ).toBe('queued');
@@ -462,11 +457,8 @@ describe('integration sync API and immutable windows', () => {
   });
 
   it.each([
-    // 03:00 UTC is 19:00 or 20:00 the previous day in Los Angeles.
     ['America/Los_Angeles', 3, -2],
-    // 20:00 UTC is 05:00 the next day in Tokyo, so today's UTC date is finished there.
     ['Asia/Tokyo', 20, 0],
-    // An unrecorded zone waits for UTC-12: 11:00 UTC is 23:00 the previous day there.
     [null, 11, -2],
   ])(
     'ends a GA4 property in zone %s at %s:00 UTC on its own yesterday, never its unfinished day',
@@ -504,7 +496,6 @@ describe('integration sync API and immutable windows', () => {
       windowEnd: yesterday,
       syncKind: 'backfill',
     });
-    /** Ends the run as `status` with one Search Console day extract; its artifact and revision. */
     const extracted = async (runId: string, status: 'succeeded' | 'failed') => {
       const run = await db
         .updateTable('integration_sync_runs')
@@ -568,13 +559,9 @@ describe('integration sync API and immutable windows', () => {
         .execute();
       return nextWindow();
     };
-    // Nothing reported yet: every day within the finality bound may be pending.
     expect(await nextWindow()).toEqual([day(-10), yesterday]);
-    // Pending for 37 days: re-read only within the 10-day finality bound.
     expect(await reportedThrough(day(-38))).toEqual([day(-10), yesterday]);
-    // Reported up to 8 days ago: every day since may still be pending.
     expect(await reportedThrough(day(-8))).toEqual([day(-7), yesterday]);
-    // A failed run's later row never replaced the revision that read those days.
     const failed = await enqueueSyncRun(db, {
       ...target,
       windowStart: day(-7),
@@ -584,7 +571,6 @@ describe('integration sync API and immutable windows', () => {
       day(-7),
       yesterday,
     ]);
-    // Reported up to 2 days ago: only the 3 usual late-data days are re-read.
     expect(await reportedThrough(day(-2))).toEqual([day(-3), yesterday]);
   });
 

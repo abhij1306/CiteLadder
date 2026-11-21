@@ -1,10 +1,3 @@
-/**
- * The typed audit configuration frozen at admission. `freeze.ts` writes it
- * through `frozenConfiguration`; every reader goes through
- * `readFrozenConfiguration`, which reads field by field: a missing or
- * malformed field stays unavailable (undefined) and is never filled from the
- * live configuration.
- */
 import { z } from 'zod';
 import { record } from '../db/json.ts';
 
@@ -39,6 +32,7 @@ const configurationShape = {
   anthropic_max_uses: z.number().int().nonnegative(),
   openai_max_tool_calls: z.number().int().nonnegative(),
   panel_hash: z.string(),
+  prompt_selection: z.enum(['set', 'selected']),
   measurement_policy: z.looseObject(measurementShape),
   engine_routes: z.record(z.string(), frozenRouteSchema),
 };
@@ -46,12 +40,10 @@ const frozenConfigurationSchema = z.looseObject(configurationShape);
 
 type FrozenMeasurement = z.infer<z.ZodObject<typeof measurementShape>>;
 type FrozenFields = z.infer<z.ZodObject<typeof configurationShape>>;
-/** What a reader sees: every field possibly unavailable, the measurement block likewise. */
 type FrozenConfiguration = Partial<Omit<FrozenFields, 'measurement_policy'>> & {
   measurement_policy: Partial<FrozenMeasurement>;
 };
 
-/** The configuration to persist, refused when a typed field is missing or malformed. */
 export function frozenConfiguration<T extends z.input<typeof frozenConfigurationSchema>>(
   configuration: T,
 ): T {
@@ -69,7 +61,6 @@ function readFields<Shape extends Record<string, z.ZodType>>(
     const parsed = schema.safeParse(source[key]);
     if (parsed.success) fields[key] = parsed.data;
   }
-  // Every key was validated against its own schema above.
   return fields as Partial<z.infer<z.ZodObject<Shape>>>;
 }
 
@@ -81,10 +72,16 @@ const searchRequestShape = {
   request_settings: z.record(z.string(), z.unknown()),
   recovery_deadline_hours: z.number().positive(),
 };
-/** A search-surface task's frozen request (`request_snapshot`), read field by field. */
 export const readFrozenSearchRequest = (value: unknown) => readFields(searchRequestShape, value);
 
-/** A stored configuration's typed fields; anything missing or malformed is unavailable. */
+export const askedWholeSet = (configuration: unknown) =>
+  configurationShape.prompt_selection.parse(record(configuration).prompt_selection) === 'set';
+
+export const auditFrozenRetrievalEnabled = (configuration: unknown) =>
+  measurementShape.retrieval_enabled.parse(
+    record(record(configuration).measurement_policy).retrieval_enabled,
+  );
+
 export function readFrozenConfiguration(value: unknown): FrozenConfiguration {
   const { measurement_policy: _measurement, ...fields } = configurationShape;
   return {

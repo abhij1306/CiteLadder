@@ -43,10 +43,6 @@ function spend(
     .returning('id')
     .executeTakeFirst();
 }
-/**
- * Charge one redirect token: `charged` to follow it, `duplicate` if already
- * paid in this budget window. A token that failed is retried in a later window.
- */
 export function spendRedirect(
   db: Database,
   scope: SourceScope,
@@ -69,13 +65,6 @@ const NOT_EARNABLE = policy.opportunity.earned_actions.EARNED_EXCLUDED_SOURCE_CL
 const v = policy.opportunity.source_pages;
 const hoursAgo = (now: Date, hours: number) => new Date(now.getTime() - hours * 3_600_000);
 
-/**
- * Claim the next pages to read within the remaining budget. A page is read
- * once and again only after it goes stale. Pages cited in answers come before
- * organic search results nobody cited; within each, never read before stale,
- * then retries. A failed read waits a budget window and a blocked one the
- * stale period, so neither is re-fetched every run.
- */
 export function claimPages(db: Database, scope: SourceScope, now = new Date(), task?: QueueTask) {
   return db.transaction().execute(async (trx) => {
     await fenceInspectionTask(trx, task);

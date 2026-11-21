@@ -1,7 +1,11 @@
 import { parentPort } from 'node:worker_threads';
 import { analyzePage } from './analyze-page.ts';
 import { document } from '../../web-evidence/html.ts';
-import { parseSitemap, SitemapParseError } from '../../web-evidence/sitemaps.ts';
+import {
+  parseSitemap,
+  SitemapParseError,
+  SitemapTooLargeError,
+} from '../../web-evidence/sitemaps.ts';
 import { extractPage } from '../../projects/html-evidence.ts';
 import { discoveryLinks } from '../discovery-links.ts';
 import { extractPageFacts } from './facts.ts';
@@ -14,6 +18,7 @@ function sitemap(input: Extract<Interpretation, { kind: 'sitemap' }>): SitemapPa
       document: parseSitemap(Buffer.from(input.body), input.contentType, input.limits),
     };
   } catch (error) {
+    if (error instanceof SitemapTooLargeError) return { kind: 'too_large', reason: error.message };
     if (error instanceof SitemapParseError) return { kind: 'invalid', reason: error.message };
     throw error;
   }
@@ -33,7 +38,6 @@ function interpret(input: Interpretation) {
   };
 }
 
-/** A persistent interpreter: one reply per id-tagged request, for the life of the pool. */
 parentPort!.on('message', ({ id, input }: { id: number; input: Interpretation }) => {
   try {
     const result = interpret(input);

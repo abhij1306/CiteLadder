@@ -16,7 +16,6 @@ import {
   recomputeResponse,
 } from './demand-contracts.ts';
 
-/** Every route here reads the path project inside the active workspace. */
 const family = { family: 'demand', authorize: 'active-project' } as const;
 const root = '/api/v1/projects/{project_id}/demand';
 const projectPath = { project_id: { scalar: { kind: 'uuid' }, required: true } } as const;
@@ -117,7 +116,6 @@ export const demandRoutes = [
       const body = await readBody(c, overrideBody),
         w = c.get('workspace');
       const normalized = normalizeQuery(body.query);
-      // Text with no searchable characters is a validation error, never a 500.
       if (!normalized)
         throw new RequestValidationError([
           {

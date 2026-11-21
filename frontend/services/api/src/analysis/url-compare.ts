@@ -1,4 +1,3 @@
-/** Page grouping identity used by Action and evidence readers. */
 import { policy } from '../config.ts';
 import { stripTrailing } from '../text-order.ts';
 

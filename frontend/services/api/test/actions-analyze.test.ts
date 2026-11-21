@@ -1,11 +1,3 @@
-/**
- * Analyze a page through the served Actions routes (content optimization
- * phase 2, PR 4): the picker offers only the latest crawl's content pages,
- * the request accepts only such a page and prompts of a topic that has some,
- * reuses the page's Action on a repeat, and starts an `optimize_page` chat
- * whose page fetch hands the chosen prompts to the Agent's context. The site
- * is recorded; nothing reaches the network or a model.
- */
 import { randomUUID } from 'node:crypto';
 
 import { afterAll, describe, expect, it, vi } from 'vitest';
@@ -60,11 +52,6 @@ async function contentPage(seed: SiteSeed, path: string, kind: string) {
   return page.id;
 }
 
-/**
- * A signed-in owner of a crawled project with one content page (a
- * comparison), one product page, a topic with two prompts, a topic with none
- * and a prompt in no topic.
- */
 async function setup() {
   const seed = await fixtures.crawl();
   workspaces.push(seed.workspaceId);
@@ -283,7 +270,6 @@ describe('Analyze a page', () => {
         await (await app.request(`/api/v1/actions/${started.action_id}`, { headers })).json(),
       ).editable_page;
     expect(await editable()).toBe(true);
-    // The latest crawl now reads the page as a product page: a content kind no longer.
     await db
       .updateTable('site_page_analyses')
       .set({ page_kind: 'product' })

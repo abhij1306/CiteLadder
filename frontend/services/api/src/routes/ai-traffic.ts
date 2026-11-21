@@ -1,10 +1,3 @@
-/**
- * AI Traffic persisted signal reads, with the retained referral data owner.
- *
- * `range` names a preset and
- * resolves the newest persisted snapshot of that length; `from`/`to` selects
- * one exact persisted window; neither serves the latest snapshot.
- */
 import {
   aiReferralsSchema,
   aiTrafficOverviewSchema,
@@ -177,7 +170,6 @@ export const aiTrafficRoutes = [
           granularity: query.granularity,
         });
       } catch (error) {
-        // A bad granularity, window or range is a 422, never a 404 or a 500.
         if (error instanceof AiReferralsQueryError) throw new ApiError(422, error.message);
         throw error;
       }

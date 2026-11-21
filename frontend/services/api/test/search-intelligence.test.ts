@@ -80,7 +80,6 @@ async function connection(tenant: Tenant, options: { active?: boolean; tested?: 
   return id;
 }
 
-/** A run as the review creator writes it. */
 async function review(
   tenant: Tenant,
   connectionId: string,
@@ -224,7 +223,6 @@ beforeEach(async () => {
 afterAll(async () => {
   const workspaces = tenants.map((row) => row.workspaceId);
   await db.deleteFrom('search_intelligence_rows').where('workspace_id', 'in', workspaces).execute();
-  // Derived datasets reference their parent.
   await db
     .deleteFrom('search_intelligence_datasets')
     .where('workspace_id', 'in', workspaces)
@@ -260,7 +258,6 @@ describe('Search Intelligence authorization', () => {
     const viewer = await fixtures.user();
     await fixtures.member(t.workspaceId, viewer, 'viewer');
     for (const [method, path, body] of routes) {
-      // A member of another workspace sees no project, whatever header it sends.
       const foreign = await call<ErrorBody>(path, {
         method,
         body,
@@ -283,7 +280,6 @@ describe('Search Intelligence authorization', () => {
       if (method === 'GET') expect(asViewer.status).toBe(200);
       else expect([path, asViewer.status]).toEqual([path, 403]);
     }
-    // A header naming a foreign workspace does not hide the caller's own project.
     const own = await call<Readiness>('', { headers: { 'x-workspace-id': outsider.workspaceId } });
     expect(own.status).toBe(200);
     const missing = await call<ErrorBody>('', { project: randomUUID() });
@@ -299,7 +295,6 @@ describe('Search Intelligence readiness and preferences', () => {
     await db
       .insertInto('owned_domains')
       .values([
-        // The primary website's own origin, and a child subdomain.
         ...['acme.example', 'blog.acme.example', 'www.acme.co.uk'].map((domain) => ({
           id: randomUUID(),
           workspace_id: t.workspaceId,
@@ -322,9 +317,7 @@ describe('Search Intelligence readiness and preferences', () => {
       confirmedAt: now(),
       createdAt: new Date(Date.now() - 60_000),
     });
-    // A newer unconfirmed cost review does not replace the acquisition being followed.
     await review(t, connectionId);
-    // An earlier acquisition of the same dataset, which the newer one replaces.
     await dataset(t, older, {
       scope: 'domain_subdomains',
       publishedAt: new Date(Date.now() - 60_000),
@@ -353,7 +346,6 @@ describe('Search Intelligence readiness and preferences', () => {
       research_scope: si.default_research_scope,
       depths: si.default_depths,
     });
-    // The market picker offers the reviewed Labs countries, which name the saved one.
     expect(body.markets).toContainEqual({ country_code: 'AU', location_code: 2036 });
     expect(body.latest_run?.id).toBe(latest);
     expect(new Map(body.datasets.map((row) => [row.id, row.research_scope]))).toEqual(
@@ -363,7 +355,6 @@ describe('Search Intelligence readiness and preferences', () => {
       ]),
     );
 
-    // Two eligible connections are ambiguous: not connected.
     await connection(t);
     expect((await call<Readiness>('')).body).toMatchObject({
       connected: false,
@@ -381,7 +372,6 @@ describe('Search Intelligence readiness and preferences', () => {
     const read = await call<Readiness>('');
     expect(read.body.preferences).toMatchObject({
       location_code: 2840,
-      // The saved depth, and the policy default for every dataset left unsaved.
       depths: { backlinks: 500, ranking_keywords: 200 },
     });
 
@@ -422,7 +412,6 @@ describe('Search Intelligence run confirmation and cancellation', () => {
       .executeTakeFirstOrThrow();
     expect(run.analytics_task_id).toBe(tasks[0]!.id);
 
-    // A second acquisition waits for this one to finish.
     const blocked = await call<ErrorBody>(`/runs/${await review(t, connectionId)}/confirm`, {
       method: 'POST',
     });
@@ -455,13 +444,11 @@ describe('Search Intelligence run confirmation and cancellation', () => {
       const refused = await call<ErrorBody>(`/runs/${runId}/confirm`, { method: 'POST' });
       expect([refused.status, refused.body.error.code]).toEqual([409, code]);
     }
-    // A connection of another workspace is not this review's connection.
     const outsider = await tenant();
     const foreignConnection = await review(t, await connection(outsider));
     const foreign = await call<ErrorBody>(`/runs/${foreignConnection}/confirm`, { method: 'POST' });
     expect(foreign.body.error.code).toBe('connection_changed');
 
-    // Every dataset reused: nothing to acquire, so nothing is enqueued.
     const reused = await review(t, connectionId, { callPlan: [] });
     const done = await call<Run>(`/runs/${reused}/confirm`, { method: 'POST' });
     expect([done.status, done.body.status]).toEqual([202, 'succeeded']);
@@ -481,7 +468,6 @@ describe('Search Intelligence run confirmation and cancellation', () => {
     expect(task?.status).toBe('cancelled');
     expect(task?.completed_at).not.toBeNull();
 
-    // An uncertain run may have spent money; cancelling keeps that state.
     for (const status of ['succeeded', 'uncertain']) {
       const finished = await review(t, connectionId, { status });
       const unchanged = await call<Run>(`/runs/${finished}/cancel`, { method: 'POST' });
@@ -517,7 +503,7 @@ describe('Search Intelligence run confirmation and cancellation', () => {
       confirmedAt: now(),
     });
     const second = await review(t, connectionId, { confirmedAt: now() });
-    await review(t, connectionId); // an unconfirmed draft
+    await review(t, connectionId);
     const page = await call<Run[]>('/runs?limit=1&offset=1');
     expect(page.body.map((row) => row.id)).toEqual([first]);
     const detail = await call<Run>(`/runs/${second}`);
@@ -628,7 +614,6 @@ describe('Search Intelligence citation matches', () => {
         method: 'POST',
         body: { backlink_dataset_id: parent, audit_ids: [auditId] },
       });
-      // No match against an incomplete or unknown list is not evidence of no match.
       expect([derived.body.unique_rows_saved, derived.body.coverage]).toEqual([0, coverage]);
     },
   );
@@ -698,7 +683,6 @@ describe('Search Intelligence citation matches', () => {
     expect(matched.body.rows.map((row) => [row.domain, row.url])).toEqual([
       ['linker.example', 'https://linker.example/post'],
     ]);
-    // Each match keeps its citation's processing version as provenance.
     const source = await db
       .selectFrom('citations')
       .select(['id', 'analyzer_version'])
@@ -710,7 +694,6 @@ describe('Search Intelligence citation matches', () => {
       analyzer_version: source.analyzer_version,
     });
 
-    // Derivations stored before this owner are found by the same identity.
     const derived = await db
       .selectFrom('search_intelligence_datasets')
       .select(['scope_hash', 'provider_filters'])

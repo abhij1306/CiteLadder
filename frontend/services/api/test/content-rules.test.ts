@@ -24,7 +24,6 @@ const gapAction = (ruleId: string): NonNullable<Manifest['action']> => ({
   diagnosis: { what_happened: [{ rule_id: ruleId, title: 'Not cited for pricing' }] },
 });
 
-/** The `content_rules` section a turn's context gets: its place, the offered rule ids and the ones not checked. */
 function offered(sections: Manifest['package']['sections'], action: Manifest['action'] = null) {
   const supplied = withContentRules(pkg(sections), action).sections;
   const section = supplied.content_rules;
@@ -44,10 +43,8 @@ describe('content rule eligibility', () => {
     expect(turn?.first).toBe('content_rules');
     expect(turn?.ids).toContain('ai_answers.self_contained_passages');
     expect(turn?.ids).toContain('natural_voice.puffery');
-    // Comparisons only, and coverage needs the page's prompts.
     expect(turn?.ids).not.toContain('ai_answers.balanced_comparison');
     expect(turn?.ids).not.toContain('coverage.cited_angles');
-    // Site Health's rules are never offered to the model pass.
     expect(turn?.ids).not.toContain('aeo.answer_first');
     expect(turn?.notChecked).toEqual([
       'search_guidelines.original_value (needs cited_page_text)',
@@ -57,7 +54,6 @@ describe('content rule eligibility', () => {
       'proof.supporting_links (needs link_checks)',
       'coverage.cited_angles (needs page_prompts)',
     ]);
-    // Each rule reads as one line: its category, strength and severity, what it checks, and how.
     expect(turn?.lines).toContain(
       'natural_voice.rule_of_three [natural_voice, heuristic, low]: Lists of three used out of habit rather than because there are three things. min occurrences: 3. A clarity fix, never a verdict on who wrote it.',
     );
@@ -81,7 +77,6 @@ describe('content rule eligibility', () => {
     });
     expect(prompts?.ids).toContain('coverage.cited_angles');
     expect(prompts?.ids).toContain('ai_answers.balanced_comparison');
-    // A topic whose prompts no longer resolve gives none.
     expect(
       offered({
         ...page,
@@ -101,7 +96,6 @@ describe('content rule eligibility', () => {
       ...fetched('article'),
       failing_checks: [
         { rule_id: 'aeo.answer_first', outcome: 'fail', reason_code: 'answer_not_first' },
-        // Not a catalog rule: nothing the page's copy fixes.
         { rule_id: 'technical.https', outcome: 'fail', reason_code: 'http_only' },
       ],
     };
@@ -114,7 +108,6 @@ describe('content rule eligibility', () => {
     expect(
       withContentRules(pkg({ fetched_page: fetched('article') }), null).sections.content_rules,
     ).toMatchObject({ site_health_findings: [] });
-    // Its fix is stored with the Site Health rule's own source and strength.
     expect(ruleGuidance('aeo.answer_first')).toMatchObject({
       category: 'ai_answers',
       guidance: { strength: 'recommendation', source_key: 'ms_ai_answers' },

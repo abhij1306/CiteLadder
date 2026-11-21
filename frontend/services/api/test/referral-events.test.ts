@@ -1,4 +1,3 @@
-/** Referral redaction and repeatable event identity. */
 import { describe, expect, it } from 'vitest';
 
 import { classifyReferralSignals } from '../src/referrals/classification.ts';
@@ -11,7 +10,6 @@ describe('classifyReferralSignals', () => {
       matched_rule_id: 'utm-source-perplexity-ai',
     });
     expect(classifyReferralSignals({ utm_source: 'notperplexity.ai' })).toBeNull();
-    // Bare tokens stay exact: a dotted source is not a subdomain of a token.
     expect(classifyReferralSignals({ utm_source: 'news.perplexity' })).toBeNull();
   });
 });

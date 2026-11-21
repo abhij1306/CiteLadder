@@ -1,4 +1,4 @@
-import { CRAWL_ONLY_TABS, TRAFFIC_TABS } from '@/lib/config/crawl-logs';
+import { CRAWL_ONLY_TABS, TRAFFIC_TABS } from '@/lib/ai-traffic/tabs';
 import { useUrlState, type UrlCodec } from '@/lib/navigation/url-state';
 import { useProjectScope } from '@/lib/project/active-project-scope';
 import { crawlLogsAvailable, useCrawlSources } from '@/lib/ai-traffic/use-crawl-connections';
@@ -7,39 +7,32 @@ import {
   useTrafficData,
   type TrafficDataTab,
 } from '@/lib/ai-traffic/use-traffic-data';
-import { ListScreen } from '@/components/layout/page-shell';
-import type { FilterBarProps } from '@/components/ui/filter-bar';
-import { Stack } from '@/components/ui/layout';
-import { QueryState } from '@/components/ui/query-state';
-import { TabsRoot, TabPanel, type TabRowProps } from '@/components/ui/tabs';
-import { MutationNotice } from '@/components/ui/mutation-notice';
+import { ReportPage } from '@/components/templates/report-page';
+import { FilterBar } from '@/components/ui/filter-bar';
+import { TabsRoot, TabPanel, TabRow, type TabRowProps } from '@/components/ui/tabs';
 import { mutationNoticeForError } from '@/lib/api/mutation-notice';
-import { readErrorProps } from '@/components/ui/read-error';
 import { AiReferralsScreen } from './referrals-screen';
-import { TrafficExport, trafficFilters } from './traffic-controls';
+import { clearTrafficFilters, TrafficExport, trafficFilters } from './traffic-controls';
 import { TrafficOverview, TrafficCrawlers, TrafficActivity } from './traffic-views';
+import { overviewStarted } from './overview-signals';
+import { TrafficSetupState } from './traffic-setup';
+import { useSourceStep, type SourceStep } from '@/components/integrations/data-sources';
+import { Stack } from '@/components/ui/layout';
 import { TrafficPages } from './pages-view';
 import { CrawlLogAvailabilityNotice } from './crawl-log-availability';
+import { Notice, readErrorProps } from '@/components/ui/notice';
+import { StateBlock } from '@/components/ui/state-block';
 
 type TrafficTab = (typeof TRAFFIC_TABS)[number]['value'];
-/** Absent or unknown means "not chosen", so the default can follow crawl availability. */
 const tabCodec: UrlCodec<TrafficTab | null> = {
   parse: (raw) => TRAFFIC_TABS.find((t) => t.value === raw)?.value ?? null,
   serialize: (value) => value,
 };
-/**
- * Without crawl log collection the screen leads with Referrals and drops the
- * crawl-only views instead of offering a setup the workspace cannot complete.
- */
 function resolveTab(requested: TrafficTab | null, crawlAvailable: boolean | null) {
   if (crawlAvailable === false)
     return requested && !CRAWL_ONLY_TABS.has(requested) ? requested : 'referrals';
   return requested ?? (crawlAvailable === null ? null : 'overview');
 }
-/**
- * Whether Overview is, or will be, the tab on screen. It is the default while
- * availability is still being read, so its reads need not wait for that answer.
- */
 function leadsWithOverview(requested: TrafficTab | null, crawlAvailable: boolean | null) {
   return (requested === null || requested === 'overview') && crawlAvailable !== false;
 }
@@ -47,19 +40,18 @@ export function AiTrafficScreen() {
   const { workspaceId, projectId } = useProjectScope();
   const sources = useCrawlSources(projectId, workspaceId);
   const [requested, setTab] = useUrlState('tab', tabCodec);
-  // Unknown while the sources read is pending; a failed read keeps every view.
+  // Unknown while the sources read is pending; a failed read keeps every view,
+  // also while it is retried (a retry without data reads as pending again, and
+  // unmounting the views it remounts would retry it forever).
   let crawlAvailable: boolean | null = null;
   if (sources.data) crawlAvailable = crawlLogsAvailable(sources.data);
-  else if (sources.isError) crawlAvailable = true;
+  else if (sources.isError || sources.errorUpdatedAt > 0) crawlAvailable = true;
   const tab = resolveTab(requested, crawlAvailable);
   useOverviewWarmup(leadsWithOverview(requested, crawlAvailable));
   const tabs: TabRowProps = {
-    ariaLabel: 'AI Traffic views',
+    ariaLabel: 'AI traffic views',
     items: crawlAvailable === false ? TRAFFIC_TABS.filter((t) => !t.crawlOnly) : TRAFFIC_TABS,
   };
-  // The default view waits for crawl availability. The wait still draws the
-  // tab row (nothing selected yet), so the loaded view's filters, which join
-  // that row, do not push its work down when they arrive.
   if (tab === null)
     return (
       <TabsRoot<TrafficTab | ''>
@@ -68,9 +60,9 @@ export function AiTrafficScreen() {
           if (next) setTab(next);
         }}
       >
-        <ListScreen tabs={tabs}>
-          <QueryState kind="loading" label="Loading AI Traffic…" />
-        </ListScreen>
+        <ReportPage tabs={<TabRow {...tabs} />}>
+          <StateBlock kind="loading" label="Loading AI traffic…" shape={{ kind: 'figures' }} />
+        </ReportPage>
       </TabsRoot>
     );
   return (
@@ -96,52 +88,94 @@ function TrafficDataView({
   crawlAvailable,
 }: Readonly<{ tab: TrafficDataTab; tabs: TabRowProps; crawlAvailable: boolean }>) {
   const model = useTrafficData(tab);
-  const { summary } = model;
-  // Every narrowing in All filters after the tabs; Export, on the tabs that
-  // list rows, is a header action (D60).
-  const controls: FilterBarProps = { filters: trafficFilters({ model, crawlAvailable }) };
-  const actions = tab === 'overview' ? undefined : <TrafficExport model={model} />;
-  // First load keeps the identity, tab and control bands; only the work waits.
-  // The table tabs draw their own loading, error and empty states inside the
-  // table, in the footprint of a page of rows.
+  const { summary, workspaceId, projectId } = model;
+  const ga4 = useSourceStep(workspaceId, projectId, 'ga4');
+  const sources = useCrawlSources(projectId, workspaceId);
+  const idle = trafficIdle({ tab, ga4, sources: sources.data, overview: summary.data });
+  const frame = {
+    tabs: <TabRow {...tabs} />,
+    filters: idle ? undefined : (
+      <FilterBar
+        filters={trafficFilters({ model, crawlAvailable })}
+        actions={tab === 'overview' ? undefined : <TrafficExport model={model} />}
+      />
+    ),
+  };
+  if (idle)
+    return (
+      <ReportPage {...frame}>
+        <TrafficSetupState ga4Missing={ga4?.kind === 'connect'} crawlAvailable={crawlAvailable} />
+      </ReportPage>
+    );
   if (tab === 'overview' && summary.isLoading)
     return (
-      <ListScreen tabs={tabs} controls={controls} actions={actions}>
-        <QueryState kind="loading" label="Loading AI Traffic…" />
-      </ListScreen>
+      <ReportPage {...frame}>
+        <Stack gap="workspace" className="min-w-0">
+          <StateBlock kind="loading" label="Loading AI traffic…" shape={{ kind: 'figures' }} />
+          <StateBlock kind="loading" label="Loading AI traffic…" shape={{ kind: 'chart' }} />
+        </Stack>
+      </ReportPage>
     );
-  // A failed read with nothing to show is the region's state, in the same
-  // footprint its loading state took.
   if (tab === 'overview' && summary.isError)
     return (
-      <ListScreen tabs={tabs} controls={controls} actions={actions}>
-        <QueryState
+      <ReportPage {...frame}>
+        <StateBlock
           kind="error"
           {...readErrorProps(summary)}
-          fallback="Could not read AI Traffic"
+          title="Couldn't load AI traffic"
+          fallback="Check your connection and try again."
         />
-      </ListScreen>
+      </ReportPage>
     );
   return (
-    <ListScreen tabs={tabs} controls={controls} actions={actions}>
-      <TrafficTabContent tab={tab} model={model} crawlAvailable={crawlAvailable} />
-    </ListScreen>
+    <ReportPage {...frame}>
+      <TrafficTabContent tab={tab} model={model} crawlAvailable={crawlAvailable} ga4={ga4} />
+    </ReportPage>
   );
+}
+
+function trafficIdle({
+  tab,
+  ga4,
+  sources,
+  overview,
+}: Readonly<{
+  tab: TrafficDataTab;
+  ga4: SourceStep | null;
+  sources: Readonly<{ items: readonly unknown[] }> | undefined;
+  overview: ReturnType<typeof useTrafficData>['summary']['data'];
+}>): boolean {
+  switch (tab) {
+    case 'overview':
+      return ga4?.kind === 'connect' && overview !== undefined && !overviewStarted(overview);
+    case 'crawlers':
+    case 'activity':
+      return sources?.items.length === 0;
+    case 'pages':
+      return false;
+    default: {
+      const exhaustive: never = tab;
+      return exhaustive;
+    }
+  }
 }
 
 function TrafficTabContent({
   tab,
   model,
   crawlAvailable,
+  ga4,
 }: Readonly<{
   tab: TrafficDataTab;
   model: ReturnType<typeof useTrafficData>;
   crawlAvailable: boolean;
+  ga4: SourceStep | null;
 }>) {
   const { projectId, workspaceId, summary, filters } = model;
   const scope = { workspaceId, projectId, filters };
+  const crawlScope = { ...scope, onClearFilters: () => clearTrafficFilters(model) };
   return (
-    <Stack gap="workspace">
+    <>
       <TrafficStatus model={model} />
       {tab === 'overview' && summary.data ? (
         <TrafficOverview
@@ -150,22 +184,24 @@ function TrafficTabContent({
           workspaceId={workspaceId}
           range={model.selection.range}
           crawlAvailable={crawlAvailable}
+          ga4={ga4}
         />
       ) : null}
-      {tab === 'crawlers' ? <TrafficCrawlers {...scope} /> : null}
-      {tab === 'activity' ? <TrafficActivity {...scope} /> : null}
+      {tab === 'crawlers' ? <TrafficCrawlers {...crawlScope} /> : null}
+      {tab === 'activity' ? <TrafficActivity {...crawlScope} /> : null}
       {tab === 'pages' ? (
         <TabPanel value="pages">
           <TrafficPages {...scope} sort={model.selection.sort} onSort={model.selection.setSort} />
         </TabPanel>
       ) : null}
-    </Stack>
+    </>
   );
 }
 function TrafficStatus({ model }: Readonly<{ model: ReturnType<typeof useTrafficData> }>) {
   const { exporting } = model;
   return exporting.isError ? (
-    <MutationNotice
+    <Notice
+      kind="mutation"
       notice={mutationNoticeForError(exporting.error, { action: 'export AI traffic' })}
       onRetry={() => exporting.mutate()}
     />

@@ -52,7 +52,6 @@ const theme = z.string().max(P.theme_max_chars);
 const intent = z.string().max(P.intent_max_chars);
 const persona = z.string().trim().max(P.persona_max_chars);
 
-/** An omitted cohort is filed by whether the text names the brand (`brand-filing.ts`). */
 export const promptInput = promptCreateRequestSchema.extend({
   text,
   theme: theme.default(''),
@@ -68,7 +67,9 @@ export const promptUpdate = promptUpdateRequestSchema.extend({
   intent: intent.nullish(),
   persona: persona.nullish(),
 });
-export const promptBulkStatus = promptBulkStatusRequestSchema;
+export const promptBulkStatus = promptBulkStatusRequestSchema.extend({
+  prompt_ids: promptBulkStatusRequestSchema.shape.prompt_ids.max(P.bulk_prompts_max),
+});
 const importRow = promptImportRowRequestSchema.extend({
   text: z.string().trim().max(P.text_max_chars),
   theme: theme.default(''),
@@ -80,7 +81,6 @@ export const promptImport = promptImportRequestSchema.extend({
   prompts: z.array(importRow).max(P.import_max_rows),
 });
 
-/** Trim and lower-case an intent; an unknown one is unspecified (''). */
 function normalizeIntent(value: string): string {
   const normalized = value.trim().toLowerCase();
   return INTENTS.has(normalized) ? normalized : '';
@@ -89,7 +89,6 @@ function normalizeIntent(value: string): string {
 type Cohort = z.infer<typeof promptCohortSchema>;
 const cohortColumns = (cohort: Cohort) => ({ cohort, branded: brandedCohort(cohort) });
 
-/** A prompt in the caller's workspace (and named project) with its project, or `Prompt not found`. */
 export async function scopedPrompt(
   db: Kysely<DB>,
   workspaceId: string,
@@ -111,7 +110,6 @@ export async function scopedPrompt(
   return row;
 }
 
-/** Every one of `promptIds` in the project, or a 404 naming how many are not in it. */
 export async function scopedPrompts(
   db: Kysely<DB>,
   scope: { workspaceId: string; projectId: string },
@@ -122,7 +120,13 @@ export async function scopedPrompts(
     ? await db
         .selectFrom('prompts')
         .innerJoin('prompt_sets', 'prompt_sets.id', 'prompts.prompt_set_id')
-        .select(['prompts.id', 'prompts.text', 'prompts.status', 'prompts.prompt_set_id'])
+        .select([
+          'prompts.id',
+          'prompts.text',
+          'prompts.status',
+          'prompts.prompt_set_id',
+          'prompts.topic_id',
+        ])
         .where('prompts.id', 'in', ids)
         .where('prompts.workspace_id', '=', scope.workspaceId)
         .where('prompt_sets.project_id', '=', scope.projectId)
@@ -133,8 +137,11 @@ export async function scopedPrompts(
   return rows;
 }
 
-/** The topic's persisted name and description, or 404 outside the project. */
-async function topicText(db: Kysely<DB>, scope: ProjectScope, topicId: string): Promise<string> {
+export async function topicText(
+  db: Kysely<DB>,
+  scope: ProjectScope,
+  topicId: string,
+): Promise<string> {
   const topic = await db
     .selectFrom('topics')
     .select(['name', 'description'])
@@ -145,7 +152,6 @@ async function topicText(db: Kysely<DB>, scope: ProjectScope, topicId: string): 
   return [topic.name, topic.description].filter(Boolean).join(' ');
 }
 
-/** The project scope of a prompt set already found in its workspace. */
 function setScope(set: { workspace_id: string; project_id: string }): ProjectScope {
   return { workspaceId: set.workspace_id, projectId: set.project_id };
 }
@@ -178,20 +184,12 @@ export async function createPrompt(
   return firstOf(await createPrompts(db, scope, promptSetId, [input]), 'created prompt');
 }
 
-/**
- * Create manual prompts in one transaction: every one binds and is new to the
- * set (and to the batch), or nothing is created.
- */
 type Screened<T> = {
   input: T;
   hash: string;
   problem: { kind: 'binding'; failure: BindingFailure } | { kind: 'duplicate' } | null;
 };
 
-/**
- * Each input with what stops it inserting: a topical binding failure, or text
- * equivalent to an earlier input or to a prompt already in the set.
- */
 async function screen<T extends { text: string; topic_id?: string | null }>(
   db: Kysely<DB>,
   set: { id: string; workspace_id: string; project_id: string },
@@ -215,7 +213,6 @@ async function screen<T extends { text: string; topic_id?: string | null }>(
         .where('normalized_text_hash', 'in', hashes)
         .execute()
     : [];
-  // Texts already in the set, then each input that passes: only those can repeat.
   const taken = new Set(existing.map((row) => row.normalized_text_hash));
   return inputs.map((input) => {
     const hash = promptTextHash(input.text);
@@ -233,10 +230,6 @@ async function screen<T extends { text: string; topic_id?: string | null }>(
   });
 }
 
-/**
- * The inputs `createPrompts` would accept, and each dropped one with why. A
- * read: the insert screens again under its locks.
- */
 export async function screenPrompts(
   db: Database,
   scope: RecordScope,
@@ -310,7 +303,6 @@ export async function updatePrompt(
   }
 }
 
-/** The prompt row `FOR UPDATE`, read after its project lock; 404 once it is deleted. */
 async function lockedPrompt(db: Kysely<DB>, promptId: string): Promise<PromptRow> {
   const prompt = await db
     .selectFrom('prompts')
@@ -322,12 +314,6 @@ async function lockedPrompt(db: Kysely<DB>, promptId: string): Promise<PromptRow
   return prompt;
 }
 
-/**
- * The edit, under the project lock that topic writers take, so the topic and
- * vocabulary it binds against cannot change before it commits. The prompt is
- * re-read under that lock: a re-file or status change that committed while
- * this edit waited decides what it must bind to.
- */
 async function applyPromptUpdate(
   db: Kysely<DB>,
   scope: RecordScope,
@@ -343,18 +329,30 @@ async function applyPromptUpdate(
   const projectScope = { workspaceId: scope.workspaceId, projectId };
   await acquireProjectLock(db, projectId);
   const prompt = await lockedPrompt(db, promptId);
-  // An explicit null detaches the prompt; an absent key leaves its topic.
   const topicGiven = 'topic_id' in input;
   const topicId = topicGiven ? (input.topic_id ?? null) : prompt.topic_id;
   if (topicGiven && topicId !== null) await topicText(db, projectScope, topicId);
   const activates = input.status === P.status_active && prompt.status !== P.status_active;
-  // Re-filing an active prompt under another topic changes what it must bind to.
   const refiled =
     topicId !== prompt.topic_id && (input.status ?? prompt.status) === P.status_active;
   if (input.text != null || activates || refiled) {
     await requireBinding(db, projectScope, input.text ?? prompt.text, topicId);
   }
-  const changes: Partial<PromptRow> = {
+  const row = await db
+    .updateTable('prompts')
+    .set({
+      ...editedColumns(input),
+      ...(topicGiven ? { topic_id: topicId } : {}),
+      updated_at: new Date(),
+    })
+    .where('id', '=', prompt.id)
+    .returningAll()
+    .executeTakeFirstOrThrow();
+  return promptView(row);
+}
+
+function editedColumns(input: z.infer<typeof promptUpdate>): Partial<PromptRow> {
+  return {
     ...(input.text == null
       ? {}
       : { text: input.text, normalized_text_hash: promptTextHash(input.text) }),
@@ -365,15 +363,7 @@ async function applyPromptUpdate(
     ...(input.cohort == null ? {} : cohortColumns(input.cohort)),
     ...(input.enabled == null ? {} : { enabled: input.enabled }),
     ...(input.status == null ? {} : { status: input.status }),
-    ...(topicGiven ? { topic_id: topicId } : {}),
   };
-  const row = await db
-    .updateTable('prompts')
-    .set({ ...changes, updated_at: new Date() })
-    .where('id', '=', prompt.id)
-    .returningAll()
-    .executeTakeFirstOrThrow();
-  return promptView(row);
 }
 
 export async function deletePrompt(
@@ -385,17 +375,44 @@ export async function deletePrompt(
   await db.deleteFrom('prompts').where('id', '=', prompt.id).execute();
 }
 
+export async function refilePrompts(
+  db: Kysely<DB>,
+  scope: ProjectScope,
+  change: Readonly<{ promptIds: readonly string[]; topicId: string | null }>,
+): Promise<void> {
+  await db
+    .updateTable('prompts')
+    .set({ topic_id: change.topicId, updated_at: new Date() })
+    .where('workspace_id', '=', scope.workspaceId)
+    .where('id', 'in', change.promptIds)
+    .execute();
+}
+
+export async function deleteScopedPrompts(
+  db: Kysely<DB>,
+  scope: ProjectScope,
+  promptIds: readonly string[],
+): Promise<number> {
+  const result = await db
+    .deleteFrom('prompts')
+    .where('workspace_id', '=', scope.workspaceId)
+    .where('id', 'in', promptIds)
+    .executeTakeFirst();
+  return Number(result.numDeletedRows);
+}
+
 type Failed<T> = { item: T; failure: BindingFailure; code: string; message: string };
 
-/** Each failing item; the whole request is rejected if any fail. */
-function failures<T>(items: readonly T[], check: (item: T) => BindingFailure | null): Failed<T>[] {
+export function failures<T>(
+  items: readonly T[],
+  check: (item: T) => BindingFailure | null,
+): Failed<T>[] {
   return items.flatMap((item) => {
     const failure = check(item);
     return failure === null ? [] : [{ item, failure, ...BINDING_FAILURES[failure] }];
   });
 }
 
-/** Archive or activate prompts of one set; all of them, or none (404). */
 export async function bulkSetStatus(
   db: Database,
   scope: RecordScope,
@@ -478,7 +495,6 @@ export async function importPrompts(
         },
       );
     }
-    // Topics are created only for rows that insert, so screen duplicates first.
     const byHash = new Map<string, (typeof rows)[number]>();
     for (const row of rows) {
       const hash = row.text ? promptTextHash(row.text) : '';

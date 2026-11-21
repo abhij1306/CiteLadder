@@ -1,4 +1,3 @@
-/** The Search Demand analytics kind. */
 import type { AnalyticsKinds } from '../queue/executor.ts';
 import { recomputeDemand } from './snapshot.ts';
 

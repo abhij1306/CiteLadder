@@ -1,28 +1,24 @@
+import { ClampText } from '@/components/ui/clamp-text';
 import { Stack } from '@/components/ui/layout';
 import { TextLink } from '@/components/ui/text-link';
 import { textRole } from '@/components/ui/typography';
 import { type AgentWebSource } from '@/lib/api/agent';
 import { parseAbsoluteHttpUrl } from '@/lib/safe-http-url';
 
-/**
- * Pages a web search returned, kept apart from the CiteLadder records a reply
- * cites: they are outside observations, not project data.
- */
-export function WebSources({
-  sources,
-  label = 'Web sources',
-}: Readonly<{ sources: readonly AgentWebSource[]; label?: string }>) {
+export function WebSources({ sources }: Readonly<{ sources: readonly AgentWebSource[] }>) {
   if (sources.length === 0) return null;
   return (
-    <Stack as="section" gap="tight" aria-label={label}>
-      <span className={textRole('label')}>{label}</span>
+    <Stack as="section" gap="tight" aria-label="Web sources">
+      <span className={textRole('body', 'text-ink-2')}>Web sources</span>
       <Stack as="ul" gap="tight">
         {sources.map((source) => (
           <li key={source.url} className="min-w-0">
-            <TextLink variant="external" href={source.url} text="caption" className="truncate">
-              {source.title.trim() || hostOf(source.url)}
-            </TextLink>
-            <span className={textRole('caption')}> · {hostOf(source.url)}</span>
+            <ClampText className={textRole('caption')}>
+              <TextLink variant="external" href={source.url} text="caption">
+                {source.title.trim() || hostOf(source.url)}
+              </TextLink>{' '}
+              · {hostOf(source.url)}
+            </ClampText>
           </li>
         ))}
       </Stack>

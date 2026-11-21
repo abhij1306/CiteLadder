@@ -6,11 +6,10 @@ import { visibilityQueries } from '@/lib/api/visibility-queries';
 import type { SourceFilters } from '@/components/visibility/source-rows';
 import {
   selectionEnabled,
-  selectionParams,
+  topicSelectionParams,
   type SourceQueries,
 } from '@/lib/visibility/use-source-analysis';
 
-/** The first page's summary with every loaded page of creatives behind it. */
 export function mergedAdPages(
   pages: readonly [VisibilityAdsResponse, ...VisibilityAdsResponse[]],
 ): VisibilityAdsResponse {
@@ -25,13 +24,8 @@ export function mergedAdPages(
   };
 }
 
-/**
- * The Ads tab's read: the same run / engine / prompt-type selection as
- * Sources, with creatives paged by the read's cursor. A range with no runs
- * reads nothing rather than keeping the previous selection.
- */
 export function useAds(filters: Pick<SourceFilters, 'engine' | 'cohort'>, queries: SourceQueries) {
-  const params = selectionParams(filters, queries);
+  const params = topicSelectionParams(filters, queries);
   const { projectId } = queries;
   const enabled = selectionEnabled(queries);
   const query = useInfiniteQuery({

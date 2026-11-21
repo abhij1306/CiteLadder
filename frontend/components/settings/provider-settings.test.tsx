@@ -29,13 +29,11 @@ beforeEach(() => {
 afterEach(() => mswServer.resetHandlers());
 afterAll(() => mswServer.close());
 
-/** The list row for one provider, found by its heading. */
 async function row(name: string) {
   const heading = await screen.findByRole('heading', { name }, { timeout: 3_000 });
   return within(heading.closest('li')!);
 }
 
-/** The served catalog, which publishes DataForSEO's consumer-app surfaces too. */
 function consumerCatalogHandler() {
   return http.get('/api/v1/provider-catalog', () => HttpResponse.json(providerCatalogFixture));
 }
@@ -58,7 +56,6 @@ describe('ProviderSettings', () => {
     expect(screen.getByRole('heading', { name: 'Anthropic' })).toBeInTheDocument();
     expect(screen.getAllByText('Not connected')).toHaveLength(4);
     expect(screen.queryByText(/coming soon/i)).toBeNull();
-    // Credentials are asked for on demand, not repeated down the page.
     expect(screen.queryByLabelText(/api login/i)).toBeNull();
   });
 
@@ -105,7 +102,6 @@ describe('ProviderSettings', () => {
     const dataforseo = await row('DataForSEO');
     await user.click(dataforseo.getByRole('button', { name: 'Connect DataForSEO' }));
 
-    // One login and one password on the whole page.
     expect(screen.getAllByLabelText(/api login/i)).toHaveLength(1);
     await user.type(dataforseo.getByLabelText(/api login/i), 'team@example.com');
     await user.type(dataforseo.getByLabelText(/api password/i), 'secret');
@@ -121,7 +117,6 @@ describe('ProviderSettings', () => {
         ),
       }),
     );
-    // A verified save collapses the row.
     await waitFor(() => expect(dataforseo.queryByLabelText(/api login/i)).toBeNull());
   });
 
@@ -146,7 +141,6 @@ describe('ProviderSettings', () => {
             {
               key: 'chatgpt',
               label: 'ChatGPT',
-              // The whole point: a stored key alone is NOT connected.
               state: verified ? 'connected' : 'missing',
               safe_reason: verified ? null : 'verification required',
               grant_key: 'provider.openai',
@@ -156,7 +150,6 @@ describe('ProviderSettings', () => {
         }),
       ),
       http.post(`/api/v1/provider-connections/${CONNECTION_ID}/test`, () => {
-        // The save's own probe fails; the explicit retry succeeds.
         probes += 1;
         const ok = probes > 1;
         verified = ok;

@@ -1,18 +1,3 @@
-/**
- * `commerce_answer_matching`: re-match stored answers against a new catalog
- * revision (CM1).
- *
- * The successful answers of the project's last `backfill_days` that have no
- * pass for this revision and the current versions are matched in bounded
- * batches, one transaction per batch. Matching is deterministic only (token
- * and URL rules, carousel cards): the model resolver is never called. Each
- * pass is unique on answer, revision and versions, so a retried or repeated
- * task records nothing twice; a revision a newer one superseded stops before
- * its next batch, since the newer revision's own task re-matches the same
- * answers. A matched window asks for an Opportunity refresh, since the new
- * passes move the per-product findings. Leases,
- * retries and cancellation stay with the shared analytics worker.
- */
 import { z } from 'zod';
 
 import { policy } from '../config.ts';
@@ -34,7 +19,6 @@ import { prepareRecommendations } from './shelf-parsing.ts';
 
 type Revision = NonNullable<Awaited<ReturnType<typeof loadRevision>>>;
 
-/** Answers in the window with no pass for this revision and versions, oldest first. */
 function pendingAnswers(db: Database, scope: CommerceScope, revisionId: string, since: Date) {
   const versions = auditPolicy.commerce_versions;
   return db
@@ -74,7 +58,6 @@ function pendingAnswers(db: Database, scope: CommerceScope, revisionId: string, 
     .execute();
 }
 
-/** Match one batch; the number of answers it read. */
 async function matchBatch(db: Database, scope: CommerceScope, revision: Revision, since: Date) {
   const answers = await pendingAnswers(db, scope, revision.id, since);
   if (!answers.length) return 0;
@@ -134,7 +117,6 @@ export const matchAnswers: Executor = async (task, { db, checkCancelled }) => {
   const scope = { workspaceId: task.workspace_id, projectId: await taskProject(db, task) };
   const revisionId = payloadString(task, 'catalog_revision_id');
   if (!revisionId) {
-    // Crawl projection asked for a revision; a new one queues its own backfill.
     const crawl = z.uuid().safeParse(payloadString(task, 'crawl_id'));
     await db.transaction().execute((trx) =>
       recordCatalogRevision(trx, scope, {
@@ -160,7 +142,6 @@ export const matchAnswers: Executor = async (task, { db, checkCancelled }) => {
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
   for (;;) {
     await checkCancelled('commerce answer matching batch');
-    // A revision recorded mid-run queues its own task; this one stops at the next batch.
     if (await superseded()) return; // NOSONAR -- Checked before each batch, in order.
     const matched = await matchBatch(db, scope, revision, since); // NOSONAR -- Batches run in order until the window is matched.
     if (matched < policy.commerce.answer_matching.batch_size) break;

@@ -1,0 +1,69 @@
+.page-editor {
+  min-height: 100%;
+}
+.page-editor .cm-editor {
+  min-height: 100%;
+  background: transparent;
+  color: var(--color-ink);
+}
+.page-editor .cm-editor .cm-scroller {
+  font-family: var(--font-sans);
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm--line-height);
+}
+.page-editor .cm-editor .cm-content {
+  padding: var(--card-padding) 0;
+  caret-color: var(--color-ink);
+}
+.page-editor .cm-editor .cm-line {
+  padding: 0 var(--card-padding);
+}
+.page-editor .cm-editor .page-editor-h1 {
+  /* Nothing else reads this role, so the theme may not emit it: its values stand behind it. */
+  font-size: var(--text-display-sm, 1.5rem);
+  line-height: var(--text-display-sm--line-height, 2rem);
+}
+.page-editor .cm-editor .page-editor-h2 {
+  font-size: var(--text-title);
+  line-height: var(--text-title--line-height);
+}
+.page-editor .cm-editor .page-editor-h3 {
+  font-size: var(--text-heading);
+  line-height: var(--text-heading--line-height);
+}
+.page-editor .cm-editor :is(.page-editor-h1, .page-editor-h2, .page-editor-h3) {
+  padding-top: 0.5rem;
+}
+.page-editor
+  .cm-editor
+  :is(
+    .page-editor-h1,
+    .page-editor-h2,
+    .page-editor-h3,
+    .page-editor-h4,
+    .page-editor-h5,
+    .page-editor-h6
+  ),
+.page-editor .cm-editor .page-editor-strong {
+  font-weight: var(--weight-medium);
+}
+.page-editor .cm-editor .page-editor-em {
+  font-style: italic;
+}
+.page-editor .cm-editor .page-editor-link {
+  color: var(--color-accent-text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.page-editor .cm-editor .page-editor-suggestion {
+  border-bottom-width: 2px;
+  border-bottom-style: solid;
+  border-color: var(--color-info);
+  background: var(--color-info-wash);
+  color: var(--color-ink);
+  cursor: pointer;
+}
+.page-editor .cm-editor .page-editor-suggestion-needs_input {
+  border-color: var(--color-warning);
+  background: var(--color-warning-wash);
+}

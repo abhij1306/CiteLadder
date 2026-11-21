@@ -1,14 +1,8 @@
-/**
- * Folding measured runs into visibility trend points. Pure: no I/O.
- *
- * A raw point projects one
- * run; a day/week/month bucket folds the runs of one folding identity (frozen
- * comparison key and versions), weighting every rate by the responses behind
- * it and never substituting zero for a rate a run did not record.
- */
+import type { WinCounts } from '@citeladder/contracts/visibility';
 import type { visibilityTrendPointSchema } from '@citeladder/contracts/visibility-trends';
 import type { z } from 'zod';
 
+import { storedWinTally, sumWinCounts, winCounts } from '../analysis/win-rate.ts';
 import { buildModelProvenance } from '../analysis/provenance.ts';
 import { DAY_MS } from '../calendar-days.ts';
 import { wireUtc } from '../db/timestamps.ts';
@@ -41,7 +35,6 @@ type TrendRankingRow = Omit<
   | 'matched_response_count'
 >;
 
-/** A completion-weighted mean that ignores sources with no recorded rate. */
 class WeightedRate {
   private weighted = 0;
   private weight = 0;
@@ -98,7 +91,6 @@ function trendRow(row: RankingRow): TrendRankingRow {
   return rest;
 }
 
-/** The UTC start of the bucket holding `at`; weeks start on ISO Monday. */
 export function bucketStart(at: string, granularity: string): string {
   if (granularity === 'month') return `${at.slice(0, 7)}-01T00:00:00.000000`;
   const day = `${at.slice(0, 10)}T00:00:00.000000`;
@@ -115,21 +107,6 @@ function isMixedVersion(bucket: readonly TrendSource[]): boolean {
   );
 }
 
-const RETRIEVAL_ORDER = new Map<boolean | null, number>([
-  [false, 0],
-  [null, 1],
-  [true, 2],
-]);
-
-function retrievalOrder(value: boolean | null): number {
-  return RETRIEVAL_ORDER.get(value)!;
-}
-
-/**
- * Fold sources into UTC buckets, one point per (bucket, folding identity).
- * The identity carries the analyzer and scoring versions, so a bucket never
- * blends two formulas: runs of another version fold into their own point.
- */
 export function bucketPoints(sources: readonly TrendSource[], granularity: string): TrendPoint[] {
   const grouped = new Map<string, { start: string; sources: [TrendSource, ...TrendSource[]] }>();
   for (const source of sources) {
@@ -145,15 +122,13 @@ export function bucketPoints(sources: readonly TrendSource[], granularity: strin
     else grouped.set(key, { start, sources: [source] });
   }
   const buckets = [...grouped.values()];
-  // Partitions sharing a boundary order by what a reader can see: the model
-  // and whether retrieval was on, never by the comparison hash.
   return buckets
     .toSorted((left, right) => {
       const [a, b] = [left.sources[0], right.sources[0]];
       return (
         compareText(left.start, right.start) ||
         compareText(a.transportModel ?? '', b.transportModel ?? '') ||
-        retrievalOrder(a.retrievalEnabled) - retrievalOrder(b.retrievalEnabled)
+        Number(a.retrievalEnabled) - Number(b.retrievalEnabled)
       );
     })
     .map((bucket) => foldBucket(bucket.start, bucket.sources));
@@ -164,9 +139,8 @@ type EntityFold = {
   mentions: number;
   mentionRate: WeightedRate;
   citationRate: WeightedRate;
-  // A mean rank averages over the answers that named the entity, so it folds
-  // weighted by that count, not by completions.
   position: WeightedRate;
+  wins: WinCounts[];
 };
 
 function sumKnown(
@@ -188,7 +162,6 @@ function sumKnown(
   return total;
 }
 
-/** Answers that named the brand: what a run's mean rank averages over. */
 function rankedResponses(metrics: Metrics): number {
   const counts = metrics.counts;
   if (counts !== null && typeof counts === 'object' && !Array.isArray(counts)) {
@@ -206,7 +179,6 @@ function foldedPosition(bucket: readonly TrendSource[]): number | null {
   return value === null ? null : round2(value);
 }
 
-/** Fold one bucket's sources, which share one folding identity. */
 export function foldBucket(start: string, bucket: readonly TrendSource[]): TrendPoint {
   const [first] = bucket;
   if (first === undefined) throw new Error('an empty bucket has no point');
@@ -221,6 +193,7 @@ export function foldBucket(start: string, bucket: readonly TrendSource[]): Trend
     mentions: number,
     rates: { mention: number | null; citation: number | null; position: number | null },
     completions: number,
+    wins: WinCounts,
   ) => {
     const entity = entities.get(name) ?? {
       isBrand,
@@ -228,8 +201,10 @@ export function foldBucket(start: string, bucket: readonly TrendSource[]): Trend
       mentionRate: new WeightedRate(),
       citationRate: new WeightedRate(),
       position: new WeightedRate(),
+      wins: [],
     };
     entity.isBrand ||= isBrand;
+    entity.wins.push(wins);
     entity.mentions += mentions;
     entity.position.add(rates.position, mentions);
     entity.mentionRate.add(rates.mention, completions);
@@ -244,6 +219,7 @@ export function foldBucket(start: string, bucket: readonly TrendSource[]): Trend
     ownedRate.add(observedRate(metrics, 'owned_citation_rate'), completions);
     const counts = storedMentionCounts(metrics);
     const positions = metricObject(metrics.average_positions);
+    const wins = storedWinTally(metrics.win_tally);
     const brand = brandName(metrics);
     brandKeys.add(brand);
     addEntity(
@@ -256,6 +232,7 @@ export function foldBucket(start: string, bucket: readonly TrendSource[]): Trend
         position: metricNumber(positions[brand]),
       },
       completions,
+      winCounts(wins, brand),
     );
     const mentionRates = metricObject(metrics.competitor_mention_rate);
     const citationRates = metricObject(metrics.competitor_citation_rate);
@@ -270,6 +247,7 @@ export function foldBucket(start: string, bucket: readonly TrendSource[]): Trend
           position: metricNumber(positions[name]),
         },
         completions,
+        winCounts(wins, name),
       );
     }
   }
@@ -285,6 +263,7 @@ export function foldBucket(start: string, bucket: readonly TrendSource[]): Trend
       share_of_voice: totalMentions > 0 ? (mentionTotals[name] ?? 0) / totalMentions : null,
       mention_count: entity.mentions,
       avg_position: entity.position.value(),
+      ...sumWinCounts(entity.wins),
     })),
   );
   const counts = bucket.map((source) => measurementCounts(source.metrics));

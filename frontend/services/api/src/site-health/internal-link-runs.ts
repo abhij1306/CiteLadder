@@ -13,6 +13,7 @@ import type { Database } from '../db/database.ts';
 import { record } from '../db/json.ts';
 import { ApiError } from '../errors.ts';
 import { getLogger } from '../logging.ts';
+import { statusView } from '../opportunities/action-status.ts';
 import { enqueueTask } from '../queue/enqueue.ts';
 import { payloadString } from '../queue/executor.ts';
 import type { QueueTask } from '../queue/task-queue.ts';
@@ -25,14 +26,12 @@ const { succeeded, failed, cancelled } = policy.task_queue.statuses;
 const terminalTaskStatuses = [succeeded, failed, cancelled];
 const logger = getLogger('app.site_health.internal_links');
 
-/** The crawl link suggestions read: the current Site Health crawl (SH-B1). */
 export function latestLinkCrawl(db: Database, scope: LinkScope) {
   return currentSiteCrawlQuery(db, scope.workspaceId, scope.projectId)
     .select('id')
     .executeTakeFirst();
 }
 
-/** Attach each suggestion's owning source-page Action, if one exists. */
 async function attachActions(db: Database, scope: LinkScope, analysis: InternalLinkAnalysis) {
   if (!analysis.recommendations.length) return;
   const actions = await db
@@ -48,7 +47,7 @@ async function attachActions(db: Database, scope: LinkScope, analysis: InternalL
   for (const link of analysis.recommendations) {
     const action = actions.find((item) => item.target_url === link.source.url);
     link.action_id = action?.id ?? null;
-    link.action_status = action?.status ?? null;
+    link.action_status = action ? statusView(action.status).status : null;
   }
 }
 
@@ -56,7 +55,6 @@ export async function linkRun(db: Database, scope: LinkScope, id?: string) {
   let query = db
     .selectFrom('site_internal_link_runs')
     .select(['id', 'crawl_id', 'state', 'created_at', 'result'])
-    // Reads never load the frozen pages and requests, only their counts.
     .select(
       sql<unknown>`jsonb_build_object(
       'page_count', manifest->'page_count',
@@ -103,7 +101,6 @@ export async function linkRun(db: Database, scope: LinkScope, id?: string) {
   );
   analysis.stale = crawl?.id !== row.crawl_id;
   await attachActions(db, scope, analysis);
-  // A stop or a failed publication ends the run over whatever result it last published.
   if (row.state === 'cancelled' || row.state === 'failed') analysis.state = row.state;
   return { ...read, analysis };
 }
@@ -154,7 +151,6 @@ export async function admitLinkRun(
       .where('status', 'not in', terminalTaskStatuses)
       .executeTakeFirst();
     if (settling) throw new ApiError(409, 'The previous internal link analysis is still stopping');
-    // Each run can make many platform-paid judge calls; replays above spend nothing.
     await spendBudget(trx, budget('internal_link_analysis', process.env), scope.workspaceId);
     const crawl = await trx
       .selectFrom('site_crawls')
@@ -162,7 +158,6 @@ export async function admitLinkRun(
       .where('id', '=', input.crawl_id)
       .where('workspace_id', '=', scope.workspaceId)
       .where('project_id', '=', scope.projectId)
-      // A usable site crawl, as `latestLinkCrawl` offers: never a failed crawl or a page rerun.
       .where('status', 'in', USABLE_CRAWL_STATUSES)
       .where(pageRerunSql, '=', false)
       .executeTakeFirst();
@@ -205,11 +200,6 @@ export async function admitLinkRun(
   return linkRun(db, scope, id);
 }
 
-/**
- * Compensates a terminally failed `internal_link_publish`: its run ends
- * `failed`, so the project's slot frees for a new analysis instead of reading
- * live until someone cancels it. The task row keeps the error code.
- */
 export async function failLinkRun(db: Database, task: QueueTask) {
   const runId = payloadString(task, 'run_id');
   if (!runId || !task.project_id) return;

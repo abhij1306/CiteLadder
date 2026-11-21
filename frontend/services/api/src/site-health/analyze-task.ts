@@ -11,7 +11,7 @@ import { isActiveCrawl } from '@citeladder/contracts/site-health';
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { record } from '../db/json.ts';
-import type { SiteTask } from '../queue/task-queue.ts';
+import { asyncCommit, type SiteTask } from '../queue/task-queue.ts';
 import { enqueueCatalogProjection } from '../commerce/projection.ts';
 import { factSettings } from './analysis/facts.ts';
 import { analyzePageAsync, extractFactsAsync } from './analysis/off-thread.ts';
@@ -27,14 +27,13 @@ import { crawlAdmit, releaseNonPage } from './frontier.ts';
 import { crawlRobotsHandling, isBotBlock } from './page-fetch.ts';
 import type { SiteWorkerSettings } from './runtime.ts';
 import {
-  Abandoned,
   cancelTask,
   commitTask,
   finalFailure,
+  heldBySlot,
   httpError,
   loadScope,
   lockSiteTask,
-  markRunning,
   owned,
   recordCrawlEvent,
   settleTask,
@@ -42,6 +41,7 @@ import {
   statuses,
   type Crawl,
   type SiteTaskContext,
+  type TaskScope,
 } from './site-task.ts';
 import { canonicalIdentity } from './url-identity.ts';
 
@@ -59,7 +59,6 @@ type Outcome = AttemptOutcome & {
   retryAfterSeconds?: number;
 };
 
-/** Backoff for a prerequisite recheck: doubles with the wait, clamped, never past the bound. */
 function dependencyDelay(settings: SiteWorkerSettings, waited: number) {
   const base = Math.max(0, settings.dependencyRetry);
   const backoff = base
@@ -78,18 +77,22 @@ async function guardRows(
   task: SiteTask,
   lock: boolean,
 ): Promise<GuardRows> {
+  // Analysis spends no allowance, so analyses share the runtime lock; it still
+  // orders them behind a discover, which writes analyze task rows before the crawl.
   const runtimeQuery = db
     .selectFrom('workspace_site_health_runtime')
     .select('id')
     .where('workspace_id', '=', crawl.workspace_id);
-  const runtime = await (lock ? runtimeQuery.forUpdate() : runtimeQuery).executeTakeFirst();
+  const runtime = await (lock ? runtimeQuery.forShare() : runtimeQuery).executeTakeFirst();
   const monitoredQuery = db
     .selectFrom('monitored_site_urls')
     .select('active')
     .where('workspace_id', '=', crawl.workspace_id)
     .where('project_id', '=', crawl.project_id)
     .where('site_url_id', '=', task.site_url_id ?? '00000000-0000-0000-0000-000000000000');
-  const monitored = await (lock ? monitoredQuery.forUpdate() : monitoredQuery).executeTakeFirst();
+  const monitored = await (
+    lock ? monitoredQuery.forNoKeyUpdate() : monitoredQuery
+  ).executeTakeFirst();
   return { runtime, monitored };
 }
 /**
@@ -101,7 +104,6 @@ function guardAllows(crawl: Crawl, rows: GuardRows) {
   return isActiveCrawl(crawl.status) && Boolean(rows.monitored?.active) && Boolean(rows.runtime);
 }
 
-/** A discover artifact of this URL to reuse, or whether its discover task is still in flight. */
 async function reusableArtifact(db: Database, crawl: Crawl, task: SiteTask) {
   const artifact = await db
     .selectFrom('site_fetch_artifacts as f')
@@ -111,6 +113,9 @@ async function reusableArtifact(db: Database, crawl: Crawl, task: SiteTask) {
     .select(['f.id', 'f.normalized_facts'])
     .where('f.workspace_id', '=', crawl.workspace_id)
     .where('f.crawl_id', '=', crawl.id)
+    // The task's slot key (crawl, kind, URL) leads the plan, not a scan of the crawl's artifacts.
+    .where('t.crawl_id', '=', crawl.id)
+    .where('t.task_kind', '=', 'discover')
     .where('f.fetch_purpose', '=', 'discover')
     .where(
       'f.extractor_version',
@@ -142,7 +147,6 @@ async function activeTask(db: Database, crawl: Crawl, urlHash: string, kind: str
     .executeTakeFirst();
   return Boolean(row);
 }
-/** The root's analysis waits for the site-level setup evidence it reads. */
 async function setupPending(db: Database, crawl: Crawl, task: SiteTask) {
   if (crawl.site_facts !== null) return false;
   let rootHash = '';
@@ -164,7 +168,6 @@ async function setupPending(db: Database, crawl: Crawl, task: SiteTask) {
   return Boolean(row);
 }
 
-/** Commit the supported-HTML classification cohort before parsing. */
 const expectClassification = (db: Database, task: SiteTask, owner: string) =>
   owned(db, task, owner).set({ classification_expected: true, updated_at: new Date() }).execute();
 
@@ -233,51 +236,56 @@ async function acquire(ctx: SiteTaskContext, crawl: Crawl, task: SiteTask): Prom
   };
 }
 
-async function recordProgress(trx: Database, crawl: Crawl) {
-  const analyzed = crawl.analyzed_url_count + 1;
-  await trx
-    .updateTable('site_crawls')
-    .set({ analyzed_url_count: analyzed, updated_at: new Date() })
-    .where('id', '=', crawl.id)
-    .where('workspace_id', '=', crawl.workspace_id)
-    .execute();
-  await recordCrawlEvent(trx, crawl, 'analysis.progress', 'analysis progress', { analyzed });
+/**
+ * A progress event on its display cadence. The crawl row is never rewritten
+ * per page: its analyzed count is counted by the reconcile and the live
+ * counters (CO-3), so page commits share the crawl lock.
+ */
+async function recordProgress(ctx: SiteTaskContext, trx: Database, crawl: Crawl) {
+  if (ctx.cadence.analysisEvent.admits(crawl.id))
+    await recordCrawlEvent(trx, crawl, 'analysis.progress', 'analysis progress', {});
 }
 
-/** Stage the evidence and settle the task in one transaction. */
-async function persist(ctx: SiteTaskContext, claimed: SiteTask, outcome: Outcome) {
+async function contextMoved(
+  trx: Database,
+  crawl: Crawl,
+  page: Parameters<typeof pageAnalysisContext>[2],
+  context: unknown,
+) {
+  const current = await pageAnalysisContext(trx, crawl, page);
+  return JSON.stringify(current) !== JSON.stringify(context);
+}
+
+async function persist(
+  ctx: SiteTaskContext,
+  claimed: SiteTask,
+  scope: TaskScope,
+  outcome: Outcome,
+) {
   ctx.signal.throwIfAborted();
-  // Load the provisional page context and evaluate before taking commit locks.
-  const scope = outcome.facts ? await loadScope(ctx.db, claimed) : null;
-  const context = scope?.task.site_url_id
-    ? await pageAnalysisContext(ctx.db, scope.crawl, {
-        ...scope.task,
-        site_url_id: scope.task.site_url_id,
-      })
-    : null;
+  const context =
+    outcome.facts && scope.task.site_url_id
+      ? await pageAnalysisContext(ctx.db, scope.crawl, {
+          ...scope.task,
+          site_url_id: scope.task.site_url_id,
+        })
+      : null;
   const result = context && outcome.facts ? await analyzePageAsync(outcome.facts, context) : null;
   await commitTask(ctx, claimed, async (trx, lock) => {
     // Runtime and membership come before the crawl in Site Health lock order.
-    const live = await loadScope(trx, claimed);
-    if (!live) throw new Abandoned();
-    const rows = await guardRows(trx, live.crawl, live.task, true);
-    const { crawl, task } = await lock();
+    const rows = await guardRows(trx, scope.crawl, scope.task, true);
+    const { crawl, task } = await lock('share');
     if (!guardAllows(crawl, rows)) {
       await cancelTask(trx, task, ctx.owner);
       return;
     }
     let artifactId = outcome.reusedArtifactId;
     if (outcome.facts && task.site_url_id && result) {
-      // Setup/discovery may publish context while interpretation runs. Interpret
-      // the new snapshot once under the crawl lock without spending another attempt.
-      const currentContext = await pageAnalysisContext(trx, crawl, {
-        ...task,
-        site_url_id: task.site_url_id,
-      });
-      const currentResult =
-        JSON.stringify(currentContext) === JSON.stringify(context)
-          ? result
-          : await analyzePageAsync(outcome.facts, currentContext);
+      const page = { ...task, site_url_id: task.site_url_id };
+      // Requeued without an attempt (whose number keys its fetch records), so
+      // interpretation never reruns under the commit's locks.
+      if (await contextMoved(trx, crawl, page, context))
+        return settleTask(trx, ctx, task, { kind: 'deferred', delaySeconds: 0 });
       artifactId ??= await writeArtifact(trx, crawl, task, outcome.page!, outcome.facts, {
         policyVersion: ctx.fetcher.settings.policyVersion,
         latencyMs: outcome.latencyMs ?? 0,
@@ -290,7 +298,7 @@ async function persist(ctx: SiteTaskContext, claimed: SiteTask, outcome: Outcome
         { ...task, site_url_id: task.site_url_id },
         artifactId,
         outcome.facts,
-        currentResult,
+        result,
       );
       if (analysis.pageKind === 'category' || analysis.pageKind === 'product')
         await enqueueCatalogProjection(
@@ -309,11 +317,10 @@ async function persist(ctx: SiteTaskContext, claimed: SiteTask, outcome: Outcome
         ctx.fetcher.settings.policyVersion,
       );
     if (artifactId) {
-      await recordProgress(trx, crawl);
+      await recordProgress(ctx, trx, crawl);
       await settleTask(trx, ctx, task, { kind: 'succeeded', artifactId });
       return;
     }
-    // The membership row is already locked above, before the crawl.
     if (finalFailure(task, outcome.retryable))
       await releaseNonPage(trx, crawl, task.url_hash, outcome, { record: false });
     await settleTask(trx, ctx, task, {
@@ -326,32 +333,32 @@ async function persist(ctx: SiteTaskContext, claimed: SiteTask, outcome: Outcome
   });
 }
 
-/** Reused evidence or a fresh acquisition; null when the task should not run now. */
 async function prepare(
   ctx: SiteTaskContext,
   claimed: SiteTask,
-): Promise<Outcome | 'deferred' | null> {
+): Promise<{ scope: TaskScope; outcome: Outcome } | 'deferred' | null> {
   ctx.signal.throwIfAborted();
-  const scope = await loadScope(ctx.db, claimed);
-  if (!scope || !isActiveCrawl(scope.crawl.status)) {
+  const loaded = await loadScope(ctx.db, claimed);
+  if (!loaded || !isActiveCrawl(loaded.crawl.status)) {
     await cancelTask(ctx.db, claimed, ctx.owner);
     return null;
   }
-  const { crawl, task } = scope;
-  if (task.lease_owner !== ctx.owner) return null;
-  if (!guardAllows(crawl, await guardRows(ctx.db, crawl, task, false))) {
+  const { task } = loaded;
+  if (!heldBySlot(task, claimed, ctx.owner)) return null;
+  if (!guardAllows(loaded.crawl, await guardRows(ctx.db, loaded.crawl, task, false))) {
     await cancelTask(ctx.db, task, ctx.owner);
     return null;
   }
-  await startCrawl(ctx.db, crawl);
+  const scope = await startCrawl(ctx, loaded);
+  if (!scope) return null;
+  const { crawl } = scope;
   const { artifact, pending } = await reusableArtifact(ctx.db, crawl, task);
   const waited = Math.max(0, (Date.now() - new Date(task.created_at).getTime()) / 1000);
   if (
     (pending || (await setupPending(ctx.db, crawl, task))) &&
     waited < ctx.settings.dependencyMaxWait
   ) {
-    // Waiting costs no attempt; past the bound this analyze acquires the page itself.
-    const deferred = await ctx.db.transaction().execute(async (trx) => {
+    const deferred = await asyncCommit(ctx.db, async (trx) => {
       const held = await lockSiteTask(trx, ctx, claimed);
       if (!held) return false;
       await settleTask(trx, ctx, held.task, {
@@ -362,10 +369,9 @@ async function prepare(
     });
     return deferred ? 'deferred' : null;
   }
-  if (!(await markRunning(ctx, claimed))) return null;
-  if (!artifact) return acquire(ctx, crawl, task);
+  if (!artifact) return { scope, outcome: await acquire(ctx, crawl, task) };
   if (artifact.facts.has_html) await expectClassification(ctx.db, task, ctx.owner);
-  return {
+  const outcome: Outcome = {
     facts: artifact.facts,
     page: null,
     reusedArtifactId: artifact.id,
@@ -378,9 +384,11 @@ async function prepare(
     latencyMs: null,
     calls: [],
   };
+  return { scope, outcome };
 }
 
 export async function runAnalyze(ctx: SiteTaskContext, claimed: SiteTask) {
-  const outcome = await prepare(ctx, claimed);
-  if (outcome && outcome !== 'deferred') await persist(ctx, claimed, outcome);
+  const prepared = await prepare(ctx, claimed);
+  if (prepared && prepared !== 'deferred')
+    await persist(ctx, claimed, prepared.scope, prepared.outcome);
 }

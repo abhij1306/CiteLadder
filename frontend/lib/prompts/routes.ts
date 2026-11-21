@@ -1,7 +1,5 @@
-/** Query parameter that opens the Prompt Builder when the library loads. */
-export const GENERATE_PROMPTS_PARAM = 'generate';
-/** Query parameter that opens the Prompt Builder on its review step. */
-export const REVIEW_PROMPTS_PARAM = 'review';
-
 export const PROMPTS_HREF = '/prompts';
-export const PROMPTS_GENERATE_HREF = `${PROMPTS_HREF}?${GENERATE_PROMPTS_PARAM}=1`;
+export const PROMPT_BUILDER_HREF = `${PROMPTS_HREF}/build`;
+export const BUILDER_STEP_PARAM = 'step';
+
+export const PROMPT_BUILDER_REVIEW_HREF = `${PROMPT_BUILDER_HREF}?${BUILDER_STEP_PARAM}=review`;

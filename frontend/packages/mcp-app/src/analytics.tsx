@@ -15,9 +15,20 @@ import {
   TableHead,
   TableCell,
 } from '@/components/ui/table';
-import { TrendChart } from '@/components/ui/trend-chart';
+import { AreaChart } from '@/components/ui/area-chart';
 import { Label, Metric, textRole } from '@/components/ui/typography';
 import { EditorialSectionHeader } from '@/components/ui/workspace';
+import { VISIBILITY_METRICS } from '@/lib/config/visibility';
+import { Absence, printed } from '@/components/ui/absence';
+import { absent } from '@/lib/format';
+import { sentimentFigureValue } from '@/lib/visibility/perception';
+import {
+  toChartPoints,
+  toNamedChartPoints,
+  toTrendEvents,
+  trendAxis,
+  type TrendMetric,
+} from '@/lib/visibility/trends';
 import { appPolicy } from './config';
 import type { AppState, Controller } from './controller';
 import { notYetMeasuredMessage, SourcesView, SiteHealthView } from './evidence-views';
@@ -25,7 +36,7 @@ import { day, moment, rate } from './format';
 
 const views = [
   { value: 'overview', label: 'Overview' },
-  { value: 'trends', label: 'Trends' },
+  { value: 'trends', label: 'Insights' },
   { value: 'sources', label: 'Sources' },
   { value: 'site_health', label: 'Site Health' },
 ] as const;
@@ -43,7 +54,7 @@ function Overview({
   if (!parsed.success) {
     const missing = notYetMeasuredMessage(data);
     return (
-      <p role={missing ? undefined : 'alert'} className={textRole('body')}>
+      <p role={missing ? undefined : 'alert'} className={textRole('body', 'text-ink-2')}>
         {missing ?? 'Visibility evidence is unavailable. Retry or reconnect.'}
       </p>
     );
@@ -66,13 +77,13 @@ function Overview({
         <div>
           <Label>Brand mention rate</Label>
           <div>
-            <Metric>{rate(projection.visibility_rate)}</Metric>
+            <Metric>{printed(rate(projection.visibility_rate))}</Metric>
           </div>
         </div>
         <div>
           <Label>Owned citation rate</Label>
           <div>
-            <Metric>{rate(projection.owned_citation_rate)}</Metric>
+            <Metric>{printed(rate(projection.owned_citation_rate))}</Metric>
           </div>
         </div>
       </div>
@@ -91,7 +102,7 @@ function Overview({
           ? projection.model_provenance
               .map(
                 (route) =>
-                  `${route.logical_engine}: ${route.transport_model}, retrieval ${route.retrieval_enabled ?? 'unknown'}`,
+                  `${route.logical_engine}: ${route.transport_model}, retrieval ${route.retrieval_enabled}`,
               )
               .join(' · ')
           : 'Model and retrieval provenance unavailable'}
@@ -134,11 +145,11 @@ function Trends({
   select: Controller['select'];
   selectCompetitor: Controller['selectCompetitor'];
 }>) {
-  const [metric, setMetric] = useState<string>('brand_mention_rate');
+  const [metric, setMetric] = useState<TrendMetric>('brand_mention_rate');
   const parsed = visibilityTrendListSchema.safeParse(data.points);
   if (!parsed.success)
     return (
-      <p role="alert" className={textRole('body')}>
+      <p role="alert" className={textRole('body', 'text-ink-2')}>
         Visibility history is unavailable. Retry or reconnect.
       </p>
     );
@@ -150,21 +161,36 @@ function Trends({
       ),
     ),
   ];
-  const value = (point: (typeof points)[number]) => {
-    if (selection.competitor) {
-      const field = metric === 'brand_mention_rate' ? 'mention_rate' : 'citation_rate';
-      return point.rankings.find((row) => row.name === selection.competitor)?.[field] ?? null;
-    }
-    return metric === 'brand_mention_rate' ? point.brand_mention_rate : point.owned_citation_rate;
+  const competitor = selection.competitor ?? null;
+  const metricLabel = VISIBILITY_METRICS.find((item) => item.value === metric)?.label ?? metric;
+  const chart = competitor
+    ? toNamedChartPoints(points, metric, competitor)
+    : toChartPoints(points, metric);
+  const axis = trendAxis(metric, [chart.map((point) => point.value)]);
+  const cell = (index: number) => {
+    const measured = chart[index]?.value ?? null;
+    if (measured !== null) return axis.format(measured);
+    const row = points[index]?.rankings.find((entry) =>
+      competitor ? entry.name === competitor : entry.is_brand,
+    );
+    if (metric === 'sentiment')
+      return <Absence label={sentimentFigureValue(row?.sentiment).missingLabel} />;
+    return absent(
+      metric === 'win_rate' && row?.win_answers === 0 ? 'not_applicable' : 'unavailable',
+    );
   };
+  const events = toTrendEvents(points, { timeZone: 'UTC', engineLabel: (key) => key });
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-3">
         <Select
           ariaLabel="Trend metric"
           value={metric}
-          options={appPolicy.metrics}
-          onValueChange={setMetric}
+          options={VISIBILITY_METRICS}
+          onValueChange={(next) => {
+            const picked = VISIBILITY_METRICS.find((item) => item.value === next);
+            if (picked) setMetric(picked.value);
+          }}
         />
         <Select
           ariaLabel="Competitor"
@@ -176,47 +202,45 @@ function Trends({
           onValueChange={(competitor) => selectCompetitor(competitor || null)}
         />
       </div>
-      <TrendChart
-        label="Observed visibility history"
-        yMax={1}
-        yFormat={rate}
-        data={points.map((point, index) => {
-          const previous = points[index - 1];
-          return {
-            label: day(point.completed_at),
-            value: value(point),
-            breakBefore:
-              previous !== undefined &&
-              (!point.comparison_key ||
-                point.comparison_key !== previous.comparison_key ||
-                JSON.stringify(point.analyzer_versions) !==
-                  JSON.stringify(previous.analyzer_versions) ||
-                JSON.stringify(point.scoring_rule_versions) !==
-                  JSON.stringify(previous.scoring_rule_versions)),
-          };
-        })}
+      <AreaChart
+        label={`${metricLabel} over time`}
+        name={competitor ?? 'Your brand'}
+        you={!competitor}
+        data={chart.map((point) => ({
+          ...point,
+          value: axis.plot(point.value),
+          label: `${point.dateLabel} · ${axis.format(point.value)}`,
+          axisLabel: point.label,
+        }))}
+        events={events}
+        eventsLabel="What changed"
+        eventLegend
+        yMin={axis.yMin}
+        yMax={axis.yMax}
+        yFormat={axis.tick}
+        format={(plotted) => axis.format(axis.unplot(plotted))}
       />
       <Table>
         <TableHeader>
           <TableRow>
             <TableHead>Completed</TableHead>
-            <TableHead>Rate</TableHead>
+            <TableHead>{metricLabel}</TableHead>
             <TableHead>Coverage / model</TableHead>
             <TableHead>Evidence</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {points.map((point) => (
+          {points.map((point, index) => (
             <TableRow key={point.source_snapshot_ids.join(',')}>
               <TableCell>{moment(point.completed_at)}</TableCell>
-              <TableCell>{rate(value(point))}</TableCell>
+              <TableCell>{cell(index)}</TableCell>
               <TableCell>
                 {point.counts?.state ?? 'unknown'} · {point.transport_model ?? 'mixed / unknown'} ·
                 retrieval {String(point.retrieval_enabled)}
               </TableCell>
               <TableCell>
                 <Button
-                  variant="ghost"
+                  variant="quiet"
                   disabled={!point.audit_id}
                   onClick={() =>
                     void select({
@@ -238,7 +262,9 @@ function Trends({
           ))}
         </TableBody>
       </Table>
-      {!points.length && <p className={textRole('body')}>No measured runs in this window.</p>}
+      {!points.length && (
+        <p className={textRole('body', 'text-ink-2')}>No measured runs in this window.</p>
+      )}
       <p className={textRole('caption')}>
         Gaps and changed comparison identities break the line. Sources drill-down selects one
         concrete audit from this window.
@@ -247,7 +273,6 @@ function Trends({
   );
 }
 
-/** Human scope label. Selections carry IDs for reads; the UI never shows them. */
 function evidenceLabel(
   selection: AnalyticsSelection,
   evidence: Record<string, unknown> | undefined,
@@ -329,7 +354,7 @@ export function Analytics({ controller }: Readonly<{ controller: Controller }>) 
   };
   return (
     <main className="space-y-4 p-4">
-      <h1 className={textRole('pageTitle')}>CiteLadder analytics</h1>
+      <h1 className={textRole('title')}>CiteLadder analytics</h1>
       <div className="flex flex-wrap gap-3">
         <Select
           ariaLabel="Project and workspace"
@@ -349,16 +374,16 @@ export function Analytics({ controller }: Readonly<{ controller: Controller }>) 
           Refresh connection
         </Button>
         {state.projectCursor && (
-          <Button variant="ghost" onClick={() => void controller.loadProjects(state.projectCursor)}>
+          <Button variant="quiet" onClick={() => void controller.loadProjects(state.projectCursor)}>
             More projects
           </Button>
         )}
       </div>
       {state.error && (
-        <div role="alert" className={textRole('body')}>
+        <div role="alert" className={textRole('body', 'text-ink-2')}>
           {state.error}
           <Button
-            variant="ghost"
+            variant="quiet"
             onClick={() =>
               selection ? void controller.select(selection) : void controller.loadProjects()
             }
@@ -367,9 +392,11 @@ export function Analytics({ controller }: Readonly<{ controller: Controller }>) 
           </Button>
         </div>
       )}
-      {state.busy && <output className={textRole('body')}>Loading persisted evidence…</output>}
+      {state.busy && (
+        <output className={textRole('body', 'text-ink-2')}>Loading persisted evidence…</output>
+      )}
       {!selection && (
-        <p className={textRole('body')}>
+        <p className={textRole('body', 'text-ink-2')}>
           Connect your account and select a project. If you have no projects, complete onboarding in
           CiteLadder.
         </p>

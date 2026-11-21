@@ -24,7 +24,6 @@ export type SearchIntelligenceDataset = z.infer<typeof searchDatasetSchema>;
 export type SearchIntelligenceRow = z.infer<typeof searchRowSchema>;
 export type ResearchScope = z.infer<typeof researchScopeSchema>;
 
-/** One page of a saved dataset's rows: its order, filters and cursor. */
 export type DatasetRowsParams = Readonly<{
   cursor?: string;
   limit?: number;
@@ -109,27 +108,20 @@ const scoped = (scope: ProjectScope, signal?: AbortSignal) => ({
   workspaceId: scope.workspaceId,
 });
 
-/** The most rows one read of a saved dataset returns; a history chart reads one page. */
 const DATASET_PAGE_LIMIT = 200;
 
 export const searchIntelligenceQueries = {
-  /** What the screen can show and run; it gates the whole Search Intelligence screen. */
   readiness: (scope: ProjectScope) =>
     queryOptions({
       queryKey: queryKeys.searchIntelligence.readiness(scope),
       queryFn: ({ signal }) =>
         searchIntelligenceApi.readiness(scope.projectId, scoped(scope, signal)),
     }),
-  /** The project's research runs and their costs. */
   runs: (scope: ProjectScope) =>
     queryOptions({
       queryKey: queryKeys.searchIntelligence.runs(scope),
       queryFn: ({ signal }) => searchIntelligenceApi.runs(scope.projectId, scoped(scope, signal)),
     }),
-  /**
-   * One page of a saved dataset's rows, as a cursor table reads it: the rows
-   * under `items`, beside the dataset whose filtered count is the table's total.
-   */
   datasetRows: (scope: ProjectScope, datasetId: string, params: DatasetRowsParams) =>
     queryOptions({
       queryKey: queryKeys.searchIntelligence.datasetRows(scope, datasetId, params),
@@ -142,11 +134,8 @@ export const searchIntelligenceQueries = {
         );
         return { dataset: page.dataset, items: page.rows, next_cursor: page.next_cursor };
       },
-      // A failed interactive sort or filter settles promptly on the read
-      // error instead of holding the previous rows through retries.
       retry: false,
     }),
-  /** A saved dataset's history, read as one page for its chart. */
   datasetHistory: (scope: ProjectScope, datasetId: string) =>
     queryOptions({
       queryKey: queryKeys.searchIntelligence.datasetHistory(scope, datasetId),
@@ -157,10 +146,6 @@ export const searchIntelligenceQueries = {
     }),
 };
 
-/**
- * The project's readiness: its runs' state and every saved dataset. A
- * settled, cancelled or derived run changes it.
- */
 const refreshSearchReadiness = (client: QueryClient, projectId: string) =>
   client.invalidateQueries({
     queryKey: queryKeys.searchIntelligence.resource(projectId, 'readiness'),
@@ -169,15 +154,12 @@ const refreshSearchReadiness = (client: QueryClient, projectId: string) =>
 const refreshSearchRuns = (client: QueryClient, projectId: string) =>
   client.invalidateQueries({ queryKey: queryKeys.searchIntelligence.resource(projectId, 'runs') });
 
-/** Search Intelligence writes; each success refreshes every read it changes. */
 export const searchIntelligenceMutations = {
-  /** Price a run for review; nothing is written until it is confirmed. */
   review: (scope: ProjectScope) =>
     mutationOptions({
       mutationFn: (payload: SearchReviewRequest) =>
         searchIntelligenceApi.review(scope.projectId, payload, scoped(scope)),
     }),
-  /** Start a reviewed run: the readiness gains it, and the cost list its charge. */
   confirm: (scope: ProjectScope) =>
     mutationOptions({
       mutationFn: (runId: string) =>
@@ -188,7 +170,6 @@ export const searchIntelligenceMutations = {
           refreshSearchRuns(client, scope.projectId),
         ]),
     }),
-  /** A refused cancel (the run already settled) also leaves the readiness stale. */
   cancel: (scope: ProjectScope) =>
     mutationOptions({
       mutationFn: (runId: string) =>
@@ -196,7 +177,6 @@ export const searchIntelligenceMutations = {
       onSettled: (_run, _error, _runId, _result, { client }) =>
         refreshSearchReadiness(client, scope.projectId),
     }),
-  /** Citation matches are saved as a new dataset, which the readiness lists. */
   deriveCitationMatches: (scope: ProjectScope) =>
     mutationOptions({
       mutationFn: (input: SearchCitationMatchRequest) =>

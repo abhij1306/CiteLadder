@@ -33,9 +33,18 @@ import {
 } from '@citeladder/contracts/visibility';
 import { surfaceRatesSchema } from '@citeladder/contracts/audits';
 import { perceptionResponseSchema } from '@citeladder/contracts/visibility-perception';
-import { accuracyResponseSchema } from '@citeladder/contracts/fact-checking';
+import { competitorFocusSchema } from '@citeladder/contracts/visibility-competitor';
+import {
+  accuracyClaimPageSchema,
+  accuracyFactListSchema,
+  accuracyResponseSchema,
+  verdictOverrideSchema,
+} from '@citeladder/contracts/fact-checking';
+import type { VerdictOverrideRequest } from '@citeladder/contracts/project-requests';
 import { visibilityAdsResponseSchema } from '@citeladder/contracts/visibility-ads';
 import { visibilityTrendListSchema } from '@citeladder/contracts/visibility-trends';
+import { visibilityMatrixSchema } from '@citeladder/contracts/visibility-matrix';
+import { visibilityTopicsSchema } from '@citeladder/contracts/visibility-topics';
 import { definedQuery, withQuery } from './shared';
 import type {
   ObservedCompetitor,
@@ -50,29 +59,18 @@ import type {
 const promptMetricListSchema = z.array(promptMetricItemSchema);
 const observedCompetitorListSchema = z.array(observedCompetitorSchema);
 
-/** Which prompts a Visibility read counts: unbranded, branded, or all of them. */
 export type VisibilityCohortParam = 'core' | 'comparison' | 'all';
 
-/** Filters for the cross-run trend request (all optional; same-origin only). */
 type VisibilityTrendParams = {
-  /** A non-default market's id; omitted reads the project default. */
   market?: string;
   cohort?: VisibilityCohortParam;
-  /** Logical engine slice (`chatgpt` | `gemini` | `claude`); omit for all. */
   engine?: string;
-  /** Inclusive UTC lower bound (ISO 8601) for the completion window. */
+  topic?: string;
   from?: string;
-  /** Inclusive UTC upper bound (ISO 8601) for the completion window. */
   to?: string;
-  /** Bucketing: `run` (default) | `week` | `month`. */
   granularity?: string;
 };
 
-/**
- * Filters for the shared execution-evidence request (all optional). When both
- * `audit_id` and a date bound are set the backend intersects them (the selected
- * audit must fall inside the inclusive window). Same-origin only.
- */
 type VisibilityEvidenceParams = {
   audit_ids?: string[];
   cursor?: string;
@@ -82,27 +80,21 @@ type VisibilityEvidenceParams = {
   domain?: string;
   url?: string;
   cohort?: VisibilityCohortParam;
-  /** Restrict to one audit in the authorized project. */
   audit_id?: string;
-  /** Restrict by the source prompt frozen on `AuditPromptSnapshot.prompt_id`. */
   prompt_id?: string;
-  /** Logical engine slice (`chatgpt` | `gemini` | `claude`); omit for all. */
   engine?: string;
-  /** Inclusive UTC lower bound (ISO 8601) for the completion window. */
+  topic?: string;
   from?: string;
-  /** Inclusive UTC upper bound (ISO 8601) for the completion window. */
   to?: string;
-  /** Newest-window size (default 100, max 500). */
   limit?: number;
 };
 
-/** The selection one Visibility request resolves to. */
 export type ProjectVisibilityParams = {
   audit_id?: string;
-  /** A non-default market's id; omitted reads the project default. */
   market?: string;
   cohort?: VisibilityCohortParam;
   engine?: string;
+  topic?: string;
   baseline_id?: string;
   selection_mode?: string;
   from?: string;
@@ -110,18 +102,12 @@ export type ProjectVisibilityParams = {
   configuration_key?: string;
 };
 
-/**
- * The landing selection: the latest run, the core cohort, no baseline and no
- * frozen configuration pinned. Navigation intent warms exactly this, so a
- * hovered link and the screen it opens share ONE cache entry.
- */
 export const INITIAL_VISIBILITY_PARAMS: ProjectVisibilityParams = {
   cohort: 'core',
   selection_mode: 'latest',
 };
 
 export const visibilityApi = {
-  /** Answer perception for the selected runs: net sentiment with its coverage, themes and quotes. */
   getPerception: async (
     projectId: string,
     params: { audit_id?: string; audit_ids?: string[]; engine?: string; cohort?: string },
@@ -133,7 +119,28 @@ export const visibilityApi = {
     );
     return strictValidate(perceptionResponseSchema, result, 'visibility.getPerception');
   },
-  /** Fact-check accuracy for the selected runs: verdicts on the brand's claims with their coverage. */
+  getCompetitorFocus: async (
+    projectId: string,
+    params: {
+      name: string;
+      audit_id?: string;
+      audit_ids?: string[];
+      engine?: string;
+      topic?: string;
+      cohort?: string;
+    },
+    options?: ApiRequestOptions,
+  ) => {
+    const { name, ...selection } = params;
+    const result = await apiClient.get(
+      withQuery(
+        `/projects/${projectId}/visibility/competitors/${encodeURIComponent(name)}`,
+        definedQuery(selection),
+      ),
+      options,
+    );
+    return strictValidate(competitorFocusSchema, result, 'visibility.getCompetitorFocus');
+  },
   getAccuracy: async (
     projectId: string,
     params: { audit_id?: string; audit_ids?: string[]; engine?: string; cohort?: string },
@@ -145,13 +152,63 @@ export const visibilityApi = {
     );
     return strictValidate(accuracyResponseSchema, result, 'visibility.getAccuracy');
   },
-  /** Ads in ChatGPT Search answers for the selected runs: presence, advertisers and creatives. */
+  getAccuracyFacts: async (
+    projectId: string,
+    params: { audit_id?: string; audit_ids?: string[]; engine?: string; cohort?: string },
+    options?: ApiRequestOptions,
+  ) => {
+    const result = await apiClient.get(
+      withQuery(`/projects/${projectId}/visibility/accuracy/facts`, definedQuery(params)),
+      options,
+    );
+    return strictValidate(accuracyFactListSchema, result, 'visibility.getAccuracyFacts');
+  },
+  getAccuracyClaims: async (
+    projectId: string,
+    params: {
+      audit_id?: string;
+      audit_ids?: string[];
+      engine?: string;
+      cohort?: string;
+      cursor?: string;
+    },
+    options?: ApiRequestOptions,
+  ) => {
+    const result = await apiClient.get(
+      withQuery(`/projects/${projectId}/visibility/accuracy/claims`, definedQuery(params)),
+      options,
+    );
+    return strictValidate(accuracyClaimPageSchema, result, 'visibility.getAccuracyClaims');
+  },
+  overrideVerdict: async (
+    projectId: string,
+    verdictId: string,
+    input: VerdictOverrideRequest,
+    options?: ApiRequestOptions,
+  ) => {
+    const result = await apiClient.post(
+      `/projects/${projectId}/claim-verdicts/${verdictId}/overrides`,
+      input,
+      options,
+    );
+    return strictValidate(verdictOverrideSchema, result, 'visibility.overrideVerdict');
+  },
+  exportAccuracyClaims: (
+    projectId: string,
+    params: { audit_id?: string; audit_ids?: string[]; engine?: string; cohort?: string },
+    options?: ApiRequestOptions,
+  ) =>
+    apiClient.getBlob(
+      withQuery(`/projects/${projectId}/visibility/accuracy/claims/export`, definedQuery(params)),
+      options,
+    ),
   getAds: async (
     projectId: string,
     params: {
       audit_id?: string;
       audit_ids?: string[];
       engine?: string;
+      topic?: string;
       cohort?: string;
       cursor?: string;
     },
@@ -169,7 +226,16 @@ export const visibilityApi = {
       audit_id?: string;
       audit_ids?: string[];
       engine?: string;
+      topic?: string;
       cohort?: string;
+      prompt_id?: string;
+      outcome?: string;
+      competitor?: string;
+      domain?: string;
+      url?: string;
+      search?: string;
+      order?: 'top' | 'rising' | 'falling';
+      limit?: number;
       cursor?: string;
       query?: string;
     },
@@ -188,6 +254,7 @@ export const visibilityApi = {
       audit_ids?: string[];
       baseline_audit_ids?: string[];
       engine?: string;
+      topic?: string;
       cohort?: string;
       domain?: string;
       source_type?: string;
@@ -205,12 +272,6 @@ export const visibilityApi = {
     );
     return strictValidate(visibilitySourcesSchema, result, 'visibility.getSources');
   },
-  /**
-   * The five AI Overview rates for one selection.
-   *
-   * `engine` is required: the rates belong to an observed surface, and asking
-   * for them without naming one would answer a question nobody asked.
-   */
   getSurfaceRates: async (
     projectId: string,
     params: {
@@ -235,6 +296,7 @@ export const visibilityApi = {
       audit_id?: string;
       audit_ids?: string[];
       engine?: string;
+      topic?: string;
       cohort?: string;
       domain?: string;
       url?: string;
@@ -255,6 +317,7 @@ export const visibilityApi = {
       audit_id?: string;
       audit_ids?: string[];
       engine?: string;
+      topic?: string;
       cohort?: string;
       limit?: number;
     },
@@ -277,6 +340,7 @@ export const visibilityApi = {
       audit_ids?: string[];
       baseline_audit_ids?: string[];
       engine?: string;
+      topic?: string;
       cohort?: string;
       dimension?: 'domain' | 'url';
       limit?: number;
@@ -296,6 +360,7 @@ export const visibilityApi = {
       audit_id?: string;
       audit_ids?: string[];
       engine?: string;
+      topic?: string;
       cohort?: string;
     },
     options?: ApiRequestOptions,
@@ -306,10 +371,9 @@ export const visibilityApi = {
     );
     return strictValidate(visibilitySourceUrlSchema, result, 'visibility.getSourceUrl');
   },
-  /** Each market's latest run side by side (Visibility → By market). */
   getMarketVisibility: async (
     projectId: string,
-    params: { cohort?: string },
+    params: { cohort?: string; topic?: string },
     options?: ApiRequestOptions,
   ) => {
     const result = await apiClient.get(
@@ -317,6 +381,24 @@ export const visibilityApi = {
       options,
     );
     return strictValidate(visibilityMarketsSchema, result, 'visibility.getMarketVisibility');
+  },
+  getVisibilityTopics: async (
+    projectId: string,
+    params: Omit<ProjectVisibilityParams, 'baseline_id' | 'topic'>,
+    options?: ApiRequestOptions,
+  ) => {
+    const path = withQuery(`/projects/${projectId}/visibility/topics`, definedQuery(params));
+    const res = await apiClient.get(path, options);
+    return strictValidate(visibilityTopicsSchema, res, 'visibility.getVisibilityTopics');
+  },
+  getVisibilityMatrix: async (
+    projectId: string,
+    params: Omit<ProjectVisibilityParams, 'baseline_id'>,
+    options?: ApiRequestOptions,
+  ) => {
+    const path = withQuery(`/projects/${projectId}/visibility/matrix`, definedQuery(params));
+    const res = await apiClient.get(path, options);
+    return strictValidate(visibilityMatrixSchema, res, 'visibility.getVisibilityMatrix');
   },
   getProjectVisibility: async (
     projectId: string,
@@ -328,14 +410,6 @@ export const visibilityApi = {
     return strictValidate(visibilitySchema, res, 'visibility.getProjectVisibility');
   },
 
-  /**
-   * Cross-run Visibility trend projection for a project (roadmap surface, now
-   * live). An ordered series of `VisibilityTrendPoint`s over the project's
-   * persisted dashboard-ready `MetricSnapshot` rows — optionally filtered by
-   * `engine` and an inclusive UTC `from`/`to` window, and bucketed by
-   * `granularity`. Same-origin relative path only; response is strictly
-   * validated (backend is the source of truth).
-   */
   getVisibilityTrends: async (
     projectId: string,
     params?: VisibilityTrendParams,
@@ -346,13 +420,6 @@ export const visibilityApi = {
     return strictValidate(visibilityTrendListSchema, res, 'visibility.getVisibilityTrends');
   },
 
-  /**
-   * Shared persisted execution-evidence dataset for Query fanouts and the
-   * Sources drill-downs (`/projects/{id}/visibility/evidence`). Returns a
-   * bounded newest-first window of `VisibilityExecutionEvidence` plus a
-   * `truncated` flag — no provider is called and no evidence is inferred at read
-   * time. Same-origin relative path only; response is strictly validated.
-   */
   getVisibilityEvidence: async (
     projectId: string,
     params?: VisibilityEvidenceParams,
@@ -376,6 +443,7 @@ export const visibilityApi = {
       baseline_id?: string;
       audit_ids?: string[];
       baseline_audit_ids?: string[];
+      latest?: 'run' | 'prompt';
     },
   ): Promise<PromptMetricItem[]> => {
     const path = withQuery(
@@ -385,10 +453,6 @@ export const visibilityApi = {
     const res = await apiClient.get<PromptMetricItem[]>(path, options);
     return strictValidate(promptMetricListSchema, res, 'visibility.getPromptMetrics');
   },
-  /**
-   * One prompt's mention and owned-citation rates per run in a market, the
-   * Actions declared on it, and its latest per-engine outcomes.
-   */
   getPromptHistory: async (
     projectId: string,
     promptId: string,
@@ -427,5 +491,17 @@ export const visibilityApi = {
       options,
     );
     return strictValidate(competitorSchema, res, 'visibility.acceptCompetitorSuggestion');
+  },
+  rejectCompetitorSuggestion: async (
+    projectId: string,
+    candidateId: string,
+    options?: ApiRequestOptions,
+  ): Promise<ObservedCompetitor> => {
+    const res = await apiClient.post<ObservedCompetitor>(
+      `/projects/${projectId}/competitor-suggestions/${candidateId}/reject`,
+      undefined,
+      options,
+    );
+    return strictValidate(observedCompetitorSchema, res, 'visibility.rejectCompetitorSuggestion');
   },
 };

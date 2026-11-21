@@ -1,4 +1,3 @@
-/** Binary scoring of the public checklist: Web Fundamentals and weighted AEO readiness. */
 import { policy } from '../../config.ts';
 import { canonicalDeclarations, finalizeEvaluation } from './finalize.ts';
 import { analysisPolicy } from './policy.ts';
@@ -12,22 +11,12 @@ const DIMENSIONS = analysisPolicy.rules.aeo_dimensions;
 const PAGE_KINDS = new Set(analysisPolicy.classification.page_kinds);
 const DETERMINATE = new Set(['satisfied', 'missing']);
 
-/**
- * The crawl's site-level checks that applied (evaluated where the site facts
- * were observed). A blocked crawler makes every page ineligible, so each page
- * scores these in place of its own site rows.
- */
-export const appliedSiteChecks = (rows: RuleEvaluation[]) =>
+const appliedSiteChecks = (rows: RuleEvaluation[]) =>
   rows.filter((row) => row.scope === 'site' && row.outcome !== 'not_applicable');
 
 const SCORED_SITE_RULES = policy.site_health.rule_catalog
   .filter((rule) => rule.scope === 'site' && membership(rule.rule_id).score_roles.length)
   .map((rule) => rule.rule_id);
-/**
- * The crawl's applied site checks, with every scored site check the crawl never
- * evaluated (no root analysis, no site facts) as unknown: a missing crawler
- * verdict keeps measurement partial instead of silently dropping out.
- */
 export function crawlSiteChecks(rows: RuleEvaluation[]) {
   const applied = appliedSiteChecks(rows);
   const seen = new Set(applied.map((row) => row.rule_id));
@@ -47,17 +36,10 @@ const SCORED_FINALIZE_RULES = policy.site_health.rule_catalog
       membership(rule.rule_id).score_roles.length,
   )
   .map((rule) => rule.rule_id);
-/** Why a crawl-finalize check does not apply to the page from its own facts alone; null when it may. */
 const FINALIZE_NOT_APPLICABLE: Record<string, (facts: Record<string, unknown>) => string | null> = {
   'technical.canonical_integrity': (facts) =>
     canonicalDeclarations(facts).length ? null : 'no_canonical',
 };
-/**
- * A page's final checks, with every scored crawl-finalize check the crawl never
- * evaluated (a cancelled crawl skips finalization) as unknown, so the missing
- * verdict keeps measurement partial instead of silently dropping out. A check
- * the page's own facts rule out (no canonical declared) stays not applicable.
- */
 export function finalPageChecks(rows: RuleEvaluation[], facts: Record<string, unknown>) {
   const seen = new Set(rows.map((row) => row.rule_id));
   return [
@@ -76,7 +58,6 @@ const withSiteChecks = (rows: RuleEvaluation[], siteRows: RuleEvaluation[]) => [
   ...appliedSiteChecks(siteRows),
 ];
 
-/** One applicable check per rule; duplicates that disagree count as unknown. */
 function applicableChecks(rows: RuleEvaluation[], role: string) {
   const byId = new Map<string, RuleEvaluation>();
   const conflicted = new Set<string>();
@@ -96,7 +77,6 @@ function measurementState(determinate: number, expected: number) {
   return determinate === expected ? 'measured' : 'limited_evidence';
 }
 
-/** Score resolved checks; every applicable check stays in coverage. */
 function roleResult(rows: RuleEvaluation[]) {
   const expected = rows.length;
   const determinate = rows.filter((row) => DETERMINATE.has(row.outcome)).length;
@@ -150,7 +130,6 @@ function pillar(key: string, rows: RuleEvaluation[]) {
 }
 export type ReadinessDimension = ReturnType<typeof pillar>;
 
-/** Weight scored pillars; incomplete checks are reported in coverage, not withheld. */
 function weightedReadiness(dimensions: ReadinessDimension[]) {
   let applicableWeight = 0;
   let scoredWeight = 0;
@@ -184,7 +163,6 @@ export function readinessReason(
   return kind === 'other' ? 'page_purpose_unresolved' : 'no_applicable_checks';
 }
 
-/** `siteRows` defaults to the page's own rows, which carry the site checks on the root analysis. */
 export function scoreAnalysis(
   pageRows: RuleEvaluation[],
   pageKind: string,

@@ -9,6 +9,8 @@ import type { observedCompetitorSchema } from '@citeladder/contracts/visibility'
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import type { z } from 'zod';
 
+import { persistObservedCompetitors } from '../src/analysis/observed-competitors.ts';
+import { scoringConfig } from '../src/analysis/scoring.ts';
 import { createApp } from '../src/app.ts';
 import { TEST_SESSION_COOKIE, sessionToken, testConfig, testDatabase } from './support.ts';
 import { VisibilityFixtures, type Tenant } from './visibility-fixtures.ts';
@@ -74,7 +76,6 @@ async function brand(): Promise<string> {
   return row.id;
 }
 
-/** A profile as onboarding leaves it: products, a web-evidence field, other context. */
 async function profile(
   input: { products?: string[]; businessContext?: Record<string, unknown> } = {},
 ): Promise<void> {
@@ -129,11 +130,12 @@ async function readyLogo(owner: 'brands' | 'competitors', ownerId: string, image
 
 async function suggestion(input: {
   name: string;
-  domain: string;
+  domain: string | null;
   prompts?: number;
   engines?: number;
   status?: string;
   auditId: string;
+  createdAt?: Date;
 }): Promise<string> {
   const id = randomUUID();
   await db
@@ -144,7 +146,11 @@ async function suggestion(input: {
       project_id: t.projectId,
       audit_id: input.auditId,
       name: input.name,
+      kind: input.domain === null ? 'named_in_answers' : 'cited_domain',
       domain: input.domain,
+      name_key: input.domain === null ? input.name.toLowerCase() : null,
+      engine_total: 4,
+      citation_count: input.domain === null ? null : 3,
       qualification_reason: 'Cited across prompts and engines',
       prompt_count: input.prompts ?? 2,
       engine_count: input.engines ?? 2,
@@ -153,7 +159,7 @@ async function suggestion(input: {
       source_analysis_ids: JSON.stringify([randomUUID()]),
       source_artifact_ids: JSON.stringify([]),
       status: input.status ?? 'pending',
-      created_at: new Date(),
+      created_at: input.createdAt ?? new Date(),
     })
     .execute();
   return id;
@@ -167,6 +173,11 @@ describe('brand identity workspace boundaries', () => {
     ['/business-map', 'PUT', { offerings: [] }],
     ['/competitor-suggestions', 'GET', undefined],
     [`/competitor-suggestions/${randomUUID()}/accept`, 'POST', undefined],
+    [`/competitor-suggestions/${randomUUID()}/reject`, 'POST', undefined],
+    ['/themes', 'GET', undefined],
+    ['/themes', 'POST', { name: 'Price' }],
+    [`/themes/${randomUUID()}`, 'PATCH', { name: 'Price' }],
+    [`/themes/${randomUUID()}`, 'DELETE', undefined],
   ] as const;
 
   it('requires membership, the project workspace and write capability', async () => {
@@ -189,6 +200,57 @@ describe('brand identity workspace boundaries', () => {
       if (method !== 'GET')
         expect((await call(path, { method, body, user: viewer })).status).toBe(403);
     }
+  });
+});
+
+describe('project themes', () => {
+  type Theme = { id: string; name: string; source: string };
+  const names = async (tenant: Tenant = t) => {
+    const token = await sessionToken({ sub: tenant.userId, ver: 0 });
+    const response = await app.request(`/api/v1/projects/${tenant.projectId}/themes`, {
+      headers: {
+        'x-workspace-id': tenant.workspaceId,
+        cookie: `${TEST_SESSION_COOKIE}=${token}`,
+      },
+    });
+    return ((await response.json()) as Theme[]).map((theme) => [theme.name, theme.source]);
+  };
+
+  it('adds in order, renames and deletes, refusing a repeated name and the fallback', async () => {
+    const add = (name: string) => call<Theme>('/themes', { method: 'POST', body: { name } });
+    const price = await add(' Price ');
+    const delivery = await add('Delivery');
+    expect([price.status, delivery.status]).toEqual([201, 201]);
+    expect([(await add('price')).status, (await add('other')).status]).toEqual([409, 422]);
+    const spaced = await add('Customer   support');
+    expect([spaced.body.name, (await add('customer support')).status]).toEqual([
+      'Customer support',
+      409,
+    ]);
+    await request(`/themes/${spaced.body.id}`, { method: 'DELETE' });
+    const renamed = await call<Theme>(`/themes/${delivery.body.id}`, {
+      method: 'PATCH',
+      body: { name: 'Delivery speed' },
+    });
+    expect(renamed.body.name).toBe('Delivery speed');
+    expect(await names()).toEqual([
+      ['Price', 'user'],
+      ['Delivery speed', 'user'],
+    ]);
+    expect((await request(`/themes/${price.body.id}`, { method: 'DELETE' })).status).toBe(204);
+    expect(await names()).toEqual([['Delivery speed', 'user']]);
+  });
+
+  it("never renames or deletes another workspace's theme through the caller's own project", async () => {
+    const theirs = await call<Theme>('/themes', { method: 'POST', body: { name: 'Price' } });
+    const owner = t;
+    t = await fixtures.tenant();
+    const path = `/themes/${theirs.body.id}`;
+    expect([
+      (await request(path, { method: 'PATCH', body: { name: 'Taken' } })).status,
+      (await request(path, { method: 'DELETE' })).status,
+    ]).toEqual([404, 404]);
+    expect([await names(owner), await names()]).toEqual([[['Price', 'user']], []]);
   });
 });
 
@@ -255,8 +317,6 @@ describe('brand profile', () => {
       body: { category: '  trail running shoes ', buyer_type: 'both' },
     });
     expect(edited.status).toBe(200);
-    // Unsupplied facets and other context stay as they were; terms inferred
-    // from the replaced category go, and the older `business_type` key gives way.
     expect(edited.body.business_context).toEqual({
       category: 'trail running shoes',
       buyer_type: 'both',
@@ -291,8 +351,6 @@ describe('brand profile', () => {
       },
     });
     expect(edited.status).toBe(200);
-    // Sent terms survive the category change that drops inferred ones; lists
-    // are trimmed and deduplicated, and an empty list clears the field.
     expect(edited.body.business_context).toEqual({
       category: 'trail running shoes',
       category_terms: ['trail shoes', 'hiking shoes'],
@@ -336,43 +394,6 @@ describe('brand profile', () => {
       body: { description: 'x'.repeat(4_001) },
     });
     expect(tooLong.status).toBe(422);
-  });
-
-  it('reads provenance stored without the reviewer keys as unreviewed', async () => {
-    await profile();
-    // The older stored shape, written before provenance carried the
-    // reviewer keys; stored rows keep it, so the reader must accept it.
-    await db
-      .updateTable('brand_profiles')
-      .set({
-        sources: JSON.stringify({
-          description: { origin: 'ai_suggested', review_state: 'unreviewed' },
-        }),
-      })
-      .where('workspace_id', '=', t.workspaceId)
-      .where('project_id', '=', t.projectId)
-      .execute();
-    const shown = await call<BrandProfile>('/brand-profile');
-    expect(shown.status).toBe(200);
-    expect(shown.body.sources.description).toEqual({
-      origin: 'ai_suggested',
-      review_state: 'unreviewed',
-      reviewed_by: null,
-      reviewed_at: null,
-    });
-    // The first edit keeps the origin and rewrites the entry with the full
-    // provenance shape, so the stored row is healed by the next write.
-    const edited = await call<BrandProfile>('/brand-profile', {
-      method: 'PUT',
-      body: { description: 'Now reviewed.' },
-    });
-    expect(edited.status).toBe(200);
-    expect(edited.body.sources.description).toMatchObject({
-      origin: 'ai_suggested',
-      review_state: 'edited',
-      reviewed_by: t.userId,
-      reviewed_at: expect.any(String),
-    });
   });
 });
 
@@ -431,7 +452,6 @@ describe('business map', () => {
     expect(offering!.offering).toBe('running shoes');
     expect(offering!.attributes).toMatchObject([
       { value: 'waterproof', origin: 'model', review_state: 'suggested' },
-      // A new entry is a confirmed manual fact, whatever the request asked.
       { value: 'wide fit', origin: 'manual', review_state: 'confirmed', reviewed_by: t.userId },
     ]);
     expect(offering!.situations.map((entry) => entry.value)).toEqual(['wet trails']);
@@ -451,7 +471,6 @@ describe('business map', () => {
       },
     ]);
     expect(await call<BusinessMap>('/business-map')).toMatchObject({ body: confirmed.body });
-    // Only the map key changed; other persisted facts are untouched.
     expect((await call<BrandProfile>('/brand-profile')).body.business_context).toMatchObject({
       category: 'footwear',
     });
@@ -490,9 +509,118 @@ describe('competitor suggestions', () => {
       auditId,
     });
     await suggestion({ name: 'Done', domain: 'done.example', status: 'accepted', auditId });
+    const earlier = await fixtures.audit(t);
+    await suggestion({
+      name: 'Strong',
+      domain: 'strong.example',
+      prompts: 9,
+      auditId: earlier,
+      createdAt: new Date(Date.now() - 60_000),
+    });
+    const named = await suggestion({ name: 'Ledgerly', domain: null, prompts: 3, auditId });
     const listed = await call<ObservedCompetitor[]>('/competitor-suggestions');
-    expect(listed.body.map((row) => row.id)).toEqual([strong, weak]);
-    expect(listed.body[0]).toMatchObject({ audit_id: auditId, source_artifact_ids: [] });
+    expect(listed.body.map((row) => row.id)).toEqual([strong, named, weak]);
+    expect(listed.body[0]).toMatchObject({
+      kind: 'cited_domain',
+      audit_id: auditId,
+      domain: 'strong.example',
+      source_artifact_ids: [],
+    });
+    expect(listed.body[1]).toEqual(
+      expect.objectContaining({ kind: 'named_in_answers', name: 'Ledgerly', engine_total: 4 }),
+    );
+    expect(listed.body[1]).not.toHaveProperty('domain');
+
+    await fixtures.competitor(t.projectId, { name: 'Ledgerly Inc', aliases: ['Ledgerly'] });
+    await fixtures.competitor(t.projectId, { name: 'Weak Co', domains: ['weak.example'] });
+    const outsider = await fixtures.tenant();
+    await fixtures.competitor(outsider.projectId, { name: 'Strong' });
+    const relisted = await call<ObservedCompetitor[]>('/competitor-suggestions');
+    expect(relisted.body.map((row) => row.id)).toEqual([strong]);
+  });
+
+  it('records who rejected a suggestion and when, on every pending row of its domain', async () => {
+    const earlier = await fixtures.audit(t);
+    const auditId = await fixtures.audit(t);
+    const older = await suggestion({ name: 'Zen', domain: 'zen.example', auditId: earlier });
+    const latest = await suggestion({ name: 'Zen', domain: 'zen.example', auditId });
+    const other = await suggestion({ name: 'Kept', domain: 'kept.example', auditId });
+    const rejected = await call<ObservedCompetitor>(`/competitor-suggestions/${latest}/reject`, {
+      method: 'POST',
+    });
+    expect(rejected).toMatchObject({ status: 200, body: { id: latest, status: 'rejected' } });
+    const rows = await db
+      .selectFrom('observed_entity_candidates')
+      .select(['id', 'status', 'decided_by_user_id', 'decided_at'])
+      .where('id', 'in', [older, latest, other])
+      .execute();
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    for (const id of [older, latest])
+      expect(byId.get(id)).toMatchObject({
+        status: 'rejected',
+        decided_by_user_id: t.userId,
+        decided_at: expect.any(Date),
+      });
+    expect(byId.get(other)).toMatchObject({ status: 'pending', decided_at: null });
+    expect((await call<ObservedCompetitor[]>('/competitor-suggestions')).body).toEqual([
+      expect.objectContaining({ id: other }),
+    ]);
+    expect((await call(`/competitor-suggestions/${older}/reject`, { method: 'POST' })).status).toBe(
+      200,
+    );
+    await call(`/competitor-suggestions/${other}/accept`, { method: 'POST' });
+    expect((await call(`/competitor-suggestions/${other}/reject`, { method: 'POST' })).status).toBe(
+      409,
+    );
+  });
+
+  it('never suggests a rejected domain again from a later audit', async () => {
+    const earlier = await fixtures.audit(t);
+    await suggestion({
+      name: 'Zen',
+      domain: 'zen.example',
+      status: 'rejected',
+      auditId: earlier,
+    });
+    const auditId = await fixtures.audit(t);
+    const cited = (url: string) => ({ url });
+    for (const [engine, promptIndex] of [
+      ['chatgpt', 0],
+      ['perplexity', 1],
+    ] as const)
+      await fixtures.execution(t, {
+        auditId,
+        engine,
+        promptIndex,
+        analysis: {
+          citations: [cited('https://zen.example/a'), cited('https://fresh.example/b')],
+        },
+      });
+    const audit = await db
+      .selectFrom('audits')
+      .selectAll()
+      .where('id', '=', auditId)
+      .executeTakeFirstOrThrow();
+    const analyses = await db
+      .selectFrom('response_analyses')
+      .selectAll()
+      .where('audit_id', '=', auditId)
+      .execute();
+    await persistObservedCompetitors(
+      db,
+      audit,
+      analyses,
+      scoringConfig(audit.configuration),
+      new Date(),
+    );
+    const rows = await db
+      .selectFrom('observed_entity_candidates')
+      .select(['domain', 'citation_count', 'engine_count', 'engine_total'])
+      .where('audit_id', '=', auditId)
+      .execute();
+    expect(rows).toEqual([
+      { domain: 'fresh.example', citation_count: 2, engine_count: 2, engine_total: 2 },
+    ]);
   });
 
   it('reuses a tracked competitor, adds new ones within the ceiling, and records the decision', async () => {
@@ -506,6 +634,11 @@ describe('competitor suggestions', () => {
       method: 'POST',
     });
     expect(reused.body).toMatchObject({ id: existing, name: 'Globex' });
+    const bySubdomain = await suggestion({ name: 'Shop', domain: 'shop.globex.example', auditId });
+    const reusedHost = await call<Competitor>(`/competitor-suggestions/${bySubdomain}/accept`, {
+      method: 'POST',
+    });
+    expect(reusedHost.body).toMatchObject({ id: existing, name: 'Globex' });
 
     const fresh = await suggestion({ name: 'Initech', domain: 'initech.example', auditId });
     const added = await call<Competitor>(`/competitor-suggestions/${fresh}/accept`, {
@@ -524,6 +657,7 @@ describe('competitor suggestions', () => {
     const overflow = await suggestion({ name: 'Six', domain: 'six.example', auditId });
     const refused = await call(`/competitor-suggestions/${overflow}/accept`, { method: 'POST' });
     expect(refused.status).toBe(409);
+    expect(refused.body).toMatchObject({ error: { code: 'competitor_limit' } });
     const competitors = await db
       .selectFrom('competitors')
       .select('name')
@@ -544,6 +678,39 @@ describe('competitor suggestions', () => {
     ]);
     expect([one.status, two.status]).toEqual([200, 200]);
     expect(one.body.id).toBe(two.body.id);
+  });
+
+  it('settles a concurrent accept and reject of one domain on one decision', async () => {
+    const older = await suggestion({
+      name: 'Pied',
+      domain: 'pied.example',
+      auditId: await fixtures.audit(t),
+    });
+    const latest = await suggestion({
+      name: 'Pied',
+      domain: 'pied.example',
+      auditId: await fixtures.audit(t),
+    });
+    const statuses = await Promise.all([
+      call(`/competitor-suggestions/${older}/accept`, { method: 'POST' }).then((r) => r.status),
+      call(`/competitor-suggestions/${latest}/reject`, { method: 'POST' }).then((r) => r.status),
+    ]);
+    const rows = await db
+      .selectFrom('observed_entity_candidates')
+      .select('status')
+      .where('id', 'in', [older, latest])
+      .execute();
+    const tracked = await db
+      .selectFrom('competitors')
+      .select('name')
+      .where('project_id', '=', t.projectId)
+      .execute();
+    expect(new Set(rows.map((row) => row.status)).size).toBe(1);
+    expect({ statuses, tracked }).toEqual(
+      rows[0]!.status === 'accepted'
+        ? { statuses: [200, 409], tracked: [{ name: 'Pied' }] }
+        : { statuses: [409, 200], tracked: [] },
+    );
   });
 });
 

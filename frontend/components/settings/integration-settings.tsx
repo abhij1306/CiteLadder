@@ -2,12 +2,13 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 
-import { Callout } from '@/components/ui/callout';
 import { CrawlLogConnections } from '@/components/ai-traffic/crawl-log-connections';
-import { Stack } from '@/components/ui/layout';
-import { QueryState } from '@/components/ui/query-state';
-import { ReadError } from '@/components/ui/read-error';
-import { GRANT_FAMILY, type GrantFamily, type GrantModel } from '@/components/settings/grant-model';
+import {
+  FAMILY_META,
+  GRANT_FAMILY,
+  type GrantFamily,
+  type GrantModel,
+} from '@/components/settings/grant-model';
 import { IntegrationCardView } from '@/components/settings/integration-card-view';
 import { IntegrationsEmptyState } from '@/components/settings/integrations-empty-state';
 import {
@@ -17,8 +18,10 @@ import {
 } from '@/lib/api/integrations';
 import { oauthErrorMessage } from '@/components/integrations/data-sources';
 import { useActiveWorkspaceId } from '@/lib/project/project-context';
+import { Notice, readErrorProps } from '@/components/ui/notice';
+import { SettingsGroup } from '@/components/ui/setting-row';
+import { StateBlock } from '@/components/ui/state-block';
 
-/** Display order of connection sub-rows inside a grant card (gsc before ga4). */
 const PROVIDER_ORDER: Record<IntegrationConnection['provider'], number> = {
   gsc: 0,
   ga4: 1,
@@ -27,12 +30,6 @@ const PROVIDER_ORDER: Record<IntegrationConnection['provider'], number> = {
 
 const FAMILY_ORDER: GrantFamily[] = ['google', 'microsoft'];
 
-/**
- * Group the flat `GET /integrations` connection list into per-grant cards:
- * connections sharing a `grant_id` ride ONE OAuth grant (one Google consent ⇒
- * gsc + ga4 rows; one Microsoft consent ⇒ bing). Grant status + scopes are
- * grant-level, so they are read off any connection in the group (deduped).
- */
 function groupIntoGrants(connections: IntegrationConnection[]): GrantModel[] {
   const byGrant = new Map<string, GrantModel['connections']>();
   for (const connection of connections) {
@@ -56,12 +53,6 @@ function groupIntoGrants(connections: IntegrationConnection[]): GrantModel[] {
   return grants.sort((a, b) => FAMILY_ORDER.indexOf(a.family) - FAMILY_ORDER.indexOf(b.family));
 }
 
-/**
- * OAuth-callback result notice (contract C2): the backend callback 302s to
- * `/settings?tab=integrations&connected=<provider>` / `&error=<code>`. The
- * params are captured once on mount and then stripped from the URL by the
- * panel, so a refresh never re-shows a stale notice.
- */
 function CallbackNotice({
   notice,
 }: Readonly<{ notice: { connected: string | null; error: string | null } }>) {
@@ -70,35 +61,18 @@ function CallbackNotice({
       notice.connected === 'gsc' || notice.connected === 'ga4' || notice.connected === 'bing'
         ? GRANT_FAMILY[notice.connected]
         : null;
-    if (family === 'google') {
-      return (
-        <Callout tone="positive">
-          <strong>Google connected.</strong> Search Console and Analytics 4 are now linked through
-          one Google connection. Select a property for each below to start importing — nothing syncs
-          until a property is chosen.
-        </Callout>
-      );
-    }
-    if (family === 'microsoft') {
-      return (
-        <Callout tone="positive">
-          <strong>Bing connected.</strong> Bing Webmaster Tools is now linked. Select a property
-          below to start importing — nothing syncs until a property is chosen.
-        </Callout>
-      );
-    }
     return (
-      <Callout tone="positive">
-        <strong>Integration connected.</strong> Select a property below to start importing — nothing
-        syncs until a property is chosen.
-      </Callout>
+      <Notice tone="positive">
+        <strong>{family ? FAMILY_META[family].title : 'Integration'} connected.</strong> Nothing
+        imports until you choose a property.
+      </Notice>
     );
   }
   if (notice.error) {
     return (
-      <Callout tone="negative">
+      <Notice tone="negative">
         <strong>Connection failed.</strong> {oauthErrorMessage(notice.error)}
-      </Callout>
+      </Notice>
     );
   }
   return null;
@@ -118,8 +92,6 @@ export function IntegrationSettings() {
   const searchParams = useSearchParams()[0];
   const workspaceId = useActiveWorkspaceId();
 
-  // C2 callback params — captured once (like the ?tab= deep link), then
-  // cleaned from the URL so they don't linger across refresh/share.
   const [notice] = useState(() => ({
     connected: searchParams.get('connected'),
     error: searchParams.get('error'),
@@ -127,7 +99,6 @@ export function IntegrationSettings() {
   const hasCallbackParams = searchParams.has('connected') || searchParams.has('error');
   useEffect(() => {
     if (!hasCallbackParams) return;
-    // A fresh connect changes the list — refetch before stripping the params.
     if (notice.connected) void refreshIntegrations(queryClient);
     // Shallow URL cleanup, NOT a redirect: the params have already been captured
     // into `notice`, so this only rewrites the address bar. A route navigation
@@ -143,44 +114,40 @@ export function IntegrationSettings() {
   const connections = connectionsQuery.data ?? [];
   const grants = groupIntoGrants(connections);
 
-  if (!workspaceId) return <Callout tone="info">Loading your workspace…</Callout>;
+  if (!workspaceId)
+    return <StateBlock kind="loading" label="Loading your workspace…" shape={{ kind: 'list' }} />;
 
+  const settled = !connectionsQuery.isLoading && !connectionsQuery.isError;
   return (
-    <Stack gap="workspace">
+    <>
       <CallbackNotice notice={notice} />
-
-      {connectionsQuery.isError ? (
-        <ReadError
-          error={connectionsQuery.error}
-          fallback="Could not load integrations. Check your connection and try again."
-          onRetry={() => void connectionsQuery.refetch()}
-          pending={connectionsQuery.isFetching}
-        />
-      ) : null}
-
-      {connectionsQuery.isLoading ? (
-        <QueryState kind="loading" label="Loading integrations…" />
-      ) : null}
-
-      {!connectionsQuery.isLoading && !connectionsQuery.isError && connections.length === 0 ? (
-        <IntegrationsEmptyState workspaceId={workspaceId} />
-      ) : null}
-
-      {!connectionsQuery.isLoading && !connectionsQuery.isError && connections.length > 0 ? (
-        // One column, one card per grant: a Google card holds two connections
-        // and a Bing card one, so side by side they never share a height.
-        <Stack gap="workspace">
-          {FAMILY_ORDER.map((family) => (
+      {settled && connections.length > 0 ? null : (
+        <SettingsGroup title="Search and analytics">
+          {connectionsQuery.isError ? (
+            <StateBlock
+              kind="error"
+              title="Couldn't load integrations"
+              {...readErrorProps(connectionsQuery)}
+              fallback="Couldn't load integrations. Check your connection and try again."
+            />
+          ) : null}
+          {connectionsQuery.isLoading ? (
+            <StateBlock kind="loading" label="Loading integrations…" shape={{ kind: 'list' }} />
+          ) : null}
+          {settled ? <IntegrationsEmptyState workspaceId={workspaceId} /> : null}
+        </SettingsGroup>
+      )}
+      {settled && connections.length > 0
+        ? FAMILY_ORDER.map((family) => (
             <IntegrationCardView
               workspaceId={workspaceId}
               key={family}
               family={family}
               grant={grants.find((grant) => grant.family === family) ?? null}
             />
-          ))}
-        </Stack>
-      ) : null}
+          ))
+        : null}
       <CrawlLogConnections />
-    </Stack>
+    </>
   );
 }

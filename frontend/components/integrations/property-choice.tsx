@@ -1,12 +1,12 @@
 import { useMutation } from '@tanstack/react-query';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { Button } from '@/components/ui/button';
-import { Callout } from '@/components/ui/callout';
-import { MutationNotice } from '@/components/ui/mutation-notice';
+import { Icon } from '@/components/ui/icon';
 import { Inline, Stack } from '@/components/ui/layout';
-import { Spinner } from '@/components/ui/spinner';
+import { Skeleton } from '@/components/ui/skeleton';
 import { textRole } from '@/components/ui/typography';
+import { List, RefreshCw } from '@/lib/icons';
 import { mutationNoticeForError } from '@/lib/api/mutation-notice';
 import {
   integrationsMutations,
@@ -18,10 +18,10 @@ import {
 import { PROVIDER_META } from '@/components/settings/grant-model';
 
 import { ownPropertiesFirst } from './data-sources';
+import { Notice } from '@/components/ui/notice';
 
 const onlyItem = <T,>(items: readonly T[]) => (items.length === 1 ? items[0] : undefined);
 
-/** The one property worth offering as a single click, if any. */
 function suggestedProperty(provider: IntegrationProvider, properties: IntegrationProperty[]) {
   const matching = properties.filter((property) => property.matches_project === true);
   return (
@@ -32,12 +32,7 @@ function suggestedProperty(provider: IntegrationProvider, properties: Integratio
   );
 }
 
-/**
- * Choose the property a source imports into the project. Discovery is a live
- * provider call, so it starts on request, or by itself when the user has just
- * returned from consent; the project's own property is offered as one click.
- */
-export function PropertyChoice({
+export function usePropertyChoice({
   provider,
   connection,
   projectId,
@@ -47,13 +42,12 @@ export function PropertyChoice({
   connection: IntegrationConnection;
   projectId: string;
   autoStart: boolean;
-}>) {
+}>): { action: ReactNode; body: ReactNode } {
   const source = PROVIDER_META[provider];
   const [showAll, setShowAll] = useState(false);
   const discovery = useMutation(
     integrationsMutations.discoverProperties(connection.workspace_id, connection.id),
   );
-  // Discovery names the project, so its own properties are marked.
   const discover = () => discovery.mutate(projectId);
   const select = useMutation(
     integrationsMutations.createMapping(connection.workspace_id, connection.id),
@@ -61,7 +55,6 @@ export function PropertyChoice({
   const choose = (propertyRef: string) =>
     select.mutate({ provider, property_ref: propertyRef, project_id: projectId });
   const pendingRef = select.isPending ? (select.variables?.property_ref ?? null) : null;
-  // Returning from consent, the list is what the user came back for.
   const started = useRef(false);
   useEffect(() => {
     if (!autoStart || started.current) return;
@@ -69,59 +62,102 @@ export function PropertyChoice({
     discovery.mutate(projectId);
   }, [autoStart, discovery, projectId]);
 
-  if (!discovery.isSuccess)
-    return <DiscoveryStatus noun={source.noun} discovery={discovery} discover={discover} />;
+  if (!discovery.isSuccess) return discoveryStatus({ noun: source.noun, discovery, discover });
   const properties = ownPropertiesFirst(discovery.data);
   if (properties.length === 0)
-    return (
-      <Callout tone="neutral">
-        This account has no {source.noun}. Add and verify the site in {source.console}, then{' '}
-        <Button variant="ghost" onClick={discover}>
-          check again
-        </Button>
-      </Callout>
-    );
-  const suggested = suggestedProperty(provider, properties);
-  return (
-    <Stack gap="compact">
-      {suggested ? (
-        <Inline className="flex-wrap">
-          <Button
-            variant="primary"
-            onClick={() => choose(suggested.property_ref)}
-            pending={pendingRef === suggested.property_ref}
-            pendingLabel="Importing…"
-            disabled={select.isPending}
-            aria-label={`Use ${suggested.label} for ${source.label}`}
-          >
-            Use {suggested.label}
+    return {
+      action: null,
+      body: (
+        <Notice tone="info">
+          This account has no {source.noun}. Add and verify the site in {source.console}, then{' '}
+          <Button variant="quiet" onClick={discover}>
+            <Icon icon={RefreshCw} />
+            check again
           </Button>
-          {properties.length > 1 && !showAll ? (
-            <Button variant="ghost" onClick={() => setShowAll(true)}>
-              Choose another
-            </Button>
+        </Notice>
+      ),
+    };
+  const suggested = suggestedProperty(provider, properties);
+  const listed = !suggested || showAll;
+  return {
+    action: suggested ? (
+      <SuggestionButtons
+        label={`${suggested.label} for ${source.label}`}
+        suggestedLabel={suggested.label}
+        offerOthers={!listed && properties.length > 1}
+        onShowAll={() => setShowAll(true)}
+        onUse={() => choose(suggested.property_ref)}
+        pending={pendingRef === suggested.property_ref}
+        disabled={select.isPending}
+      />
+    ) : null,
+    body:
+      listed || select.isError ? (
+        <Stack gap="compact">
+          {listed ? (
+            <PropertyList
+              source={source}
+              properties={properties}
+              pendingRef={pendingRef}
+              onSelect={choose}
+            />
           ) : null}
-        </Inline>
-      ) : null}
-      {suggested && !showAll ? null : (
-        <PropertyList
-          source={source}
-          properties={properties}
-          pendingRef={pendingRef}
-          onSelect={choose}
-        />
-      )}
-      {select.isError ? (
-        <MutationNotice
-          notice={mutationNoticeForError(select.error, { action: 'save the property' })}
-        />
-      ) : null}
-    </Stack>
+          <SaveFailure error={select.error} />
+        </Stack>
+      ) : null,
+  };
+}
+
+function SaveFailure({ error }: Readonly<{ error: Error | null }>) {
+  if (!error) return null;
+  return (
+    <Notice
+      kind="mutation"
+      notice={mutationNoticeForError(error, { action: 'save the property' })}
+    />
   );
 }
 
-/** Discovery before it has a list: the button, progress, or the failure with a retry. */
-function DiscoveryStatus({
+function SuggestionButtons({
+  label,
+  suggestedLabel,
+  offerOthers,
+  onShowAll,
+  onUse,
+  pending,
+  disabled,
+}: Readonly<{
+  label: string;
+  suggestedLabel: string;
+  offerOthers: boolean;
+  onShowAll: () => void;
+  onUse: () => void;
+  pending: boolean;
+  disabled: boolean;
+}>) {
+  return (
+    <>
+      {offerOthers ? (
+        <Button variant="quiet" onClick={onShowAll}>
+          <Icon icon={List} />
+          Choose another
+        </Button>
+      ) : null}
+      <Button
+        variant="secondary"
+        onClick={onUse}
+        pending={pending}
+        pendingLabel="Importing…"
+        disabled={disabled}
+        aria-label={`Use ${label}`}
+      >
+        Use {suggestedLabel}
+      </Button>
+    </>
+  );
+}
+
+function discoveryStatus({
   noun,
   discovery,
   discover,
@@ -129,34 +165,37 @@ function DiscoveryStatus({
   noun: string;
   discovery: { isIdle: boolean; isPending: boolean; error: unknown };
   discover: () => void;
-}>) {
+}>): { action: ReactNode; body: ReactNode } {
   if (discovery.isIdle)
-    return (
-      <div>
+    return {
+      action: (
         <Button variant="secondary" onClick={discover}>
           Choose {noun}
         </Button>
-      </div>
-    );
+      ),
+      body: null,
+    };
   if (discovery.isPending)
-    return (
-      <Inline as="output" className="type-caption">
-        <Spinner /> Loading your {noun}s…
-      </Inline>
-    );
-  return (
-    <MutationNotice
-      notice={mutationNoticeForError(discovery.error, { action: `load your ${noun}s` })}
-      recovery={
-        <Button variant="secondary" onClick={discover}>
-          Try again
-        </Button>
-      }
-    />
-  );
+    return {
+      action: null,
+      body: <Skeleton variant="list" rows={2} label={`Loading your ${noun}s…`} />,
+    };
+  return {
+    action: null,
+    body: (
+      <Notice
+        kind="mutation"
+        notice={mutationNoticeForError(discovery.error, { action: `load your ${noun}s` })}
+        recovery={
+          <Button variant="secondary" onClick={discover}>
+            Try again
+          </Button>
+        }
+      />
+    ),
+  };
 }
 
-/** Every discovered property; another site's property is shown but cannot be used. */
 function PropertyList({
   source,
   properties,
@@ -175,7 +214,9 @@ function PropertyList({
         return (
           <Inline as="li" key={property.property_ref} gap="compact">
             <span className="min-w-0 flex-1">
-              <span className={textRole('label', 'block truncate')}>{property.label}</span>
+              <span className={textRole('body', 'text-ink-2 block truncate')}>
+                {property.label}
+              </span>
               <span className="type-caption block truncate">
                 {foreign ? 'Belongs to a different site' : property.property_ref}
               </span>

@@ -1,4 +1,3 @@
-/** Discovery admission freezes targets; publication fences the claim after bounded network work. */
 import { randomUUID } from 'node:crypto';
 import { competitorDiscoveryRequestSchema } from '@citeladder/contracts/commerce-requests';
 import { commerceTargetSchema } from '@citeladder/contracts/commerce-suite';
@@ -55,7 +54,6 @@ async function targetContext(
     .where('project_id', '=', scope.projectId)
     .where('id', '=', target.id)
     .executeTakeFirst();
-  // An archived product takes no new competitors until restored.
   if (!row || ('lifecycle_state' in row && row.lifecycle_state !== 'active')) {
     if (executing) throw new TerminalExecutorError(p.target_missing_error);
     commerceMissing('Commerce target not found');
@@ -91,7 +89,6 @@ export function enqueueDiscoveries(
     const targetKey = (target: z.infer<typeof commerceTargetSchema>) =>
       `${target.kind}:${target.id.toLowerCase()}`;
     const targets = new Map(input.targets.map((target) => [targetKey(target), target]));
-    // Each target spends platform research-provider calls and outbound fetches.
     await spendBudget(trx, budget('commerce_discovery', process.env), scope.workspaceId, {
       amount: targets.size,
     });
@@ -140,9 +137,6 @@ async function validate(
   const attempted = new Set<string>();
   await Promise.all(
     Array.from({ length: Math.min(p.verify_concurrency, candidates.length) }, async () => {
-      // Each consumer verifies one page at a time; parallelizing the loop
-      // would exceed the configured acquisition concurrency. Fetching stops
-      // once enough pages verified to fill the accept limit.
       while (next < candidates.length && verified.size < p.result_limit) {
         const item = candidates[next++]!;
         attempted.add(item.canonical!);
@@ -161,7 +155,6 @@ async function validate(
           });
           if (verifyPage(page, kind, owned)) verified.add(item.canonical!);
         } catch (error) {
-          // A rejected or unavailable page never fails its siblings; it stays unverified.
           logger.info('commerce_candidate_verify_failed', {
             ...failureFacts(error),
             elapsed_ms: Math.round(performance.now() - startedAt),

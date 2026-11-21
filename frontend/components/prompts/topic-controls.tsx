@@ -1,45 +1,42 @@
-import { Pencil, Plus, Settings2, Trash2 } from 'lucide-react';
 import { useId, useState } from 'react';
 
 import { Button, IconButton } from '@/components/ui/button';
-import { Callout } from '@/components/ui/callout';
-import { MutationNotice } from '@/components/ui/mutation-notice';
+import { Pencil, Plus, Settings2, Trash2 } from '@/lib/icons';
 import type { MutationNotice as MutationNoticeData } from '@/lib/api/mutation-notice';
 import { Dialog } from '@/components/ui/dialog';
 import { Field } from '@/components/ui/field';
 import type { FilterDefinition } from '@/components/ui/all-filters';
+import { DefaultHint } from '@/components/ui/filter-options';
 import { Icon } from '@/components/ui/icon';
 import { Input } from '@/components/ui/input';
 import { TreeItem, TreeItemForm, TreeList } from '@/components/ui/list-row';
-import {
-  MenuItem,
-  MenuLabel,
-  MenuRadioGroup,
-  MenuRadioItem,
-  MenuSeparator,
-} from '@/components/ui/menu';
-import { QueryState } from '@/components/ui/query-state';
+import { MenuItem, MenuRadioGroup, MenuRadioItem, MenuSeparator } from '@/components/ui/menu';
 import { Select } from '@/components/ui/select';
 import { ControlCount } from '@/components/ui/tabs';
 import type { Topic } from '@citeladder/contracts';
 import { orderTopicsForRail } from '@/lib/prompts/topic-tree';
 
 import type { useTopicMutations } from './use-topic-mutations';
+import { Notice, readErrorProps, type RetryableRead } from '@/components/ui/notice';
+import { StateBlock } from '@/components/ui/state-block';
 
 type TopicMutations = ReturnType<typeof useTopicMutations>;
 
-const TOPICS_LOAD_ERROR = "Couldn't load topics. Check your connection and try again.";
+type TopicsLoadError = RetryableRead | null;
 
-/** The filter value for "All topics". */
+function TopicsLoadNotice({ read }: Readonly<{ read: RetryableRead }>) {
+  return (
+    <Notice
+      kind="read"
+      {...readErrorProps(read)}
+      title="Couldn't load topics"
+      fallback="Check your connection and try again."
+    />
+  );
+}
+
 const ALL_TOPICS = '';
 
-/**
- * The Topic filter, first in the prompt library's All filters (owner,
- * 2026-11-06: it replaced the topics side panel so the table keeps the page's
- * width). "All topics", then every topic with its active-prompt count, a
- * subtopic named with its parent; the submenu ends with "Add topic" and
- * "Manage topics…", which open the dialogs below. Selection filters the table.
- */
 export function topicFilter({
   topics,
   selectedTopicId,
@@ -47,10 +44,8 @@ export function topicFilter({
   manage,
 }: Readonly<{
   topics: readonly Topic[];
-  /** null = "All topics". */
   selectedTopicId: string | null;
   onSelect: (topicId: string | null) => void;
-  /** Opens the topic dialogs, for a role that may edit topics; omitted otherwise. */
   manage?: Readonly<{ onAdd: () => void; onManage: () => void }>;
 }>): FilterDefinition {
   const ordered = orderTopicsForRail(topics);
@@ -59,14 +54,19 @@ export function topicFilter({
     kind: 'custom',
     id: 'topic',
     label: 'Topic',
+    icon: 'topic',
     valueLabel: selected?.label ?? 'All topics',
     isDefault: selectedTopicId === null,
+    defaultLabel: 'All topics',
+    reset: () => onSelect(null),
     content: (
       <>
-        <MenuLabel>Topic</MenuLabel>
         <MenuRadioGroup value={selectedTopicId ?? ALL_TOPICS}>
           <MenuRadioItem value={ALL_TOPICS} onSelect={() => onSelect(null)}>
-            All topics
+            <span className="flex min-w-0 items-center">
+              All topics
+              <DefaultHint />
+            </span>
           </MenuRadioItem>
           {ordered.map(({ topic, label }) => (
             <MenuRadioItem key={topic.id} value={topic.id} onSelect={() => onSelect(topic.id)}>
@@ -91,11 +91,6 @@ export function topicFilter({
   };
 }
 
-/**
- * Adds a topic, or a subtopic under a top-level topic (subtopics nest one
- * level deep). A failed create keeps the dialog open with the typed name so
- * the person can retry; a successful one closes it.
- */
 export function AddTopicDialog({
   open,
   onOpenChange,
@@ -107,7 +102,6 @@ export function AddTopicDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   topics: readonly Topic[];
-  /** Rejects when the create fails; the error is then shown from `error`. */
   onCreate: (name: string, parentId: string | null) => Promise<void>;
   isCreating?: boolean;
   error?: MutationNoticeData | null;
@@ -130,9 +124,7 @@ export function AddTopicDialog({
     try {
       await onCreate(trimmed, parentId || null);
       close(false);
-    } catch {
-      // Shown through `error`; the typed name stays for a retry.
-    }
+    } catch {}
   };
 
   return (
@@ -140,7 +132,6 @@ export function AddTopicDialog({
       open={open}
       onOpenChange={close}
       title="Add topic"
-      description="Topics group prompts so you can filter and compare them."
       footer={
         <>
           <Button variant="secondary" onClick={() => close(false)}>
@@ -160,7 +151,7 @@ export function AddTopicDialog({
           void submit();
         }}
       >
-        {error ? <MutationNotice notice={error} /> : null}
+        {error ? <Notice kind="mutation" notice={error} /> : null}
         <Field label="Topic name" required>
           {(props) => (
             <Input
@@ -198,11 +189,6 @@ export function AddTopicDialog({
 
 export type TopicDialog = 'add' | 'manage';
 
-/**
- * The library's topic-load notice and its two topic dialogs over one set of
- * topic writes. A create
- * failure shows in Add topic; rename and delete failures show in Manage topics.
- */
 export function TopicDialogs({
   dialog,
   onDialogChange,
@@ -216,14 +202,14 @@ export function TopicDialogs({
   onDialogChange: (dialog: TopicDialog | null) => void;
   topics: readonly Topic[];
   mutations: TopicMutations;
-  loadError: boolean;
+  loadError: TopicsLoadError;
   onAdd: () => void;
   onDelete: (topic: Topic) => void;
 }>) {
   const createFailed = mutations.create.isError;
   return (
     <>
-      {loadError ? <Callout tone="negative">{TOPICS_LOAD_ERROR}</Callout> : null}
+      {loadError ? <TopicsLoadNotice read={loadError} /> : null}
       <AddTopicDialog
         open={dialog === 'add'}
         onOpenChange={(open) => onDialogChange(open ? 'add' : null)}
@@ -250,11 +236,6 @@ export function TopicDialogs({
   );
 }
 
-/**
- * Every topic with its active-prompt count and its rename and delete
- * actions. Deleting asks first (the library's confirmation) and detaches the
- * topic's prompts — it never deletes them.
- */
 export function ManageTopicsDialog({
   open,
   onOpenChange,
@@ -262,17 +243,16 @@ export function ManageTopicsDialog({
   onRename,
   onDelete,
   onAdd,
-  loadError = false,
+  loadError = null,
   actionError,
 }: Readonly<{
   open: boolean;
   onOpenChange: (open: boolean) => void;
   topics: readonly Topic[];
-  /** Rejects when the rename fails; the typed name then stays for a retry. */
   onRename: (topic: Topic, name: string) => Promise<void>;
   onDelete: (topic: Topic) => void;
   onAdd: () => void;
-  loadError?: boolean;
+  loadError?: TopicsLoadError;
   actionError?: MutationNoticeData | null;
 }>) {
   const ordered = orderTopicsForRail(topics);
@@ -291,8 +271,8 @@ export function ManageTopicsDialog({
         </>
       }
     >
-      {loadError ? <Callout tone="negative">{TOPICS_LOAD_ERROR}</Callout> : null}
-      {!loadError && actionError ? <MutationNotice notice={actionError} /> : null}
+      {loadError ? <TopicsLoadNotice read={loadError} /> : null}
+      {!loadError && actionError ? <Notice kind="mutation" notice={actionError} /> : null}
       {ordered.length ? (
         <TreeList label="Topics">
           {ordered.map(({ topic, nested, label }) => (
@@ -306,9 +286,10 @@ export function ManageTopicsDialog({
             />
           ))}
         </TreeList>
-      ) : (
-        <QueryState kind="empty" inline message="No topics yet." />
-      )}
+      ) : null}
+      {!ordered.length && !loadError ? (
+        <StateBlock kind="empty" inline message="No topics yet." />
+      ) : null}
     </Dialog>
   );
 }
@@ -321,7 +302,6 @@ function TopicRow({
   onDelete,
 }: Readonly<{
   topic: Topic;
-  /** Parent-qualified for a subtopic, so same-named subtopics stay distinct. */
   name: string;
   nested: boolean;
   onRename: (name: string) => Promise<void>;
@@ -350,7 +330,6 @@ function TopicRow({
             label={`Rename topic ${name}`}
             onClick={() => setRenaming(true)}
           />
-          {/* Neutral at rest like Rename: the confirmation carries the danger. */}
           <IconButton icon={Trash2} label={`Delete topic ${name}`} onClick={onDelete} />
         </>
       }
@@ -358,11 +337,6 @@ function TopicRow({
   );
 }
 
-/**
- * A topic's name, edited in place. Enter saves (Escape closes the dialog,
- * dropping the edit); a failed save keeps the typed name so the person can
- * retry, and an unchanged or empty name saves nothing.
- */
 function TopicRenameForm({
   current,
   name,
@@ -389,7 +363,6 @@ function TopicRenameForm({
       await onRename(trimmed);
       onDone();
     } catch {
-      // Shown through the dialog's error; keep the typed name.
     } finally {
       setSaving(false);
     }

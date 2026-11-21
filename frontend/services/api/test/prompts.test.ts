@@ -83,7 +83,18 @@ describe('prompt sets', () => {
     expect(listed.body.prompt_sets.map((set) => set.id).sort()).toEqual(
       [t.setId, created.body.id].sort(),
     );
-    // The listed form bounds are the ones the write schemas enforce.
+    const commerce = await promptSet(db, t.projectId);
+    await db
+      .updateTable('prompt_sets')
+      .set({ name: 'Commerce Buyer Prompts' })
+      .where('id', '=', commerce)
+      .execute();
+    const kinds = await call<PromptSetList>(`/prompt-sets?project_id=${t.projectId}`);
+    expect(Object.fromEntries(kinds.body.prompt_sets.map((set) => [set.id, set.kind]))).toEqual({
+      [t.setId]: 'brand',
+      [created.body.id]: 'brand',
+      [commerce]: 'commerce',
+    });
     const { persona_max_chars: personaMax } = listed.body.limits;
     const id = await prompt(db, t.setId, 'acme trail shoes');
     expect((await patch(`/prompts/${id}`, { persona: 'x'.repeat(personaMax) })).status).toBe(200);
@@ -228,8 +239,6 @@ describe('prompt edits', () => {
       status: 'archived',
       topicId: trail,
     });
-    // The topic writer deletes the prompt's topic, detaching it and taking
-    // "hydration packs" out of the project vocabulary.
     const activation = await db.transaction().execute(async (deletion) => {
       const { rows } = await sql<{ pid: number }>`select pg_backend_pid() as pid`.execute(deletion);
       const blocker = rows[0]!.pid;
@@ -297,6 +306,155 @@ describe('prompt edits', () => {
       status: 'active',
     });
     expect(done.body.prompts.find((row) => row.id === one)?.status).toBe('active');
+  });
+});
+
+describe('bulk prompt actions', () => {
+  const bulk = `/projects/{project}/prompts`;
+  const bulkPath = (action: string) => `${bulk.replace('{project}', t.projectId)}/${action}`;
+  const topicsOf = async (ids: string[]) =>
+    Object.fromEntries(
+      (
+        await db.selectFrom('prompts').select(['id', 'topic_id']).where('id', 'in', ids).execute()
+      ).map((row) => [row.id, row.topic_id]),
+    );
+
+  it('refuses to activate prompts beyond the plan limit, in bulk or one at a time', async () => {
+    await grant(db, t.accountId, { value: 1 });
+    const start = Date.now() - 60_000;
+    const within = await prompt(db, t.setId, 'acme trail shoes', {
+      status: 'archived',
+      createdAt: new Date(start),
+    });
+    const beyond = await prompt(db, t.setId, 'acme road shoes', {
+      status: 'archived',
+      createdAt: new Date(start + 1000),
+    });
+    const refused = await post<ErrorBody>(`/prompt-sets/${t.setId}/prompts/bulk-status`, {
+      prompt_ids: [within, beyond],
+      status: 'active',
+    });
+    expect([refused.status, refused.body.error.code, refused.body.error.details]).toEqual([
+      403,
+      'occupancy_limit_exceeded',
+      { key: 'prompt_slots', excluded: 1 },
+    ]);
+    const single = await patch<ErrorBody>(`/prompts/${beyond}`, { status: 'active' });
+    expect([single.status, single.body.error.code]).toEqual([403, 'occupancy_limit_exceeded']);
+    const statuses = await db
+      .selectFrom('prompts')
+      .select(['id', 'status'])
+      .where('id', 'in', [within, beyond])
+      .execute();
+    expect(statuses.every((row) => row.status === 'archived')).toBe(true);
+    const allowed = await post<PromptSet>(`/prompt-sets/${t.setId}/prompts/bulk-status`, {
+      prompt_ids: [within],
+      status: 'active',
+    });
+    expect(allowed.body.prompts.find((row) => row.id === within)?.status).toBe('active');
+  });
+
+  it('files a selection under a topic, binding only the active prompts that move', async () => {
+    const trail = await topic(db, t.projectId, 'Trail gear', 'hydration packs');
+    const fits = await prompt(db, t.setId, 'lightest hydration packs');
+    const stray = await prompt(db, t.setId, 'cheapest flights to lisbon');
+    const parked = await prompt(db, t.setId, 'cheapest hotels in porto', { status: 'archived' });
+    const refused = await post<ErrorBody>(bulkPath('bulk-topic'), {
+      prompt_ids: [fits, stray],
+      topic_id: trail,
+    });
+    expect([refused.status, refused.body.error.details]).toEqual([
+      422,
+      { prompts: [expect.objectContaining({ prompt_id: stray })] },
+    ]);
+    expect(await topicsOf([fits, stray])).toEqual({ [fits]: null, [stray]: null });
+    const filed = await post<{ count: number }>(bulkPath('bulk-topic'), {
+      prompt_ids: [fits, parked],
+      topic_id: trail,
+    });
+    expect([filed.status, filed.body]).toEqual([200, { count: 2 }]);
+    expect(await topicsOf([fits, parked])).toEqual({ [fits]: trail, [parked]: trail });
+    const cleared = await post(bulkPath('bulk-topic'), { prompt_ids: [parked], topic_id: null });
+    expect([cleared.status, (await topicsOf([parked]))[parked]]).toEqual([200, null]);
+  });
+
+  it('assigns under the project lock: concurrent writers keep every change, and a topic deleted meanwhile refuses it', async () => {
+    const shoes = await topic(db, t.projectId, 'Shoes');
+    const socks = await topic(db, t.projectId, 'Socks');
+    const a = await prompt(db, t.setId, 'acme trail shoes', { status: 'archived' });
+    const b = await prompt(db, t.setId, 'acme road shoes', { status: 'archived' });
+    const c = await prompt(db, t.setId, 'acme running socks', { status: 'archived' });
+    const answers = await Promise.all([
+      post(bulkPath('bulk-topic'), { prompt_ids: [a, b], topic_id: shoes }),
+      post(bulkPath('bulk-topic'), { prompt_ids: [c], topic_id: socks }),
+      patch(`/prompts/${a}`, { text: 'acme trail running shoes' }),
+    ]);
+    expect(answers.map((answer) => answer.status)).toEqual([200, 200, 200]);
+    expect(await topicsOf([a, b, c])).toEqual({ [a]: shoes, [b]: shoes, [c]: socks });
+    const edited = await db
+      .selectFrom('prompts')
+      .select('text')
+      .where('id', '=', a)
+      .executeTakeFirstOrThrow();
+    expect(edited.text).toBe('acme trail running shoes');
+
+    const pending = await db.transaction().execute(async (deletion) => {
+      const { rows } = await sql<{ pid: number }>`select pg_backend_pid() as pid`.execute(deletion);
+      const blocker = rows[0]!.pid;
+      await acquireProjectLock(deletion, t.projectId);
+      await deletion.deleteFrom('topics').where('id', '=', socks).execute();
+      const request = post<ErrorBody>(bulkPath('bulk-topic'), { prompt_ids: [a], topic_id: socks });
+      await vi.waitFor(
+        async () => {
+          const blocked = await sql<{ waiting: boolean }>`select exists (
+            select 1 from pg_stat_activity where ${blocker} = any(pg_blocking_pids(pid))
+          ) as waiting`.execute(db);
+          expect(blocked.rows[0]!.waiting).toBe(true);
+        },
+        { timeout: 5000, interval: 20 },
+      );
+      return { request };
+    });
+    expect((await pending.request).status).toBe(404);
+    expect((await topicsOf([a]))[a]).toBe(shoes);
+  });
+
+  it('deletes a whole selection or none of it', async () => {
+    const a = await prompt(db, t.setId, 'acme trail shoes');
+    const b = await prompt(db, t.setId, 'acme road shoes');
+    const missing = await post(bulkPath('bulk-delete'), { prompt_ids: [a, randomUUID()] });
+    expect(missing.status).toBe(404);
+    expect(await promptTexts()).toEqual(['acme road shoes', 'acme trail shoes']);
+    const done = await post<{ count: number }>(bulkPath('bulk-delete'), { prompt_ids: [a, b] });
+    expect([done.status, done.body, await promptTexts()]).toEqual([200, { count: 2 }, []]);
+  });
+
+  it('rejects prompt ids from another workspace on every bulk route instead of skipping them', async () => {
+    const mine = await prompt(db, t.setId, 'acme trail shoes', { status: 'archived' });
+    const other = await fixtures.tenant();
+    const theirs = await prompt(db, await promptSet(db, other.projectId), 'acme road shoes', {
+      status: 'archived',
+    });
+    const answers = await Promise.all([
+      post(`/prompt-sets/${t.setId}/prompts/bulk-status`, {
+        prompt_ids: [mine, theirs],
+        status: 'active',
+      }),
+      post(bulkPath('bulk-topic'), { prompt_ids: [mine, theirs], topic_id: null }),
+      post(bulkPath('bulk-delete'), { prompt_ids: [mine, theirs] }),
+    ]);
+    expect(answers.map((answer) => answer.status)).toEqual([404, 404, 404]);
+    const kept = await db
+      .selectFrom('prompts')
+      .select(['id', 'status'])
+      .where('id', 'in', [mine, theirs])
+      .orderBy('id')
+      .execute();
+    expect(kept).toEqual([mine, theirs].sort().map((id) => ({ id, status: 'archived' })));
+    const foreignProject = await post(`${bulk.replace('{project}', other.projectId)}/bulk-delete`, {
+      prompt_ids: [theirs],
+    });
+    expect(foreignProject.status).toBe(404);
   });
 });
 
@@ -442,7 +600,6 @@ describe('candidate review', () => {
       branded: true,
       persona: 'Road runners',
     });
-    // Views omit the evidence; the provenance stays on the stored prompt.
     expect(review.body.accepted[0]).not.toHaveProperty('generation_evidence');
     const stored = await db
       .selectFrom('prompts')

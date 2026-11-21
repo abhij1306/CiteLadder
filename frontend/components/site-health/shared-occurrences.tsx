@@ -14,29 +14,17 @@ import {
 import { pageKindLabel } from '@/lib/site-health/page-kinds';
 import { pageDisplayTitle } from '@/lib/site-health/status';
 
-/**
- * Evidence shared by several pages is usually one template element, so the
- * question is the one fix that clears it everywhere. The scope is built from
- * the counts, not from the label the reader sees, and claims no more than the
- * loaded rows prove.
- */
 type SharedIssue = Pick<SiteIssue, 'group_id' | 'title' | 'rule_id'>;
 
 function sharedAskAgentPrompt(issue: SharedIssue, evidence: string, scope: SharedScope): string {
   const reach = scope.complete
     ? `${scope.pageCount} of the issue's ${scope.totalPageCount} affected pages`
     : `${scope.pageCount} of the ${scope.loadedPageCount} affected pages loaded so far; the issue affects ${scope.totalPageCount} pages`;
-  return `Analyze the Site Health issue "${issueTitle(issue)}" where the same evidence, ${evidence}, was found on several pages (${reach}). Check whether it comes from one shared template or component and propose the one fix that clears it on every page.`;
+  return `Analyze the Website issue "${issueTitle(issue)}" where the same evidence, ${evidence}, was found on several pages (${reach}). Check whether it comes from one shared template or component and propose the one fix that clears it on every page.`;
 }
 
 type SharedScope = Parameters<typeof sharedPagesLabel>[0];
 
-/**
- * Evidence several pages share, said once: the element, how many pages carry
- * it, one question for all of them, then the pages themselves. The handoff
- * names the issue group without a page, since the question is the fix that
- * clears every page at once.
- */
 export function SharedOccurrences({
   issue,
   entry,
@@ -51,12 +39,8 @@ export function SharedOccurrences({
   return (
     <Stack as="li" gap="workspace" className={ledgerItemClasses()}>
       <div className={insetClasses()}>
-        <EvidenceLine
-          lead={sharedEvidenceLead(entry.ruleId)}
-          facts={entry.facts}
-          text="itemTitle"
-        />
-        <span className="type-caption tabular-nums">{sharedPagesLabel(scope)}</span>
+        <EvidenceLine lead={sharedEvidenceLead(entry.ruleId)} facts={entry.facts} text="body" />
+        <span className="type-caption">{sharedPagesLabel(scope)}</span>
         <AskAgentLink
           appearance="text"
           handoff={{
@@ -85,11 +69,6 @@ export function SharedOccurrences({
   );
 }
 
-/**
- * One affected page, linking to its detail: its title with its kind at the
- * row's end, bound 4 over its URL. The URL keeps to one line (the full
- * address in its tooltip), so a long query string never stacks the row.
- */
 export function AffectedPageLink({
   crawlId,
   siteUrlId,
@@ -105,20 +84,23 @@ export function AffectedPageLink({
 }>) {
   return (
     <TextLink
-      text="itemTitle"
+      text="body"
       className="block min-w-0"
       href={`/site/crawls/${crawlId}/pages/${siteUrlId}`}
     >
       <Stack as="span" gap="tight" className="min-w-0">
         <Inline as="span" className="items-baseline justify-between">
-          <span className={textRole('itemTitle', 'min-w-0 [overflow-wrap:anywhere]')}>
+          <span
+            className={textRole('body', 'min-w-0 truncate')}
+            title={pageDisplayTitle(title, url)}
+          >
             {pageDisplayTitle(title, url)}
           </span>
           {pageKind ? (
             <span className="type-caption shrink-0">{pageKindLabel(pageKind)}</span>
           ) : null}
         </Inline>
-        <span className="type-caption min-w-0 truncate tabular-nums" title={url}>
+        <span className="type-caption min-w-0 truncate" title={url}>
           {url}
         </span>
       </Stack>

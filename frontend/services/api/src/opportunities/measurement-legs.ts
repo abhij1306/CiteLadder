@@ -1,4 +1,3 @@
-/** A declaration's next readings, projected without scheduling or acquiring them. */
 import { sql, type Selectable } from 'kysely';
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';

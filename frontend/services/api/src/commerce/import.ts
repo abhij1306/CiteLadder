@@ -1,21 +1,3 @@
-/**
- * The one catalog admission path (commerce improvement PR 6, CM3). The CSV
- * template, a Merchant Center feed and a Shopify storefront all arrive as
- * stored content parsed by `catalog-sources.ts`, and all write here:
- *
- * 1. `stageImport` keeps the raw content, idempotent on its hash, and returns
- *    the category tree it proposes. Nothing reaches the catalog yet.
- * 2. `applyImport`, once the person confirms that tree (leaving out any
- *    categories), matches each product by URL, SKU or GTIN (or name and brand
- *    when a row has none), appends one import observation per product, writes
- *    the categories with their parents, and records a catalog revision, which
- *    queues the 30-day answer backfill.
- *
- * A row matched by an identifier but naming a different URL updates that
- * product and keeps its URL; the new URL is recorded on the observation as an
- * alias. An in-app edit keeps its field while an import repeats what the field
- * last imported (`edits.ts`).
- */
 import { createHash, randomUUID } from 'node:crypto';
 import {
   catalogImportSchema,
@@ -57,11 +39,6 @@ type Outcome = CatalogImport['row_outcomes'][number];
 type ImportRow = Selectable<CommerceCsvImports>;
 type ParsedItem = Extract<CatalogItem, { kind: 'item' }>;
 
-/**
- * What a row writes over a product: an edited field keeps its edit while the
- * row repeats what it last imported. The categories it adds, when it changes
- * the category set, also record their import provenance in `sources`.
- */
 function editAware(
   sources: Record<string, unknown>,
   values: CatalogValues,
@@ -75,18 +52,15 @@ function editAware(
       ),
     ),
   );
-  // A range belongs to its low price: an edit holding the price holds the range too.
   if (applied.price === undefined) delete applied.price_max;
   const keys = categorySet(categories);
   if (!keys.length || editHolds(sources, 'categories', keys))
     return { applied, added: [] as string[], replaces: false };
-  // Taking over an edited set makes the row's categories the whole set, as a field.
   const replaces = editedField(sources, 'categories');
   sources.categories = { ...provenance, keys };
   return { applied, added: [...categories], replaces };
 }
 
-/** Adds the row's categories; a row taking over an edited set removes the rest. */
 async function writeCategories(
   db: Database,
   scope: CommerceScope,
@@ -141,11 +115,9 @@ const identityKeys = (row: Identity) =>
     row.sku ? `sku:${row.sku}` : '',
     row.gtin ? `gtin:${row.gtin}` : '',
   ].filter(Boolean);
-/** A product's name and brand, the identity of a row that names no URL, SKU or GTIN. */
 const nameKey = (row: Identity) =>
   row.name ? `name:${categoryKey(row.brand ?? '')}|${categoryKey(row.name)}` : '';
 
-/** The identifiers an edit replaced, as the field last imported them. */
 function importedKeys(row: Product) {
   const imported = (field: keyof Identity) => {
     const value = importedBaseline(row.field_sources, field);
@@ -158,20 +130,11 @@ function importedKeys(row: Product) {
   });
 }
 
-/**
- * The project's products by URL, SKU, GTIN and name, read once per import
- * (under the catalog lock) and kept current as rows write, so each row matches
- * in memory instead of scanning unindexed identifier columns. A row naming no
- * current identifier still matches the product whose edit replaced the
- * identifier it repeats, so re-importing the same file never splits an edited
- * product; a row naming no identifier at all matches by name and brand.
- */
 class ProductIndex {
   private readonly rows = new Map<string, Product>();
   private readonly keys = new Map<string, Set<string>>();
   private readonly replaced = new Map<string, Set<string>>();
   private readonly categories = new Map<string, string>();
-  /** Each product's category keys, so a row joining none new changes nothing. */
   private readonly memberships = new Map<string, Set<string>>();
 
   static async load(db: Database, scope: CommerceScope) {
@@ -205,7 +168,6 @@ class ProductIndex {
     return index;
   }
 
-  /** Whether the product joins a category it is not in yet; records the joins. */
   joins(productId: string, names: readonly string[]) {
     const keys = this.memberships.get(productId) ?? new Set<string>();
     const fresh = names.map(categoryKey).filter((key) => !keys.has(key));
@@ -248,7 +210,6 @@ class ProductIndex {
     return id;
   }
 
-  /** The categories this import wrote, by key. */
   written(): ReadonlyMap<string, string> {
     return this.categories;
   }
@@ -256,10 +217,8 @@ class ProductIndex {
 
 const numeric = (value: string | number | null | undefined) =>
   value === null || value === undefined ? null : Number(value);
-/** A price as the numeric column returns it. */
 const stored = (value: number | null) => (value === null ? null : String(value));
 
-/** Whether `applied` changes any of the product's current values. */
 function changes(product: Product, applied: CatalogValues) {
   return Object.entries(applied).some(([field, value]) => {
     const previous = product[field as keyof CatalogValues];
@@ -269,15 +228,9 @@ function changes(product: Product, applied: CatalogValues) {
   });
 }
 
-/** An identifier match keeps the product's URL; a different URL in the row is an alias. */
 const aliasOf = (product: Product, url: string | undefined) =>
   product.canonical_url && url && product.canonical_url !== url ? url : undefined;
 
-/**
- * The columns a row writes beyond its applied values, and whether any of it
- * changes the product: a price without a range ends the range an earlier
- * import gave the product, and listed variants replace the product's.
- */
 function rowColumns(product: Product, applied: CatalogValues, variants: CatalogVariant[]) {
   const priceMax = applied.price === undefined ? undefined : (applied.price_max ?? null);
   const listed = variants.length ? JSON.stringify(variants) : undefined;
@@ -290,7 +243,6 @@ function rowColumns(product: Product, applied: CatalogValues, variants: CatalogV
     ...(priceMax === undefined ? {} : { price_max: priceMax }),
     ...(listed ? { variants: listed } : {}),
   };
-  /** The product as the index keeps it once the row is written. */
   const after = (sources: Record<string, unknown>): Product => ({
     ...product,
     ...applied,
@@ -331,7 +283,6 @@ async function importItem(
   const categories = keptCategories(item.paths, run.excluded);
   const { applied, added, replaces } = editAware(sources, values, categories, provenance);
   const row = rowColumns(product, applied, item.variants);
-  // Always recorded, so a later row of this file joining the same categories is unchanged.
   const joined = index.joins(product.id, added);
   for (const field of Object.keys(applied)) sources[field] = provenance;
   if (row.listed) sources.variants = provenance;
@@ -365,7 +316,6 @@ async function importItem(
   return outcome(item.row_number, row.changed || joined ? 'updated' : 'unchanged', product.id);
 }
 
-/** The parents of the categories this import wrote, from its proposed tree. */
 async function writeParents(
   db: Database,
   scope: CommerceScope,
@@ -412,7 +362,6 @@ async function stageOf(db: Database, scope: CommerceScope, row: ImportRow, items
   });
 }
 
-/** How stored content is labelled: its media type, sniffed for a feed. */
 function contentType(format: CatalogFormat, content: string) {
   const start = content.trimStart();
   if (format === 'shopify' || start.startsWith('{') || start.startsWith('['))
@@ -426,15 +375,9 @@ function contentType(format: CatalogFormat, content: string) {
 type CatalogSource = {
   format: CatalogFormat;
   content: string;
-  /** The file name, or the Shopify store host. */
   label: string;
 };
 
-/**
- * Stage an import: keep its content and show the category tree it proposes.
- * The same content again returns the earlier import, staged or applied. A
- * file that cannot be read is refused before anything is stored.
- */
 export async function stageImport(db: Database, scope: CommerceScope, source: CatalogSource) {
   const items = catalogItems(source.format, source.content);
   const hash = createHash('sha256').update(`${source.format}\n${source.content}`).digest('hex');
@@ -476,11 +419,6 @@ export async function stageImport(db: Database, scope: CommerceScope, source: Ca
   return stageOf(db, scope, row, items);
 }
 
-/**
- * Apply a staged import with the category tree the person confirmed: the
- * proposed categories named in `excluded` (and those under them) are left
- * out. Applying an import twice returns its first result.
- */
 export function applyImport(
   db: Database,
   scope: CommerceScope,
@@ -511,7 +449,6 @@ export function applyImport(
           : await importItem(trx, scope, run, item), // NOSONAR -- One transaction; rows share the product index in file order.
       );
     await writeParents(trx, scope, items, index.written());
-    // Rejected rows first, so the reasons lead the results.
     outcomes.sort(
       (a, b) =>
         Number(b.status === 'rejected') - Number(a.status === 'rejected') ||
@@ -535,7 +472,6 @@ export function applyImport(
       .where('project_id', '=', scope.projectId)
       .returningAll()
       .executeTakeFirstOrThrow();
-    // A changed catalog becomes a revision that re-matches recent answers.
     await recordCatalogRevision(trx, scope, { kind: 'import', id: row.id });
     return resultOf(applied);
   });

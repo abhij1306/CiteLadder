@@ -14,7 +14,6 @@ describe('URLs a page declares resolve against its document base', () => {
     );
     expect(page.canonical_declarations).toEqual(['https://cdn.other.test/docs/post']);
     expect(page.canonical_url).toBe('https://cdn.other.test/docs/post');
-    // An empty declaration names nothing, rather than the base itself.
     const empty = facts(
       '<link rel="canonical" href=" "><main><p>Text</p></main>',
       'https://e.test/a',

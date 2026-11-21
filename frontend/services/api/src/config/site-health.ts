@@ -1,4 +1,3 @@
-/** Site Health policy. */
 import { createHash } from 'node:crypto';
 import { compareText } from '../text-order.ts';
 import architecture from './site-health/architecture.json' with { type: 'json' };
@@ -55,7 +54,6 @@ function remediationRoute(rule: (typeof rules)[number]) {
 }
 
 export const siteHealth = {
-  interactive: { admission_seconds: 30, timeout_seconds: 180, concurrency: 2 },
   ...architecture,
   ...links,
   ...acquisition,

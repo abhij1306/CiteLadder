@@ -3,11 +3,6 @@ import { z } from 'zod';
 const responseObject = <Shape extends z.ZodRawShape>(shape: Shape) => z.strictObject(shape);
 const uuid = () => z.uuid();
 
-// ---------------------------------------------------------------------------
-// Providers (BYOK) — secret never present
-// ---------------------------------------------------------------------------
-
-// The complete BYOK transport surface exposed by the provider catalog.
 export const transportProviderSchema = z.enum(['openai', 'anthropic', 'google', 'dataforseo']);
 // Every engine the analysis side understands. `google_ai_overview` is an
 // OBSERVED search surface rather than a conversational engine, and it is a
@@ -21,19 +16,14 @@ export const logicalEngineSchema = z.enum([
   'chatgpt_search',
   'gemini_consumer',
 ]);
-// How a surface is reached, and therefore which request shape it has. An
-// `llm` route is asked a question; a `search_ai` route is observed.
 export const surfaceKindSchema = z.enum(['llm', 'search_ai', 'llm_scraper']);
 
-// A configured route on a connection: which logical engine this transport
-// serves and the concrete transport model to call.
 const providerRouteSchema = responseObject({
   id: uuid(),
   logical_engine: logicalEngineSchema,
   transport_provider: transportProviderSchema,
   transport_model: z.string(),
   is_default: z.boolean(),
-  // Backend defaults to true.
   active: z.boolean().optional(),
 });
 
@@ -48,19 +38,14 @@ export const providerConnectionSchema = responseObject({
   transport_provider: transportProviderSchema,
   base_url: z.string().nullable(),
   active: z.boolean(),
-  // Presence flag only — the key value itself is NEVER on the wire.
   api_key_set: z.boolean().optional(),
   last_tested_at: z.string().nullable().optional(),
-  // Backend defaults to '' (untested); accept any short status string.
   last_test_status: z.string().optional(),
   routes: z.array(providerRouteSchema).optional(),
   created_at: z.string(),
   updated_at: z.string(),
 });
 
-// `retrieval_enabled` and `reasoning_effort` describe how an LLM is ASKED and
-// are null on an observed search surface. Read `surface_kind` to know which
-// shape a route is, rather than inferring it from a missing field.
 const providerCatalogRouteSchema = responseObject({
   transport_provider: transportProviderSchema,
   transport_model: z.string(),
@@ -69,23 +54,17 @@ const providerCatalogRouteSchema = responseObject({
   surface_kind: surfaceKindSchema,
 });
 
-// The catalogue's display name for the engine. Engines arrive in display order.
 const providerCatalogEngineSchema = responseObject({
   logical_engine: logicalEngineSchema,
   label: z.string().min(1),
   routes: z.array(providerCatalogRouteSchema),
 });
 
-// The one engine catalogue the browser reads: which engines exist, their labels,
-// their display order (the array order) and each route's surface kind.
 export const providerCatalogSchema = responseObject({
   transports: z.array(transportProviderSchema),
   engines: z.array(providerCatalogEngineSchema),
 });
 
-// `POST /provider-connections/{id}/test`. Lives here with every other response
-// contract rather than beside the caller, and locks `status` to the two values
-// the backend actually emits so a probe outcome cannot be a free string.
 export const connectionTestResultSchema = responseObject({
   connection_id: uuid(),
   status: z.enum(['ok', 'failed']),

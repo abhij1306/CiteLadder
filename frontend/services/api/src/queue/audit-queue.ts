@@ -8,16 +8,13 @@ import { auditEvent, transitionAudit } from '../audits/state.ts';
 import { AUDIT_LANE, TaskQueue, type ClaimFilter } from './task-queue.ts';
 
 export type AuditTask = Selectable<AuditTasks>;
-/** A row this claim leased: its `lease_owner` is the claim's own owner, for every later write. */
 export type ClaimedAuditTask = AuditTask & { lease_owner: string };
 const table = 'audit_tasks';
-/** `audit_tasks.lease_owner` is `varchar(64)`. */
 const LEASE_OWNER_MAX_LENGTH = 64;
 const { statuses } = policy.task_queue;
 
 export type AuditClaimScope = { workspaceId: string; auditId: string };
 
-/** Claims only these audits' tasks, each in its own workspace. */
 function auditScope(scope: AuditClaimScope | readonly AuditClaimScope[]): ClaimFilter {
   const scopes: readonly AuditClaimScope[] = 'auditId' in scope ? [scope] : scope;
   return (column) =>
@@ -32,11 +29,6 @@ function auditScope(scope: AuditClaimScope | readonly AuditClaimScope[]): ClaimF
       : sql<boolean>`false`;
 }
 
-/**
- * Lease the earliest due audit schedules, committed before planning: an
- * expired lease is due again, and a held one is skipped, so two schedulers
- * never plan the same occurrence.
- */
 export function claimDueSchedules(
   db: Database,
   options: { owner: string; at: Date; limit: number; leaseSeconds: number },
@@ -77,7 +69,6 @@ export function claimDueSchedules(
       id: schedule.id,
       workspaceId: schedule.workspace_id,
       projectId: schedule.project_id,
-      // The due filter excludes schedules without a next run.
       scheduledFor: schedule.next_run_at ?? options.at,
     }));
   });
@@ -108,7 +99,6 @@ export async function ownedAuditTask(db: Database, claimed: AuditTask, owner: st
   return task ? { audit, task } : null;
 }
 
-/** Polling and capacity parks keep the paid-attempt budget unchanged. Caller owns the transaction. */
 export function parkAuditTask(
   db: Database,
   task: AuditTask,
@@ -132,11 +122,6 @@ export function parkAuditTask(
     .execute();
 }
 
-/**
- * The audit lane's domain side on the shared queue owner: claims are scoped
- * to audits, and every write after the claim takes the parent audit lock
- * first (`ownedAuditTask`).
- */
 export class AuditQueue {
   readonly db: Database;
   readonly now: () => Date;
@@ -146,12 +131,6 @@ export class AuditQueue {
     this.now = now ?? (() => new Date());
     this.#tasks = new TaskQueue(db, AUDIT_LANE, { leaseTtlSeconds: leaseSeconds, now });
   }
-  /**
-   * The claim and fairness cursor commit before any provider dispatch. Each
-   * claim leases its rows to `<owner>:<nonce>`: the lane charges no attempt
-   * at claim or uncertain reclaim, so only this per-claim owner tells a stale
-   * slot's lease from the same worker's re-claim of the task.
-   */
   async claim(
     owner: string,
     limit = 1,
@@ -167,7 +146,6 @@ export class AuditQueue {
     });
     return rows.map((row) => ({ ...row, lease_owner: leaseOwner }));
   }
-  /** Earliest claimable time or lease expiry, so an idle runner stays for a retry, provider poll or recovery due soon. */
   nextDue(): Promise<Date | null> {
     return this.#tasks.nextDue();
   }

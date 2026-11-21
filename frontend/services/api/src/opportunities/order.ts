@@ -1,8 +1,3 @@
-/**
- * The shared Opportunity queue order, the one Opportunity-level user write
- * (`commands.update_order`). It stores stable keys, so the order survives
- * refreshes that replace the rows, and never touches derived evidence.
- */
 import { randomUUID } from 'node:crypto';
 
 import { asApiErrorCode } from '@citeladder/contracts/error-codes';

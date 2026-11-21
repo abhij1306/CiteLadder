@@ -9,7 +9,6 @@ import { chooseFilterOption } from '@/test/all-filters';
 import { renderWithProviders } from '@/test/render';
 import { InventorySection } from './inventory-section';
 
-/** The Pages tab's browser: the view switch and filter above its table. */
 function PagesBrowser() {
   return <InventorySection mode="scored" crawl={makeSiteCrawl()} active={false} />;
 }
@@ -24,7 +23,6 @@ afterAll(() => mswServer.close());
 
 describe('InventorySection', () => {
   it('keeps the page browser’s rows and pager on screen while the next page loads', async () => {
-    // A full first page of ten rows, then one more on the second.
     const firstPage = [
       makePageSummary({ title: 'Homepage' }),
       ...Array.from({ length: 9 }, (_, index) =>
@@ -53,15 +51,11 @@ describe('InventorySection', () => {
     await user.click(await screen.findByRole('button', { name: 'Next page' }));
 
     const table = screen.getByRole('region', { name: 'Pages' });
-    const ordinal = (title: string) =>
-      within(table).getByText(title).closest('tr')?.querySelector('td')?.textContent;
-    expect(ordinal('Homepage')).toBe('1');
+    expect(within(table).getByText('Homepage')).toBeInTheDocument();
     expect(table).toHaveAttribute('aria-busy', 'true');
     expect(within(table).getByRole('button', { name: 'Previous page' })).toBeInTheDocument();
     expect(await within(table).findByText('Pricing')).toBeInTheDocument();
     expect(within(table).queryByText('Homepage')).not.toBeInTheDocument();
-    // The "#" column runs on from the page before rather than restarting.
-    expect(ordinal('Pricing')).toBe('11');
   });
 
   it('keeps the current tab’s rows on screen while another tab’s first page loads', async () => {
@@ -84,15 +78,12 @@ describe('InventorySection', () => {
     renderWithProviders(<PagesBrowser />);
     expect(await screen.findByText('Homepage')).toBeInTheDocument();
 
-    await user.click(screen.getByRole('radio', { name: 'Errors & Blocked' }));
+    await user.click(screen.getByRole('radio', { name: 'Errors' }));
 
     expect(screen.getByText('Homepage')).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Pages' })).toHaveAttribute('aria-busy', 'true');
     expect(await screen.findByText('Broken page')).toBeInTheDocument();
-    expect(screen.getByRole('radio', { name: 'Errors & Blocked' })).toHaveAttribute(
-      'aria-checked',
-      'true',
-    );
+    expect(screen.getByRole('radio', { name: 'Errors' })).toHaveAttribute('aria-checked', 'true');
   });
 
   it('asks the server for the page kind picked in the table toolbar', async () => {
@@ -153,6 +144,31 @@ describe('InventorySection', () => {
     ).toBeInTheDocument();
   });
 
+  it('lists every page again once the search box is emptied, without Enter', async () => {
+    window.history.replaceState(null, '', '/site');
+    mswServer.use(
+      http.get(PAGES, ({ request }) => {
+        const query = new URL(request.url).searchParams.get('query');
+        return HttpResponse.json({
+          items: [makePageSummary({ title: query ? 'Bags' : 'Homepage' })],
+          next_cursor: null,
+          root_errors: [],
+        });
+      }),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<PagesBrowser />);
+    const search = () => screen.getByRole('searchbox', { name: 'Search pages' });
+    await user.type(await screen.findByRole('searchbox', { name: 'Search pages' }), '/bags{Enter}');
+    expect(await screen.findByText('Bags')).toBeInTheDocument();
+
+    await user.clear(search());
+
+    expect(await screen.findByText('Homepage')).toBeInTheDocument();
+    expect(screen.queryByText('Bags')).not.toBeInTheDocument();
+    expect(new URLSearchParams(window.location.search).get('pages_query')).toBeNull();
+  });
+
   it('draws the discovered pages’ first load inside their table', async () => {
     mswServer.use(
       http.get(INVENTORY, async () => {
@@ -173,5 +189,42 @@ describe('InventorySection', () => {
     expect(
       await within(table).findByRole('status', { name: 'Loading discovered pages…' }),
     ).toBeInTheDocument();
+  });
+
+  it('prints discovered URLs without the origin they all share', async () => {
+    const discovered = (site_url_id: string, display_url: string) => ({
+      ...makePageSummary({ site_url_id, display_url, normalized_url: display_url }),
+      content_type: 'text/html',
+      source: 'sitemap',
+      depth: 1,
+      first_seen_at: null,
+      last_seen_at: null,
+    });
+    mswServer.use(
+      http.get(INVENTORY, () =>
+        HttpResponse.json({
+          items: [
+            discovered(LATER_PAGE, 'https://acme.com/journal/teapots'),
+            discovered(SITE_HEALTH_UUID_2, 'https://acme.com/'),
+          ],
+          next_cursor: null,
+        }),
+      ),
+    );
+    renderWithProviders(
+      <InventorySection
+        mode="discovering"
+        crawl={makeSiteCrawl({ status: 'running', discovery_status: 'running' })}
+        active
+      />,
+    );
+
+    const table = screen.getByRole('region', { name: 'Pages discovered so far' });
+    await within(table).findByRole('cell', { name: '/journal/teapots' });
+    const firstCells = within(table)
+      .getAllByRole('row')
+      .slice(1, 3)
+      .map((row) => within(row).getAllByRole('cell')[0]!.textContent);
+    expect(firstCells).toEqual(['/journal/teapots', '/']);
   });
 });

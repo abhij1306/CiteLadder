@@ -1,21 +1,8 @@
 // @vitest-environment node
-//
-// Pure logic: no DOM, no window, no React render. The suite-wide jsdom
-// default costs a full environment per file and buys nothing here.
 import { describe, expect, it } from 'vite-plus/test';
 
 import { MARKET_COUNTRIES, MARKET_LANGUAGES, marketLabel } from './markets';
 
-/**
- * These options feed the setup and market pickers and are submitted verbatim
- * as `country_code` / `language_code`, so a malformed entry is not a cosmetic
- * problem — it is a request the backend rejects for a value the user could
- * not have typed wrong.
- *
- * The shapes asserted here are the ones the module documents: a 2-letter
- * uppercase country, and a language that is either 2 lowercase letters or
- * `xx-YY`.
- */
 const COUNTRY_CODE = /^[A-Z]{2}$/;
 const LANGUAGE_CODE = /^[a-z]{2}(-[A-Z]{2})?$/;
 
@@ -47,8 +34,6 @@ describe('market options', () => {
     ['language', MARKET_LANGUAGES],
   ])('has no duplicate %s values', (_name, options) => {
     const values = options.map((option) => option.value);
-    // A duplicate value makes two select entries indistinguishable to React's
-    // keying and to the user.
     expect(new Set(values).size).toBe(values.length);
   });
 
@@ -61,8 +46,6 @@ describe('market options', () => {
   });
 
   it('offers a plain base language alongside every regional variant', () => {
-    // `en-GB` without `en` would leave a user unable to pick the generic
-    // language the backend treats as the default.
     const values = new Set(MARKET_LANGUAGES.map((option) => option.value));
     for (const value of values) {
       if (!value.includes('-')) continue;

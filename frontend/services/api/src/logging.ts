@@ -1,10 +1,3 @@
-/**
- * Structured JSON logging keyed by request id.
- *
- * Records carry `event`, `logger`, `level`, Cloud Logging's `severity`,
- * `correlation_id` and `timestamp` so one log query covers every record. The correlation id travels in
- * AsyncLocalStorage.
- */
 import { AsyncLocalStorage } from 'node:async_hooks';
 
 type Level = 'debug' | 'info' | 'warning' | 'error';
@@ -24,7 +17,6 @@ const correlation = new AsyncLocalStorage<string>();
 
 let sink: LogSink = (line) => process.stdout.write(`${line}\n`);
 
-/** Replace the output sink (tests capture records through this). */
 export function setLogSink(next: LogSink): LogSink {
   const previous = sink;
   sink = next;

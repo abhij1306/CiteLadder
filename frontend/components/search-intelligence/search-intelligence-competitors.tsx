@@ -1,8 +1,8 @@
-import { Users } from 'lucide-react';
-
+import { BrandMark } from '@/components/ui/brand-mark';
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
-import { ClampText, TableCell, TableRow } from '@/components/ui/table';
-import { textRole } from '@/components/ui/typography';
+import { useShownSpan } from '@/components/ui/data-table-fit';
+import { Inline } from '@/components/ui/layout';
+import { TableCell, TableCellLines, TableRow } from '@/components/ui/table';
 import { Pressable } from '@/components/ui/pressable';
 import { TextLink } from '@/components/ui/text-link';
 import type {
@@ -10,13 +10,13 @@ import type {
   SearchIntelligenceReadiness,
 } from '@/lib/api/search-intelligence';
 import { searchDatasetKindsWith } from '@citeladder/contracts/search-intelligence';
+import { Users } from '@/lib/icons';
 import { SEARCH_DATASET_LABELS } from '@/lib/config/search-intelligence';
 
 const COMPARISON_KINDS = searchDatasetKindsWith('comparison');
 import { datasetCount } from './search-intelligence-format';
 import { SearchValue } from './search-intelligence-value';
 
-// A reviewed canonical host may be www while saved competitor identities use apex domains.
 export function matchesCompetitor(origin: string, domain: string): boolean {
   if (!origin) return false;
   try {
@@ -36,11 +36,31 @@ export function SearchIntelligenceCompetitors({
   competitors: SearchIntelligenceReadiness['competitors'];
   onOpen: (dataset: SearchIntelligenceDataset) => void;
 }>) {
+  const rows = competitors.map((competitor) => {
+    const footprint = datasets.find(
+      (item) =>
+        item.dataset_kind === 'footprint' &&
+        matchesCompetitor(item.target_origin, competitor.registrable_domain),
+    );
+    const comparisons = new Map(
+      COMPARISON_KINDS.map((kind) => [
+        kind,
+        datasets.find(
+          (item) =>
+            item.dataset_kind === kind &&
+            matchesCompetitor(item.comparison_origin, competitor.registrable_domain),
+        ),
+      ]),
+    );
+    const fetched = Boolean(footprint) || [...comparisons.values()].some(Boolean);
+    return { competitor, footprint, comparisons, fetched };
+  });
+  const noneFetched = rows.length > 0 && !rows.some((row) => row.fetched);
   return (
     <DataTable
       title="Competitive footprint"
-      columns={COMPETITOR_COLUMNS}
-      minWidth="md"
+      description={noneFetched ? 'Competitive footprint not fetched yet' : undefined}
+      columns={noneFetched ? COMPETITOR_COLUMNS.slice(0, 1) : COMPETITOR_COLUMNS}
       state={
         competitors.length
           ? undefined
@@ -48,34 +68,33 @@ export function SearchIntelligenceCompetitors({
               kind: 'empty',
               icon: Users,
               heading: 'No competitors saved for this project',
-              headingLevel: 3,
             }
       }
     >
-      {competitors.map((competitor) => {
-        const footprint = datasets.find(
-          (item) =>
-            item.dataset_kind === 'footprint' &&
-            matchesCompetitor(item.target_origin, competitor.registrable_domain),
+      {rows.map(({ competitor, footprint, comparisons, fetched }) => {
+        const identity = (
+          <TableCell>
+            <Inline as="span">
+              <BrandMark name={competitor.label} websiteUrl={competitor.hostname} />
+              <TableCellLines
+                title
+                primary={competitor.label}
+                secondary={footprint?.target_hostname ?? competitor.hostname}
+              />
+            </Inline>
+          </TableCell>
         );
-        const comparison = (kind: string) =>
-          datasets.find(
-            (item) =>
-              item.dataset_kind === kind &&
-              matchesCompetitor(item.comparison_origin, competitor.registrable_domain),
+        if (noneFetched) return <TableRow key={competitor.identity}>{identity}</TableRow>;
+        if (!fetched)
+          return (
+            <TableRow key={competitor.identity}>
+              {identity}
+              <NotFetchedCell />
+            </TableRow>
           );
         return (
           <TableRow key={competitor.identity}>
-            <TableCell>
-              <div className="grid max-w-sm min-w-0">
-                <ClampText lines={1} className={textRole('itemTitle')}>
-                  {competitor.label}
-                </ClampText>
-                <ClampText lines={1} className={textRole('caption')}>
-                  {footprint?.target_hostname ?? competitor.hostname}
-                </ClampText>
-              </div>
-            </TableCell>
+            {identity}
             <TableCell numeric>
               <SearchValue
                 value={footprint?.summary.organic_keywords}
@@ -89,14 +108,14 @@ export function SearchIntelligenceCompetitors({
               />
             </TableCell>
             {COMPARISON_KINDS.map((kind) => {
-              const dataset = comparison(kind);
+              const dataset = comparisons.get(kind);
               return (
                 <TableCell numeric key={kind}>
                   {dataset ? (
                     <TextLink asChild text="body">
                       <Pressable
-                        className="w-auto text-center"
-                        aria-label={`${competitor.label}: ${SEARCH_DATASET_LABELS[kind]}`}
+                        className="min-h-6 w-auto min-w-6 text-center"
+                        aria-label={`${datasetCount(dataset)} ${SEARCH_DATASET_LABELS[kind]}: ${competitor.label}`}
                         onClick={() => onOpen(dataset)}
                       >
                         {datasetCount(dataset)}
@@ -116,9 +135,19 @@ export function SearchIntelligenceCompetitors({
 }
 
 const COMPETITOR_COLUMNS: readonly DataTableColumn[] = [
-  { key: 'competitor', label: 'Competitor' },
-  { key: 'organic', label: 'Organic keywords', width: 'figure', numeric: true },
-  { key: 'traffic', label: 'Est. monthly traffic', width: 'figure', numeric: true },
-  { key: 'missing', label: 'Missing keywords', width: 'figure', numeric: true },
-  { key: 'shared', label: 'Shared keywords', width: 'figure', numeric: true },
+  { key: 'competitor', label: 'Competitor', kind: 'identity' },
+  { key: 'organic', label: 'Organic keywords', kind: 'number' },
+  { key: 'traffic', label: 'Est. monthly traffic', kind: 'number', priority: 'low' },
+  { key: 'missing', label: 'Missing keywords', kind: 'number' },
+  { key: 'shared', label: 'Shared keywords', kind: 'number' },
 ];
+
+const FIGURE_KEYS = COMPETITOR_COLUMNS.slice(1).map((column) => column.key);
+
+function NotFetchedCell() {
+  return (
+    <TableCell colSpan={useShownSpan(FIGURE_KEYS)}>
+      <SearchValue value={null} fetched={false} />
+    </TableCell>
+  );
+}

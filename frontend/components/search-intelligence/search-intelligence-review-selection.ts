@@ -11,25 +11,16 @@ import { matchesCompetitor } from './search-intelligence-competitors';
 export const selectionKey = (selection: SearchDatasetSelectionRequest) =>
   `${selection.kind}:${selection.competitor_id ?? ''}`;
 
-/**
- * The server sends every list dataset's depth, saved or default; any other
- * kind has a fixed size the API sets, so its request depth is 1.
- */
 function depthFor(data: SearchIntelligenceReadiness, kind: SearchDatasetKind) {
   return data.preferences.depths[kind] ?? 1;
 }
 
-/**
- * Every saved competitor, the remembered ones first. A remembered choice orders
- * the list; it never hides a competitor the project still has.
- */
 export function reviewCompetitors(data: SearchIntelligenceReadiness): string[] {
   const all = data.competitors.map(({ identity }) => identity);
   const preferred = data.preferences.competitor_ids.filter((id) => all.includes(id));
   return [...preferred, ...all.filter((id) => !preferred.includes(id))];
 }
 
-/** The website the review starts on: the remembered one, else the first. */
 export function reviewOwnedTarget(data: SearchIntelligenceReadiness) {
   return (
     data.owned_targets.find((target) => target.identity === data.preferences.owned_target_id) ??
@@ -52,15 +43,12 @@ export function availableSelections(
   ];
 }
 
-/** Whether a saved dataset already answers this selection, so a refresh re-reads it. */
 function saved(data: SearchIntelligenceReadiness, selection: SearchDatasetSelectionRequest) {
   const owned = reviewOwnedTarget(data)?.origin;
   const competitor = data.competitors.find((item) => item.identity === selection.competitor_id);
   return data.datasets.some((dataset) => {
     if (dataset.dataset_kind !== selection.kind) return false;
     if (!competitor) return dataset.target_origin === owned && !dataset.comparison_origin;
-    // A comparison belongs to one of your websites as well as the competitor;
-    // one saved for another of your websites does not answer this review.
     if (SEARCH_DATASET_KINDS[selection.kind].comparison)
       return (
         dataset.target_origin === owned &&
@@ -70,11 +58,6 @@ function saved(data: SearchIntelligenceReadiness, selection: SearchDatasetSelect
   });
 }
 
-/**
- * What the review starts with. A keyword seed asks for suggestions only; a refresh
- * or deeper fetch re-reads what is saved; a new analysis starts from the small
- * preset: the owned footprint and rankings, and one competitor's keyword gaps.
- */
 export function defaultSelections(
   data: SearchIntelligenceReadiness,
   action: string,

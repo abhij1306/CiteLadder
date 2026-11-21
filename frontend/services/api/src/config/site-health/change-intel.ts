@@ -1,4 +1,3 @@
-/** Change comparison bounds and processing identity. */
 const config = {
   analyzer_version: 'site-change-v1',
   max_pages: 5000,

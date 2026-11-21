@@ -1,21 +1,22 @@
 import { useState } from 'react';
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
-import { GitCompare } from 'lucide-react';
 
-import { Badge, type BadgeTone } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { StatusMark, type StatusTone } from '@/components/ui/status-mark';
+import { ActionButton } from '@/components/ui/actions';
 import { DataTable, type DataTableColumn, type DataTableState } from '@/components/ui/data-table';
 import { Inline, Stack } from '@/components/ui/layout';
-import { readErrorProps } from '@/components/ui/read-error';
-import { StatRow } from '@/components/ui/stat-row';
-import { ClampText, TableCell, TableRow } from '@/components/ui/table';
+import { TableCell, TableRow, UrlText } from '@/components/ui/table';
+import { GitCompare } from '@/lib/icons';
+import { readableUrl, sharedOrigin } from '@/lib/format';
 import { TextLink } from '@/components/ui/text-link';
 import { siteHealthQueries } from '@/lib/api/site-health-queries';
 import type { ChangeObservation, ChangeSummary } from '@citeladder/contracts';
 import { useCursorTableQuery } from '@/lib/table/use-cursor-table-query';
 import { changeFieldLabel } from '@/lib/site-health/change-fields';
 import { ChangeEvidenceDrawer } from './changes-panel-evidence';
+import { readErrorProps } from '@/components/ui/notice';
+import { READ_FAILED, StateBlock } from '@/components/ui/state-block';
+import { FigureStrip } from '@/components/ui/figure-strip';
 
 const CLASS_LABELS = {
   improvement: 'Improvement',
@@ -24,21 +25,21 @@ const CLASS_LABELS = {
   'critical-regression': 'Critical regression',
 } as const;
 
-/** A change class is a delta, so it carries the delta's direction. */
-const CLASS_TONES: Readonly<Record<keyof typeof CLASS_LABELS, BadgeTone>> = {
+const CLASS_TONES: Readonly<Record<keyof typeof CLASS_LABELS, StatusTone>> = {
   improvement: 'positive',
   'neutral-change': 'neutral',
   'potential-regression': 'warning',
   'critical-regression': 'negative',
 };
 
-function displayPath(url: string) {
-  try {
-    const parsed = new URL(url);
-    return `${parsed.hostname}${parsed.pathname}`;
-  } catch {
-    return url;
-  }
+function comparedPair(data: ChangeSummary | undefined) {
+  const crawlAId = data?.crawl_a_id ?? undefined;
+  const crawlBId = data?.crawl_b_id ?? undefined;
+  return {
+    crawlAId,
+    crawlBId,
+    pairAvailable: data?.state === 'available' && Boolean(crawlAId && crawlBId),
+  };
 }
 
 export function ChangesPanel({
@@ -48,14 +49,7 @@ export function ChangesPanel({
   const scope = { workspaceId, projectId };
   const summary = useQuery(siteHealthQueries.changesSummary(scope));
   const [selected, setSelected] = useState<ChangeObservation | undefined>(undefined);
-  const crawlAId = summary.data?.crawl_a_id ?? undefined;
-  const crawlBId = summary.data?.crawl_b_id ?? undefined;
-  const pairAvailable = summary.data?.state === 'available' && Boolean(crawlAId && crawlBId);
-  // A page turn keeps the rows and the pager on screen until the next changes
-  // land. The compared pair is part of the cursor's identity server-side, so
-  // a new pair restarts paging rather than replaying a refused cursor. No
-  // exact total: no persisted count describes one pair's change set, so the
-  // range stands alone rather than paying for a COUNT(*) per navigation.
+  const { crawlAId, crawlBId, pairAvailable } = comparedPair(summary.data);
   const { page, table } = useCursorTableQuery({
     workspaceId,
     // Rows carry over only within the same compared pair: a row of another
@@ -65,12 +59,12 @@ export function ChangesPanel({
     query: (request) => siteHealthQueries.changes(scope, { crawlAId, crawlBId, ...request }),
     noun: 'changes',
     loading: 'Loading persisted website changes…',
-    error: 'Could not load Website Changes.',
+    subject: 'the website changes',
     empty: () => ({
       kind: 'empty',
       icon: GitCompare,
       headingLevel: 3,
-      heading: 'No changes were observed in this comparable pair',
+      heading: 'No tracked fields changed between your last two crawls',
     }),
     enabled: pairAvailable,
   });
@@ -78,33 +72,30 @@ export function ChangesPanel({
     summary.data?.state === 'available'
       ? (summary.data.summary.counts_by_class as Record<string, number> | undefined)
       : undefined;
-  // Until the summary says which pair to compare, and whenever no pair can
-  // be compared, that answer stands in the table's place at its full height.
   const summaryState = comparisonState(summary, pairAvailable);
+  const origin = sharedOrigin(page?.items.map((row) => row.normalized_url) ?? []);
   return (
     <Stack gap="workspace" className="min-w-0" data-testid="website-changes">
-      <Card>
-        <CardHeader>
-          <CardTitle>Since the previous crawl</CardTitle>
-          <CardDescription>
-            What changed on your pages between your last two crawls. Expected means the change
-            matches an implementation you declared.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <StatRow
-            segments={Object.entries(CLASS_LABELS).map(([key, label]) => ({
-              key,
-              label,
-              value: counts ? (counts[key] ?? 0) : null,
-            }))}
-          />
-        </CardContent>
-      </Card>
+      {summary.isPending ? (
+        <StateBlock
+          kind="loading"
+          label="Loading the change counts…"
+          shape={{ kind: 'figures', count: 4 }}
+        />
+      ) : null}
+      {counts ? (
+        <FigureStrip
+          label="Tracked field changes since the previous crawl"
+          segments={Object.entries(CLASS_LABELS).map(([key, label]) => ({
+            key,
+            label,
+            value: counts[key] ?? 0,
+          }))}
+        />
+      ) : null}
       <DataTable
         label="Website changes"
         columns={CHANGE_COLUMNS}
-        minWidth="md"
         {...table}
         state={summaryState ?? table.state}
         pager={summaryState ? undefined : table.pager}
@@ -113,6 +104,7 @@ export function ChangesPanel({
           <ChangeRow
             key={row.id}
             row={row}
+            origin={origin}
             crawlBId={summary.data?.crawl_b_id ?? null}
             onOpen={() => setSelected(row)}
           />
@@ -130,38 +122,50 @@ export function ChangesPanel({
 
 function ChangeRow({
   row,
+  origin,
   crawlBId,
   onOpen,
-}: Readonly<{ row: ChangeObservation; crawlBId: string | null; onOpen: () => void }>) {
+}: Readonly<{
+  row: ChangeObservation;
+  origin: string | null;
+  crawlBId: string | null;
+  onOpen: () => void;
+}>) {
   const field = changeFieldLabel(row.field);
+  const url = readableUrl(row.normalized_url);
   return (
     <TableRow>
       <TableCell>
-        <TextLink text="emphasis" href={`/site/crawls/${crawlBId}/pages/${row.site_url_id}`}>
-          <ClampText>{displayPath(row.normalized_url)}</ClampText>
+        <TextLink
+          text="emphasis"
+          underline="hover"
+          className="flex min-w-0"
+          href={`/site/crawls/${crawlBId}/pages/${row.site_url_id}`}
+          aria-label={url}
+        >
+          <UrlText url={row.normalized_url} origin={origin} />
         </TextLink>
       </TableCell>
       <TableCell>{field}</TableCell>
       <TableCell>
         <Inline className="whitespace-nowrap">
-          <Badge tone={CLASS_TONES[row.change_class]}>{CLASS_LABELS[row.change_class]}</Badge>
+          <StatusMark tone={CLASS_TONES[row.change_class]}>
+            {CLASS_LABELS[row.change_class]}
+          </StatusMark>
           {row.expected ? <span className="type-caption">Expected</span> : null}
         </Inline>
       </TableCell>
       <TableCell>
-        <Button
-          variant="ghost"
+        <ActionButton
+          action="viewEvidence"
           onClick={onOpen}
-          aria-label={`View evidence: ${field} on ${displayPath(row.normalized_url)}`}
-        >
-          View evidence
-        </Button>
+          aria-label={`View evidence: ${field} on ${url}`}
+        />
       </TableCell>
     </TableRow>
   );
 }
 
-/** What the table shows while the summary decides, or cannot name, a comparable pair. */
 function comparisonState(
   summary: UseQueryResult<ChangeSummary>,
   pairAvailable: boolean,
@@ -171,14 +175,15 @@ function comparisonState(
     return {
       kind: 'error',
       ...readErrorProps(summary),
-      fallback: 'Could not load Website Changes.',
+      fallback: READ_FAILED,
+      title: "Couldn't load the website changes",
     };
   if (summary.data.state === 'unavailable')
     return {
       kind: 'empty',
       icon: GitCompare,
       headingLevel: 3,
-      heading: 'Website Changes need two usable crawls with persisted page evidence',
+      heading: 'Changes need two completed crawls',
     };
   if (summary.data.state === 'non_comparable')
     return {
@@ -199,10 +204,9 @@ function comparisonState(
   return undefined;
 }
 
-// Page is the one flexible column; the evidence is a button at the row's end.
 const CHANGE_COLUMNS: readonly DataTableColumn[] = [
-  { key: 'page', label: 'Page' },
-  { key: 'field', label: 'Field', width: 'name' },
-  { key: 'class', label: 'Class', width: 'name' },
-  { key: 'evidence', label: 'Evidence', width: 'category' },
+  { key: 'page', label: 'Page', kind: 'identity' },
+  { key: 'field', label: 'Field', kind: 'text', width: 'category', priority: 'low' },
+  { key: 'class', label: 'Class', kind: 'text', width: 'name' },
+  { key: 'evidence', label: 'Evidence', kind: 'text', width: 'category' },
 ];

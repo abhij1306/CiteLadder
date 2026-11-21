@@ -11,29 +11,15 @@ allowBuilds:
   msw: true
   unrs-resolver: true
 
-# Supply-chain hardening: refuse packages whose trust signals (provenance,
-# signatures) weaken between updates.
-#
-# NOTE: `minimumReleaseAge` (a 7-day quarantine on freshly published versions)
-# was removed at the maintainer's request. pnpm defaults this setting to 1440
-# minutes -- one day -- so keep the immediate-install decision explicit. Note
-# that an explicit cutoff also turns `minimumReleaseAgeStrict` on from pnpm 12
-# onward; at a cutoff of 0 no version is ever immature, so nothing is gated.
 minimumReleaseAge: 0
 trustPolicy: no-downgrade
 # Skip the downgrade check for releases older than ~1 year — they predate
 # widespread provenance publishing and trip the check for benign reasons.
 # Anything newer must keep (or strengthen) its trust evidence.
 trustPolicyIgnoreAfter: 525600
-# Pinned exceptions (currently none): recent versions that trip the downgrade
-# check for benign reasons, e.g. a release published without provenance while
-# earlier ones had it. Reviewed individually; keep this list short and exact,
-# and delete an entry as soon as the resolved tree no longer contains it.
 
 # pnpm 10+ reads overrides here, not from package.json.
 overrides:
-  # Keeps the React type packages on a single version across the tree, from
-  # the same catalog pin package.json declares.
   '@types/react': 'catalog:'
   '@types/react-dom': 'catalog:'
   # Vite+ toolchain overrides, keyed with the explicit `@*` ranges that `vp
@@ -52,8 +38,6 @@ catalog:
   vite-plus: 1.6.0
   '@vitest/coverage-v8': 5.1.0
   '@vitest/coverage-istanbul': 5.1.0
-  # One React type version across the tree: package.json and the overrides
-  # above both reference these pins.
   '@types/react': 19.3.0
   '@types/react-dom': 19.3.0
 peerDependencyRules:

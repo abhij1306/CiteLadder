@@ -71,7 +71,6 @@ it('charts monthly totals and changes, leaving an unobserved month as a gap', as
       HttpResponse.json({
         dataset,
         rows: [
-          // Saved out of order, with June never observed.
           month('33333333-3333-4333-8333-333333333333', '2026-07-01', 1400, {
             new_backlinks: 90,
             lost_backlinks: 30,

@@ -60,7 +60,6 @@ const providerPath = { provider: { scalar: { kind: 'str' }, required: true } } a
 const oauthCookie = integrationPolicy.transport.INTEGRATION_OAUTH_TRANSACTION_COOKIE;
 const logger = getLogger('api.integrations');
 
-/** Land on the screen that started the flow (a validated app path), else Settings. */
 function oauthLanding(
   params: Record<string, string>,
   clearCookie = false,
@@ -85,11 +84,6 @@ function cookieValue(header: string | undefined, name: string): string {
   return pair?.slice(name.length + 1) ?? '';
 }
 
-/**
- * One mapped property's on-demand run: the new run, the run already syncing it,
- * `syncing` when that run has no trackable record, or null when the target no
- * longer resolves.
- */
 async function onDemandRun(
   db: Database,
   workspaceId: string,
@@ -105,8 +99,6 @@ async function onDemandRun(
     });
   } catch (error) {
     if (error instanceof ApiError && error.code === 'sync_target_unresolved') return null;
-    // A property already syncing is current once that run finishes, so the
-    // page tracks that run instead of a new one.
     if (error instanceof ApiError && error.code === 'sync_active_window_conflict')
       return (await activePropertySync(db, workspaceId, target.mapping_id)) ?? 'syncing';
     throw error;
@@ -180,8 +172,6 @@ export const integrationRoutes = [
         .where('mapping.project_id', '=', path.project_id)
         .where('mapping.status', '=', 'active')
         .where('grant.status', '=', 'connected')
-        // Keep Bing imports current too; the Performance tables simply do not
-        // project Bing rows.
         .where('connection.provider', 'in', ['gsc', 'ga4', 'bing'])
         .orderBy('mapping.created_at', 'asc')
         .orderBy('mapping.id', 'asc')
@@ -229,8 +219,6 @@ export const integrationRoutes = [
         );
         return new Response(null, { status: 302, headers });
       } catch (error) {
-        // A full-page navigation: land back on the screen with the reason
-        // rather than a JSON body the browser would render as the page.
         if (error instanceof IntegrationError)
           return oauthLanding({ error: error.code }, false, returnTo);
         throw error;
@@ -381,10 +369,7 @@ export const integrationRoutes = [
         .where('connection.workspace_id', '=', workspaceId)
         .executeTakeFirst();
       if (!row) throw notFound('Integration connection');
-      // The connection was just proven to belong to this workspace.
       await spendBudget(db, budget('integration_properties', config.settings), path.connection_id);
-      // Resolve the project before provider I/O; an unknown project is a 404,
-      // and any other failure keeps its own error.
       let sites: Set<string> | null = null;
       if (body?.project_id) {
         sites = await projectSiteDomains(db, workspaceId, body.project_id);
@@ -400,7 +385,6 @@ export const integrationRoutes = [
       } catch (error) {
         return integrationFailure(error);
       }
-      // GA4 summaries carry no site URL, so a GA4 match stays unknown (null).
       return properties.map((property) => ({
         ...property,
         matches_project:
@@ -443,11 +427,6 @@ export const integrationRoutes = [
     path: '/api/v1/integrations/{connection_id}',
     capability: 'manage_credentials',
     params: { path: connectionPath, query: {} },
-    /**
-     * Disconnect the connection's OAuth grant: revoke it and retire every
-     * property mapping it serves. Connections and their imported evidence stay
-     * (raw evidence is append-only), so a reconnect resumes the same history.
-     */
     async handle({ c, db }, { path }) {
       await disconnectConnection(db, {
         workspaceId: c.get('workspace').workspaceId,
@@ -460,7 +439,6 @@ export const integrationRoutes = [
     path: '/api/v1/integrations/mappings/{mapping_id}',
     capability: 'manage_credentials',
     params: { path: { mapping_id: uuid }, query: {} },
-    /** Retire one mapping; retiring an active one records it in the integration audit trail. */
     async handle({ c, db }, { path }) {
       const workspaceId = c.get('workspace').workspaceId;
       const mapping = await db
@@ -493,7 +471,6 @@ export const integrationRoutes = [
     family,
     path: '/api/v1/integrations/{connection_id}/mappings',
     status: 201,
-    // A mapping spends the connecting admin's provider grant, so it needs their authority.
     capability: 'manage_credentials',
     params: { path: connectionPath, query: {} },
     body: mappingRequest,
@@ -533,7 +510,6 @@ export const integrationRoutes = [
             code: 'mapping_property_not_owned',
           });
         }
-        // Choosing another property for the project retires the one it replaces.
         const replacedAt = new Date();
         const replaced = await trx
           .updateTable('integration_property_mappings')

@@ -1,3 +1,4 @@
+import { JUMP_LINK } from '@/components/agent/jump-link';
 import { Stack } from '@/components/ui/layout';
 import { Pressable } from '@/components/ui/pressable';
 import { textRole } from '@/components/ui/typography';
@@ -6,7 +7,6 @@ import { pageOutline, type OutlineHeading } from '@/lib/agent/page-workspace';
 
 type OutlineNode = { heading: OutlineHeading; children: OutlineNode[] };
 
-/** The headings as a tree: each one under the nearest heading of a higher level before it. */
 function nest(headings: readonly OutlineHeading[]): OutlineNode[] {
   const roots: OutlineNode[] = [];
   const open: OutlineNode[] = [];
@@ -29,7 +29,7 @@ function Branch({
       {nodes.map((node) => (
         <Stack as="li" gap="tight" key={node.heading.from}>
           <Pressable
-            className={textRole('control', 'hover:text-accent-ink w-auto text-start')}
+            className={textRole('body', `${JUMP_LINK} w-auto text-start`)}
             onClick={() => onJump(node.heading.from)}
           >
             {node.heading.text}
@@ -43,16 +43,13 @@ function Branch({
   );
 }
 
-/**
- * The Outline tab: the headings of the page as it is now (the person's
- * unsaved edits included). Choosing one puts the cursor on it in the page.
- */
 export function OutlinePanel({
   body,
   onJump,
 }: Readonly<{ body: string; onJump: (from: number) => void }>) {
   const tree = nest(pageOutline(body));
-  if (tree.length === 0) return <p className={textRole('body')}>This page has no headings yet.</p>;
+  if (tree.length === 0)
+    return <p className={textRole('body', 'text-ink-2')}>This page has no headings yet.</p>;
   return (
     <nav aria-label="Page outline">
       <Branch nodes={tree} nested={false} onJump={onJump} />

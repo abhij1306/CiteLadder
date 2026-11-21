@@ -1,4 +1,3 @@
-/** The project dashboard: the selected crawl, its counters, the quota and the screen phase. */
 import { siteHealthDashboardSchema } from '@citeladder/contracts/site-health';
 
 import type { Database } from '../../db/database.ts';
@@ -17,10 +16,6 @@ const TERMINAL_DISCOVERY = new Set([
 ]);
 type Phase = 'empty' | 'discovering' | 'analyzing' | 'dashboard' | 'terminal';
 
-/**
- * The screen phase, resolved once from every input at the same instant so the
- * client never flips between views while its requests land.
- */
 export function resolvePhase(
   crawl: Crawl | null,
   summary: ReturnType<typeof scoreSummary>,
@@ -28,15 +23,12 @@ export function resolvePhase(
 ): Phase {
   if (crawl === null) return 'empty';
   if (crawl.status === 'completed' || crawl.status === 'partially_completed') return 'dashboard';
-  // Real partial scores outrank a failure; a present-but-unscored summary does not.
   const scored =
     summary !== null &&
     (summary.web_fundamentals_state !== 'not_measured' ||
       summary.aeo_measurement_state !== 'not_measured');
   if (scored) return 'dashboard';
   if (crawl.status === 'failed' || crawl.status === 'cancelled') return 'terminal';
-  // A committed monitored set seeds analysis at creation; `analysis_status`
-  // only lags until the first reconcile.
   if (hasMonitoredSelection) return 'analyzing';
   return TERMINAL_DISCOVERY.has(crawl.discovery_status) ? 'analyzing' : 'discovering';
 }

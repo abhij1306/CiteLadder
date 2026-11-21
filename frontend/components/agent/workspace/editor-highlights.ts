@@ -1,19 +1,10 @@
-/**
- * Suggestion highlights in the page editor (E2). The server's offsets are
- * the editor's offsets, so a highlight starts exactly where its suggestion's
- * text is in the latest revision. While the person types, each highlight is
- * mapped through the edit (`mapPos` with `TrackDel`): one whose start or end
- * is deleted is dropped, never moved onto other text.
- */
 import { MapMode, StateEffect, StateField, type ChangeDesc } from '@codemirror/state';
 import { Decoration, EditorView, type DecorationSet } from '@codemirror/view';
 
 import type { SuggestionHighlight } from '@/lib/agent/page-workspace';
 
-/** Replaces every highlight, as a fresh read of the suggestions places them. */
 export const setHighlights = StateEffect.define<readonly SuggestionHighlight[]>();
 
-/** The highlights through one change; a deleted boundary drops its highlight. */
 function mapHighlights(
   highlights: readonly SuggestionHighlight[],
   changes: ChangeDesc,
@@ -39,7 +30,6 @@ function decorations(highlights: readonly SuggestionHighlight[]): DecorationSet 
   );
 }
 
-/** Where each open suggestion's text is now, kept current through every edit. */
 export const highlightField = StateField.define<readonly SuggestionHighlight[]>({
   create: () => [],
   update(highlights, transaction) {
@@ -49,7 +39,6 @@ export const highlightField = StateField.define<readonly SuggestionHighlight[]>(
   provide: (field) => EditorView.decorations.from(field, decorations),
 });
 
-/** The highlight under a position, if any; the innermost when two overlap. */
 export function highlightAt(
   highlights: readonly SuggestionHighlight[],
   position: number,

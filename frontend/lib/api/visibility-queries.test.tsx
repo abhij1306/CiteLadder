@@ -21,7 +21,6 @@ afterAll(() => mswServer.close());
 const notFound = (code: string, message: string) =>
   HttpResponse.json({ error: { code, message } }, { status: 404 });
 
-/** Reads the landing selection the way the Visibility screen does, naming each state. */
 function LandingProjection() {
   const query = useQuery(visibilityQueries.project(SCOPE, INITIAL_VISIBILITY_PARAMS));
   if (query.isPending) return <p>Loading</p>;
@@ -52,7 +51,6 @@ describe('the Visibility landing projection', () => {
     const { queryKey } = visibilityQueries.project(SCOPE, INITIAL_VISIBILITY_PARAMS);
 
     prefetchRoute(client, '/visibility', { projectId: PROJECT_ID, workspaceId: WORKSPACE_ID });
-    // The warmup's answer has landed before the screen mounts, as it does in the app.
     await vi.waitFor(() => expect(client.getQueryState(queryKey)?.fetchStatus).toBe('idle'));
     expect(client.getQueryState(queryKey)?.status).toBe('success');
     renderProjection(client);

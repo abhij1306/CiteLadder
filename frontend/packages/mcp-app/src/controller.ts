@@ -97,7 +97,6 @@ async function readSelection(host: Host, input: AnalyticsSelection) {
   return { selection, data };
 }
 
-/** One generation per selection. Late reads can never repopulate old scope. */
 export function createController(host: Host) {
   let generation = 0;
   let projectRequest = 0;
@@ -155,7 +154,6 @@ export function createController(host: Host) {
       if (requestedSelection) {
         if (!resolved) throw new Error('Missing requested selection');
         const matches = Object.entries(requestedSelection).every(([key, expected]) => {
-          // Latest resolves to concrete IDs. All other filters retain their scope.
           if ((key === 'audit_id' || key === 'snapshot_id') && expected == null) return true;
           return (resolved[key as keyof AnalyticsSelection] ?? null) === (expected ?? null);
         });

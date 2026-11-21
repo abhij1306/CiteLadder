@@ -1,4 +1,3 @@
-/** The project Overview's shared layout and its PDF export. */
 import { overviewLayoutSchema, overviewLayoutUpdateSchema } from '@citeladder/contracts/overview';
 import { z } from 'zod';
 

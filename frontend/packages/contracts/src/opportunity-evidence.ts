@@ -1,15 +1,9 @@
-/**
- * What each Opportunity rule stores as `evidence`: written by its producer in
- * the refresh, read by declaration checks and evidence views. One schema per
- * rule family; `opportunityEvidenceSchemas` names the schema of every rule.
- */
 import { z } from 'zod';
 import { keywordGapEvidenceSchema, sourcePatternSchema } from './opportunities.ts';
 import { internalLinkSchema } from './site-health/internal-links.ts';
 
 const json = z.record(z.string(), z.unknown());
 
-/** A tracked prompt whose answers omit the brand or never cite an owned page. */
 const promptGapEvidenceSchema = z.object({
   prompt_text: z.string(),
   prompt_intent: z.string(),
@@ -34,7 +28,6 @@ const promptGapEvidenceSchema = z.object({
   }),
 });
 
-/** A prompt decline the audit confirmed across runs and engines. */
 const promptDeclineEvidenceSchema = z.object({
   prompt: z.string(),
   rolling_four: z.unknown(),
@@ -47,7 +40,6 @@ const promptDeclineEvidenceSchema = z.object({
   content_goal: z.string(),
 });
 
-/** A cited third-party page competitors are listed on and the brand is not. */
 const earnedListingEvidenceSchema = z.object({
   content_handoff: z.looseObject({
     url_hash: z.string(),
@@ -59,11 +51,6 @@ const earnedListingEvidenceSchema = z.object({
   }),
 });
 
-/**
- * The Site Health defects on one owned page that one finding folds together,
- * every one of them: several rules can map to one finding (SH-B2). `issues` is
- * in rule order, then issue id.
- */
 export const siteIssueEvidenceSchema = z.object({
   issues: z
     .array(
@@ -83,24 +70,18 @@ export const siteIssueEvidenceSchema = z.object({
   limitations: z.array(z.string()),
 });
 
-/**
- * One Site Health issue family: one rule across the pages it fails on in one
- * crawl. `group_id` is the family's issue group in that crawl's catalog.
- * `pages` is the cohort a declaration freezes, in URL order and bounded;
- * `page_count` counts every affected page, so fewer listed pages means the
- * list was cut.
- */
 export const issueFamilyCohortSchema = z.object({
   rule_id: z.string(),
   rule_label: z.string(),
+  finding_class: z.string(),
   crawl_id: z.string(),
   group_id: z.string(),
   page_count: z.number().int(),
+  whole_site: z.boolean(),
   pages: z.array(z.object({ site_url_id: z.string(), url: z.string() })),
 });
 export type IssueFamilyCohort = z.infer<typeof issueFamilyCohortSchema>;
 
-/** A Site Health defect repeated across pages, as one finding. */
 export const siteIssueFamilyEvidenceSchema = z.object({
   issue_rule_id: z.string(),
   issue_severity: z.string(),
@@ -110,7 +91,6 @@ export const siteIssueFamilyEvidenceSchema = z.object({
   limitations: z.array(z.string()),
 });
 
-/** Suggested contextual links from one owned page, from one link run. */
 const contextualLinksEvidenceSchema = z.object({
   site_url_id: z.string(),
   crawl_id: z.string(),
@@ -122,7 +102,6 @@ const contextualLinksEvidenceSchema = z.object({
   }),
 });
 
-/** One field of an owned page that changed between two crawls. */
 const siteChangeEvidenceSchema = z.object({
   change_snapshot_id: z.string(),
   change_observation_id: z.string(),
@@ -136,7 +115,22 @@ const siteChangeEvidenceSchema = z.object({
   coverage: json,
 });
 
-/** A promoted Search Console signal on a page or query. */
+const relevanceCoverage = z.number().optional().catch(undefined);
+const absentTerms = z.array(z.string()).optional().catch(undefined);
+
+export const queryRelevanceSchema = z.discriminatedUnion('state', [
+  z.object({
+    state: z.literal('measured'),
+    title_coverage: relevanceCoverage,
+    h1_coverage: relevanceCoverage,
+    primary_content_coverage: relevanceCoverage,
+    absent_from_title: absentTerms,
+    absent_from_h1: absentTerms,
+    statement: z.string().nullable().optional().catch(null),
+  }),
+  z.object({ state: z.literal('unknown'), reason: z.string() }),
+]);
+
 const demandSignalEvidenceSchema = z.object({
   demand_snapshot_id: z.string(),
   demand_signal_id: z.string(),
@@ -144,14 +138,9 @@ const demandSignalEvidenceSchema = z.object({
   metrics: json,
   coverage: json,
   limitations: z.array(z.unknown()),
-  query_relevance: z.unknown(),
+  query_relevance: queryRelevanceSchema.nullable(),
 });
 
-/**
- * What every per-product metric rule stores: the product, the window the
- * Products read measured (ending at `as_of`), the metric's reading and the
- * threshold it failed, beside the row's own figures.
- */
 const productMetricEvidenceSchema = z.object({
   product_id: z.string(),
   product_name: z.string(),
@@ -185,27 +174,18 @@ const citedAlternativesEvidenceSchema = z.object({
   audit_id: z.string(),
 });
 
-/** The most cited pages a content-gap finding lists. */
 export const CONTENT_GAP_EVIDENCE_MEMBERS = 20;
 
-/** What both content-gap rules store: one angle of one succeeded content-angle run. */
 const contentGapEvidenceSchema = z.object({
   run_id: z.string(),
-  /** The angle's stable identity across reclustering; the label is not. */
   lineage_id: z.string(),
   angle_label: z.string(),
-  /** Null for prompts without a topic. */
   topic_id: z.string().nullable(),
-  /**
-   * The angle's prompts with their text as the prompt library held it at the
-   * refresh; `text` is null for a prompt the library no longer had then.
-   */
   prompts: z.array(z.object({ id: z.string(), text: z.string().nullable() })),
   engines: z.array(z.string()),
   citation_count: z.number().int(),
   domain_count: z.number().int(),
   competitor_count: z.number().int(),
-  /** Every cited page of the angle; `members` lists the most cited ones first. */
   member_count: z.number().int(),
   members: z
     .array(
@@ -219,46 +199,35 @@ const contentGapEvidenceSchema = z.object({
       }),
     )
     .max(CONTENT_GAP_EVIDENCE_MEMBERS),
-  /** The run's audit window. */
   window: z.object({ start: z.string(), end: z.string() }),
   methodology_version: z.string(),
   formula_version: z.string(),
-  /** The run's recorded limitations (topicless prompts, empty titles, ...). */
   limitations: z.array(json),
 });
 
-/** An angle matched to an owned content page that is not cited for its prompts. */
 const contentGapImprovePageEvidenceSchema = contentGapEvidenceSchema.extend({
   site_url_id: z.string(),
   url: z.string(),
   match_method: z.literal('model_pick'),
-  /** The planned-page Action of the same lineage this page now continues. */
   continues_action_id: z.string().optional(),
 });
 export type ContentGapImprovePageEvidence = z.infer<typeof contentGapImprovePageEvidenceSchema>;
 
-/** An angle no content page covers: a page to plan, keyed by its lineage's fixed key. */
 const contentGapNewPageEvidenceSchema = contentGapEvidenceSchema.extend({
   planned_page_key: z.string(),
 });
 export type ContentGapNewPageEvidence = z.infer<typeof contentGapNewPageEvidenceSchema>;
 
-/** Either content-gap rule's evidence. */
 export const contentGapFindingEvidenceSchema = z.union([
   contentGapImprovePageEvidenceSchema,
   contentGapNewPageEvidenceSchema,
 ]);
 export type ContentGapEvidence = z.infer<typeof contentGapFindingEvidenceSchema>;
 
-/** A content-gap finding's rule with its evidence. */
 export type ContentGapFinding =
   | { rule_id: 'content_gap_improve_page'; evidence: ContentGapImprovePageEvidence }
   | { rule_id: 'content_gap_new_page'; evidence: ContentGapNewPageEvidence };
 
-/**
- * A finding's rule and stored evidence as a content-gap finding, or null when
- * the rule is not a content-gap rule or the evidence is not in its shape.
- */
 export function parseContentGapEvidence(rule: string, evidence: unknown): ContentGapFinding | null {
   switch (rule) {
     case 'content_gap_improve_page': {
@@ -279,17 +248,11 @@ const siteIssue = siteIssueEvidenceSchema;
 const siteChange = siteChangeEvidenceSchema;
 const demand = demandSignalEvidenceSchema;
 
-/** Every rule's evidence schema, by rule id. */
 export const opportunityEvidenceSchemas = {
   brand_absent_high_value_prompt: promptGap,
   owned_page_not_cited: promptGap,
   confirmed_prompt_decline: promptDeclineEvidenceSchema,
   earned_page_acquire_listing: earnedListingEvidenceSchema,
-  missing_structured_data: siteIssue,
-  schema_properties_incomplete: siteIssue,
-  schema_visible_content_conflict: siteIssue,
-  content_structure_incomplete: siteIssue,
-  citability_trust_incomplete: siteIssue,
   site_contextual_links: contextualLinksEvidenceSchema,
   site_link_near_orphan: siteIssue,
   site_link_weak_authority: siteIssue,

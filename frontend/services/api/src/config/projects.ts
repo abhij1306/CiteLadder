@@ -1,25 +1,18 @@
 import type { OverviewWidget } from '@citeladder/contracts/overview';
 
-/** Bounds for persisted dashboard/report measurement history. */
 export const projectReads = {
   default_benchmark_mode: 'controlled_localized',
-  /** The industry a project carries until someone names one; reports leave it out. */
   default_industry: 'General',
   default_repetitions: 1,
-  /** The Overview a project shows until someone edits it, and what Reset restores. */
   overview_default_layout: [
-    { key: 'project_state', size: 'half' },
-    { key: 'citation_share', size: 'half' },
+    { key: 'project_state', size: 'full' },
     { key: 'movement', size: 'half' },
     { key: 'next_action', size: 'half' },
     { key: 'missing_prompts', size: 'full' },
-    { key: 'ranked_actions', size: 'half' },
-    { key: 'progress_proof', size: 'half' },
+    { key: 'ranked_actions', size: 'full' },
     { key: 'company_facts', size: 'full' },
   ] satisfies OverviewWidget[] as OverviewWidget[],
   CODE_OVERVIEW_LAYOUT_CONFLICT: 'overview_layout_conflict',
-  /** Ranked opportunities the Overview reads for its action widgets. */
   overview_opportunity_rows: 8,
-  /** Rows a list widget prints in the Overview PDF. */
   overview_report_list_rows: 10,
 };

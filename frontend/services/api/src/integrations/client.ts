@@ -18,7 +18,6 @@ export class IntegrationError extends Error {
   readonly code: string;
   readonly retryable: boolean;
   readonly retryAfter: number | null;
-  /** The provider's HTTP status, when the error is a provider response. */
   readonly httpStatus: number | null;
 
   constructor(
@@ -99,7 +98,6 @@ function statusError(status: number, retryAfter: string | null): IntegrationErro
 
 const oauthErrorSchema = z.object({ error: z.string() });
 
-/** Whether an OAuth token error body names `invalid_grant`; never surfaces the body. */
 async function isInvalidGrant(response: Response): Promise<boolean> {
   try {
     const parsed = oauthErrorSchema.safeParse(await response.json());
@@ -290,7 +288,6 @@ export class IntegrationClient {
     const properties = new Map<string, ProviderProperty>();
     let pageToken = '';
     const seen = new Set<string>();
-    // Each discovery request depends on the preceding provider page token.
     for (let page = 0; page < endpoints.GA4_ACCOUNT_SUMMARIES_MAX_PAGES; page++) {
       const url = new URL(endpoints.GA4_ADMIN_API_BASE_URL + endpoints.GA4_ACCOUNT_SUMMARIES_PATH);
       url.searchParams.set('pageSize', String(endpoints.GA4_ACCOUNT_SUMMARIES_PAGE_SIZE));

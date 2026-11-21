@@ -1,6 +1,5 @@
-/** Selection-wide SQL tallies over fanout settled on each derived answer. */
 import type { visibilityFanoutSummarySchema } from '@citeladder/contracts/visibility-evidence';
-import { sql } from 'kysely';
+import { type RawBuilder, sql } from 'kysely';
 import type { z } from 'zod';
 import type { Database } from '../db/database.ts';
 import { storedInstant, utcTextOf } from '../db/timestamps.ts';
@@ -11,6 +10,8 @@ import {
 } from '../http/keyset-cursor.ts';
 import { parseUuid } from '../http/uuid.ts';
 import { compareText } from '../text-order.ts';
+import { applyFilters, type EvidenceFilters } from './evidence.ts';
+import { comparedRunId, queryBrands } from './fanout-terms.ts';
 import { authorizedSelection, evidenceScope, type RunSelection } from './selection.ts';
 
 export type FanoutResponse = z.input<typeof visibilityFanoutSummarySchema>;
@@ -18,8 +19,10 @@ export type FanoutResponse = z.input<typeof visibilityFanoutSummarySchema>;
 type FanoutOptions = {
   query: string | null;
   search: string | null;
+  order: 'top' | 'rising' | 'falling';
   cursor: string | null;
   limit: number;
+  filters: EvidenceFilters;
 };
 
 function fanoutPosition(options: FanoutOptions, filters: Record<string, unknown>) {
@@ -59,15 +62,19 @@ export async function getVisibilityFanout(
   const filters = {
     ...selection,
     auditIds: [...(selection.auditIds ?? [])].sort(compareText),
+    ...options.filters,
     query: options.query,
     search: options.search?.trim().toLowerCase() ?? '',
+    order: options.order,
   };
   const { asOf, queryAfter, answerAfter } = fanoutPosition(options, filters);
+  const previousId = await comparedRunId(db, selection);
+  const previousScope = previousAnswers(db, selection, previousId, options.filters);
   const base = db
     .with(
       (cte) => cte('answers').materialized(),
       () =>
-        evidenceScope(db, selection)
+        applyFilters(evidenceScope(db, selection), options.filters)
           .where('ra.created_at', '<=', new Date(asOf))
           .select([
             'ra.id',
@@ -108,18 +115,43 @@ export async function getVisibilityFanout(
           ),
         ])
         .groupBy('event.query'),
+    )
+    .with('previous', () =>
+      previousScope
+        .innerJoin(
+          sql<{ query: string }>`lateral (select unnest(ra.fanout_queries) as query)`.as('event'),
+          (join) => join.onTrue(),
+        )
+        .select(['event.query', sql<number>`count(*)::int`.as('event_count')])
+        .groupBy('event.query'),
+    )
+    .with('ranked', (db) =>
+      db
+        .selectFrom('tallies')
+        .fullJoin('previous', 'previous.query', 'tallies.query')
+        .select([
+          sql<string>`coalesce(tallies.query, previous.query)`.as('query'),
+          sql<number>`coalesce(tallies.event_count, 0)`.as('event_count'),
+          sql<number>`coalesce(tallies.prompt_count, 0)`.as('prompt_count'),
+          sql<string[]>`coalesce(tallies.engines, '{}'::text[])`.as('engines'),
+          sql<number>`coalesce(tallies.response_count, 0)`.as('response_count'),
+          sql<number>`coalesce(tallies.brand_response_count, 0)`.as('brand_response_count'),
+          sql<number>`round(coalesce(tallies.event_count::numeric
+            / nullif((select sum(event_count) from tallies), 0), 0), 6)::float8`.as('share'),
+          sql<number | null>`case when ${previousId !== null} then round(
+            coalesce(tallies.event_count::numeric / nullif((select sum(event_count) from tallies), 0), 0)
+            - coalesce(previous.event_count::numeric / nullif((select sum(event_count) from previous), 0), 0),
+          6)::float8 end`.as('change'),
+        ]),
     );
   const matched = base
-    .selectFrom('tallies')
+    .selectFrom('ranked')
     .selectAll()
     .$if(Boolean(filters.search), (query) =>
       query.where(sql<boolean>`position(${filters.search} in lower(query)) > 0`),
     );
-  const queryPage = matched
-    .where(queryAfter)
-    .orderBy('event_count', 'desc')
-    .orderBy(sql`query collate "C"`)
-    .limit(options.limit + 1);
+  const page = pageOrder(options, queryAfter);
+  const queryPage = matched.where(page.keep).orderBy(page.order).limit(page.limit);
   const drillDown = options.query !== null;
   const answerPage = base
     .selectFrom('answers')
@@ -144,7 +176,9 @@ export async function getVisibilityFanout(
         'event_count',
       ),
       sql<number>`(select count(*)::int from tallies)`.as('distinct_queries'),
-      sql<number>`(select count(*)::int from (${matched}) matched)`.as('matched_queries'),
+      sql<number>`(select count(*)::int from (${matched}) matched where event_count > 0)`.as(
+        'matched_queries',
+      ),
       sql<Record<string, number>>`(select coalesce(jsonb_object_agg(state, count), '{}'::jsonb)
       from (select fanout_state as state, count(*)::int as count from answers group by fanout_state) states)`.as(
         'coverage',
@@ -154,8 +188,11 @@ export async function getVisibilityFanout(
           ? sql`(select count(*)::int from answers where fanout_queries @> array[${options.query}]::text[])`
           : sql`0`
       }`.as('total_answers'),
+      sql<string[]>`(select coalesce(array_agg(distinct audit_id), '{}') from answers)`.as(
+        'audit_ids',
+      ),
       sql<
-        FanoutResponse['items']
+        Omit<FanoutResponse['items'][number], 'brands'>[]
       >`(select coalesce(jsonb_agg(to_jsonb(page)), '[]'::jsonb) from (${queryPage}) page)`.as(
         'items',
       ),
@@ -166,19 +203,77 @@ export async function getVisibilityFanout(
       }`.as('answers'),
     ])
     .executeTakeFirstOrThrow();
-  const hasMore = (drillDown ? summary.answers : summary.items).length > options.limit;
-  const items = summary.items.slice(0, options.limit);
-  const answers = summary.answers.slice(0, options.limit);
-  const lastQuery = items.at(-1);
-  const lastAnswer = answers.at(-1);
-  let keys: string[] | null = null;
-  if (!drillDown && lastQuery) keys = [asOf, String(lastQuery.event_count), lastQuery.query];
-  else if (lastAnswer) keys = [asOf, lastAnswer.created_at, lastAnswer.id];
+  const { audit_ids: auditIds, ...totals } = summary;
+  const items = totals.items.slice(0, options.limit);
+  const answers = totals.answers.slice(0, options.limit);
+  const brands = await queryBrands(db, selection, [
+    ...auditIds,
+    ...(previousId ? [previousId] : []),
+  ]);
   return {
-    ...summary,
-    items,
-    // `id` and `created_at` only key the cursor; the contract does not carry them.
+    ...totals,
+    compared: previousId !== null,
+    items: items.map((item) => ({ ...item, brands: brands(item.query) })),
     answers: answers.map(({ id: _id, created_at: _createdAt, ...answer }) => answer),
-    next_cursor: hasMore && keys ? encodeKeysetCursor('fanout', filters, keys) : null,
+    next_cursor: nextCursor({ options, filters, asOf, totals, items, answers }),
   };
+}
+
+function previousAnswers(
+  db: Database,
+  selection: RunSelection,
+  previousId: string | null,
+  filters: EvidenceFilters,
+) {
+  const scope = applyFilters(
+    evidenceScope(db, { ...selection, auditId: previousId ?? selection.auditId, auditIds: null }),
+    filters,
+  );
+  return previousId === null ? scope.where(sql<boolean>`false`) : scope;
+}
+
+function pageOrder(options: FanoutOptions, queryAfter: RawBuilder<boolean>) {
+  switch (options.order) {
+    case 'top':
+      return {
+        keep: sql<boolean>`event_count > 0 and ${queryAfter}`,
+        order: sql`event_count desc, query collate "C"`,
+        limit: options.limit + 1,
+      };
+    case 'rising':
+      return {
+        keep: sql<boolean>`change > 0`,
+        order: sql`change desc, query collate "C"`,
+        limit: options.limit,
+      };
+    case 'falling':
+      return {
+        keep: sql<boolean>`change < 0`,
+        order: sql`change asc, query collate "C"`,
+        limit: options.limit,
+      };
+    default: {
+      const unreachable: never = options.order;
+      return unreachable;
+    }
+  }
+}
+
+function nextCursor(input: {
+  options: FanoutOptions;
+  filters: Record<string, unknown>;
+  asOf: string;
+  totals: { items: unknown[]; answers: unknown[] };
+  items: readonly { event_count: number; query: string }[];
+  answers: readonly { created_at: string; id: string }[];
+}): string | null {
+  const { options, asOf } = input;
+  if (options.query !== null) {
+    const last = input.answers.at(-1);
+    if (input.totals.answers.length <= options.limit || !last) return null;
+    return encodeKeysetCursor('fanout', input.filters, [asOf, last.created_at, last.id]);
+  }
+  const last = input.items.at(-1);
+  if (options.order !== 'top' || input.totals.items.length <= options.limit || !last) return null;
+  return encodeKeysetCursor('fanout', input.filters, [asOf, String(last.event_count), last.query]);
 }

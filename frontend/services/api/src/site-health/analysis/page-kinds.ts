@@ -1,10 +1,3 @@
-/**
- * Deterministic page-kind classification by evidence tier, not summed weights.
- * The highest tier that produced evidence decides, so one decisive structural
- * observation is never outvoted by several weak signals, and `classified_by`
- * always names the single signal that chose the kind. Structured data is the
- * page's claim about itself and never decides alone.
- */
 import { compareText } from '../../text-order.ts';
 import { firstOf } from '../../lists.ts';
 import { documentUrl, isHomepagePath, normalizedPath, routeSignal } from '../routes.ts';
@@ -52,7 +45,6 @@ const signal = (name: string, pageKind: string, detail: string): Signal => ({
 });
 const tierIndex = (tier: string) => c.tiers.indexOf(tier);
 
-/** The page kind structured data alone suggests, most specific type first. */
 function schemaSuggestion(facts: Facts): [string, string] | null {
   const types = new Set(textList(record(facts.structured_data).types));
   for (const [type, kind] of c.schema_type_map) {
@@ -63,7 +55,6 @@ function schemaSuggestion(facts: Facts): [string, string] | null {
   return null;
 }
 
-/** A real buy box with a corroborator, or an own price under a product-detail heading. */
 function productEvidence(facts: Facts) {
   const product = record(record(facts.entity).product);
   const purchase = Boolean(product.has_purchase_control);
@@ -84,7 +75,6 @@ function productEvidence(facts: Facts) {
   return ogProduct || singleSchemaProduct ? 'primary_buy_box' : '';
 }
 
-/** A collection with a decisive affordance bound to it; pagination alone is navigation. */
 function listingEvidence(facts: Facts) {
   const collection = record(record(record(facts.entity).listing).collection_evidence);
   const size = record(collection.container).item_count;
@@ -198,7 +188,6 @@ function contentHeuristic(facts: Facts) {
     : null;
 }
 
-/** The page's own stated purpose: longest phrase wins, config order breaks ties. */
 function titleSuggestion(path: string, facts: Facts) {
   const h1 = textList(record(facts.headings).h1_texts).slice(0, 1);
   const slug = (path.split('/').at(-1) ?? '').replaceAll(/[-_]/gu, ' ');
@@ -245,7 +234,6 @@ function classificationSignals(finalUrl: string, facts: Facts): [Signal[], strin
     return [[], null];
   const path = normalizedPath(url);
   const schema = schemaSuggestion(facts)?.[0] ?? null;
-  // The root path is an exact fact: a homepage stays one even when it renders a product grid.
   if (isHomepagePath(path)) return [[signal('root_path', 'homepage', path || '/')], schema];
   const routed = routeSignal(path);
   const route = routed ? [signal('path_pattern', routed.kind, routed.pattern)] : [];
@@ -255,7 +243,6 @@ function classificationSignals(finalUrl: string, facts: Facts): [Signal[], strin
   ];
 }
 
-/** A winner only when the strongest non-schema evidence agrees on one kind. */
 function winningSignal(matched: Signal[]) {
   const eligible = matched.filter((item) => item.signal !== 'structured_data');
   if (!eligible.length) return null;
@@ -292,7 +279,6 @@ function otherReason(matched: Signal[], winner: Signal | null) {
   return matched.length ? c.other_reasons.schema_only : c.other_reasons.no_signals;
 }
 
-/** Classify one page into the config taxonomy; malformed facts simply match fewer signals. */
 export function classify(finalUrl: string, facts: Facts) {
   const [matched, schemaKind] = classificationSignals(finalUrl, facts);
   const winner = winningSignal(matched);
@@ -304,7 +290,6 @@ export function classify(finalUrl: string, facts: Facts) {
       tier === 'structural' && matched.some((item) => item.page_kind !== winner.page_kind)
         ? 'medium'
         : TIER_CONFIDENCE[tier]!;
-  // Without observed page content (a client-rendered shell), a URL or title guess is weak evidence.
   const extraction = record(facts.extraction);
   const unobserved = extraction.state === 'unavailable' ? text(extraction.reason) : '';
   if (unobserved && winner && confidence !== 'unknown') confidence = 'low';

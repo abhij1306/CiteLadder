@@ -4,88 +4,96 @@ import {
   type AccuracyCoverage,
   type AccuracyResponse,
 } from '@citeladder/contracts/fact-checking';
-import { ShieldCheck } from 'lucide-react';
+import type { ReactNode } from 'react';
 
-import { AppGrid } from '@/components/ui/app-grid';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Delta } from '@/components/ui/delta';
+import { TabPanel, Tabs } from '@/components/ui/tabs';
+import { Tooltip } from '@/components/ui/tooltip';
+import { StatusMark } from '@/components/ui/status-mark';
 import { DataTable } from '@/components/ui/data-table';
 import { Inline, Stack } from '@/components/ui/layout';
-import { BusyBar } from '@/components/ui/progress-bar';
-import { QueryState } from '@/components/ui/query-state';
-import { ReadError } from '@/components/ui/read-error';
-import { Skeleton } from '@/components/ui/skeleton';
-import { StatRow } from '@/components/ui/stat-row';
+import { ClampText } from '@/components/ui/clamp-text';
 import { TableCell, TableRow } from '@/components/ui/table';
 import { TextLink } from '@/components/ui/text-link';
 import { textRole } from '@/components/ui/typography';
-import { MissingValue } from '@/components/ui/unavailable-value';
-import type { SourceFilters } from '@/components/visibility/source-rows';
+import { ShieldCheck } from '@/lib/icons';
+import { stringUrlCodec, useUrlState } from '@/lib/navigation/url-state';
 import {
+  accuracyCoverageExtras,
   accuracyCoverageLine,
   accuracyStateCopy,
+  contradictedChange,
   TOPIC_LABELS,
   VERDICT_LABELS,
   VERDICT_TONE,
 } from '@/lib/visibility/accuracy';
 import { useEngineCatalog } from '@/lib/providers/engines';
-import { formatShare } from '@/lib/visibility/perception';
-import { useAccuracy } from '@/lib/visibility/use-accuracy';
-import type { SourceQueries } from '@/lib/visibility/use-source-analysis';
+import { formatPercent, percentText } from '@/lib/format';
+import { StateBlock } from '@/components/ui/state-block';
+import { Section, SectionContent, TitledSection, SectionStack } from '@/components/ui/section';
+import { FigureStrip } from '@/components/ui/figure-strip';
 
-/**
- * What answers claimed about the brand, checked against its confirmed facts.
- * Accuracy always travels with its coverage, and a claim without a verdict is
- * a named state, never a zero.
- */
-export function VisibilityAccuracy({
-  filters,
-  queries,
-}: Readonly<{ filters: SourceFilters; queries: SourceQueries }>) {
-  const query = useAccuracy(filters, queries);
-  if (query.error)
-    return (
-      <ReadError
-        error={query.error}
-        fallback="Could not load fact checks. Check your connection and try again."
-        onRetry={() => void query.refetch()}
-        pending={query.isFetching}
-      />
-    );
-  // The selection above has settled on a measured run (`SelectionGate`), so
-  // no data is this read still on its way.
-  if (!query.data)
-    return (
-      <Stack gap="workspace" aria-busy>
-        <Skeleton variant="block" />
-        <Skeleton variant="chart" />
-      </Stack>
-    );
-  return (
-    <div className="relative">
-      <BusyBar active={query.isFetching} label="Updating fact checks" />
-      <AccuracyView data={query.data} />
-    </div>
-  );
-}
+type ClaimView = 'contradicted' | 'all-claims' | 'by-fact';
 
-export function AccuracyView({ data }: Readonly<{ data: AccuracyResponse }>) {
+const CLAIM_VIEWS = [
+  { value: 'contradicted', label: 'Contradicted' },
+  { value: 'all-claims', label: 'All claims' },
+  { value: 'by-fact', label: 'By fact' },
+] as const satisfies readonly { value: ClaimView; label: string }[];
+
+const CLAIM_VIEW_CODEC = stringUrlCodec<ClaimView>(
+  CLAIM_VIEWS.map((item) => item.value),
+  'contradicted',
+);
+
+export function AccuracyView({
+  data,
+  lede,
+  stateActions,
+  trend,
+  allClaims,
+  byFact,
+}: Readonly<{
+  data: AccuracyResponse;
+  lede?: ReactNode;
+  stateActions?: ReactNode;
+  trend?: ReactNode;
+  allClaims: ReactNode;
+  byFact: ReactNode;
+}>) {
   const { label: engineLabel } = useEngineCatalog();
-  if (data.state !== 'value')
-    return <AccuracyState state={data.state} reason={data.reason} coverage={data.score.coverage} />;
+  const [view, setView] = useUrlState('claims', CLAIM_VIEW_CODEC, { history: 'replace' });
+  if (data.state !== 'value') {
+    const state = (
+      <AccuracyState state={data.state} reason={data.reason} coverage={data.score.coverage} />
+    );
+    const actionable = data.state === 'no_facts' || data.state === 'no_claims';
+    return actionable && stateActions ? (
+      <Stack gap="item">
+        <Inline className="justify-end">{stateActions}</Inline>
+        {state}
+      </Stack>
+    ) : (
+      state
+    );
+  }
   return (
-    <Stack gap="workspace">
-      <Headline data={data} />
-      {/* The contradictions and the sources cited beside them are one
-          question; the two-column table sits beside the claims where the
-          width allows. */}
-      <AppGrid layout="halves">
-        <ContradictedClaims claims={data.contradicted} />
-        <CitedTable cited={data.cited_alongside} />
-      </AppGrid>
+    <SectionStack>
+      <Headline data={data} lede={lede} />
+      {trend}
+      <Section aria-label="Claims">
+        <Tabs value={view} onValueChange={setView} items={CLAIM_VIEWS} ariaLabel="Claims" spaced>
+          <TabPanel value="contradicted">
+            <ContradictedClaims claims={data.contradicted} />
+          </TabPanel>
+          <TabPanel value="all-claims">{allClaims}</TabPanel>
+          <TabPanel value="by-fact">{byFact}</TabPanel>
+        </Tabs>
+      </Section>
+      <CitedTable cited={data.cited_alongside} />
       <BreakdownTable title="By topic" column="Topic" rows={data.topics} label={topicLabel} />
       <BreakdownTable title="By engine" column="Engine" rows={data.engines} label={engineLabel} />
-    </Stack>
+    </SectionStack>
   );
 }
 
@@ -104,75 +112,77 @@ function AccuracyState({
   coverage?: AccuracyCoverage;
 }>) {
   const copy = accuracyStateCopy(state, reason);
-  // One state box at the shared footprint: the coverage it read is part of
-  // the same sentence, not a caption that grows the box.
+  const counted = coverage?.claims ? accuracyCoverageLine(coverage) : null;
   return (
-    <QueryState
+    <StateBlock
       kind="empty"
       headingLevel={3}
       icon={ShieldCheck}
       heading={copy.heading}
-      description={
-        coverage?.claims
-          ? `${copy.description} ${accuracyCoverageLine(coverage)}.`
-          : copy.description
-      }
+      description={[copy.description, counted].filter(Boolean).join(' ') || undefined}
     />
   );
 }
 
 function CoverageNote({ coverage }: Readonly<{ coverage: AccuracyCoverage }>) {
-  return <p className={textRole('caption', 'text-ink-muted')}>{accuracyCoverageLine(coverage)}</p>;
+  const extras = accuracyCoverageExtras(coverage);
+  if (!extras.length) return null;
+  return <p className={textRole('caption', 'text-ink-2')}>{extras.join(' · ')}</p>;
 }
 
-function Headline({ data }: Readonly<{ data: AccuracyResponse }>) {
+function Headline({ data, lede }: Readonly<{ data: AccuracyResponse; lede?: ReactNode }>) {
   const { coverage } = data.score;
   return (
-    <Card>
-      <CardContent>
+    <Section>
+      <SectionContent>
         <Stack gap="item">
-          <StatRow
+          {lede}
+          <FigureStrip
             label="Fact checks"
+            subLine
             segments={[
               {
-                key: 'accuracy',
-                label: 'Accuracy',
-                value: formatShare(data.score.accuracy),
-                missingLabel: 'Unavailable',
-                sub: 'Supported, of claims that were supported or contradicted.',
-              },
-              {
-                key: 'supported',
-                label: 'Supported',
-                value: String(coverage.supported),
-                sub: 'A confirmed fact states the same thing.',
+                key: 'claims',
+                label: 'Claims',
+                value: String(coverage.claims),
               },
               {
                 key: 'contradicted',
                 label: 'Contradicted',
                 value: String(coverage.contradicted),
-                sub: 'A confirmed fact states something incompatible.',
+                delta: (
+                  <Delta
+                    value={contradictedChange(data)}
+                    policy="lower-is-better"
+                    precision={0}
+                    context="vs previous"
+                  />
+                ),
               },
-              // Two different findings: no confirmed fact on the point, and a
-              // fact that could not settle the claim. Never one summed figure.
+              { key: 'supported', label: 'Supported', value: String(coverage.supported) },
               {
-                key: 'not_covered',
-                label: VERDICT_LABELS.not_covered,
-                value: String(coverage.not_covered),
-                sub: 'No confirmed fact on the point.',
+                key: 'accuracy',
+                label: 'Accuracy',
+                value: data.score.accuracy === null ? null : percentText(data.score.accuracy),
+                missingState: 'unavailable',
+                sub: (
+                  <Tooltip content="Verdicts a person changed">
+                    <span>{coverage.edited} edited</span>
+                  </Tooltip>
+                ),
               },
               {
-                key: 'inconclusive',
-                label: VERDICT_LABELS.inconclusive,
-                value: String(coverage.inconclusive),
-                sub: 'A confirmed fact could not settle the claim.',
+                key: 'not_checked',
+                label: 'Not checked',
+                value: String(coverage.inconclusive + coverage.not_covered),
+                sub: `${coverage.inconclusive} ${VERDICT_LABELS.inconclusive.toLowerCase()} · ${coverage.not_covered} ${VERDICT_LABELS.not_covered.toLowerCase()}`,
               },
             ]}
           />
           <CoverageNote coverage={coverage} />
         </Stack>
-      </CardContent>
-    </Card>
+      </SectionContent>
+    </Section>
   );
 }
 
@@ -187,43 +197,33 @@ function ClaimLink({ claim }: Readonly<{ claim: AccuracyClaim }>) {
 function ContradictedClaims({ claims }: Readonly<{ claims: AccuracyClaim[] }>) {
   const { label: engineLabel } = useEngineCatalog();
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Contradicted claims</CardTitle>
-        <CardDescription>
-          What answers said about you that a confirmed fact contradicts, quoted exactly.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        {!claims.length ? (
-          <QueryState kind="empty" inline message="No contradicted claims in these answers." />
-        ) : (
-          <Stack as="ul">
-            {claims.map((claim) => (
-              <Stack as="li" gap="tight" key={`${claim.execution_id}:${claim.quote}`}>
-                <ClaimLink claim={claim} />
-                {claim.facts.map((fact) => (
-                  <span key={fact.statement} className="type-caption text-ink-secondary">
-                    Your fact: {fact.statement}
-                  </span>
-                ))}
-                <Inline as="span" className={textRole('caption', 'text-ink-muted flex-wrap')}>
-                  {/* The badge takes the claim's own verdict tone; a claim
-                      without a verdict yet is neutral, not negative. */}
-                  <Badge
-                    variant="sentiment"
-                    value={claim.verdict ? VERDICT_TONE[claim.verdict] : 'neutral'}
-                  >
-                    {TOPIC_LABELS[claim.topic]}
-                  </Badge>
-                  {engineLabel(claim.logical_engine)} · {claim.prompt}
-                </Inline>
-              </Stack>
-            ))}
-          </Stack>
-        )}
-      </CardContent>
-    </Card>
+    <Stack gap="item">
+      {!claims.length ? (
+        <StateBlock kind="empty" inline message="No contradicted claims in these answers." />
+      ) : (
+        <Stack as="ul">
+          {claims.map((claim) => (
+            <Stack as="li" gap="tight" key={`${claim.execution_id}:${claim.quote}`}>
+              <ClaimLink claim={claim} />
+              {claim.facts.map((fact) => (
+                <span key={fact.statement} className="type-caption text-ink-2">
+                  Your fact: {fact.statement}
+                </span>
+              ))}
+              <Inline as="span" className={textRole('caption', 'text-ink-2 flex-wrap')}>
+                <StatusMark
+                  variant="sentiment"
+                  value={claim.verdict ? VERDICT_TONE[claim.verdict] : 'neutral'}
+                >
+                  {TOPIC_LABELS[claim.topic]}
+                </StatusMark>
+                {engineLabel(claim.logical_engine)} · {claim.prompt}
+              </Inline>
+            </Stack>
+          ))}
+        </Stack>
+      )}
+    </Stack>
   );
 }
 
@@ -240,50 +240,60 @@ function BreakdownTable({
 }>) {
   if (!rows.length) return null;
   return (
-    <DataTable
-      title={title}
-      columns={[
-        { key: 'key', label: column },
-        { key: 'claims', label: 'Claims', width: 'figure', numeric: true },
-        { key: 'supported', label: VERDICT_LABELS.supported, width: 'figure', numeric: true },
-        { key: 'contradicted', label: VERDICT_LABELS.contradicted, width: 'figure', numeric: true },
-        { key: 'accuracy', label: 'Accuracy', width: 'figure', numeric: true },
-      ]}
-    >
-      {rows.map((row) => (
-        <TableRow key={row.key}>
-          <TableCell>{label(row.key)}</TableCell>
-          <TableCell numeric>{row.score.coverage.claims}</TableCell>
-          <TableCell numeric>{row.score.coverage.supported}</TableCell>
-          <TableCell numeric>{row.score.coverage.contradicted}</TableCell>
-          <TableCell numeric>{formatShare(row.score.accuracy) ?? <MissingValue />}</TableCell>
-        </TableRow>
-      ))}
-    </DataTable>
+    <TitledSection title={title}>
+      <DataTable
+        label={title}
+        columns={[
+          { key: 'key', label: column },
+          { key: 'claims', label: 'Claims', width: 'figure', kind: 'number' },
+          { key: 'supported', label: VERDICT_LABELS.supported, width: 'figure', kind: 'number' },
+          {
+            key: 'contradicted',
+            label: VERDICT_LABELS.contradicted,
+            width: 'figure',
+            kind: 'number',
+          },
+          { key: 'accuracy', label: 'Accuracy', width: 'figure', kind: 'number' },
+        ]}
+      >
+        {rows.map((row) => (
+          <TableRow key={row.key}>
+            <TableCell>{label(row.key)}</TableCell>
+            <TableCell numeric>{row.score.coverage.claims}</TableCell>
+            <TableCell numeric>{row.score.coverage.supported}</TableCell>
+            <TableCell numeric>{row.score.coverage.contradicted}</TableCell>
+            <TableCell numeric>{formatPercent(row.score.accuracy)}</TableCell>
+          </TableRow>
+        ))}
+      </DataTable>
+    </TitledSection>
   );
 }
 
 function CitedTable({ cited }: Readonly<{ cited: AccuracyResponse['cited_alongside'] }>) {
   return (
-    <DataTable
-      title="Sources cited alongside contradictions"
-      columns={[
-        { key: 'domain', label: 'Domain' },
-        { key: 'answers', label: 'Answers', width: 'figure', numeric: true },
-      ]}
-      footer="Domains cited in answers with a contradicted claim. Cited alongside, not shown to be the source."
-      state={
-        cited.length
-          ? undefined
-          : { kind: 'empty', inline: true, message: 'No sources cited alongside contradictions.' }
-      }
-    >
-      {cited.map((row) => (
-        <TableRow key={row.domain}>
-          <TableCell>{row.domain}</TableCell>
-          <TableCell numeric>{row.answers}</TableCell>
-        </TableRow>
-      ))}
-    </DataTable>
+    <TitledSection title="Sources cited alongside contradictions">
+      <DataTable
+        label="Sources cited alongside contradictions"
+        columns={[
+          { key: 'domain', label: 'Domain' },
+          { key: 'answers', label: 'Answers', width: 'figure', kind: 'number' },
+        ]}
+        state={
+          cited.length
+            ? undefined
+            : { kind: 'empty', inline: true, message: 'No sources cited alongside contradictions.' }
+        }
+      >
+        {cited.map((row) => (
+          <TableRow key={row.domain}>
+            <TableCell>
+              <ClampText>{row.domain}</ClampText>
+            </TableCell>
+            <TableCell numeric>{row.answers}</TableCell>
+          </TableRow>
+        ))}
+      </DataTable>
+    </TitledSection>
   );
 }

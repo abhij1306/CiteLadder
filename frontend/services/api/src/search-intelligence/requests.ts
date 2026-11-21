@@ -10,13 +10,11 @@ import type { CanonicalTarget } from './targets.ts';
 
 export const si = policy.search_intelligence;
 export type DatasetKind = SearchDatasetKind;
-/** A stored dataset kind, refused rather than priced as some other kind. */
 export function datasetKind(value: unknown): DatasetKind {
   const parsed = searchDatasetKindSchema.safeParse(value);
   if (parsed.success) return parsed.data;
   throw new Error(`Unknown Search Intelligence dataset kind: ${String(value)}`);
 }
-/** Backlink datasets need no search market, so their scope carries none. */
 export const isBacklinkKind = (kind: DatasetKind) => SEARCH_DATASET_KINDS[kind].backlink;
 type ResearchScope = 'exact_host' | 'domain_subdomains';
 export type RequestOptions = {
@@ -210,7 +208,6 @@ function applyKeywordOrder(o: RequestOptions, payload: Record<string, unknown>) 
   }
 }
 
-/** Only reviewed domain/prefix constraints and policy-owned endpoints can reach a paid request. */
 export function buildRequest(o: RequestOptions) {
   const payload = datasetPayload(o);
   const endpoint = applyResearchScope(o, payload);
@@ -236,13 +233,11 @@ export function scopeHash(o: RequestOptions, payload: Record<string, unknown>) {
     )
     .digest('hex');
 }
-/** A stored decimal USD amount in exact 1e-8 units; a missing amount is zero. */
 export function usdUnits(value: string | null | undefined): number {
   if (value === null || value === undefined) return 0;
   const [whole = '0', fraction = ''] = value.trim().split('.');
   return Number(BigInt(whole || '0') * 100_000_000n + BigInt(fraction.padEnd(8, '0').slice(0, 8)));
 }
-/** Integer microdollars keep quoted totals exact across pages. */
 export function quoteDataset(kind: DatasetKind, rows: number) {
   if (!Number.isSafeInteger(rows) || rows < 1 || rows > si.max_depth)
     throw new Error('Unsupported dataset depth');
@@ -258,7 +253,6 @@ export function quoteDataset(kind: DatasetKind, rows: number) {
       : requestRate * calls + rowRate * rows;
   return { calls, rows, costMicrousd: cost };
 }
-/** One request's own estimate: a short final page costs less than a full one. */
 export function pageEstimateMicrousd(kind: DatasetKind, pageRows: number) {
   return quoteDataset(kind, Math.max(1, Math.trunc(pageRows) || 1)).costMicrousd;
 }

@@ -1,23 +1,15 @@
 import type { ReactNode } from 'react';
 
-import { KpiRow, type StatSegment } from '@/components/ui/stat-row';
-import { TextLink } from '@/components/ui/text-link';
-import { UnavailableValue } from '@/components/ui/unavailable-value';
-import { ICONS } from '@/lib/icons';
+import { Absence } from '@/components/ui/absence';
 import type { SiteCrawl, SiteHealthDashboard, SiteHealthOverview } from '@citeladder/contracts';
+import { FigureStrip, type FigureSegment } from '@/components/ui/figure-strip';
+import { formatCount } from '@/lib/format';
 
-/** One Site Health score as a `KpiRow` segment: the score ring and where to act. */
 export type AuditMetric = {
   title: string;
   value: number | null;
-  /**
-   * `percent` is a share drawn as a ring, as the Overview and Pages strips
-   * show it; `plain-percent` is the same share as a plain figure, which the
-   * page detail keeps.
-   */
-  valueUnit?: 'score' | 'percent' | 'plain-percent';
+  valueUnit?: 'score' | 'percent' | 'count';
   href?: string;
-  icon: typeof ICONS.site;
   unavailable?: ReactNode;
 };
 
@@ -26,32 +18,26 @@ function auditSegment({
   value,
   valueUnit = 'score',
   href,
-  icon,
   unavailable,
-}: AuditMetric): StatSegment {
+}: AuditMetric): FigureSegment {
   const base = {
     key: title,
     label: title,
-    icon,
-    action: href ? <TextLink href={href}>View details</TextLink> : undefined,
+    action: href ? { label: 'View details', href } : undefined,
   };
   if (value === null) {
-    return { ...base, value: unavailable ?? <UnavailableValue state="not_measured" /> };
+    return { ...base, value: unavailable ?? <Absence state="not_measured" /> };
   }
-  if (valueUnit === 'plain-percent') return { ...base, value: `${Math.round(value)}%` };
-  // The ring names itself "<label>: <n> out of 100".
-  return {
-    ...base,
-    score: { value, label: valueUnit === 'percent' ? title : `${title} score` },
-  };
+  if (valueUnit === 'count') return { ...base, value: formatCount(value) };
+  const score = Math.max(0, Math.min(100, Math.round(value)));
+  return { ...base, value: valueUnit === 'percent' ? `${score}%` : String(score) };
 }
 
-/** The Site Health scores, as one `KpiRow`. */
 export function AuditScores({
   metrics,
   testId,
 }: Readonly<{ metrics: readonly AuditMetric[]; testId?: string }>) {
-  return <KpiRow segments={metrics.map(auditSegment)} testId={testId} />;
+  return <FigureStrip segments={metrics.map(auditSegment)} testId={testId} />;
 }
 
 type Summary = SiteHealthDashboard['score_summary'];
@@ -103,38 +89,34 @@ function metricContext(
 function technicalMetric(context: MetricContext): AuditMetric {
   const source = context.overview ?? context.summary;
   return {
-    title: 'Web Fundamentals',
+    title: 'Web fundamentals',
     value: source?.web_fundamentals_score ?? null,
     href: '/issues?section=technical',
-    icon: ICONS.siteHealth,
   };
 }
 
 function aeoMetric(context: MetricContext): AuditMetric {
   const source = context.overview ?? context.summary;
   return {
-    title: 'AEO Readiness',
+    title: 'AEO readiness',
     value: source?.aeo_readiness_score ?? null,
     href: '/issues?section=aeo',
-    icon: ICONS.visibility,
   };
 }
 
 function measurementMetric(context: MetricContext): AuditMetric {
   const source = context.overview ?? context.summary;
   return {
-    title: 'AEO Checklist Completion',
+    title: 'AEO checklist completion',
     valueUnit: 'percent',
     value: percentRatio(source?.aeo_measurement_coverage),
     href: '/site?tab=aeo-readiness',
-    icon: ICONS.reports,
   };
 }
 
 const count = (value: unknown) =>
   typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
 
-/** Found and analyzed pages: saved by the crawl, absent on older snapshots. */
 function coverageCounts(coverage: SiteHealthOverview['crawl_coverage'] | undefined) {
   const evidence = coverage?.evidence ?? {};
   const found = count(evidence.observation_count);
@@ -145,14 +127,13 @@ function coverageCounts(coverage: SiteHealthOverview['crawl_coverage'] | undefin
 
 function crawlMetric(context: MetricContext): AuditMetric {
   const counts = coverageCounts(context.overview?.crawl_coverage);
-  // Share of the pages the crawl found, not of the pages it chose: 20 of 100 is not 100%.
   let progress = context.selected > 0 ? (100 * context.analyzed) / context.selected : null;
   if (counts)
     progress = counts.found ? (100 * Math.min(counts.analyzed, counts.found)) / counts.found : null;
   return {
-    title: 'Crawl Coverage',
+    title: 'Crawl coverage',
+    valueUnit: 'percent',
     value: progress,
     href: '/site?tab=pages',
-    icon: ICONS.site,
   };
 }

@@ -6,7 +6,6 @@ import { AgentError, type Lease, type Run } from './contracts.ts';
 import { appendRecoveryReply } from './messages.ts';
 
 const { statuses, claimable, active, terminal } = policy.task_queue;
-/** The fenced run lock every turn write takes: still running, held and not cancelled. */
 export async function lockRun(db: Database, lease: Lease): Promise<Run> {
   const run = await fenceLease(
     db,
@@ -69,7 +68,6 @@ export async function endInterrupted(
   await appendRecoveryReply(db, run, 'interrupted');
 }
 
-/** Workspace sets come from the process owner, with bounded lease recovery. */
 export class AgentQueue {
   readonly db: Database;
   readonly #runs: TaskQueue<'agent_runs'>;
@@ -77,7 +75,6 @@ export class AgentQueue {
     this.db = db;
     this.#runs = new TaskQueue(db, AGENT_LANE, { leaseTtlSeconds: leaseSeconds });
   }
-  /** Claim the next turn of `workspaceIds` (or `runId`), committed before the stream runs it. */
   async claim(owner: string, workspaceIds: readonly string[], runId?: string): Promise<Run | null> {
     if (!workspaceIds.length) return null;
     const [run] = await this.#runs.claim({

@@ -1,4 +1,3 @@
-/** Every bulk lane's expired-lease reclaim; discovery and integrations recover here. */
 import { sql, type RawBuilder } from 'kysely';
 import { policy } from '../config.ts';
 import { queueRecovery } from '../config/queue-recovery.ts';
@@ -10,12 +9,9 @@ import { DISCOVERY_LANE, INTEGRATION_LANE, type LaneDescriptor } from './task-qu
 const { statuses } = policy.task_queue;
 
 export type LeaseRecovery = {
-  /** The lane's table and the attempts one reclaim charges (0 when its claim already charged it). */
   lane: Pick<LaneDescriptor, 'table' | 'recoveryCharge'>;
   batchSize: number;
-  /** Narrows the expired rows, such as task kinds or one workspace's run. */
   scope?: RawBuilder<boolean>;
-  /** The time the reclaim records; the database clock unless the lane keeps its own. */
   at?: Date;
 };
 
@@ -26,12 +22,6 @@ export type ReclaimedLease = {
   attempt_count: number;
 };
 
-/**
- * Return the oldest expired leases to `retry_wait`, or fail those the charge
- * exhausts, without running provider work. `SKIP LOCKED` leaves a lease a
- * heartbeat or publication holds for the next pass. It joins the caller's
- * transaction, so a lane can settle failed rows' parents in the same commit.
- */
 export function reclaimExpiredLeases(
   db: Database,
   recovery: LeaseRecovery,
@@ -102,7 +92,6 @@ function logExhausted(queue: LaneDescriptor['table'], tasks: readonly ReclaimedL
 
 export async function recoverDiscoveryLeases(db: Database, batchSize = queueRecovery.batchSize) {
   const tasks = await db.transaction().execute(async (trx) => {
-    // Discovery counts the attempt on completion or recovery, never on claim.
     const tasks = await reclaimExpiredLeases(trx, {
       lane: DISCOVERY_LANE,
       batchSize,
@@ -152,7 +141,6 @@ export async function recoverIntegrationLeases(
   batchSize = queueRecovery.batchSize,
   scope?: { workspaceId: string; runId: string },
 ) {
-  // Integration claims already charge the attempt. Reclaiming must not charge it twice.
   const tasks = await reclaimExpiredLeases(db, {
     lane: INTEGRATION_LANE,
     batchSize,

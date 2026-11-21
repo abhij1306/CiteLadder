@@ -8,15 +8,10 @@ import { Switch } from '@/components/ui/switch';
 import { textRole } from '@/components/ui/typography';
 import type { EntityMatching } from '@citeladder/contracts';
 
-/** An editable mention rule; `touched` rules are the only ones saved. */
 export type MentionRuleDraft = {
   mode: EntityMatching['mode'];
   contextTerms: string;
   exclusionPhrases: string;
-  /**
-   * Shown open (an ordinary-word name, or one already needing context) rather
-   * than behind a disclosure; fixed while the panel is open.
-   */
   open: boolean;
   touched: boolean;
 };
@@ -31,11 +26,6 @@ export function mentionRuleDraft(matching: EntityMatching | undefined): MentionR
   };
 }
 
-/**
- * When a brand or competitor name counts as a mention. A name that is an
- * ordinary word ("Target", "Notion") shows its rule straight away; any other
- * name keeps it behind a disclosure, since every occurrence counts by default.
- */
 export function MentionRuleFields({
   name,
   rule,
@@ -60,15 +50,12 @@ export function MentionRuleFields({
           onCheckedChange={(checked) => update({ mode: checked ? 'context_required' : 'always' })}
           label={`${name || 'This name'} needs context to count as a mention`}
         />
-        <span aria-hidden className={textRole('body')}>
+        <span aria-hidden className={textRole('body', 'text-ink-2')}>
           Needs context to count as a mention
         </span>
       </Inline>
       {rule.mode === 'context_required' ? (
-        <Field
-          label="Context words"
-          hint="Comma separated. A mention counts only when one of these appears near the name."
-        >
+        <Field label="Context words" hint="Comma separated">
           {(props) => (
             <Input
               {...props}
@@ -79,10 +66,7 @@ export function MentionRuleFields({
           )}
         </Field>
       ) : null}
-      <Field
-        label="Never counts inside"
-        hint="Comma separated. Phrases where the name is an ordinary word."
-      >
+      <Field label="Never counts inside" hint="Comma separated">
         {(props) => (
           <Input
             {...props}
@@ -94,7 +78,6 @@ export function MentionRuleFields({
       </Field>
     </Stack>
   );
-  // Decided once per draft, so toggling the switch never remounts the fields.
   if (rule.open) return fields;
   return <Disclosure title="Mention rule">{fields}</Disclosure>;
 }

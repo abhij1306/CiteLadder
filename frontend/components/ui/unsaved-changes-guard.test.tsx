@@ -12,7 +12,6 @@ function Editor() {
     <>
       <h1>Editor</h1>
       <UnsavedChangesGuard when={dirty} />
-      {/* A second, clean editor on the same screen (another output of the chat). */}
       <UnsavedChangesGuard when={false} />
       <button type="button" onClick={() => setDirty(true)}>
         Edit
@@ -56,7 +55,6 @@ it('asks before unsaved edits are discarded by leaving or closing the tab', asyn
   await user.click(screen.getByRole('button', { name: 'Edit' }));
   expect(closeTab()).toBe(true);
 
-  // A tab held in the URL stays on the screen, so it is not a discard.
   await user.click(screen.getByRole('link', { name: 'Outline tab' }));
   expect(router.state.location.search).toBe('?tab=outline');
   expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();

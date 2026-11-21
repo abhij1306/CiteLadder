@@ -1,109 +1,118 @@
 import { useState } from 'react';
 
 import { ProjectEditPanel } from '@/components/projects/project-edit-panel';
-import { AppGrid } from '@/components/ui/app-grid';
 import { BrandMark } from '@/components/ui/brand-mark';
 import { Button } from '@/components/ui/button';
-import { Callout } from '@/components/ui/callout';
-import { MutationNotice } from '@/components/ui/mutation-notice';
-import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { ChipInput, ChipList } from '@/components/ui/chip-input';
-import { Field } from '@/components/ui/field';
-import { Input } from '@/components/ui/input';
-import { Stack } from '@/components/ui/layout';
-import { SegmentedControl } from '@/components/ui/tabs';
+import { Absence } from '@/components/ui/absence';
+import { Icon } from '@/components/ui/icon';
+import { Inline } from '@/components/ui/layout';
+import { Select } from '@/components/ui/select';
+import { SettingField, SettingRow, SettingRows, SettingsGroup } from '@/components/ui/setting-row';
+import { StateBlock } from '@/components/ui/state-block';
 import { Textarea } from '@/components/ui/textarea';
-import { textRole } from '@/components/ui/typography';
+import { Pencil } from '@/lib/icons';
 import { mutationNoticeForError } from '@/lib/api/mutation-notice';
 import type { Project } from '@citeladder/contracts';
 import { BUYER_TYPE_CHOICES, MARKET_SCOPE_CHOICES } from '@/lib/project/identity-facets';
 import { useWorkspaceCapability } from '@/lib/project/project-context';
 
+import { SaveFoot } from './save-foot';
 import type { BrandProfileForm } from './use-brand-profile-form';
+import { Notice } from '@/components/ui/notice';
 
-/** The profile save's outcome, above the tab it was saved from. */
-export function ProfileSaveNotices({ form }: Readonly<{ form: BrandProfileForm }>) {
+function ProfileSaveNotices({ form }: Readonly<{ form: BrandProfileForm }>) {
   if (form.error)
     return (
-      <MutationNotice
+      <Notice
+        kind="mutation"
         notice={mutationNoticeForError(form.error, { action: 'save the brand profile' })}
       />
     );
-  return form.notice ? <Callout tone="positive">{form.notice}</Callout> : null;
+  return form.notice ? <Notice tone="positive">{form.notice}</Notice> : null;
 }
 
-/**
- * Category, buyer type and market scope decide which questions prompt
- * generation asks, so a wrong onboarding answer must stay correctable here,
- * beside the description and positioning.
- */
+function ProfileSaveFoot({ form }: Readonly<{ form: BrandProfileForm }>) {
+  return (
+    <SaveFoot
+      label="Save brand knowledge"
+      changed={form.dirty}
+      saving={form.saving}
+      onSave={form.save}
+    />
+  );
+}
+
 export function CompanyFactsCard({ form }: Readonly<{ form: BrandProfileForm }>) {
   const { draft, identity, saving } = form;
   return (
-    <Card aria-labelledby="company-facts">
-      <CardHeader>
-        <CardTitle id="company-facts">Company facts</CardTitle>
-        <CardDescription>
-          The canonical facts used across CiteLadder, including by the agent.
-        </CardDescription>
-      </CardHeader>
-      <Stack gap="workspace">
-        <Field
-          label="What you sell"
-          hint="The category buyers would search for. Generated questions are built from it."
-        >
-          {(field) => (
-            <Input
-              {...field}
-              disabled={saving}
-              value={identity.category}
-              onChange={(event) => form.setIdentity({ ...identity, category: event.target.value })}
-            />
-          )}
-        </Field>
-        <AppGrid layout="halves">
-          <FacetChoice
-            label="Who buys it"
-            value={identity.buyer_type}
-            options={BUYER_TYPE_CHOICES}
-            disabled={saving}
-            onPick={(buyer_type) => form.setIdentity({ ...identity, buyer_type })}
-          />
-          <FacetChoice
-            label="Where they buy it"
-            value={identity.market_scope}
-            options={MARKET_SCOPE_CHOICES}
-            disabled={saving}
-            onPick={(market_scope) => form.setIdentity({ ...identity, market_scope })}
-          />
-        </AppGrid>
-        <Field label="Description" hint="Core mission, value proposition, and brand summary.">
+    <SettingsGroup title="Company facts">
+      <ProfileSaveNotices form={form} />
+      <SettingRows foot={<ProfileSaveFoot form={form} />}>
+        <SettingField label="Category">
           {(field) => (
             <Textarea
               {...field}
-              rows={6}
+              rows={2}
+              disabled={saving}
+              value={identity.category}
+              onChange={(event) =>
+                form.setIdentity({
+                  ...identity,
+                  category: event.target.value.replaceAll('\n', ' '),
+                })
+              }
+            />
+          )}
+        </SettingField>
+        <FacetChoice
+          label="Who buys it"
+          value={identity.buyer_type}
+          options={BUYER_TYPE_CHOICES}
+          disabled={saving}
+          onPick={(buyer_type) => form.setIdentity({ ...identity, buyer_type })}
+        />
+        <FacetChoice
+          label="Where they buy it"
+          value={identity.market_scope}
+          options={MARKET_SCOPE_CHOICES}
+          disabled={saving}
+          onPick={(market_scope) => form.setIdentity({ ...identity, market_scope })}
+        />
+        <SettingField label="Target audience">
+          {(field) => (
+            <Textarea
+              {...field}
+              rows={3}
+              disabled={saving}
+              value={draft.target_audience}
+              onChange={(event) => form.setDraft({ ...draft, target_audience: event.target.value })}
+            />
+          )}
+        </SettingField>
+        <SettingField label="Description">
+          {(field) => (
+            <Textarea
+              {...field}
+              rows={4}
               disabled={saving}
               value={draft.description}
               onChange={(event) => form.setDraft({ ...draft, description: event.target.value })}
             />
           )}
-        </Field>
-        <Field
-          label="Positioning"
-          hint="Include price tier, differentiation, and competitive segment."
-        >
+        </SettingField>
+        <SettingField label="Positioning">
           {(field) => (
             <Textarea
               {...field}
-              rows={6}
+              rows={4}
               disabled={saving}
               value={draft.positioning}
               onChange={(event) => form.setDraft({ ...draft, positioning: event.target.value })}
             />
           )}
-        </Field>
-      </Stack>
-    </Card>
+        </SettingField>
+      </SettingRows>
+    </SettingsGroup>
   );
 }
 
@@ -121,106 +130,69 @@ function FacetChoice<T extends string>({
   onPick: (value: T) => void;
 }>) {
   return (
-    <Stack gap="compact">
-      <span className={textRole('label')} aria-hidden>
-        {label}
-      </span>
-      {/* A single choice is the shared segmented control: selection is its
-          accent bar and foreground ink, never a filled chip. */}
-      <SegmentedControl<T | ''>
-        ariaLabel={label}
-        value={value ?? ''}
-        options={options}
-        disabled={disabled}
-        onChange={(next) => {
-          if (next && !disabled) onPick(next);
-        }}
-      />
-    </Stack>
-  );
-}
-
-/**
- * Who the business sells to, and its offerings one chip each, so an offering
- * whose name holds a comma ("simulator bays for golf courses, and community
- * centres") stays one offering. A typed but unadded offering is held by the
- * form and saved with the list.
- */
-export function AudienceCard({ form }: Readonly<{ form: BrandProfileForm }>) {
-  const { draft, saving } = form;
-  return (
-    <Card aria-labelledby="audience-offerings">
-      <CardHeader>
-        <CardTitle id="audience-offerings">Audience and offerings</CardTitle>
-        <CardDescription>Who you sell to, and what you sell.</CardDescription>
-      </CardHeader>
-      <Stack gap="workspace">
-        <Field
-          label="Target audience"
-          hint="Key demographics, customer personas, and ideal buyers."
-        >
-          {(field) => (
-            <Textarea
-              {...field}
-              rows={6}
-              disabled={saving}
-              value={draft.target_audience}
-              onChange={(event) => form.setDraft({ ...draft, target_audience: event.target.value })}
-            />
-          )}
-        </Field>
-        <ChipInput
-          label="Products and services"
-          hint="One offering per entry, named as a buyer would."
-          items={draft.products_services.map((value) => ({ value }))}
-          onChange={(items) =>
-            form.setDraft({ ...draft, products_services: items.map((item) => item.value) })
-          }
-          pending={form.pendingOffering}
-          onPendingChange={form.setPendingOffering}
-          disabled={saving}
+    <SettingField inline label={label}>
+      {(field) => (
+        <Select<T | ''>
+          id={field.id}
+          ariaLabel={label}
+          aria-describedby={field['aria-describedby']}
+          value={value ?? ''}
+          placeholder="Not set"
+          options={options}
+          disabled={disabled}
+          onValueChange={(next) => {
+            if (next) onPick(next);
+          }}
         />
-      </Stack>
-    </Card>
+      )}
+    </SettingField>
   );
 }
 
-/**
- * The project's tracked competitors as one wrapping row of marked chips. They
- * are edited with the rest of the project's configuration, which this opens.
- */
 export function TrackedCompetitorsCard({ project }: Readonly<{ project: Project }>) {
   const mayEdit = useWorkspaceCapability('write');
   const [editing, setEditing] = useState(false);
   return (
-    <Card aria-labelledby="tracked-competitors">
-      <CardHeader
-        actions={
-          mayEdit ? (
-            <Button variant="secondary" onClick={() => setEditing(true)}>
-              Edit competitors
-            </Button>
-          ) : null
-        }
-      >
-        <CardTitle id="tracked-competitors">Tracked competitors</CardTitle>
-        <CardDescription>The brands CiteLadder measures you against.</CardDescription>
-      </CardHeader>
-      <ChipList
-        label="Tracked competitors"
-        items={(project.competitors ?? []).map((competitor) => ({
-          key: `${competitor.name}:${competitor.domains[0] ?? ''}`,
-          value: competitor.name,
-          media: (
-            <BrandMark
-              name={competitor.name}
-              logoUrl={competitor.logo_url}
-              websiteUrl={competitor.domains[0]}
+    <SettingsGroup
+      title="Tracked competitors"
+      action={
+        mayEdit ? (
+          <Button variant="secondary" onClick={() => setEditing(true)}>
+            <Icon icon={Pencil} />
+            Edit competitors
+          </Button>
+        ) : null
+      }
+    >
+      {(project.competitors ?? []).length === 0 ? (
+        <StateBlock kind="empty" inline message="No competitors tracked yet." />
+      ) : (
+        <SettingRows label="Tracked competitors">
+          {(project.competitors ?? []).map((competitor) => (
+            <SettingRow
+              key={`${competitor.name}:${competitor.domains[0] ?? ''}`}
+              label={
+                <Inline as="span">
+                  <BrandMark
+                    name={competitor.name}
+                    logoUrl={competitor.logo_url}
+                    websiteUrl={competitor.domains[0]}
+                  />
+                  <span className="truncate">{competitor.name}</span>
+                </Inline>
+              }
+              value={
+                competitor.domains.length ? (
+                  competitor.domains.join(', ')
+                ) : (
+                  <Absence state="not_set" />
+                )
+              }
             />
-          ),
-        }))}
-      />
+          ))}
+        </SettingRows>
+      )}
       {editing ? <ProjectEditPanel project={project} open onOpenChange={setEditing} /> : null}
-    </Card>
+    </SettingsGroup>
   );
 }

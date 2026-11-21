@@ -1,8 +1,3 @@
-/**
- * Catalog matching in every answer (CM1) against real PostgreSQL: a brand-run
- * answer is matched against the catalog revision its audit froze, and a new
- * revision re-matches earlier answers once through the shared analytics worker.
- */
 import { randomUUID } from 'node:crypto';
 import { afterAll, afterEach, describe, expect, it } from 'vitest';
 
@@ -46,7 +41,6 @@ const TRAIL = 'https://shop.example/products/trail,Acme Trail Climber,Acme';
 const ANSWER =
   '1. Acme Road Runner for daily road miles\n2. Acme Trail Climber for rocky trails\n3. A generic foam trainer';
 
-/** An audit (brand by default) of one prompt whose single ChatGPT answer is `answer`; the audit id. */
 async function brandAnswer(t: Tenant, answer: string, auditScope: 'brand' | 'commerce' = 'brand') {
   const recorded = await recordAnswer(db, t, answer, {
     runtime,
@@ -57,7 +51,6 @@ async function brandAnswer(t: Tenant, answer: string, auditScope: 'brand' | 'com
   return recorded.auditId;
 }
 
-/** Each pass of the workspace with its revision number and the products it observed. */
 async function passes(workspaceId: string) {
   const rows = await db
     .selectFrom('commerce_match_passes as p')
@@ -104,7 +97,6 @@ const matchingTasks = (workspaceId: string) =>
     .orderBy('created_at')
     .execute();
 
-/** Run the queued matching tasks of one workspace through the shared analytics worker. */
 async function runMatching(workspaceId: string, taskIds: string[]) {
   await new AnalyticsWorker(db, settings, {
     owner: 'matching-test',
@@ -124,7 +116,6 @@ describe('catalog matching in every answer', () => {
       .where('id', '=', auditId)
       .executeTakeFirstOrThrow();
     expect(audit.configuration).toMatchObject({ commerce_catalog: { revision_number: 1 } });
-    // Only the span naming a catalog product is kept; no buyer prompt targets the answer.
     expect(await passes(t.workspaceId)).toEqual([
       {
         mode: 'live',
@@ -140,11 +131,9 @@ describe('catalog matching in every answer', () => {
     const foreign = await auditTenant(db, fixtures);
     await brandAnswer(t, ANSWER);
     await brandAnswer(foreign, ANSWER);
-    // Before any catalog the answer has nothing to match.
     expect(await passes(t.workspaceId)).toEqual([]);
 
     await importCatalog(db, scopeOf(t), csv([ROAD]));
-    // The import's own Opportunity refresh has been claimed before the backfill ends.
     await db
       .deleteFrom('analytics_tasks')
       .where('workspace_id', '=', t.workspaceId)
@@ -155,7 +144,6 @@ describe('catalog matching in every answer', () => {
     expect(await passes(t.workspaceId)).toEqual([
       { mode: 'backfill', target: null, revision: 1, observed: ['1:owned:Acme Road Runner'] },
     ]);
-    // The backfill's passes are new Commerce evidence, so they ask for a refresh.
     const refreshes = await db
       .selectFrom('analytics_tasks')
       .select(['payload', 'status'])
@@ -172,7 +160,6 @@ describe('catalog matching in every answer', () => {
       },
     ]);
 
-    // Running the same revision again records nothing new.
     const again = await enqueueTask(db, {
       workspaceId: t.workspaceId,
       projectId: t.projectId,
@@ -183,11 +170,9 @@ describe('catalog matching in every answer', () => {
     });
     await runMatching(t.workspaceId, [again!]);
     expect(await passes(t.workspaceId)).toHaveLength(1);
-    // The same file again is the same import: no new revision.
     await importCatalog(db, scopeOf(t), csv([ROAD]));
     expect(await matchingTasks(t.workspaceId)).toHaveLength(2);
 
-    // A changed catalog is a new revision whose pass becomes the answer's latest.
     await importCatalog(db, scopeOf(t), csv([ROAD, TRAIL]));
     const queued = await matchingTasks(t.workspaceId);
     await runMatching(t.workspaceId, [queued.at(-1)!.id]);
@@ -200,7 +185,6 @@ describe('catalog matching in every answer', () => {
         observed: ['1:owned:Acme Road Runner', '2:owned:Acme Trail Climber'],
       },
     ]);
-    // Another workspace's answer naming the same products is never matched.
     expect(await passes(foreign.workspaceId)).toEqual([]);
   });
 
@@ -225,7 +209,6 @@ describe('catalog matching in every answer', () => {
       })
       .execute();
     const auditId = await brandAnswer(t, ANSWER, 'commerce');
-    // The trail shoe joins the category after the answer: revision 2 re-matches it.
     await importCatalog(db, scopeOf(t), shoes([ROAD, TRAIL]));
     const queued = await matchingTasks(t.workspaceId);
     await runMatching(t.workspaceId, [queued.at(-1)!.id]);
@@ -278,8 +261,6 @@ describe('catalog matching in every answer', () => {
       new Set(latest.map((row) => row.id)),
     );
 
-    // Recovery of an answer saved without its live pass: the backfill pass
-    // already covers it, so no resolver quota is spent on it.
     let calls = 0;
     const resolver = {
       model: 'fixture',
@@ -309,7 +290,6 @@ describe('catalog matching in every answer', () => {
     await brandAnswer(foreign, ANSWER);
     await importCatalog(db, scopeOf(t), csv([ROAD]));
     const [own] = await matchingTasks(t.workspaceId);
-    // The foreign workspace's task names this workspace's revision.
     const stolen = await enqueueTask(db, {
       workspaceId: foreign.workspaceId,
       projectId: foreign.projectId,
@@ -326,7 +306,6 @@ describe('catalog matching in every answer', () => {
       .where('workspace_id', '=', foreign.workspaceId)
       .execute();
     expect(foreignRevisions).toEqual([]);
-    // The foreign answer matches once its own catalog names the product.
     await importCatalog(db, scopeOf(foreign), csv([ROAD]));
     const [foreignOwn] = await matchingTasks(foreign.workspaceId).then((rows) =>
       rows.filter((row) => row.id !== stolen),
@@ -350,7 +329,6 @@ describe('catalog matching in every answer', () => {
       expect(await matchingTasks(t.workspaceId)).toEqual([]);
       expect(await passes(t.workspaceId)).toEqual([]);
     }
-    // The same import and answer in a qualifying project are matched.
     const qualifying = await auditTenant(db, fixtures);
     await importCatalog(db, scopeOf(qualifying), csv([ROAD]));
     await brandAnswer(qualifying, ANSWER);

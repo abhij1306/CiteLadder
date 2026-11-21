@@ -1,9 +1,3 @@
-/**
- * Site Health's page-local checks on the fetched page (content rules engine,
- * L0): the same extractor, classifier and evaluators a crawl runs, on this one
- * response. Rules that need the crawl (site, cluster and graph scopes, and the
- * sitemap checks) are left out; they keep the crawl's finding.
- */
 import { policy } from '../config.ts';
 import { factSettings } from '../site-health/analysis/facts.ts';
 import { analyzePageAsync, extractFactsAsync } from '../site-health/analysis/off-thread.ts';
@@ -13,7 +7,6 @@ import type { FetchedPage } from '../safe-fetch.ts';
 const fetch = policy.content_optimization.page_fetch;
 const SITE_CONTEXT: ReadonlySet<string> = new Set(fetch.site_context_rule_ids);
 
-/** One persisted check: the evaluation as Site Health judged it, without its catalog copy. */
 export type PageCheck = Pick<
   RuleEvaluation,
   | 'rule_id'
@@ -31,7 +24,6 @@ export type PageCheck = Pick<
 const isPageLocal = (evaluation: RuleEvaluation) =>
   evaluation.scope === fetch.page_local_scope && !SITE_CONTEXT.has(evaluation.rule_id);
 
-/** The page kind the fetched page reads as, and its page-local evaluations in catalog order. */
 export async function pageLocalChecks(
   page: FetchedPage,
   fetched: { at: Date; latencyMs: number },
@@ -53,7 +45,6 @@ export async function pageLocalChecks(
     factSettings(),
   );
   const result = await analyzePageAsync(facts, {
-    // A single fetch has no sitemap or site-level evidence; the checks that read them are left out.
     sitemapMember: false,
     siteFacts: null,
     auditTime: fetched.at.toISOString(),

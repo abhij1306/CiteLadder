@@ -6,23 +6,12 @@ import type { SearchSurfaceEvidence, SurfaceEntity } from '@citeladder/contracts
 
 import { SurfaceEvidence } from './surface-evidence';
 
-/**
- * The two things this panel exists to keep straight.
- *
- * First, that mentioned / linked / cited stay three columns. They are three
- * independent observations that come apart in both directions, and a reader
- * who sees them collapse into one "appeared" cell has lost the finding.
- *
- * Second, that "Google showed no overview" and "we never managed to look" are
- * never the same sentence. The first is a measurement; the second is a gap in
- * ours, and presenting it as the brand's absence is the worst thing this
- * surface could do.
- */
-
 function entity(overrides: Partial<SurfaceEntity> = {}): SurfaceEntity {
   return {
     name: 'Acme Corp',
     kind: 'brand',
+    logo_url: null,
+    website_url: null,
     mentioned: false,
     linked: false,
     cited: false,
@@ -52,11 +41,6 @@ function evidence(overrides: Partial<SearchSurfaceEvidence> = {}): SearchSurface
   };
 }
 
-/**
- * The three signal cells of one row, each with the label only a screen reader
- * hears. Asserting the prefix too is deliberate: a bare "Yes" three columns
- * along is meaningless without sight of the header.
- */
 function signalsFor(name: string): string[] {
   const row = screen.getByRole('row', { name: new RegExp(name) });
   return within(row)
@@ -91,8 +75,6 @@ describe('AI Overview evidence', () => {
       />,
     );
 
-    // Named No, Linked Yes, Cited No. Deriving any one of these from another
-    // would make all three read the same.
     expect(signalsFor('Acme Corp')).toEqual(signals('No', 'Yes', 'No'));
   });
 
@@ -105,7 +87,6 @@ describe('AI Overview evidence', () => {
   it('names an unranked brand rather than giving it a position', () => {
     render(<SurfaceEvidence evidence={evidence({ entities: [entity({ cited: true })] })} />);
 
-    // Never named is not last place, so it must not arrive as a number.
     expect(screen.getByText('Not named')).toBeVisible();
   });
 
@@ -119,7 +100,7 @@ describe('AI Overview evidence', () => {
         })}
       />,
     );
-    expect(screen.getByText(/Google showed no AI Overview/)).toBeVisible();
+    expect(screen.getByText('Not shown')).toBeVisible();
     unmount();
 
     render(
@@ -131,8 +112,8 @@ describe('AI Overview evidence', () => {
         })}
       />,
     );
-    expect(screen.getByText(/never successfully retrieved/)).toBeVisible();
-    expect(screen.queryByText(/Google showed no AI Overview/)).toBeNull();
+    expect(screen.getByText('Not observed')).toBeVisible();
+    expect(screen.queryByText('Not shown')).toBeNull();
   });
 
   it('keeps the presence table out of a run that observed nothing', () => {
@@ -146,8 +127,6 @@ describe('AI Overview evidence', () => {
       />,
     );
 
-    // With no overview there is nothing to have appeared in, so a table of
-    // "No, No, No" would read as the brand losing rather than as no contest.
     expect(screen.queryByRole('table')).toBeNull();
   });
 });

@@ -1,4 +1,3 @@
-/** Deterministic ads metrics: applicability, presence, advertisers, creatives and prompts. */
 import { describe, expect, it } from 'vitest';
 
 import { adsSummary, type AdAnswer, type AdObservation } from '../src/visibility/ad-metrics.ts';

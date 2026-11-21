@@ -3,21 +3,17 @@ import { describe, expect, it } from 'vite-plus/test';
 import type { CrawlOverallStatus } from '@citeladder/contracts';
 import { CRAWL_POLL_MS } from '@/lib/config/operational';
 import {
-  PLACEHOLDER,
   canShowDiscoveredTotal,
   crawlDisplayStatus,
   discoveryProgressLabel,
-  formatAudited,
   formatIssueCount,
   formatScore,
-  isAnalysisTerminal,
   crawlPollInterval,
   isCrawlStalled,
   isDiscoveryProvisional,
   isDiscoveryTerminal,
-  isErrorRow,
-  isSampleMode,
   crawlProgressVersion,
+  crawlViewsDue,
   statusLabel,
 } from './status';
 import { crawlFailureCopy, dashboardRunNotice } from './run-notice';
@@ -40,7 +36,6 @@ describe('polling / cancel / terminal predicates', () => {
       status: 'running' as const,
       started_at: new Date(now - msAgo).toISOString(),
       created_at: new Date(now - msAgo).toISOString(),
-      // Progressing: last write was just now, so it is never "silent".
       updated_at: new Date(now - 1_000).toISOString(),
     });
 
@@ -61,8 +56,6 @@ describe('polling / cancel / terminal predicates', () => {
   });
 
   it('keeps polling a long crawl that is still writing progress', () => {
-    // The stall cutoff is about SILENCE, not duration: an hour-long crawl that
-    // updated a second ago is healthy and must not be abandoned.
     const now = Date.parse('2026-07-29T12:00:00Z');
     const crawl = {
       status: 'running' as const,
@@ -98,22 +91,16 @@ describe('polling / cancel / terminal predicates', () => {
   });
 
   it('is not stalled when the crawl is terminal or absent', () => {
-    const now = Date.parse('2026-07-29T12:00:00Z');
-    expect(isCrawlStalled(null, now)).toBe(false);
+    expect(isCrawlStalled(null)).toBe(false);
     expect(
-      isCrawlStalled(
-        {
-          status: 'completed',
-          counters: { activity: { state: 'stalled' } },
-        } as never,
-        now,
-      ),
+      isCrawlStalled({
+        status: 'completed',
+        counters: { activity: { state: 'stalled' } },
+      } as never),
     ).toBe(false);
   });
 
   it('keeps polling when timestamps are unusable rather than giving up', () => {
-    // Clock skew / a bad timestamp must degrade to the baseline cadence — the
-    // one thing it must never do is silently stop progress.
     const now = Date.parse('2026-07-29T12:00:00Z');
     expect(
       crawlPollInterval(
@@ -139,11 +126,9 @@ describe('polling / cancel / terminal predicates', () => {
     ).toBe(CRAWL_POLL_MS);
   });
 
-  it('recognises terminal discovery / analysis sub-states', () => {
+  it('recognises terminal discovery sub-states', () => {
     expect(isDiscoveryTerminal('sample_completed')).toBe(true);
     expect(isDiscoveryTerminal('running')).toBe(false);
-    expect(isAnalysisTerminal('partially_completed')).toBe(true);
-    expect(isAnalysisTerminal('pending')).toBe(false);
   });
 });
 
@@ -182,7 +167,6 @@ describe('discovery provisional / sample-mode copy', () => {
 
   it('renders sample copy (never a total or "so far")', () => {
     const sample = { ...base, sample_mode: true, inventory_complete: true, visible_url_count: 10 };
-    expect(isSampleMode(sample)).toBe(true);
     expect(discoveryProgressLabel(sample)).toBe('10 sample pages');
     expect(discoveryProgressLabel(sample)).not.toContain('so far');
     expect(discoveryProgressLabel(sample)).not.toContain('discovered');
@@ -241,6 +225,17 @@ describe('crawlProgressVersion (single-subscription fan-out key)', () => {
   });
 });
 
+describe('crawlViewsDue (throttled list refresh)', () => {
+  const seen = { version: 'a', status: 'running' as const, refreshedAt: 0 };
+
+  it('throttles a running crawl, but never its terminal transition', () => {
+    expect(crawlViewsDue(seen, { version: 'a', status: 'running' }, 60_000)).toBe(false);
+    expect(crawlViewsDue(seen, { version: 'b', status: 'running' }, 29_999)).toBe(false);
+    expect(crawlViewsDue(seen, { version: 'b', status: 'running' }, 30_000)).toBe(true);
+    expect(crawlViewsDue(seen, { version: 'b', status: 'completed' }, 1)).toBe(true);
+  });
+});
+
 describe('dashboardRunNotice', () => {
   const noticeBase = {
     analyzed_count: 3,
@@ -273,8 +268,6 @@ describe('dashboardRunNotice', () => {
   });
 
   it('shows no notice when only discovered links could not be fetched', () => {
-    // Every real site has a few dead or non-page links; that is a normal crawl
-    // with nothing to retry, so only an analysis shortfall earns a notice.
     const partial = { ...noticeBase, status: 'partially_completed' as const };
     expect(dashboardRunNotice({ ...partial, partial_reason: 'discovery_incomplete' })).toBeNull();
     expect(
@@ -283,15 +276,14 @@ describe('dashboardRunNotice', () => {
       badge: 'partial',
       tone: 'warning',
       message:
-        'Some pages could not be analyzed — showing partial results. Re-crawl to retry the remaining pages.',
+        'Some pages could not be analyzed. Partial results are shown. Re-crawl to retry the remaining pages.',
     });
   });
 
   it('labels a failed-with-data dashboard with a Failed badge', () => {
     const notice = dashboardRunNotice({ ...noticeBase, status: 'failed' });
     expect(notice?.badge).toBe('failed');
-    // Partial results exist — the "so far" phrasing stays, with the reason.
-    expect(notice?.message).toMatch(/showing the pages analyzed so far/);
+    expect(notice?.message).toMatch(/The pages analyzed so far are shown/);
   });
 
   it('drops the "pages analyzed so far" claim when nothing was analyzed', () => {
@@ -309,7 +301,7 @@ describe('dashboardRunNotice', () => {
       },
     });
     expect(notice?.badge).toBe('failed');
-    expect(notice?.message).not.toMatch(/showing the pages analyzed so far/);
+    expect(notice?.message).not.toMatch(/The pages analyzed so far are shown/);
     expect(notice?.message).toContain('The run failed before any page was analyzed.');
     expect(notice?.message).toContain('The domain could not be resolved (DNS)');
     expect(notice?.message).toMatch(/domain is spelled correctly/);
@@ -346,14 +338,6 @@ describe('crawlFailureCopy', () => {
 });
 
 describe('badge mapping', () => {
-  it('classifies error/blocked rows explicitly (not zero scores)', () => {
-    expect(isErrorRow('failed')).toBe(true);
-    expect(isErrorRow('error')).toBe(true);
-    expect(isErrorRow('blocked')).toBe(true);
-    expect(isErrorRow('cancelled')).toBe(true);
-    expect(isErrorRow('completed')).toBe(false);
-  });
-
   it('reads a crawl that only missed unreachable links as completed', () => {
     expect(
       crawlDisplayStatus({ status: 'partially_completed', partial_reason: 'discovery_incomplete' }),
@@ -367,28 +351,21 @@ describe('badge mapping', () => {
 
 describe('score / count / date placeholders', () => {
   it('renders not measured for a null or NaN score (never 0 for missing)', () => {
-    expect(formatScore(null)).toBe(PLACEHOLDER);
-    expect(formatScore(Number.NaN)).toBe(PLACEHOLDER);
+    expect(formatScore(null)).toEqual({ absent: 'not_measured' });
+    expect(formatScore(Number.NaN)).toEqual({ absent: 'not_measured' });
     expect(formatScore(0)).toBe('0');
-    // Whole numbers: the tenth is an artefact of the division, not a
-    // measurement, and it changes with one check on one page.
     expect(formatScore(88.25)).toBe('88');
     expect(formatScore(27.210884353741495)).toBe('27');
   });
 
   it('renders not measured for a null issue count', () => {
-    expect(formatIssueCount(null)).toBe(PLACEHOLDER);
+    expect(formatIssueCount(null)).toEqual({ absent: 'not_measured' });
     expect(formatIssueCount(0)).toBe('0');
     expect(formatIssueCount(4)).toBe('4');
   });
 
-  it('renders not measured for a null last-audited', () => {
-    expect(formatAudited(null)).toBe(PLACEHOLDER);
-    expect(formatAudited('not-a-date')).toBe('not-a-date');
-  });
-
-  it('titleizes snake_case status tokens', () => {
-    expect(statusLabel('sample_completed')).toBe('Sample Completed');
+  it('sentence-cases snake_case status tokens', () => {
+    expect(statusLabel('sample_completed')).toBe('Sample completed');
     expect(statusLabel('running')).toBe('Running');
   });
 });

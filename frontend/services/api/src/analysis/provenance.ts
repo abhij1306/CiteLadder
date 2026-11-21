@@ -1,11 +1,4 @@
-/**
- * Frozen retrieval and route provenance, for one execution or one run.
- *
- * The task's request snapshot wins, then its
- * route snapshot, then the audit's frozen measurement policy. Live
- * configuration is never consulted.
- */
-import { readFrozenConfiguration } from '../audits/frozen-configuration.ts';
+import { auditFrozenRetrievalEnabled } from '../audits/frozen-configuration.ts';
 import { logicalEngines } from '../config/providers.ts';
 import { compareText } from '../text-order.ts';
 
@@ -24,29 +17,22 @@ function frozenRetrievalEnabled(...snapshots: unknown[]): boolean | null {
   return null;
 }
 
-/** The retrieval state frozen in an audit's measurement-policy block. */
-export function auditFrozenRetrievalEnabled(configuration: unknown): boolean | null {
-  return readFrozenConfiguration(configuration).measurement_policy.retrieval_enabled ?? null;
-}
-
 export function executionFrozenProvenance(input: {
   requestSnapshot: unknown;
   routeSnapshot: unknown;
   auditConfiguration: unknown;
-}): boolean | null {
+}): boolean {
   const retrieval = frozenRetrievalEnabled(input.requestSnapshot, input.routeSnapshot);
   return retrieval ?? auditFrozenRetrievalEnabled(input.auditConfiguration);
 }
 
-/** One measured route on an aggregate surface. */
 export type ModelProvenance = {
   logical_engine: string;
   transport_provider: string;
   transport_model: string;
-  retrieval_enabled: boolean | null;
+  retrieval_enabled: boolean;
 };
 
-// Catalog order is the sorted engine catalog; unknown engines sort after it.
 const ENGINE_ORDER = new Map<string, number>(
   logicalEngines.toSorted(compareText).map((engine, index) => [engine, index]),
 );
@@ -55,18 +41,6 @@ function engineRank(engine: string): number {
   return ENGINE_ORDER.get(engine) ?? ENGINE_ORDER.size;
 }
 
-// Unrecorded first, then off, then on.
-const RETRIEVAL_RANK = new Map<boolean | null, number>([
-  [null, 0],
-  [false, 1],
-  [true, 2],
-]);
-
-function retrievalRank(value: boolean | null): number {
-  return RETRIEVAL_RANK.get(value)!;
-}
-
-/** Exact duplicates removed, in stable catalog order. */
 export function buildModelProvenance(items: Iterable<ModelProvenance>): ModelProvenance[] {
   const unique = new Map<string, ModelProvenance>();
   for (const item of items) {
@@ -84,11 +58,10 @@ export function buildModelProvenance(items: Iterable<ModelProvenance>): ModelPro
       compareText(left.logical_engine, right.logical_engine) ||
       compareText(left.transport_provider, right.transport_provider) ||
       compareText(left.transport_model, right.transport_model) ||
-      retrievalRank(left.retrieval_enabled) - retrievalRank(right.retrieval_enabled),
+      Number(left.retrieval_enabled) - Number(right.retrieval_enabled),
   );
 }
 
-/** A run's routes from its frozen engine snapshots, with its frozen retrieval state. */
 export function modelProvenanceFor(
   engineSnapshots: readonly {
     logical_engine: string;

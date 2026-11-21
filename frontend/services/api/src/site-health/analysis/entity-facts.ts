@@ -1,8 +1,3 @@
-/**
- * Primary-entity structure read from the page's own region: its own buy box,
- * its own collection with the controls bound to it, and a single location.
- * These are observations; the classifier decides what they mean.
- */
 import {
   ancestors,
   attribute,
@@ -119,7 +114,6 @@ const blobHas = (blob: string, vocabulary: ReadonlySet<string>) =>
 const matchesTokens = (node: HtmlElement, vocabulary: ReadonlySet<string>) =>
   intersects(normalizedTokens(attributeBlob(node)), vocabulary);
 
-/** Descendants matching `test` that are visible and outside page chrome. */
 const find = (node: HtmlNode, test: (item: HtmlElement) => boolean) =>
   [...elements(node)].filter(
     (item) =>
@@ -155,7 +149,6 @@ function brandNames(page: PageScope) {
   return names.slice(0, 8);
 }
 
-/** A product-detail heading, or a disclosure toggle whose label leads with one. */
 function hasDetailHeading(page: PageScope) {
   for (const node of find(page.region, (item) =>
     ['h2', 'h3', 'button', 'summary'].includes(item.tagName),
@@ -235,7 +228,6 @@ function associatedVariantLabel(control: HtmlElement, page: PageScope) {
   return false;
 }
 
-/** Only the nearest semantic radio group may provide a shared variant name. */
 function variantRadioGroup(control: HtmlElement, page: PageScope) {
   if (control.tagName !== 'input' || attribute(control, 'type') !== 'radio') return false;
   let depth = 0;
@@ -256,7 +248,6 @@ function variantRadioGroup(control: HtmlElement, page: PageScope) {
   return false;
 }
 
-/** A variant identity on the control, its associated label, or its semantic radio group. */
 function variantIdentity(control: HtmlElement, page: PageScope) {
   return (
     matchesTokens(control, VARIANT) ||
@@ -266,7 +257,6 @@ function variantIdentity(control: HtmlElement, page: PageScope) {
   );
 }
 
-/** A multi-option variant selector or explicitly named variant radio group. */
 function hasVariantControl(page: PageScope) {
   for (const select of find(page.region, (item) => item.tagName === 'select')) {
     if (!outsideContainers(select, page.cards)) continue;
@@ -311,7 +301,6 @@ function isPagination(node: HtmlElement, blob: string) {
   );
 }
 
-/** Whether a node sits under chrome before reaching the region; pagination navs may pass. */
 function insideExcludedCollection(node: HtmlElement, region: HtmlNode, allowPagination = false) {
   let current: HtmlElement | null = node;
   for (let depth = 0; depth < regionPolicy.max_ancestor_depth && current; depth++) {
@@ -390,7 +379,6 @@ function isExplicitList(node: HtmlElement) {
   return wordTokens(identity).some((token) => EXPLICIT_LIST_TOKENS.has(token));
 }
 
-/** Repeated containers plus explicit list/grid owners, for binding empty states. */
 function listingContainers(page: PageScope) {
   const containers = [...page.cards].filter((node) => !insideExcludedCollection(node, page.region));
   const known = new Set(page.cards);
@@ -405,7 +393,6 @@ function listingContainers(page: PageScope) {
   return containers;
 }
 
-/** A visible navigable target; item naming is assessed separately. */
 function cardTarget(anchor: HtmlElement, baseUrl: string) {
   if (!regionNodeIsVisible(anchor)) return null;
   const href = attribute(anchor, 'href').trim();
@@ -519,7 +506,6 @@ function observeCollection(
   };
 }
 
-/** The first item with the largest key, like a stable max. */
 function maxBy<T>(items: T[], key: (item: T) => number[]): T | undefined {
   let best: T | undefined;
   let bestKey: number[] = [];
@@ -587,7 +573,6 @@ function locationFacts(region: HtmlNode) {
   };
 }
 
-/** Bounded primary-entity structure facts for one parsed document. */
 export function entityFacts(page: PageScope) {
   return {
     region: { source: page.source, card_list_count: page.cards.size },

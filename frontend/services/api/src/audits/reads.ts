@@ -27,7 +27,6 @@ export async function authorizedAudit(db: Database, workspaceId: string, auditId
   if (!audit) throw notFound('Audit');
   return audit;
 }
-/** The market a run measured: its row's id and the country and language it froze. */
 function frozenMarket(audit: { market_id: string | null; configuration: unknown }) {
   const config = record(audit.configuration);
   return {
@@ -49,7 +48,6 @@ async function auditResponses(
   return audits.map((audit) =>
     auditSchema.parse({
       ...audit,
-      // The same rule `cancelAudit` enforces, so the screen never restates it.
       cancelable: policy.audits.constants.audit_active_statuses.includes(audit.status),
       engine_snapshots: routes.get(audit.id) ?? [],
       market: frozenMarket(audit),
@@ -68,7 +66,6 @@ export async function readAudit(db: Database, workspaceId: string, auditId: stri
     'the response built for the loaded audit',
   );
 }
-/** The named audits in the given order: one launch's per-market runs. */
 export async function readAudits(db: Database, workspaceId: string, auditIds: readonly string[]) {
   const rows = await auditQuery(db, workspaceId)
     .where('id', 'in', [...auditIds])
@@ -83,7 +80,6 @@ export async function listAudits(
   workspaceId: string,
   projectId?: string,
   limit = 50,
-  /** Keyset: only audits ordered after this audit (newest first). */
   afterId?: string,
 ) {
   let query = auditQuery(db, workspaceId)
@@ -137,7 +133,6 @@ export async function readAuditMetrics(db: Database, workspaceId: string, auditI
   if (!metric) throw notFound('Audit metrics');
   return auditMetricsSchema.parse({ ...metric, created_at: wireUtc(metric.created_text) });
 }
-/** Validate a cursor within its authorized audit, then page using exact PostgreSQL timestamp/UUID order. */
 export async function auditEvents(
   db: Database,
   workspaceId: string,

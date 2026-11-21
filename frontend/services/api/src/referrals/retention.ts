@@ -1,9 +1,3 @@
-/**
- * `referral_retention_sweep`: hard-delete one workspace's referral data older
- * than the retention horizon, classifications first (foreign-key order), in
- * bounded committed batches with cooperative cancel at each boundary. A re-run
- * simply finds less to delete.
- */
 import { DAY_MS } from '../calendar-days.ts';
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
@@ -11,7 +5,6 @@ import { payloadString, type Executor } from '../queue/executor.ts';
 
 const BATCH_SIZE = 500;
 
-/** The next batch of one workspace's referral events dated before `cutoff`, oldest first. */
 export function expiredBatch(db: Database, workspaceId: string, cutoff: Date) {
   return db
     .selectFrom('referral_events')

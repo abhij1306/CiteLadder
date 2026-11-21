@@ -1,7 +1,3 @@
-/**
- * The crawl's counters: the one chooser every crawl read uses, and the live
- * scan of its tasks and analyses. Nothing here writes.
- */
 import { crawlCountersSchema } from '@citeladder/contracts/site-health';
 import { sql } from 'kysely';
 import type { z } from 'zod';
@@ -15,22 +11,14 @@ type Counters = z.input<typeof crawlCountersSchema>;
 
 const iso = (value: Date | null) => value?.toISOString() ?? null;
 
-/**
- * The task a page's status reads (alias `t`): its analysis, else a fetch that
- * failed for good, so a URL that could never be fetched counts and lists as
- * an error. A URL the crawl's own policy excluded is not one.
- */
 export const ROW_TASK = sql`(t.task_kind = 'analyze'
   or (t.task_kind = 'discover' and t.status = 'failed'
     and not ${failedAs('t', ['excluded'])}))`;
-/** Which `ROW_TASK` row wins: the analysis, then the latest generation. */
 export const ROW_TASK_ORDER = sql`t.task_kind = 'analyze' desc, t.generation desc`;
 
-/** What the crawl's tasks and analyses count: every counter except the live selection. */
 export type TaskCounters = Omit<Counters, 'selected'>;
 const terminalCountersSchema = crawlCountersSchema.omit({ selected: true });
 
-/** The project's active monitored selection: current configuration, read live. */
 async function selectedCount(db: Database, crawl: Crawl) {
   const row = await db
     .selectFrom('monitored_site_urls')
@@ -42,28 +30,54 @@ async function selectedCount(db: Database, crawl: Crawl) {
   return Number(row.count);
 }
 
+type Activity = Counters['activity'];
+const STALLED: [Activity['state'], Activity['reason']] = ['stalled', 'expired_lease'];
+const WORKING: [Activity['state'], Activity['reason']] = ['working', 'active_work'];
+
 /**
- * The one counter chooser every crawl read uses, with the live selection. An
- * active crawl counts its tasks live; a terminal one reads the counters its
- * terminalization persisted (`site-health/terminal-counters.ts`). A terminal
- * crawl without persisted counters is counted from its tasks rather than
- * reported as zeros it never observed.
+ * Whether any open task of the crawl holds an expired lease. The literal
+ * status list matches `ix_site_crawl_tasks_open`'s predicate, so the probe
+ * reads that partial index instead of the crawl's settled history.
  */
+async function hasExpiredLease(db: Database, crawl: Crawl) {
+  const { rows } = await sql<{ expired: boolean }>`
+    select exists (
+      select 1 from site_crawl_tasks
+      where crawl_id = ${crawl.id} and workspace_id = ${crawl.workspace_id}
+        and status not in ('cancelled', 'failed', 'succeeded')
+        and status in ('leased', 'running') and lease_expires_at <= now()
+    ) as expired`.execute(db);
+  return firstOf(rows, 'the expired lease probe').expired;
+}
+
+async function liveCounters(db: Database, crawl: Crawl, persisted: TaskCounters) {
+  const activity = { ...persisted.activity };
+  const backoffEnded =
+    activity.state === 'waiting' &&
+    activity.next_available_at !== null &&
+    Date.parse(activity.next_available_at) <= Date.now();
+  if (await hasExpiredLease(db, crawl)) [activity.state, activity.reason] = STALLED;
+  else if (activity.state === 'stalled' || backoffEnded)
+    [activity.state, activity.reason] = WORKING;
+  return { ...persisted, activity };
+}
+
+function persistedCounters(db: Database, crawl: Crawl) {
+  const stored = isTerminal(crawl) ? crawl.terminal_counters : crawl.live_counters;
+  if (stored === null) return null;
+  const counters = terminalCountersSchema.parse(stored);
+  return isTerminal(crawl) ? counters : liveCounters(db, crawl, counters);
+}
+
 export async function crawlCounters(db: Database, crawl: Crawl): Promise<Counters> {
-  const persisted =
-    isTerminal(crawl) && crawl.terminal_counters !== null
-      ? terminalCountersSchema.parse(crawl.terminal_counters)
-      : null;
   const [counters, selected] = await Promise.all([
-    persisted ?? taskCounters(db, crawl),
+    persistedCounters(db, crawl) ?? taskCounters(db, crawl),
     selectedCount(db, crawl),
   ]);
   return { ...counters, selected };
 }
 
-/** Counters of the crawl's own tasks and analyses, scanned now. */
 export async function taskCounters(db: Database, crawl: Crawl): Promise<TaskCounters> {
-  // A site or policy refusal is no page error: it counts as blocked.
   const refused = failedAs('t', ['blocked', 'excluded']);
   const tasks = sql<{
     queued: number;
@@ -115,8 +129,6 @@ export async function taskCounters(db: Database, crawl: Crawl): Promise<TaskCoun
         where workspace_id = ${crawl.workspace_id} and crawl_id = ${crawl.id} and status = 'completed'
         order by site_url_id, created_at desc
       ) latest group by page_kind`.execute(db),
-    // URLs admitted and then declined by the crawl's own policy leave both
-    // sides of analyzed/total, in whichever task kind declined them.
     sql<{ count: number }>`
       select count(distinct url_hash)::int as count from site_crawl_tasks
       where workspace_id = ${crawl.workspace_id} and crawl_id = ${crawl.id}

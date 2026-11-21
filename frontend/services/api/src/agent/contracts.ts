@@ -19,22 +19,18 @@ export class AgentError extends Error {
     this.code = code;
   }
 }
-/** A run's frozen limits: what admission granted, never re-read from live config. */
 export const budgetSchema = z.object({
   version: z.literal(1),
   max_model_calls: z.number().int().positive(),
   max_tool_calls: z.number().int().nonnegative(),
   max_parallel_tool_calls: z.number().int().positive(),
-  /** Provider-hosted web searches per turn, across all its model calls. */
   max_web_searches: z.number().int().nonnegative(),
-  /** At most this many of them in one model call, so a call holds only what it can run. */
   max_web_searches_per_call: z.number().int().nonnegative(),
   limit_reminder_calls: z.number().int().nonnegative(),
   reasoning_effort: z.enum(['low', 'medium', 'high']),
   compaction_trigger_tokens: z.number().int().positive(),
   replay_max_chars: z.number().int().positive(),
   execution_timeout_seconds: z.number().positive(),
-  /** The whole turn's time limit, which the browser's request enforces. */
   turn_timeout_seconds: z.number().positive(),
   tool_result_max_chars: z.number().int().positive(),
   context_package_max_chars: z.number().int().positive(),

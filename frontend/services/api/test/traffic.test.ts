@@ -54,7 +54,6 @@ describe('traffic projections and Performance', () => {
       .where('project_id', '=', t.projectId)
       .where('task_kind', '!=', 'traffic_snapshot_refresh')
       .execute();
-    // Nothing is declared on this project, so no verification is queued.
     expect(successors.map((r) => r.task_kind).sort()).toEqual(['demand_snapshot_refresh']);
     const before = rows.map((r) => r.id).sort();
     await refreshTrafficSnapshot(await task(db, t, 'traffic_snapshot_refresh'), context);
@@ -91,11 +90,9 @@ describe('traffic projections and Performance', () => {
         synced.metrics as { series: { clicks: { date: string; value: number | null }[] } }
       ).series.clicks.map((point) => [point.date, point.value]),
     );
-    // An empty day before the anchor is measured; empty days after it are lag.
     expect(
       ['2026-07-21', '2026-07-26', '2026-07-27', '2026-07-28'].map((d) => clicks.get(d)),
     ).toEqual([0, 1, null, null]);
-    // A short incremental sync still hands Demand the same anchored policy window.
     await refreshTrafficSnapshot(
       await task(db, t, 'traffic_snapshot_refresh', ['2026-07-25', '2026-07-28']),
       context,
@@ -120,7 +117,6 @@ describe('traffic projections and Performance', () => {
       values: ['zero click', '2026-07-25'],
       metrics: { impressions: 40, clicks: 0, position: 3 },
     });
-    // The run covers July; the three June days before it have no partition.
     const window: [string, string] = ['2026-06-28', WINDOW[1]];
     await refreshTrafficSnapshot(await task(db, t, 'traffic_snapshot_refresh', window), context);
     const snapshot = await db
@@ -135,7 +131,6 @@ describe('traffic projections and Performance', () => {
       totals: Record<string, number | null>;
       series: { clicks: { date: string; value: number | null }[] };
     };
-    // Unreported and missing days leave the window partial, not null.
     expect(metrics.totals).toMatchObject({ clicks: 0, impressions: 40 });
     const clicks = new Map(metrics.series.clicks.map((point) => [point.date, point.value]));
     expect(
@@ -151,7 +146,6 @@ describe('traffic projections and Performance', () => {
         >;
       }
     ).analytics_quality;
-    // Only Search Console is mapped, so no GA4 or Bing day is reported unavailable.
     expect(Object.keys(quality).sort()).toEqual([
       'gsc_country_daily',
       'gsc_day_daily',
@@ -177,17 +171,13 @@ describe('traffic projections and Performance', () => {
   });
 
   it.each([
-    // Read the next day, when Search Console had finalized only July 20.
     ['2026-07-29T12:00:00Z', null, true],
-    // Read four weeks later, when every July day was final: the silence is zero.
     ['2026-08-20T12:00:00Z', 0, false],
   ])(
     'a Search Console day silent in a revision fetched at %s reads %s',
     async (fetchedAt, july23, pending) => {
       const seed = await importSeed(db, t);
-      // Revision 0 read July 1-28 and reported rows only through July 20.
       await metric(db, seed, { date: '2026-07-20' });
-      // Revision 1 re-read only July 26-28, after Search Console finalized them.
       await metric(db, seed, { date: '2026-07-27', revision: 1 });
       await db
         .updateTable('integration_sync_runs')
@@ -235,7 +225,6 @@ describe('traffic projections and Performance', () => {
     const seed = await importSeed(db, t);
     await metric(db, seed, {});
     await metric(db, seed, { date: '2026-06-10', revision: 1 });
-    // The second import covered one June day; nothing imported June 11-30.
     await db
       .updateTable('integration_sync_runs')
       .set({ window_start: '2026-06-10', window_end: '2026-06-10' })

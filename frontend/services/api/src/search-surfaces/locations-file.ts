@@ -1,8 +1,3 @@
-/**
- * Builds the reviewed DataForSEO locations file from DataForSEO's own
- * location and language lists, one pair per search surface. Pure: the
- * operator CLI fetches the lists and writes the result for review.
- */
 import { MARKET_COUNTRIES, MARKET_LANGUAGES } from '@citeladder/contracts/markets';
 import { z } from 'zod';
 
@@ -22,7 +17,6 @@ const locationRow = z.looseObject({
   location_type: z.string().nullish(),
 });
 const languageRow = z.looseObject({ language_code: z.string() });
-/** DataForSEO's envelope: one task whose result is the list. */
 const listEnvelope = <Row extends z.ZodType>(row: Row) =>
   z.looseObject({
     status_code: z.literal(20000),
@@ -38,7 +32,6 @@ export type SurfaceLists = {
   languages: z.infer<typeof languageRow>[];
 };
 
-/** One surface's lists from DataForSEO's two response bodies; anything else throws. */
 export function surfaceLists(locations: unknown, languages: unknown): SurfaceLists {
   return {
     locations: locationsEnvelope.parse(locations).tasks.flatMap((task) => task.result ?? []),
@@ -58,12 +51,6 @@ function countryCode(lists: SurfaceLists, country: string): number | null {
   return row?.location_code ?? null;
 }
 
-/**
- * Every market country at least one surface supports, with its location code
- * and those surfaces, and each surface's market languages. A surface offering
- * none of them supports no country. A country whose surfaces disagree on its
- * location code is refused for review.
- */
 export function buildLocationsFile(
   lists: Record<SearchSurface, SurfaceLists>,
   generatedAt: string,
@@ -94,7 +81,6 @@ export function buildLocationsFile(
   });
 }
 
-/** The market languages a surface's language list offers. */
 function offeredLanguages(lists: SurfaceLists): string[] {
   const offered = new Set(lists.languages.map((row) => row.language_code.toLowerCase()));
   return candidateLanguages.filter((language) => offered.has(language));
@@ -102,10 +88,6 @@ function offeredLanguages(lists: SurfaceLists): string[] {
 
 const PRINT_WIDTH = 100;
 
-/**
- * Two-space JSON with each string list on one line when it fits the
- * formatter's print width, as the formatter writes it.
- */
 export function serializeLocationsFile(file: LocationsFile): string {
   return `${JSON.stringify(file, null, 2).replace(
     /^( *)("[^"\n]*": )?\[\n((?: *"[^"\n]*",?\n)+) *\]/gmu,

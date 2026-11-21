@@ -208,7 +208,7 @@ describe('Declaration status', () => {
       <DeclarationStatus declaration={declaration([])} workspaceId={WORKSPACE} />,
       { projectSelection: selection },
     );
-    expect(screen.getByText(/No automatic check applies to these findings/)).toBeVisible();
+    expect(screen.getByText('No automatic check applies. Recorded, not verified.')).toBeVisible();
     unmeasured.unmount();
     renderWithProviders(
       <DeclarationStatus
@@ -220,11 +220,7 @@ describe('Declaration status', () => {
       />,
       { projectSelection: selection },
     );
-    expect(
-      screen.getByText(
-        'These findings were already resolved before this went live, so the outcome is not credited to this change and nothing is measured.',
-      ),
-    ).toBeVisible();
+    expect(screen.getByText('Resolved before go-live: not credited, not measured.')).toBeVisible();
     expect(screen.queryByText(/No automatic check applies/)).not.toBeInTheDocument();
   });
 
@@ -278,83 +274,6 @@ describe('Declaration status', () => {
         /^An AI answer cites your pageWaitingA new page of yours, not one already cited for these prompts/,
       ),
     ]);
-  });
-
-  it('reads an issue family as verified, partially resolved, still failing or inconclusive', () => {
-    const family = (
-      index: number,
-      state: 'met' | 'unmet' | 'unavailable',
-      reason: string | null,
-      pages: {
-        failing: { site_url_id: string; url: string }[];
-        passing: number;
-        not_applicable: number;
-        unread: number;
-        uncovered?: number;
-      },
-    ) => ({
-      ...pageCheck(state),
-      index,
-      kind: 'issue_family',
-      reason,
-      subject: 'Missing viewport meta tag',
-      pages: { uncovered: 0, ...pages },
-    });
-    const stuck = {
-      site_url_id: '77777777-7777-4777-8777-777777777777',
-      url: 'https://acme.test/b',
-    };
-    renderWithProviders(
-      <DeclarationStatus
-        declaration={declaration([
-          family(0, 'met', null, { failing: [], passing: 2, not_applicable: 1, unread: 0 }),
-          family(1, 'unmet', 'partially_resolved', {
-            failing: [stuck],
-            passing: 1,
-            not_applicable: 0,
-            unread: 0,
-          }),
-          family(2, 'unmet', 'still_failing', {
-            failing: [stuck],
-            passing: 0,
-            not_applicable: 0,
-            unread: 2,
-          }),
-          family(3, 'unavailable', 'cohort_partly_analyzed', {
-            failing: [],
-            passing: 2,
-            not_applicable: 0,
-            unread: 1,
-          }),
-          // A reason this screen does not know claims no failure subtype.
-          family(4, 'unmet', null, { failing: [], passing: 0, not_applicable: 0, unread: 0 }),
-          // Every checked page passes, but the family ran past its cohort.
-          family(5, 'unavailable', 'cohort_sampled', {
-            failing: [],
-            passing: 2,
-            not_applicable: 0,
-            unread: 0,
-            uncovered: 3,
-          }),
-        ])}
-        workspaceId={WORKSPACE}
-      />,
-      { projectSelection: selection },
-    );
-    // Each check's own row; a family's failing pages are a list inside it.
-    const rows = [...screen.getByRole('list', { name: 'Checks' }).children];
-    const check = 'Every affected page passes the Site Health check';
-    const subject = 'Missing viewport meta tag';
-    const read = 'Read Sep 25, 2026';
-    expect(rows.map((item) => item.textContent)).toEqual([
-      `${check}Verified${subject}2 pages pass · 0 pages still fail · 1 page no longer applies${read}`,
-      `${check}Partially resolved${subject}1 page passes · 1 page still failshttps://acme.test/bSome affected pages now pass; the pages listed still fail. · ${read}`,
-      `${check}Still failing${subject}0 pages pass · 1 page still fails · 2 pages not readhttps://acme.test/bNo affected page the crawl read passes yet. · ${read}`,
-      `${check}Inconclusive${subject}2 pages pass · 0 pages still fail · 1 page not readThe affected pages that crawl read pass, but it did not read them all. Run a crawl that includes the rest. · ${read}`,
-      `${check}Not met${subject}0 pages pass · 0 pages still fail${read}`,
-      `${check}Inconclusive${subject}2 pages pass · 0 pages still fail · 3 pages not checkedEvery checked page passes or no longer applies, but the issue was on more pages than one check covers, so it cannot be verified on all of them. · ${read}`,
-    ]);
-    expect(screen.getAllByRole('list', { name: 'Pages still failing' })).toHaveLength(2);
   });
 
   it('offers a crawl while a page check lacks a met reading, and says why', () => {

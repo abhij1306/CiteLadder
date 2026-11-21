@@ -12,7 +12,6 @@ export async function executeInteractiveAudit(
   config: ServiceConfig,
   workspaceId: string,
   auditId: string,
-  /** Stops the drive early, e.g. on shutdown; the runner continues the audit. */
   stopping?: AbortSignal,
 ) {
   const env = config.settings;
@@ -32,7 +31,6 @@ export async function executeInteractiveAudit(
   );
   const deadline = performance.now() + interactiveExecution.admissionSeconds * 1000;
   while (!signal.aborted && performance.now() < deadline) {
-    // Each claim advances a persisted phase; future polls keep their due time.
     if (!(await worker.runOnce(signal))) break;
   }
 }

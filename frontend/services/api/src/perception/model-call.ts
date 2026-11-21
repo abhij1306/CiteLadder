@@ -1,8 +1,3 @@
-/**
- * What the perception and fact verification executors share around their one
- * bounded model call: the configured gateway, the parse-retry loop with its
- * outcome mapping, the platform caps and the recorded call columns.
- */
 import { sql } from 'kysely';
 import type { z } from 'zod';
 
@@ -10,7 +5,6 @@ import type { Database } from '../db/database.ts';
 import { createModelGateway, gatewaySettings, type ModelGateway } from '../models/gateway.ts';
 import { ModelError } from '../models/http.ts';
 
-/** The call actually made: provider, returned model, input hash, usage and latency. */
 export type ModelCall = {
   provider: string;
   model: string;
@@ -21,7 +15,6 @@ export type ModelCall = {
 
 type CallFailure = { outcome: 'invalid_output' } | { outcome: 'model_error'; reason: string };
 
-/** The deployment's gateway, or null when no gateway model is configured. */
 export function configuredGateway(): ModelGateway | null {
   try {
     return createModelGateway(gatewaySettings());
@@ -31,10 +24,6 @@ export function configuredGateway(): ModelGateway | null {
   }
 }
 
-/**
- * Up to `maxAttempts` calls while the output fails to parse; a provider fault
- * ends at once. `accept` turns a parsed value into the executor's outcome.
- */
 export async function callStructured<Value, Outcome>(
   gateway: ModelGateway,
   request: {
@@ -80,14 +69,12 @@ export async function callStructured<Value, Outcome>(
   return { call, outcome: { outcome: 'invalid_output' } };
 }
 
-/** Whether the audit or the workspace's UTC day already spent its calls in `table`. */
 export async function overCap(
   db: Database,
   table: 'answer_perceptions' | 'fact_verifications',
   input: {
     workspaceId: string;
     auditId: string;
-    /** Outcomes that spent a model call; only these count. */
     called: readonly string[];
     perAudit: number;
     perDay: number;
@@ -111,7 +98,6 @@ export async function overCap(
   return Number(audit.count) >= input.perAudit || Number(day.count) >= input.perDay;
 }
 
-/** The outcome and call columns every model-call outcome row records. */
 export function outcomeColumns(
   outcome: { outcome: string; reason?: string },
   drops: Record<string, number>,

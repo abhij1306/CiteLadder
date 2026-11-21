@@ -1,4 +1,3 @@
-import { ChevronDown, Pencil, Plus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
@@ -6,6 +5,7 @@ import { Icon } from '@/components/ui/icon';
 import { Menu, MenuContent, MenuItem, MenuTrigger } from '@/components/ui/menu';
 import { useProjectCreation } from '@/components/layout/use-project-creation';
 import type { Project } from '@citeladder/contracts';
+import { ChevronDown, Pencil, Plus } from '@/lib/icons';
 import { newProjectDestination } from '@/lib/navigation/project-destination';
 
 export function ProjectControls({

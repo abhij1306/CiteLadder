@@ -1,4 +1,3 @@
-/** Pure demand decisions over recorded evidence. No model or provider calls. */
 import type { DemandDetectorState } from '@citeladder/contracts/demand';
 import { policy } from '../config.ts';
 import { canonicalHash } from '../canonical-json.ts';
@@ -15,7 +14,6 @@ export type SearchInput = {
   target: string;
   impressions: number;
   clicks: number;
-  /** Impression-weighted average position, or null when none was reported. */
   position: number | null;
 };
 export type QueryInput = {
@@ -58,7 +56,6 @@ export type Evaluation = {
   counts_by_classification: Record<string, number>;
   limitations: string[];
 };
-/** Partial when any row abstained, else available only when rows were evaluated. */
 export function collectionState(abstained: number, rowCount: number): DemandDetectorState {
   if (abstained) return 'partial';
   return rowCount ? 'available' : 'unavailable';
@@ -81,13 +78,6 @@ export type QueryClass = Pick<
   Classification,
   'classification' | 'classifier_version' | 'override_id'
 >;
-/**
- * Low-CTR targets with enough impressions. A query must classify as
- * non-branded (branded and ambiguous cohorts are never actionable); pages
- * carry no brand class. The highest-impression targets fill a bounded set.
- * A query with no classification abstains (it can be neither admitted nor
- * ruled branded), which makes the evaluation partial, like the detectors'.
- */
 export function detectSearchSignals(
   rows: SearchInput[],
   queryClass: (query: string) => QueryClass | undefined,
@@ -169,7 +159,6 @@ export function aggregate(rows: QueryInput[]) {
   const impressions = rows.reduce((n, r) => n + r.impressions, 0);
   const clicks = rows.reduce((n, r) => n + r.clicks, 0);
   const positioned = rows.filter((r) => r.position !== null && r.impressions > 0);
-  // Weighted over the impressions that report a position, not all impressions.
   const positionedImpressions = positioned.reduce((n, r) => n + r.impressions, 0);
   const page = rows.find((r) => r.page_content_usable) ?? rows[0];
   return {
@@ -250,7 +239,6 @@ export function detectStrikingDistance(rows: QueryInput[]): Evaluation {
     JSON.stringify([r.classification, r.normalized_query, r.resolved_page_url]),
   );
   const candidates: Candidate[] = [];
-  // Order by the group identity fields.
   const ordered = [...groups.values()].sort(
     ([a], [b]) =>
       compareText(a.classification, b.classification) ||

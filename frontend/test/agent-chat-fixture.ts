@@ -25,7 +25,13 @@ export function revision(id: string, number: number, author: 'agent' | 'user', b
 type DetailRun = {
   status: string;
   error_code?: string;
-  progress?: { ordinal: number; status: string; tool: string | null }[];
+  progress?: {
+    ordinal: number;
+    status: string;
+    tool: string | null;
+    target?: string | null;
+    run_attempt?: number;
+  }[];
 };
 
 const DEFAULT_RUN: DetailRun = { status: 'succeeded' };
@@ -36,6 +42,7 @@ export function detail(latest: ReturnType<typeof revision>, run: DetailRun = DEF
       id: CHAT,
       project_id: PROJECT,
       action_id: null,
+      origin: 'chat',
       target_label: null,
       title: 'Improve pricing snippet',
       turn_count: 1,
@@ -53,6 +60,8 @@ export function detail(latest: ReturnType<typeof revision>, run: DetailRun = DEF
         role: 'user',
         content: 'Improve our pricing page snippet.',
         mentions: [] as AgentMessage['mentions'],
+        attachments: [] as AgentMessage['attachments'],
+        proposals: [] as AgentMessage['proposals'],
         skill_id: null,
         skill_source: null,
         evidence_refs: [],
@@ -65,13 +74,21 @@ export function detail(latest: ReturnType<typeof revision>, run: DetailRun = DEF
         role: 'agent',
         content: 'Here are the edits.',
         mentions: [] as AgentMessage['mentions'],
+        attachments: [] as AgentMessage['attachments'],
+        proposals: [] as AgentMessage['proposals'],
         skill_id: 'gsc_optimize',
         skill_source: 'model',
         evidence_refs: [],
         steps: [
           { kind: 'model', ordinal: 1 },
           { kind: 'skill', skill_id: 'gsc_optimize' },
-          { kind: 'tool', ordinal: 1, tool: 'read_integration_status', status: 'completed' },
+          {
+            kind: 'tool',
+            ordinal: 1,
+            tool: 'read_integration_status',
+            status: 'completed',
+            call_id: 'call_1',
+          },
           { kind: 'model', ordinal: 2 },
         ],
         created_at: NOW,
@@ -88,15 +105,9 @@ export function detail(latest: ReturnType<typeof revision>, run: DetailRun = DEF
       created_at: NOW,
       completed_at: NOW,
       progress: (run.progress ?? []).map((step) => ({
-        model_attempt_id: RUN,
-        tool_attempt_id: null,
         call_id: null,
         run_attempt: 1,
-        runtime_version: 'agent-runtime-2',
-        protocol_version: 'agent-protocol-1',
-        registry_version: 'agent-tools-2',
-        skill_catalog_version: 'test-catalog',
-        projection_version: 'agent-progress-1',
+        target: null,
         ...step,
       })),
     },
@@ -118,10 +129,6 @@ export function detail(latest: ReturnType<typeof revision>, run: DetailRun = DEF
   };
 }
 
-/**
- * A page chat as its read returns it while the page is read, once the fetch
- * queued the first turn, and after that turn answered with `reply`.
- */
 export function pageChatPhases(reply: string) {
   const base = detail(revision(REV1, 1, 'agent', 'Body.'));
   const request = base.messages[0]!;
@@ -170,19 +177,7 @@ export const skills = {
       description: 'Title and snippet edits.',
     },
   ],
-  workflow_groups: [{ id: 'improve', label: 'Improve your site' }],
-  workflows: [
-    {
-      id: 'internal_links',
-      group: 'improve',
-      label: 'Internal links',
-      description: 'Where to link from.',
-      skill_id: 'internal_links',
-      format_id: null,
-      prompt: 'Plan internal links.',
-      inputs: [],
-    },
-  ],
+  workflows: [{ id: 'internal_links', label: 'Internal links' }],
   output_kinds: [
     {
       kind: 'page_edits',
@@ -191,5 +186,5 @@ export const skills = {
       next: [{ workflow_id: 'internal_links', prompt: 'Plan internal links that support' }],
     },
   ],
-  limits: { mentions_max: 5 },
+  limits: { mentions_max: 5, attachments_max: 3, attachment_max_chars: 40000 },
 };

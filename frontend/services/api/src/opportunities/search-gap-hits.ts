@@ -1,11 +1,3 @@
-/**
- * Keyword gaps from published Search Intelligence datasets: searches a saved
- * competitor ranks for in the project's market and the project does not. Only
- * reviewed, published datasets are read; nothing here calls a provider. Gates
- * abstain on unknown values and count them, a search Search Console already
- * shows is left to Demand, and a page whose title and H1 cover every term is
- * improved instead of planning a new one.
- */
 import { createHash } from 'node:crypto';
 import { sql } from 'kysely';
 import { getDomain } from 'tldts';
@@ -43,12 +35,10 @@ type GapDataset = {
   published_at: string;
 };
 
-/** What a refresh reads for keyword gaps, resolved without loading rows. */
 export type SearchGapSource = {
   revision: string;
   market: Market;
   datasets: GapDataset[];
-  /** Owned ranking and shared-keyword datasets that contradict a gap. */
   ranked_dataset_ids: string[];
   competitors: Competitor[];
 };
@@ -61,11 +51,6 @@ function hostDomain(origin: string): string | null {
   }
 }
 
-/**
- * What branded-query classification reads beyond the project row: the brand's
- * names and the newest override. Overrides are append-only, so the highest
- * ordinal moves whenever one is added.
- */
 async function brandRevision(db: Database, scope: Scope) {
   const [names, override] = await Promise.all([
     db
@@ -122,7 +107,6 @@ async function projectContext(db: Database, scope: Scope) {
       domains: domains.map((row) => row.domain).sort(compareText),
     },
     owned: ownedTargets(project, domains).map((target) => target.origin),
-    // The market readiness shows.
     market: searchMarket(project, saved),
     competitors: competitors.flatMap((row) => {
       const target = competitorTarget(row, savedDomains.parse(row.domains));
@@ -131,7 +115,6 @@ async function projectContext(db: Database, scope: Scope) {
   };
 }
 
-/** The datasets a refresh would read for gaps now, and their identity. */
 export async function searchGapSource(
   db: Database,
   scope: Scope,
@@ -166,12 +149,10 @@ export async function searchGapSource(
   for (const dataset of candidates) {
     const domain = dataset.comparison_origin ? hostDomain(dataset.comparison_origin) : '';
     const competitor = domain ? byDomain.get(domain) : undefined;
-    // A comparison with a competitor no longer saved is not evidence about this project.
     if (domain && !competitor) continue;
     const key = `${dataset.dataset_kind}:${dataset.target_origin}:${domain}`;
     if (!latest.has(key)) latest.set(key, { dataset, competitor });
   }
-  // The newest reading decides; an unusable one does not revive an older one.
   for (const [key, { dataset }] of latest)
     if (!USABLE_COVERAGE.has(dataset.coverage)) latest.delete(key);
   const datasets = [...latest.values()].flatMap(({ dataset, competitor }) =>
@@ -226,16 +207,12 @@ export type GapInputs = {
   source: SearchGapSource;
   rows: GapRow[];
   rows_truncated: boolean;
-  /** Normalized searches the project already ranks for in the same market. */
   ranked: ReadonlySet<string>;
-  /** Normalized searches classified branded or ambiguous for the project. */
   branded: ReadonlySet<string>;
-  /** Normalized searches Search Console already shows, or null without Demand. */
   search_console: ReadonlySet<string> | null;
   pages: GapPage[];
 };
 
-/** Why a row was not promoted, in gate order. */
 const ABSTAIN_REASONS = [
   'unknown_volume',
   'low_volume',
@@ -250,17 +227,14 @@ const ABSTAIN_REASONS = [
 type AbstainReason = (typeof ABSTAIN_REASONS)[number];
 type PageTerms = { page: GapPage; tokens: ReadonlySet<string> };
 type SourcedRow = { row: GapRow; dataset: GapDataset };
-/** One search: every row that passed the gates for its term set, never none. */
 type Gap = { terms: string; rows: [SourcedRow, ...SourcedRow[]] };
 
-/** The row a merged gap is named after: the highest volume, then the first keyword. */
 const leadsBefore = (a: GapRow, b: GapRow) =>
   ((a.search_volume ?? 0) - (b.search_volume ?? 0) || compareText(b.keyword, a.keyword)) > 0;
 
 const namedTerms = (competitor: Competitor) =>
   [competitor.name, competitor.domain.split('.')[0] ?? ''].map(normalizeQuery).filter(Boolean);
 
-/** Whether `query` names any of `terms` as whole words. */
 const names = (query: string, terms: string[]) =>
   terms.some((term) => ` ${query} `.includes(` ${term} `));
 
@@ -283,7 +257,6 @@ function gate(
   return null;
 }
 
-/** One page whose title and H1 hold every term, or why there is none. */
 function resolvePage(keyword: string, pages: readonly PageTerms[]) {
   const terms = [...lexicalTokens(keyword)];
   if (!terms.length) return { state: 'no_usable_terms' as const, candidates: [] };
@@ -306,7 +279,6 @@ const gapFactor = (competitors: number) =>
     g.GAP_FACTOR_BASE + (competitors - 1) * g.GAP_FACTOR_PER_EXTRA_COMPETITOR,
   );
 
-/** The gates, merge and targeting, over loaded rows. Deterministic. */
 export function searchGapDecisions(inputs: GapInputs): {
   hits: DetectorHit[];
   limitations: string[];
@@ -316,7 +288,6 @@ export function searchGapDecisions(inputs: GapInputs): {
   const named = inputs.source.competitors.flatMap(namedTerms);
   const gaps = new Map<string, Gap>();
   for (const row of inputs.rows) {
-    // Rows are read only from the source's datasets; each carries its own from here on.
     const dataset = datasets.get(row.dataset_id);
     const normalized = normalizeQuery(row.keyword);
     if (!dataset || !normalized) continue;
@@ -325,7 +296,6 @@ export function searchGapDecisions(inputs: GapInputs): {
       abstained.set(reason, (abstained.get(reason) ?? 0) + 1);
       continue;
     }
-    // One gap per term set: "shoes running" and "running shoes" are one search.
     const terms = searchTerms(normalized).key;
     const entry = gaps.get(terms);
     if (entry) entry.rows.push({ row, dataset });
@@ -379,7 +349,6 @@ function gapHit({
   pages: readonly PageTerms[];
   gap: Gap;
   lead: GapRow;
-  /** How many distinct competitors rank for the search. */
   competitors: number;
 }): DetectorHit {
   const normalized = normalizeQuery(lead.keyword);
@@ -465,7 +434,6 @@ async function rankedSearches(db: Database, scope: Scope, source: SearchGapSourc
   return new Set(rows.map((row) => normalizeQuery(row.keyword)));
 }
 
-/** Searches Demand already sees: promoted query signals and any query with impressions. */
 async function searchConsoleSearches(db: Database, scope: Scope, demand: DemandSource | null) {
   if (!demand) return null;
   const workspace = new WorkspaceScope(scope.workspaceId);
@@ -511,7 +479,6 @@ async function searchConsoleSearches(db: Database, scope: Scope, demand: DemandS
   return queries;
 }
 
-/** The latest crawl's analyzed pages, with only the title and H1 text a match reads. */
 async function crawlPages(
   db: Database,
   scope: Scope,
@@ -541,7 +508,6 @@ async function crawlPages(
   }));
 }
 
-/** Keyword-gap hits for one refresh, with what the gates left out. */
 export async function searchGapHits(
   db: Database,
   scope: Scope,
@@ -550,7 +516,6 @@ export async function searchGapHits(
   crawl: CrawlSource | null,
 ): Promise<{ hits: DetectorHit[]; limitations: string[] }> {
   if (source === null) return { hits: [], limitations: [] };
-  // Only classification waits on the rows; the other reads are independent.
   const [gaps, ranked, searchConsole, pages] = await Promise.all([
     gapRows(db, scope, source).then(async ({ rows, truncated }) => ({
       rows,

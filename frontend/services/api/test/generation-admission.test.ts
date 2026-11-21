@@ -184,12 +184,10 @@ it('drops a core draft answered with general advice, by its label or an advice f
     );
   };
   const core = admit('core', [
-    // Answered with styles to consider, not dresses or shops to buy from.
     { text: 'Compare maxi dresses for a beach holiday', answer_kind: 'general_advice' },
     { text: 'How to choose maxi dresses for a wedding' },
     { text: 'What kind of maxi dresses suit a garden party?' },
     { text: 'Best maxi dresses for a beach holiday', answer_kind: 'named_options' },
-    // A row parsed without a label is judged by its text alone.
     { text: 'Looking for cheap maxi dresses for petite women' },
   ]);
   expect(core.admitted.map((row) => row.text)).toEqual([
@@ -292,7 +290,6 @@ it('admits only planned stages for quick core rows, never after-purchase questio
   );
   expect(result.admitted.map((row) => row.text)).toEqual(['Best maxi dresses for a beach holiday']);
   expect(result.drops).toEqual({ stage: 1 });
-  // Branded and comparison rows keep to the planned stages too.
   const branded = planSlots(
     context,
     generationInput.parse({ count: 1, cohort: 'brand_diagnostic' }),
@@ -323,7 +320,6 @@ it('admits only planned stages for quick core rows, never after-purchase questio
   expect(diagnostic.drops).toEqual({ stage: 1 });
 });
 
-/** Every yes/no question a core draft is asked, shared and core-only. */
 const coreQuestions = Object.keys({
   ...policy.models.quality.noul_questions,
   ...policy.models.quality.core_noul_questions,
@@ -445,7 +441,6 @@ describe('JEV judgments', () => {
           intent: { choice: intent, probabilities: { [intent]: 0.9 }, confidence: 0.8 },
         },
       }));
-    // Labelled `buy` by the drafter, but the judge reads a request to understand.
     const learning = [{ ...draft(), text: 'Which maxi dress fabrics breathe best?' }];
     await judgeDrafts(context, learning, readsAs('learn'));
     expect(learning[0]!.decision).toMatchObject({ verdict: 'fail', flags: ['advice_intent'] });
@@ -453,7 +448,6 @@ describe('JEV judgments', () => {
     const buying = [draft()];
     await judgeDrafts(context, buying, readsAs('recommend'));
     expect(buying[0]!.decision).toMatchObject({ verdict: 'pass', flags: [] });
-    // A brand diagnostic may ask how the named brand works by design.
     const branded = [
       {
         ...draft(),
@@ -483,7 +477,6 @@ describe('JEV judgments', () => {
     expect(seen[0]!.state).toMatchObject({ grounded_attributes: ['Dresses'] });
     expect(seen[0]!.questions).toEqual(expect.arrayContaining(['single_need', 'grounded_claims']));
     expect(seen[0]!.questions).not.toContain('names_a_business');
-    // A comparison also names a competitor the judge cannot tell apart, so its claims go unasked.
     const comparison = planSlots(
       context,
       generationInput.parse({ count: 1, cohort: 'comparison' }),
@@ -496,7 +489,6 @@ describe('JEV judgments', () => {
     );
     expect(seen[1]!.questions).not.toContain('grounded_claims');
     expect(seen[1]!.state).not.toHaveProperty('grounded_attributes');
-    // A core draft is asked whether it carries one need, and gated when it carries two.
     const core = [{ ...draft(), text: 'Maxi dresses for petite women and tall women' }];
     await judgeDrafts(
       context,

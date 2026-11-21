@@ -2,11 +2,6 @@ import type { CommerceCatalog } from '@citeladder/contracts/commerce-suite';
 
 type Category = CommerceCatalog['categories'][number];
 
-/**
- * The catalog's categories depth-first under their parents, each with its
- * depth; siblings keep the catalog's order (most products first). A category
- * whose parent is not listed sits at the top.
- */
 export function nestedCategories(
   categories: readonly Category[],
 ): { category: Category; depth: number }[] {
@@ -27,7 +22,6 @@ export function nestedCategories(
     }
   };
   visit(null, 0);
-  // A cycle the API never writes would leave rows unreached; they still list, at the top.
   for (const category of categories)
     if (!placed.has(category.id)) {
       placed.add(category.id);

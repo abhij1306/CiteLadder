@@ -116,9 +116,7 @@ function assertSavedTargetsUnchanged(current: SavedProject, saved: Map<string, C
     let same = false;
     try {
       same = canonicalJson(comparison(current, id)) === canonicalJson(target);
-    } catch {
-      /* changed or removed */
-    }
+    } catch {}
     if (!same) throw error('target_changed', 'Competitors changed; review again');
   }
 }
@@ -166,7 +164,6 @@ function datasetDepth(selection: Review['datasets'][number]) {
   if (SEARCH_DATASET_KINDS[selection.kind].fixedDepth) return 1;
   return selection.depth;
 }
-/** A recent complete dataset for the same scope, reused instead of buying it again. */
 function reusableSnapshot(
   trx: Database,
   scope: Scope,
@@ -184,7 +181,6 @@ function reusableSnapshot(
     .orderBy('published_at', 'desc')
     .executeTakeFirst();
 }
-/** The quoted call plan for each reviewed dataset, minus those a recent dataset already covers. */
 async function planDatasets(
   trx: Database,
   scope: Scope,
@@ -254,7 +250,6 @@ async function planDatasets(
         endpoint: request.endpoint,
         request: request.payload,
         page,
-        // Each page's own price; the pages sum to the dataset's quote.
         estimated_cost_usd: String(pageEstimateMicrousd(selection.kind, pageRows) / 1e6),
       });
     }

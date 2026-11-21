@@ -1,14 +1,7 @@
-/**
- * Count-aware projections of one persisted aggregate: never a rescore.
- *
- * A `MetricSnapshot.metrics` object (or one engine's or cohort's slice of it)
- * is what every dashboard, trend and comparison reads, and the one place
- * ranking rows are built. A stored value of the wrong type fails loudly; an
- * absent one stays absent, never zero.
- */
 import type { measurementCountsSchema, rankingRowSchema } from '@citeladder/contracts/visibility';
 import type { z } from 'zod';
 
+import { storedWinTally, winCounts } from '../analysis/win-rate.ts';
 import { policy } from '../config.ts';
 import { compareText } from '../text-order.ts';
 
@@ -16,26 +9,22 @@ export type Metrics = Readonly<Record<string, unknown>>;
 export type MeasurementCounts = z.input<typeof measurementCountsSchema>;
 export type RankingRow = z.input<typeof rankingRowSchema>;
 
-/** A stored JSON object, `{}` when absent; anything else is a corrupt aggregate. */
 export function metricObject(value: unknown): Metrics {
   if (value === null || value === undefined) return {};
   if (typeof value === 'object' && !Array.isArray(value)) return value as Metrics;
   throw new TypeError('stored metric is not an object');
 }
 
-/** A stored number, or null when it was never recorded. */
 export function metricNumber(value: unknown): number | null {
   if (value === null || value === undefined) return null;
   if (typeof value === 'number') return value;
   throw new TypeError('stored metric is not a number');
 }
 
-/** A stored count; absent reads as none observed. */
 export function metricCount(value: unknown): number {
   return Math.trunc(metricNumber(value) ?? 0);
 }
 
-/** `value` rounded to two decimals, as the stored composites are. */
 export function round2(value: number): number {
   return Number(value.toFixed(2));
 }
@@ -44,7 +33,6 @@ export function ratio(numerator: number | null, denominator: number): number | n
   return numerator !== null && denominator ? numerator / denominator : null;
 }
 
-/** The stored per-entity mention counts, or null when the aggregate has none. */
 function mentionCounts(metrics: Metrics): Record<string, number> | null {
   const counts = metricObject(metrics.share_of_voice).mention_counts;
   if (counts === null || counts === undefined) return null;
@@ -90,7 +78,6 @@ export function measurementCounts(metrics: Metrics): MeasurementCounts {
   };
 }
 
-/** Every expected response was observed; an unknown expectation is not complete. */
 export function isComplete(counts: MeasurementCounts): boolean {
   return counts.expected !== null && counts.expected !== undefined
     ? counts.responses === counts.expected
@@ -99,7 +86,6 @@ export function isComplete(counts: MeasurementCounts): boolean {
 
 type HeadlineRate = 'brand_mention_rate' | 'owned_citation_rate';
 
-/** A headline rate from its counts, falling back to the stored rate. */
 export function observedRate(metrics: Metrics, key: HeadlineRate): number | null {
   if (!metricNumber(metrics.total_completed)) return null;
   const counts = measurementCounts(metrics);
@@ -109,7 +95,6 @@ export function observedRate(metrics: Metrics, key: HeadlineRate): number | null
   return metricNumber(metrics[key]);
 }
 
-/** The mean of the stored prompt composites, without changing their formula. */
 export function promptPerformance(metrics: Metrics): number | null {
   const rows = metrics.per_prompt ?? [];
   if (!Array.isArray(rows)) throw new TypeError('stored per_prompt is not a list');
@@ -132,10 +117,6 @@ function competitorRate(metrics: Metrics, key: CompetitorRate, name: string): nu
   return metricNumber(metricObject(metrics[key])[name]);
 }
 
-/**
- * The brand's display name: the first mention-count key that is not a
- * competitor, or a stable label.
- */
 export function brandName(metrics: Metrics): string {
   const competitors = new Set(competitorNames(metrics));
   return (
@@ -143,7 +124,6 @@ export function brandName(metrics: Metrics): string {
   );
 }
 
-/** Mention-level share of voice over every brand key in `brandKeys`. */
 export function mentionSov(
   counts: Readonly<Record<string, number>>,
   brandKeys: ReadonlySet<string>,
@@ -153,7 +133,6 @@ export function mentionSov(
   return sum([...brandKeys].map((name) => counts[name] ?? 0)) / total;
 }
 
-/** The brand's mention-level share, or null when no brand count was persisted (as the tile reads it). */
 export function brandMentionSov(metrics: Metrics): number | null {
   const counts = mentionCounts(metrics);
   const brand = brandName(metrics);
@@ -164,18 +143,15 @@ export function storedMentionCounts(metrics: Metrics): Record<string, number> {
   return mentionCounts(metrics) ?? {};
 }
 
-/** The four compared values of one aggregate. */
 export function metricValues(metrics: Metrics): Record<string, number | null> {
   return {
     visibility: observedRate(metrics, 'brand_mention_rate'),
     owned_citation: observedRate(metrics, 'owned_citation_rate'),
-    // The same mention-level share the Share of voice tile shows.
     sov: brandMentionSov(metrics),
     prompt_performance: promptPerformance(metrics),
   };
 }
 
-/** Movement in points, except the prompt composite, which is already a score. */
 export function metricDeltas(current: Metrics, baseline: Metrics): Record<string, number | null> {
   const before = metricValues(baseline);
   return Object.fromEntries(
@@ -187,7 +163,6 @@ export function metricDeltas(current: Metrics, baseline: Metrics): Record<string
   );
 }
 
-/** Highest share of voice first, then name, so ties are stable. */
 export function sortRankings<Row extends { share_of_voice?: number | null; name: string }>(
   rows: Row[],
 ): Row[] {
@@ -198,13 +173,11 @@ export function sortRankings<Row extends { share_of_voice?: number | null; name:
   );
 }
 
-/**
- * Brand and competitor rows from one aggregate.
- */
 export function rankingRows(metrics: Metrics): RankingRow[] {
   const counts = storedMentionCounts(metrics);
   const presences = sum(Object.values(counts));
   const positions = metricObject(metrics.average_positions);
+  const wins = storedWinTally(metrics.win_tally);
   const row = (
     name: string,
     isBrand: boolean,
@@ -225,6 +198,7 @@ export function rankingRows(metrics: Metrics): RankingRow[] {
     matched_visibility_delta: null,
     matched_response_count: null,
     avg_position: metricNumber(positions[name]),
+    ...winCounts(wins, name),
   });
   return sortRankings([
     row(
@@ -244,16 +218,15 @@ export function rankingRows(metrics: Metrics): RankingRow[] {
   ]);
 }
 
-/**
- * The aggregate for one cohort: core is the snapshot itself, and any other
- * cohort is its own block, empty when the run stored none for it.
- */
 export function cohortMetrics(stored: unknown, cohort: string): Metrics {
   const metrics = metricObject(stored);
   return cohort === policy.visibility.core_cohort ? metrics : metricObject(metrics[cohort]);
 }
 
-/** One engine's slice of an aggregate, `{}` when that engine was not measured. */
+export function brandWins(metrics: Metrics) {
+  return winCounts(storedWinTally(metrics.win_tally), brandName(metrics));
+}
+
 export function engineMetrics(metrics: Metrics, engine: string): Metrics {
   return metricObject(metricObject(metrics.per_engine)[engine]);
 }

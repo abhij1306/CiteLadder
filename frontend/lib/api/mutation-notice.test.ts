@@ -7,8 +7,6 @@ const ACTION = { action: 'start the attribution recompute' };
 
 describe('mutationNoticeForError (A4)', () => {
   it('shows the backend message verbatim on a 4xx precondition — no "try again"', () => {
-    // COM-6: the flattened "try again" copy was the bug — a non-retryable
-    // precondition must read exactly like the backend said.
     const error = new ApiError('no completed sync window is available', 422, '{}', 'req-1', {
       code: 'precondition_failed',
       retryable: false,
@@ -17,7 +15,6 @@ describe('mutationNoticeForError (A4)', () => {
     expect(notice.message).toBe('no completed sync window is available');
     expect(notice.message).not.toMatch(/try again/i);
     expect(notice.retryable).toBe(false);
-    // A6: the machine code + request id ride along for support.
     expect(notice.code).toBe('precondition_failed');
     expect(notice.requestId).toBe('req-1');
   });
@@ -31,7 +28,7 @@ describe('mutationNoticeForError (A4)', () => {
   it('uses transient copy WITH retry on a 5xx', () => {
     const notice = mutationNoticeForError(new ApiError('boom', 500, '{}'), ACTION);
     expect(notice.message).toBe(
-      'Could not start the attribution recompute — the request failed or timed out. This is usually temporary; try again.',
+      'Could not start the attribution recompute. The request failed or timed out. This is usually temporary; try again.',
     );
     expect(notice.retryable).toBe(true);
   });

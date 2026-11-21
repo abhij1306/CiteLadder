@@ -10,7 +10,6 @@ export function required(value: string | undefined, name: string): string {
 // Exact reviewed slugs only; never print arbitrary Error.message, Zod issues or DB diagnostics.
 const safeFailures = new Set(['explicit_database_required', 'local_development_required']);
 
-/** An operator refusal built only from reviewed text; its message is safe to print. */
 export class OperatorRefusal extends Error {}
 
 export function operatorDiagnostic(error: unknown): string {
@@ -41,7 +40,6 @@ export async function operatorMain(run: () => Promise<void>) {
   }
 }
 
-/** Connection lifecycle only. Each command's domain owner enforces its own operator authority. */
 export async function withOperatorDatabase(
   run: (db: Database) => Promise<void>,
   config: DatabaseConfig = loadConfig(),

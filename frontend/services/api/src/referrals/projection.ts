@@ -1,21 +1,3 @@
-/**
- * The AI Referrals snapshot projection: pure folds over referral facts.
- *
- * It shares its calendar buckets with the traffic projection.
- * PostgreSQL worker tests cover the persisted projection. Every formula:
- *
- * - One fact per canonical source/medium metric row, keeping the highest
- *   `resync_seq` per row identity; a fact with no row identity (its metric
- *   row was deleted) never folds in.
- * - `referral_volume` = AI sessions when the bucket has any fact, else null.
- * - `referral_share` = AI sessions / all sessions when that total is positive,
- *   else null. A bucket holding an unclassified fact is unmeasured (null in
- *   both series), and any unclassified fact in the window empties `sources`.
- * - `sources`: per AI source, sessions and share of the window total; only
- *   positive sessions, ordered sessions desc then source asc.
- *
- * Dates are ISO `YYYY-MM-DD` strings, which also order correctly as text.
- */
 import { addDays, dayStart, utcDay } from '../calendar-days.ts';
 import { policy } from '../config.ts';
 import { compareText } from '../text-order.ts';
@@ -28,7 +10,6 @@ export type ReferralFact = {
   ai_source: string;
   occurred_date: string;
   sessions: number;
-  /** `(property_ref, provider, dataset, date, dimension_key)`, or null. */
   row_identity: readonly [string, string, string, string, string] | null;
   resync_seq: number;
 };
@@ -43,7 +24,6 @@ export type AiReferralsProjection = {
 
 class ProjectionError extends Error {}
 
-/** The calendar bucket holding `day`: itself, its ISO Monday, or the 1st. */
 export function bucketStart(day: string, granularity: string): string {
   if (granularity === 'day') return day;
   if (granularity === 'week') return addDays(day, -((dayStart(day).getUTCDay() + 6) % 7));
@@ -58,7 +38,6 @@ function nextBucket(start: string, granularity: string): string {
   return utcDay(date);
 }
 
-/** Series labels: every bucket start in the window, the first clamped to it. */
 function bucketLabels(windowStart: string, windowEnd: string, granularity: string): string[] {
   const labels: string[] = [];
   for (
@@ -71,7 +50,6 @@ function bucketLabels(windowStart: string, windowEnd: string, granularity: strin
   return labels;
 }
 
-/** The highest revision per metric-row identity, ordered by date then id. */
 function latestFacts(facts: readonly ReferralFact[]): ReferralFact[] {
   const latest = new Map<string, ReferralFact>();
   for (const fact of facts) {
@@ -89,7 +67,6 @@ function latestFacts(facts: readonly ReferralFact[]): ReferralFact[] {
 const add = (map: Map<string, number>, key: string, value: number) =>
   map.set(key, (map.get(key) ?? 0) + value);
 
-/** Fold the facts into one window's metrics and provenance. */
 export function buildAiReferralsProjection(options: {
   facts: readonly ReferralFact[];
   windowStart: string;

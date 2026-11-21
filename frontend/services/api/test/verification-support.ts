@@ -16,7 +16,6 @@ export type VerificationSeed = {
   analysisId: string;
   artifactId: string;
   ruleId: string;
-  /** When every source was observed, with PostgreSQL microseconds. */
   moment: string;
   declarations: Record<string, string>;
 };
@@ -81,11 +80,9 @@ export async function seedVerification(db: Database): Promise<VerificationSeed> 
       .values({
         ...scope,
         id: trafficId,
-        // Starts after the go-live day, which is partly before the change.
         window_start: new Date(`${clock.day}T00:00:00Z`),
         window_end: new Date(`${clock.day}T00:00:00Z`),
         granularity: 'day',
-        // Site-wide clicks are high; only the declared page's own row may count.
         metrics: JSON.stringify({ totals: { clicks: 500 } }),
         normalization_version: policy.traffic.TRAFFIC_NORMALIZATION_VERSION,
         formula_version: policy.traffic.TRAFFIC_FORMULA_VERSION,
@@ -122,12 +119,9 @@ export async function seedVerification(db: Database): Promise<VerificationSeed> 
       expected_outcome: 'partial',
       target_site_url_id: issue.site_url_id,
     };
-    // Frozen checks carry the contract's shape (`expectedCheckSchema`); one that
-    // does not parse reads as `malformed_check`.
     const checks: Record<string, Record<string, unknown>[]> = {
       site: [siteRule],
       traffic: [pageClicks('https://acme.test/b')],
-      // Search Console has no row for this page, whatever the site total says.
       traffic_other: [pageClicks('https://acme.test/elsewhere')],
       visibility: [
         {
@@ -140,7 +134,6 @@ export async function seedVerification(db: Database): Promise<VerificationSeed> 
           direction: 'increase',
         },
       ],
-      // Declared before checks were prompt-scoped: the project score moved.
       legacy: [
         {
           kind: 'visibility_metric',
@@ -152,9 +145,7 @@ export async function seedVerification(db: Database): Promise<VerificationSeed> 
           direction: 'increase',
         },
       ],
-      // A crawl and a Search Console window each settle one of its checks.
       mixed: [siteRule, pageClicks('https://acme.test/b')],
-      // Went live before the verification window; no new source re-reads it.
       expired: [siteRule],
       missing_prompt: [
         {
@@ -167,7 +158,6 @@ export async function seedVerification(db: Database): Promise<VerificationSeed> 
           direction: 'increase',
         },
       ],
-      // An earned listing is measured on the prompts that cited the page.
       earned: [
         {
           kind: 'visibility_metric',

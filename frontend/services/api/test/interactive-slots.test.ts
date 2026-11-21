@@ -14,7 +14,6 @@ import { auditTenant } from './audit-fixtures.ts';
 import { TEST_SESSION_COOKIE, sessionToken, testConfig, testDatabase } from './support.ts';
 import { agentTurnAcceptedSchema } from '@citeladder/contracts/agent';
 
-// This file owns its module graph, so it may fill and drain the process's slots.
 describe('in-request work slots on one API instance', () => {
   const db = testDatabase(),
     fixtures = new AgentFixtures(db),
@@ -54,7 +53,6 @@ describe('in-request work slots on one API instance', () => {
       });
     return { scope, headers, runId: accepted.run.id, run };
   }
-  /** Holds every free slot until released. */
   function fill() {
     const held: InteractiveSlot[] = [];
     for (;;) {
@@ -65,7 +63,6 @@ describe('in-request work slots on one API instance', () => {
       }
     }
   }
-  /** A model that answers only when its turn is stopped. */
   function blocking(started: () => void): AgentModel {
     return {
       ...scripted([]),
@@ -126,12 +123,7 @@ describe('in-request work slots on one API instance', () => {
   });
 
   it('ends a turn at the time limit frozen in its budget, not the live setting', async () => {
-    let started!: () => void;
-    const calling = new Promise<void>((resolve) => {
-      started = resolve;
-    });
-    const turn = await agent(blocking(() => started()));
-    // Admission froze a short limit; the live setting is still 1,800 seconds.
+    const turn = await agent(blocking(() => {}));
     const run = await fixtures.run(turn.runId);
     await db
       .updateTable('agent_runs')
@@ -139,7 +131,6 @@ describe('in-request work slots on one API instance', () => {
       .where('id', '=', turn.runId)
       .execute();
     const response = await turn.run();
-    await calling;
     expect(await response.text()).toContain('"type":"done"');
     expect(await fixtures.run(turn.runId)).toMatchObject({
       status: 'failed',

@@ -1,18 +1,19 @@
-import { useState, type ReactNode } from 'react';
+import { useState } from 'react';
 
-import { ExecutionEvidenceDrawer } from '@/components/runs/execution-evidence-drawer';
-import { Badge, type StatusValue } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { AnswerDialog } from '@/components/runs/answer-dialog';
+import { BrandMark } from '@/components/ui/brand-mark';
+import { IconButton } from '@/components/ui/button';
+import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
+import { Inline } from '@/components/ui/layout';
+import { StatusMark, type StatusValue } from '@/components/ui/status-mark';
 import { DisplayTime } from '@/components/ui/display-time';
-import { Inline, Stack } from '@/components/ui/layout';
+import { TableActionsCell, TableCell, TableCellLines, TableRow } from '@/components/ui/table';
 import { TextLink } from '@/components/ui/text-link';
-import { textRole } from '@/components/ui/typography';
-import { ledgerClasses, ledgerItemClasses } from '@/components/ui/workspace';
-import { Measured } from '@/components/products/measured';
+import { Value } from '@/components/ui/value';
 import type { CommerceProductDetail } from '@citeladder/contracts/commerce-suite';
-import { formatCount, pluralCount } from '@/lib/format';
-import { formatPosition, formatRate, holderCaption } from '@/lib/products/product-columns';
+import { FileSearch } from '@/lib/icons';
+import { formatCount, formatMean } from '@/lib/format';
+import { formatRate, holderCaption } from '@/lib/products/product-columns';
 import { productHref, type ProductScopeFilters } from '@/lib/products/product-filters';
 import { useEngineCatalog } from '@/lib/providers/engines';
 
@@ -24,45 +25,24 @@ const OUTCOMES: Record<Answer['outcome'], { label: string; tone: StatusValue }> 
   unranked: { label: 'Unranked', tone: 'info' },
 };
 
-/** One titled card holding a ledger, or a sentence when the ledger is empty. */
-function Section({
-  title,
-  description,
-  empty,
-  children,
-}: Readonly<{ title: string; description: string; empty: string | null; children: ReactNode }>) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
-        <CardDescription>{description}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        {empty === null ? (
-          <ul className={ledgerClasses()}>{children}</ul>
-        ) : (
-          <p className={textRole('body')}>{empty}</p>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
+const emptyWhen = (rows: readonly unknown[], message: string) =>
+  rows.length ? undefined : ({ kind: 'empty', inline: true, message } as const);
 
-function Row({
-  primary,
-  secondary,
-  end,
-}: Readonly<{ primary: ReactNode; secondary?: ReactNode; end?: ReactNode }>) {
-  return (
-    <Inline as="li" gap="compact" className={ledgerItemClasses('flex-wrap')}>
-      <Stack gap="tight" className="min-w-0 flex-1">
-        <span className={textRole('emphasis', 'truncate')}>{primary}</span>
-        {secondary ? <span className="type-caption">{secondary}</span> : null}
-      </Stack>
-      {end}
-    </Inline>
-  );
-}
+const answers = { key: 'answers', label: 'Answers', kind: 'number' } as const;
+
+const mean = (value: number | null) => (
+  <Value value={value === null ? null : formatMean(value)} absent="unavailable" />
+);
+const rate = (value: number | null) => (
+  <Value value={value === null ? null : formatRate(value)} absent="unavailable" />
+);
+
+const COMPETING_COLUMNS: readonly DataTableColumn[] = [
+  { key: 'product', label: 'Product', kind: 'identity' },
+  { key: 'shared', label: 'Shared answers', kind: 'number' },
+  { key: 'ahead', label: 'Ranked above it', kind: 'number', priority: 'low' },
+  { key: 'position', label: 'Position', kind: 'number' },
+];
 
 export function CompetingProducts({
   detail,
@@ -70,169 +50,239 @@ export function CompetingProducts({
 }: Readonly<{ detail: CommerceProductDetail; scope: ProductScopeFilters }>) {
   const rows = detail.competing;
   return (
-    <Section
+    <DataTable
       title="Competing products"
-      description="Products named in the same answers, by answers shared."
-      empty={rows.length ? null : 'No other product was named in its answers.'}
+      columns={COMPETING_COLUMNS}
+      state={emptyWhen(rows, 'No other product was named in its answers.')}
     >
       {rows.map((row) => (
-        <Row
-          key={row.holder_id}
-          primary={
-            <TextLink href={productHref(row.holder_id, scope)} text="inherit">
-              {row.name}
-            </TextLink>
-          }
-          secondary={[
-            holderCaption(row),
-            `In ${pluralCount(row.shared, 'shared answer')}`,
-            `ranked above it in ${formatCount(row.ahead)}`,
-          ].join(' · ')}
-          end={
-            <span className="type-caption tabular-nums">
-              Position <Measured value={row.position} format={formatPosition} />
-            </span>
-          }
-        />
+        <TableRow key={row.holder_id}>
+          <TableCell>
+            <Inline as="span">
+              {row.brand ? <BrandMark name={row.brand} placement="inline" /> : null}
+              <TableCellLines
+                primary={
+                  <TextLink
+                    href={productHref(row.holder_id, scope)}
+                    text="inherit"
+                    underline="hover"
+                  >
+                    {row.name}
+                  </TextLink>
+                }
+                secondary={holderCaption(row)}
+              />
+            </Inline>
+          </TableCell>
+          <TableCell numeric>{formatCount(row.shared)}</TableCell>
+          <TableCell numeric>{formatCount(row.ahead)}</TableCell>
+          <TableCell numeric>{mean(row.position)}</TableCell>
+        </TableRow>
       ))}
-    </Section>
+    </DataTable>
   );
 }
+
+const MERCHANT_COLUMNS: readonly DataTableColumn[] = [
+  { key: 'merchant', label: 'Merchant' },
+  answers,
+];
 
 export function Merchants({ detail }: Readonly<{ detail: CommerceProductDetail }>) {
   return (
-    <Section
+    <DataTable
       title="Merchants"
-      description="Where the answers send shoppers to buy it."
-      empty={detail.merchants.length ? null : 'No answer named a merchant for it.'}
+      columns={MERCHANT_COLUMNS}
+      state={emptyWhen(detail.merchants, 'No answer named a merchant for it.')}
     >
       {detail.merchants.map((row) => (
-        <Row
-          key={row.domain}
-          primary={row.domain}
-          end={
-            <span className="type-caption tabular-nums">{pluralCount(row.count, 'answer')}</span>
-          }
-        />
+        <TableRow key={row.domain}>
+          <TableCell>
+            <TableCellLines primary={row.domain} />
+          </TableCell>
+          <TableCell numeric>{formatCount(row.count)}</TableCell>
+        </TableRow>
       ))}
-    </Section>
+    </DataTable>
   );
 }
+
+const SEEN_IN_COLUMNS: readonly DataTableColumn[] = [
+  { key: 'name', label: 'Shopping prompt' },
+  { key: 'kind', label: 'Kind', width: 'category', priority: 'low' },
+  answers,
+];
+
+export function SeenIn({
+  detail,
+  scope,
+}: Readonly<{ detail: CommerceProductDetail; scope: ProductScopeFilters }>) {
+  return (
+    <DataTable
+      title="Seen in"
+      columns={SEEN_IN_COLUMNS}
+      state={emptyWhen(detail.seen_in, 'No shopping prompt’s answer named it.')}
+    >
+      {detail.seen_in.map((row) => (
+        <TableRow key={row.target_id}>
+          <TableCell>
+            <TableCellLines
+              primary={
+                <TextLink href={productHref(row.target_id, scope)} text="inherit" underline="hover">
+                  {row.name}
+                </TextLink>
+              }
+            />
+          </TableCell>
+          <TableCell>{row.target_kind === 'category' ? 'Category' : 'Product'}</TableCell>
+          <TableCell numeric>{formatCount(row.answers)}</TableCell>
+        </TableRow>
+      ))}
+    </DataTable>
+  );
+}
+
+const SOURCE_COLUMNS: readonly DataTableColumn[] = [
+  { key: 'page', label: 'Page', kind: 'url' },
+  answers,
+];
 
 export function Sources({ detail }: Readonly<{ detail: CommerceProductDetail }>) {
   return (
-    <Section
+    <DataTable
       title="Sources"
-      description="Pages cited by the answers that named it."
-      empty={detail.sources.length ? null : 'The answers that named it cited no pages.'}
+      columns={SOURCE_COLUMNS}
+      state={emptyWhen(detail.sources, 'The answers that named it cited no pages.')}
     >
       {detail.sources.map((row) => (
-        <Row
-          key={row.url}
-          primary={
-            <TextLink variant="external" href={row.url} text="inherit">
-              {row.title || row.url}
-            </TextLink>
-          }
-          secondary={row.domain}
-          end={
-            <span className="type-caption tabular-nums">{pluralCount(row.count, 'answer')}</span>
-          }
-        />
+        <TableRow key={row.url}>
+          <TableCell>
+            <TableCellLines
+              primary={
+                <TextLink variant="external" href={row.url} text="inherit">
+                  {row.title || row.url}
+                </TextLink>
+              }
+              secondary={row.domain}
+            />
+          </TableCell>
+          <TableCell numeric>{formatCount(row.count)}</TableCell>
+        </TableRow>
       ))}
-    </Section>
+    </DataTable>
   );
 }
+
+const QUERY_COLUMNS: readonly DataTableColumn[] = [{ key: 'query', label: 'Query' }, answers];
 
 export function FanOutQueries({ detail }: Readonly<{ detail: CommerceProductDetail }>) {
   return (
-    <Section
+    <DataTable
       title="Fan-out queries"
-      description="What the engines searched for while writing the answers that named it."
-      empty={
-        detail.fan_out_queries.length
-          ? null
-          : 'No search queries were captured for the answers that named it.'
-      }
+      columns={QUERY_COLUMNS}
+      state={emptyWhen(
+        detail.fan_out_queries,
+        'No search queries were captured for the answers that named it.',
+      )}
     >
       {detail.fan_out_queries.map((row) => (
-        <Row
-          key={row.query}
-          primary={row.query}
-          end={
-            <span className="type-caption tabular-nums">{pluralCount(row.count, 'answer')}</span>
-          }
-        />
+        <TableRow key={row.query}>
+          <TableCell>
+            <TableCellLines primary={row.query} />
+          </TableCell>
+          <TableCell numeric>{formatCount(row.count)}</TableCell>
+        </TableRow>
       ))}
-    </Section>
+    </DataTable>
   );
 }
+
+const PROMPT_COLUMNS: readonly DataTableColumn[] = [
+  { key: 'prompt', label: 'Prompt' },
+  { key: 'visibility', label: 'Visibility', kind: 'number' },
+  { key: 'appearances', label: 'Named in', kind: 'number', priority: 'low' },
+  { key: 'win', label: 'Win rate', kind: 'number', priority: 'low' },
+  { key: 'position', label: 'Position', kind: 'number' },
+];
 
 export function PromptMetrics({ detail }: Readonly<{ detail: CommerceProductDetail }>) {
   return (
-    <Section
+    <DataTable
       title="Prompts"
-      description="Each prompt that named it or targets it, over that prompt's answers."
-      empty={detail.prompts.length ? null : 'No prompt named it in this window.'}
+      columns={PROMPT_COLUMNS}
+      state={emptyWhen(detail.prompts, 'No prompt named it in this window.')}
     >
       {detail.prompts.map((row) => (
-        <Row
-          key={row.prompt_id ?? row.text}
-          primary={row.text}
-          secondary={
-            <>
-              Visibility <Measured value={row.visibility} format={formatRate} /> (
-              {formatCount(row.appearances)} of {pluralCount(row.executions, 'answer')}) · Win rate{' '}
-              <Measured value={row.win_rate} format={formatRate} /> · Position{' '}
-              <Measured value={row.position} format={formatPosition} />
-            </>
-          }
-        />
+        <TableRow key={row.prompt_id ?? row.text}>
+          <TableCell>
+            <TableCellLines primary={row.text} />
+          </TableCell>
+          <TableCell numeric>{rate(row.visibility)}</TableCell>
+          <TableCell numeric>
+            {formatCount(row.appearances)} of {formatCount(row.executions)}
+          </TableCell>
+          <TableCell numeric>{rate(row.win_rate)}</TableCell>
+          <TableCell numeric>{mean(row.position)}</TableCell>
+        </TableRow>
       ))}
-    </Section>
+    </DataTable>
   );
 }
 
-/** Each answer that named it, newest first; opening one shows the stored answer. */
+const ANSWER_COLUMNS: readonly DataTableColumn[] = [
+  { key: 'prompt', label: 'Prompt' },
+  { key: 'engine', label: 'Engine', width: 'name', priority: 'low' },
+  { key: 'date', label: 'Date', kind: 'date', priority: 'low' },
+  { key: 'rank', label: 'Rank', kind: 'number', width: 'index' },
+  { key: 'outcome', label: 'Outcome', kind: 'status' },
+  { key: 'open', label: 'Open answer', kind: 'actions', width: 'action' },
+];
+
 export function Answers({ detail }: Readonly<{ detail: CommerceProductDetail }>) {
   const [open, setOpen] = useState<Answer | null>(null);
   const engines = useEngineCatalog();
   const more = detail.answer_total - detail.answers.length;
   return (
     <>
-      <Section
+      <DataTable
         title="Answers"
         description={
           more > 0
-            ? `The newest ${formatCount(detail.answers.length)} of ${pluralCount(detail.answer_total, 'answer')} that named it.`
-            : 'Every answer that named it, newest first.'
+            ? `Newest ${formatCount(detail.answers.length)} of ${formatCount(detail.answer_total)}`
+            : undefined
         }
-        empty={detail.answers.length ? null : 'No answer named it in this window.'}
+        columns={ANSWER_COLUMNS}
+        state={emptyWhen(detail.answers, 'No answer named it in this window.')}
       >
         {detail.answers.map((row) => (
-          <Row
-            key={row.task_id}
-            primary={row.prompt_text}
-            secondary={
-              <>
-                {engines.label(row.engine)} · <DisplayTime value={row.completed_at} dateOnly />
-                {row.rank === null ? null : ` · #${row.rank}`}
-              </>
-            }
-            end={
-              <Inline gap="compact">
-                <Badge variant="status" value={OUTCOMES[row.outcome].tone}>
-                  {OUTCOMES[row.outcome].label}
-                </Badge>
-                <Button variant="ghost" onClick={() => setOpen(row)}>
-                  Open answer
-                </Button>
-              </Inline>
-            }
-          />
+          <TableRow key={row.task_id}>
+            <TableCell>
+              <TableCellLines primary={row.prompt_text} />
+            </TableCell>
+            <TableCell>{engines.label(row.engine)}</TableCell>
+            <TableCell>
+              <DisplayTime value={row.completed_at} dateOnly />
+            </TableCell>
+            <TableCell numeric>
+              <Value value={row.rank === null ? null : `#${row.rank}`} absent="unavailable" />
+            </TableCell>
+            <TableCell>
+              <StatusMark variant="status" value={OUTCOMES[row.outcome].tone}>
+                {OUTCOMES[row.outcome].label}
+              </StatusMark>
+            </TableCell>
+            <TableActionsCell>
+              <IconButton
+                icon={FileSearch}
+                variant="secondary"
+                onClick={() => setOpen(row)}
+                label={`Open the answer to ${row.prompt_text}`}
+              />
+            </TableActionsCell>
+          </TableRow>
         ))}
-      </Section>
-      <ExecutionEvidenceDrawer
+      </DataTable>
+      <AnswerDialog
         execution={open ? { id: open.task_id, prompt_text: open.prompt_text } : null}
         open={open !== null}
         onOpenChange={(next) => {

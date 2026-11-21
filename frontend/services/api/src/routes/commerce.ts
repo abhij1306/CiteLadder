@@ -19,7 +19,6 @@ import {
   competitorDiscoveryTaskSchema,
   competitorDiscoverySchema,
 } from '@citeladder/contracts/commerce-suite';
-import type { Context } from 'hono';
 import { z } from 'zod';
 
 import { decideBuyerPrompt, decideCandidate } from '../commerce/decisions.ts';
@@ -50,17 +49,20 @@ import {
   discoveries,
 } from '../commerce/reads.ts';
 import { policy } from '../config.ts';
-import type { AppEnv } from '../context.ts';
 import { ApiError } from '../errors.ts';
 import { readBody } from '../http/body.ts';
-import { defineGetRoute, definePatchRoute, definePostRoute, definePutRoute } from './define.ts';
+import {
+  defineGetRoute,
+  definePatchRoute,
+  definePostRoute,
+  definePutRoute,
+  projectScopeOf,
+} from './define.ts';
 
-/** Every route here reads the path project inside the active workspace. */
 const family = { family: 'commerce', authorize: 'active-project' } as const;
 const root = '/api/v1/projects/{project_id}/commerce';
 const uuid = { scalar: { kind: 'uuid' }, required: true } as const;
 const projectPath = { project_id: uuid } as const;
-/** The executions a product read covers, shared by the table and the detail page. */
 const windowParam = {
   scalar: { kind: 'int', ge: 1, le: 366 },
   default: policy.commerce.products.default_window_days,
@@ -79,7 +81,6 @@ const applyBody = catalogImportApplyRequestSchema.refine(
 );
 const candidateBody = competitorDecisionRequestSchema;
 const promptBody = buyerPromptDecisionRequestSchema;
-/** A retried generation with the same key replays the prompts its first attempt stored. */
 const buyerGenerateHeaders = z.object({
   'Idempotency-Key': z
     .string()
@@ -87,10 +88,6 @@ const buyerGenerateHeaders = z.object({
     .nullish(),
 });
 const executeDiscoveriesBody = competitorDiscoveryExecuteRequestSchema;
-
-function scopeOf(c: Context<AppEnv>, projectId: string) {
-  return { workspaceId: c.get('workspace').workspaceId, projectId };
-}
 
 export const commerceRoutes = [
   definePostRoute({
@@ -101,7 +98,7 @@ export const commerceRoutes = [
     body: executeDiscoveriesBody,
     response: z.array(competitorDiscoveryTaskSchema),
     async handle({ c, db, config }, { path }) {
-      const scope = scopeOf(c, path.project_id);
+      const scope = projectScopeOf(c, path.project_id);
       const { task_ids } = await readBody(c, executeDiscoveriesBody);
       return executeCompetitorDiscoveries(db, config, scope, task_ids);
     },
@@ -115,7 +112,11 @@ export const commerceRoutes = [
     body: discoveryInput,
     response: competitorDiscoverySchema,
     async handle({ c, db }, { path }) {
-      return enqueueDiscoveries(db, scopeOf(c, path.project_id), await readBody(c, discoveryInput));
+      return enqueueDiscoveries(
+        db,
+        projectScopeOf(c, path.project_id),
+        await readBody(c, discoveryInput),
+      );
     },
   }),
   definePostRoute({
@@ -133,7 +134,7 @@ export const commerceRoutes = [
         throw new ApiError(422, 'Idempotency-Key is too long');
       return generateBuyerPrompts(
         db,
-        scopeOf(c, path.project_id),
+        projectScopeOf(c, path.project_id),
         await readBody(c, buyerGenerateInput),
         { idempotencyKey: key },
       );
@@ -150,7 +151,7 @@ export const commerceRoutes = [
     async handle({ c, db }, { path }) {
       return manualBuyerPrompt(
         db,
-        scopeOf(c, path.project_id),
+        projectScopeOf(c, path.project_id),
         await readBody(c, buyerManualInput),
       );
     },
@@ -161,7 +162,7 @@ export const commerceRoutes = [
     params: { path: projectPath, query: {} },
     response: commerceCatalogSchema,
     async handle({ c, db }, { path }) {
-      return catalog(db, scopeOf(c, path.project_id));
+      return catalog(db, projectScopeOf(c, path.project_id));
     },
   }),
   defineGetRoute({
@@ -170,7 +171,7 @@ export const commerceRoutes = [
     params: { path: projectPath, query: {} },
     response: commerceProjectionSchema,
     async handle({ c, db }, { path }) {
-      return catalogProjection(db, scopeOf(c, path.project_id));
+      return catalogProjection(db, projectScopeOf(c, path.project_id));
     },
   }),
   definePostRoute({
@@ -182,7 +183,7 @@ export const commerceRoutes = [
     body: importBody,
     response: catalogImportStageSchema,
     async handle({ c, db }, { path }) {
-      const scope = scopeOf(c, path.project_id);
+      const scope = projectScopeOf(c, path.project_id);
       const body = await readBody(c, importBody);
       if (body.source !== 'shopify')
         return stageImport(db, scope, {
@@ -206,7 +207,7 @@ export const commerceRoutes = [
     body: applyBody,
     response: catalogImportSchema,
     async handle({ c, db }, { path }) {
-      const scope = scopeOf(c, path.project_id);
+      const scope = projectScopeOf(c, path.project_id);
       const { excluded_categories } = await readBody(c, applyBody);
       return applyImport(db, scope, path.import_id, excluded_categories);
     },
@@ -239,7 +240,7 @@ export const commerceRoutes = [
     },
     response: commerceProductPageSchema,
     async handle({ c, db }, { path, query }) {
-      return productMetrics(db, scopeOf(c, path.project_id), {
+      return productMetrics(db, projectScopeOf(c, path.project_id), {
         source: query.source,
         category: query.category,
         windowDays: query.window,
@@ -261,7 +262,7 @@ export const commerceRoutes = [
     },
     response: commerceShoppingOverviewSchema,
     async handle({ c, db }, { path, query }) {
-      return shoppingOverview(db, scopeOf(c, path.project_id), {
+      return shoppingOverview(db, projectScopeOf(c, path.project_id), {
         windowDays: query.window,
         category: query.category,
       });
@@ -276,7 +277,7 @@ export const commerceRoutes = [
     },
     response: commerceProductDetailSchema,
     async handle({ c, db }, { path, query }) {
-      return productDetail(db, scopeOf(c, path.project_id), path.holder_id, {
+      return productDetail(db, projectScopeOf(c, path.project_id), path.holder_id, {
         windowDays: query.window,
         engine: query.engine,
         promptSet: query.prompt_set,
@@ -291,7 +292,7 @@ export const commerceRoutes = [
     body: productEditInput,
     response: commerceProductSchema,
     async handle({ c, db }, { path }) {
-      const scope = scopeOf(c, path.project_id);
+      const scope = projectScopeOf(c, path.project_id);
       return editProduct(db, scope, path.holder_id, await readBody(c, productEditInput));
     },
   }),
@@ -303,7 +304,7 @@ export const commerceRoutes = [
     body: productLifecycleInput,
     response: commerceProductSchema,
     async handle({ c, db }, { path }) {
-      const scope = scopeOf(c, path.project_id);
+      const scope = projectScopeOf(c, path.project_id);
       const { lifecycle_state } = await readBody(c, productLifecycleInput);
       return setProductLifecycle(db, scope, path.holder_id, lifecycle_state);
     },
@@ -314,7 +315,7 @@ export const commerceRoutes = [
     params: { path: projectPath, query: {} },
     response: z.array(competitorCandidateSchema),
     async handle({ c, db }, { path }) {
-      return candidates(db, scopeOf(c, path.project_id));
+      return candidates(db, projectScopeOf(c, path.project_id));
     },
   }),
   defineGetRoute({
@@ -323,7 +324,7 @@ export const commerceRoutes = [
     params: { path: projectPath, query: { task_ids: { scalar: { kind: 'uuid' }, list: true } } },
     response: z.array(competitorDiscoveryTaskSchema),
     async handle({ c, db }, { path, query }) {
-      return discoveries(db, scopeOf(c, path.project_id), query.task_ids);
+      return discoveries(db, projectScopeOf(c, path.project_id), query.task_ids);
     },
   }),
   definePatchRoute({
@@ -334,7 +335,7 @@ export const commerceRoutes = [
     body: candidateBody,
     response: competitorCandidateSchema,
     async handle({ c, db }, { path }) {
-      const scope = scopeOf(c, path.project_id);
+      const scope = projectScopeOf(c, path.project_id);
       return decideCandidate(
         db,
         scope,
@@ -349,7 +350,7 @@ export const commerceRoutes = [
     params: { path: projectPath, query: {} },
     response: z.array(buyerPromptSchema),
     async handle({ c, db }, { path }) {
-      return buyerPrompts(db, scopeOf(c, path.project_id));
+      return buyerPrompts(db, projectScopeOf(c, path.project_id));
     },
   }),
   definePatchRoute({
@@ -360,7 +361,7 @@ export const commerceRoutes = [
     body: promptBody,
     response: buyerPromptSchema,
     async handle({ c, db }, { path }) {
-      const scope = scopeOf(c, path.project_id);
+      const scope = projectScopeOf(c, path.project_id);
       return decideBuyerPrompt(db, scope, path.prompt_id, (await readBody(c, promptBody)).approved);
     },
   }),

@@ -14,7 +14,6 @@ export type ThemePreference = 'light' | 'dark' | 'system';
 export type Theme = 'light' | 'dark';
 
 export const THEME_COOKIE = 'citeladder_theme';
-/** A year: the choice is a standing preference, refreshed whenever it changes. */
 const THEME_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 const DARK_QUERY = '(prefers-color-scheme: dark)';
 
@@ -24,7 +23,6 @@ function isExplicit(value: string | undefined): value is Theme {
   return value === 'light' || value === 'dark';
 }
 
-/** The stored preference; anything but an explicit theme is `system`. */
 function storedPreference(): ThemePreference {
   const entry = document.cookie
     .split('; ')
@@ -64,12 +62,6 @@ function resolve(preference: ThemePreference): Theme {
   return preference === 'system' ? systemTheme() : preference;
 }
 
-/**
- * Run a palette swap with transitions paused. Fields, selects and selected rows
- * transition their colours, so a live swap would fade every one of them
- * between palettes at once. Transitions return only after a frame has painted
- * the new colours, so nothing animates.
- */
 function withoutTransitions(change: () => void) {
   const pause = document.createElement('style');
   pause.textContent = '*,*::before,*::after{transition:none!important}';
@@ -95,7 +87,6 @@ export function setThemePreference(preference: ThemePreference) {
   apply();
 }
 
-/** The device scheme changed, or another tab or surface changed the cookie. */
 function onExternalChange() {
   apply();
 }
@@ -119,7 +110,6 @@ function currentTheme(): Theme {
   return document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
 }
 
-/** The resolved theme the document is showing. */
 export function useTheme(): Theme {
   return useSyncExternalStore(subscribe, currentTheme, () => 'light');
 }

@@ -1,8 +1,3 @@
-/**
- * The reads one Search Intelligence acquisition locks and checks, scoped to
- * its task's workspace and project. AcquisitionState owns the transactions
- * and the lock order; nothing here writes.
- */
 import { sql } from 'kysely';
 import type { Database } from '../db/database.ts';
 import type { AcquisitionState } from './acquisition-state.ts';
@@ -25,7 +20,6 @@ export function callsQuery(db: Database, scope: Scope) {
     .where('project_id', '=', scope.projectId)
     .where('run_id', '=', scope.runId);
 }
-/** The task, locked, while this execution still holds its live lease. */
 export function ownedTask(db: Database, { task }: Scope) {
   return db
     .selectFrom('analytics_tasks')
@@ -39,7 +33,6 @@ export function ownedTask(db: Database, { task }: Scope) {
     .forUpdate()
     .executeTakeFirst();
 }
-/** The task, locked, once it has failed or been cancelled. */
 export function endedTask(db: Database, { task }: Scope) {
   return db
     .selectFrom('analytics_tasks')
@@ -51,7 +44,6 @@ export function endedTask(db: Database, { task }: Scope) {
     .forUpdate()
     .executeTakeFirst();
 }
-/** The call's latest dispatch attempt, or undefined before its first. */
 export function latestDispatch(
   db: Database,
   run: { workspace_id: string; project_id: string },
@@ -69,7 +61,6 @@ export function latestDispatch(
 }
 type RunRef = { id: string; workspace_id: string; project_id: string };
 
-/** The run's dataset for one plan scope, locked, if it was already opened. */
 export function scopedDataset(db: Database, run: RunRef, scopeHash: string) {
   return db
     .selectFrom('search_intelligence_datasets')
@@ -81,7 +72,6 @@ export function scopedDataset(db: Database, run: RunRef, scopeHash: string) {
     .forUpdate()
     .executeTakeFirst();
 }
-/** The call's dataset, locked. */
 export function callDataset(db: Database, run: RunRef, datasetId: string) {
   return db
     .selectFrom('search_intelligence_datasets')
@@ -92,7 +82,6 @@ export function callDataset(db: Database, run: RunRef, datasetId: string) {
     .forUpdate()
     .executeTakeFirstOrThrow();
 }
-/** Every dataset of the run, with its status and coverage. */
 export function runDatasets(db: Database, run: RunRef) {
   return db
     .selectFrom('search_intelligence_datasets')

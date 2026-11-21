@@ -4,7 +4,6 @@ import { AcquisitionState } from './acquisition-state.ts';
 import { si } from './requests.ts';
 import { failureFacts, getLogger } from '../logging.ts';
 
-/** The queue sweeper may exhaust a dead analytics worker; recover saved receipts with no HTTP. */
 export async function reconcileResearch(db: Database, at = new Date(), canAdmit = () => true) {
   if (!canAdmit()) return 0;
   const candidates = await db
@@ -100,7 +99,6 @@ export async function reconcileResearch(db: Database, at = new Date(), canAdmit 
           .execute();
       });
     } catch (error) {
-      // One run's repair never blocks the others; the next sweep retries it.
       getLogger('workers.research').warning('research_maintenance_failed', {
         run_id: candidate.run_id,
         ...failureFacts(error),

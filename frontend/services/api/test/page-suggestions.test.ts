@@ -1,10 +1,3 @@
-/**
- * Suggestions on a page document against real PostgreSQL (content
- * optimization phase 2, PR 2). A recorded site is fetched into the chat's page
- * document, a scripted model stages suggestions with `suggest_edits`, and the
- * person applies, dismisses and reverts them. Nothing reaches the network or a
- * model provider.
- */
 import { randomUUID } from 'node:crypto';
 
 import { afterAll, describe, expect, it, vi } from 'vitest';
@@ -43,7 +36,6 @@ afterAll(async () => {
 });
 
 const PAGE = 'https://example.test/crm-pricing';
-// A title and no meta description: Site Health's page-local check finds the missing field.
 const ARTICLE = `<!doctype html><html><head><title>CRM pricing compared</title></head><body><main>
 <h1>CRM pricing</h1>
 <p>Compare plans across five tools.</p>
@@ -74,7 +66,6 @@ agent.store.dependencies.admission = () =>
 vi.spyOn(bindingsOwner, 'agentBindings').mockResolvedValue(agent);
 const outputs = new AgentOutputs(db);
 
-/** A crawled project whose content page is PAGE, signed in as its owner. */
 async function project() {
   const seed = await fixtures.crawl();
   workspaces.push(seed.workspaceId);
@@ -94,7 +85,6 @@ async function project() {
   return { scope: seed satisfies Scope, headers };
 }
 
-/** An optimize-page chat whose page was fetched; its first turn is queued. */
 async function pageChat() {
   const { scope, headers } = await project();
   const created = await agent.store.create(scope, {
@@ -117,7 +107,6 @@ async function pageChat() {
   const chat = { scope, headers, chatId: created.chatId, outputId: document.id };
   return {
     ...chat,
-    /** Runs the chat's queued turn with a scripted model; a later turn is queued first. */
     turn: async (responses: Response[], onCall?: (request: ModelRequest) => Promise<void>) => {
       const runtime = new AgentRuntime(db, {
         ...agent.runtime.deps,
@@ -146,7 +135,6 @@ const span = (oldString: string, newString: string, extra: Record<string, Json> 
   rationale: 'Plainer wording.',
   ...extra,
 });
-/** A chat whose first turn staged these suggestions; returns their ids in the order given. */
 async function suggested(items: Record<string, Json>[]) {
   const chat = await pageChat();
   await chat.turn([suggest(items), reply('Here are my suggestions.')]);
@@ -175,7 +163,6 @@ const target = (chat: PageChat, suggestionId: string, baseId: string) => ({
   suggestionId,
   baseId,
 });
-/** The Agent's suggestions; every chat on this page also has the Site Health meta description advice. */
 const fromModel = async (chat: PageChat) => {
   const page = await chat.list();
   return page.items.filter((item) => item.source === 'model');
@@ -232,12 +219,9 @@ describe('suggestions from the fetch and the Agent', () => {
         if (!seen.length) seen.push(JSON.stringify(request.messages[0]));
       },
     );
-    // The opening message lists the Site Health suggestion by id and status.
     expect(seen[0]).toContain(
       `${finding} [open] search_guidelines, technical.meta_description_present`,
     );
-    // Its context offers the content rules the fetched page has evidence for:
-    // coverage needs the page's prompts, which this chat has none of.
     expect(seen[0]).toContain('ai_answers.self_contained_passages [ai_answers, recommendation');
     expect(seen[0]).toContain('coverage.cited_angles (needs page_prompts)');
     const detail = await readChat(db, chat.scope, chat.chatId);
@@ -262,7 +246,6 @@ describe('suggestions from the fetch and the Agent', () => {
       },
       { source: 'model', kind: 'field', position: null, readiness: 'ready' },
     ]);
-    // Writing its text replaced the Site Health advice.
     expect(after.counts).toEqual({
       open: 3,
       applied: 0,
@@ -332,7 +315,6 @@ describe('applying suggestions', () => {
       span('Starter costs $10 a month.', 'Starter costs $10 per user a month.'),
     ]);
     const base = await chat.latest();
-    // The Pro sentence moves above the Starter heading: the same text, elsewhere.
     await outputs.edit(chat.scope, chat.chatId, chat.outputId, {
       baseId: base,
       title: 'CRM pricing compared',
@@ -407,7 +389,6 @@ describe('applying suggestions', () => {
 describe('Apply all and Dismiss all', () => {
   it('applies non-overlapping ready suggestions in position order and reports what it left', async () => {
     const { chat, ids } = await suggested([
-      // Written first, but later on the page: the Starter edit before it changes the body it reads.
       span('Pro costs $30 a month.', 'Pro is $30 a month.', { depends_on: ['body'] }),
       span('Starter costs $10 a month.', 'Starter is $10 a month.'),
       span('Compare plans across five tools.', 'Compare five CRM tools.'),
@@ -438,7 +419,6 @@ describe('Apply all and Dismiss all', () => {
       outputId: chat.outputId,
       baseId: await chat.latest(),
     });
-    // The three left open, and the Site Health advice.
     expect(dismissed).toEqual({ dismissed: 4 });
     expect((await chat.list()).counts).toMatchObject({ open: 0, applied: 1, dismissed: 4 });
   });
@@ -470,7 +450,6 @@ describe('reverting (E4)', () => {
       outcome: 'reverted',
       revision: null,
     });
-    // Reopened, the applied one can be applied again.
     const again = await agent.suggestions.apply(
       chat.scope,
       target(chat, ids[0]!, await chat.latest()),
@@ -549,7 +528,6 @@ describe('guards', () => {
     const own = agentSuggestionsPageSchema.parse(
       await (await app.request(path, { headers: chat.headers })).json(),
     );
-    // Each suggestion carries its rule's source and strength, as stored when it was made.
     expect(
       own.items.map(({ id, rule_id, category, guidance }) => ({ id, rule_id, category, guidance })),
     ).toEqual([

@@ -1,153 +1,154 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { useParams } from 'react-router-dom';
 
-import { ActionStatusBadge } from '@/components/agent/action-status-badge';
-import { DetailScreen } from '@/components/layout/page-shell';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { NotFoundScreen } from '@/components/templates/not-found-screen';
+import { RecordPage } from '@/components/templates/record-page';
+import { ActionButton } from '@/components/ui/actions';
+import { Button } from '@/components/ui/button';
+import { FilterBar } from '@/components/ui/filter-bar';
+import { Icon } from '@/components/ui/icon';
 import { Stack } from '@/components/ui/layout';
-import { QueryState } from '@/components/ui/query-state';
-import { readErrorProps } from '@/components/ui/read-error';
-import { TextLink } from '@/components/ui/text-link';
-import { TrendChart } from '@/components/ui/trend-chart';
-import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
-import { ClampText, TableCell, TableRow } from '@/components/ui/table';
+import { Notice, readErrorProps } from '@/components/ui/notice';
+import { StateBlock } from '@/components/ui/state-block';
 import { marketFilter } from '@/components/visibility/visibility-toolbar';
-import { useDisplayTimeZone } from '@/lib/display-timezone';
-import { formatDisplayDate } from '@/lib/format';
-import { formatWholePercent } from '@/lib/visibility/dashboard';
-import type { PromptHistory } from '@citeladder/contracts';
+import { ArchiveRestore } from '@/lib/icons';
+import { agentHandoffHref } from '@/lib/agent/handoff';
+import { httpErrorStatus } from '@/lib/api/errors';
+import { mutationNoticeForError } from '@/lib/api/mutation-notice';
+import { promptsMutations } from '@/lib/api/prompts';
 import { visibilityQueries } from '@/lib/api/visibility-queries';
 import { optionalStringUrlCodec, useUrlState } from '@/lib/navigation/url-state';
 import { useProjectScope } from '@/lib/project/active-project-scope';
+import { useWorkspaceCapability } from '@/lib/project/project-context';
 import { useProjectMarkets } from '@/lib/project/use-project-markets';
-import {
-  implementationEvents,
-  mentionRatePoints,
-  ownedCitationValues,
-} from '@/lib/prompts/history';
 
-import { PromptAnswerStates } from './prompt-answer-states';
+import { usePromptAnswerFilters } from './prompt-answer-filters';
+import { PromptEngineCoverage, PromptKeyFigures } from './prompt-figures';
+import { PromptPastAnswers } from './prompt-past-answers';
+import { PromptImplementations, PromptTrend } from './prompt-trend';
 
-const BACK = { href: '/prompts', label: 'Back to Prompts' } as const;
-
-/** /prompts/:promptId — one prompt's measurements over time, in one market. */
 export function PromptDetailScreen() {
   const { promptId = '' } = useParams();
   const { workspaceId, projectId } = useProjectScope();
   const [market, setMarket] = useUrlState('market', optionalStringUrlCodec);
   const markets = useProjectMarkets(projectId, workspaceId);
+  const marketChoice = marketFilter({ markets, market, onChangeMarket: setMarket });
+  const answerFilters = usePromptAnswerFilters({ market, marketChoice });
   const query = useQuery({
     ...visibilityQueries.promptHistory({ workspaceId, projectId }, promptId, {
       market: market ?? undefined,
+      engine: answerFilters.engine ?? undefined,
     }),
     enabled: Boolean(promptId),
   });
-  // A single market has nothing to choose, so the row is not drawn empty.
-  const marketChoice = marketFilter({ markets, market, onChangeMarket: setMarket });
 
+  const filters = <FilterBar filters={answerFilters.definitions} />;
+  if (httpErrorStatus(query.error) === 404) return <NotFoundScreen />;
   if (query.isError)
     return (
-      <DetailScreen back={BACK}>
-        <QueryState
+      <RecordPage filters={filters}>
+        <StateBlock
           kind="error"
           {...readErrorProps(query)}
-          fallback="This prompt could not be loaded."
+          title="Couldn't load this prompt"
+          fallback="Check your connection and try again."
         />
-      </DetailScreen>
+      </RecordPage>
     );
   if (!query.data)
     return (
-      <DetailScreen back={BACK}>
-        <QueryState kind="loading" />
-      </DetailScreen>
+      <RecordPage filters={filters}>
+        <StateBlock
+          kind="loading"
+          label="Loading this prompt…"
+          shape={{ kind: 'figures', count: 4 }}
+        />
+      </RecordPage>
     );
   const history = query.data;
+  const actionId = history.latest?.action_id ?? null;
   return (
-    <DetailScreen
+    <RecordPage
       title={history.prompt.text}
-      back={BACK}
-      controls={marketChoice ? { filters: [marketChoice] } : undefined}
-    >
-      <Stack gap="workspace" aria-busy={query.isFetching}>
-        <HistoryCard history={history} />
-        <Implementations history={history} />
-        <PromptAnswerStates latest={history.latest} />
-      </Stack>
-    </DetailScreen>
-  );
-}
-
-/** Visibility and owned citation rate per run, with declared work marked. */
-function HistoryCard({ history }: Readonly<{ history: PromptHistory }>) {
-  const timeZone = useDisplayTimeZone();
-  const data = mentionRatePoints(history.points, timeZone);
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Over time</CardTitle>
-        <CardDescription>
-          Each point is one run that measured this prompt. A run with no successful answer is a gap,
-          and a change in measurement conditions starts a new line.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        {data.length ? (
-          <TrendChart
-            label="Visibility over time"
-            name="Visibility"
-            data={data}
-            series={[{ label: 'Owned citation rate', values: ownedCitationValues(history.points) }]}
-            events={implementationEvents(history.implementations, timeZone)}
-            eventsLabel="Marked implemented"
-            yMax={100}
-            yFormat={formatWholePercent}
-          />
-        ) : (
-          <QueryState
-            kind="empty"
-            inline
-            message="No run has measured this prompt in this market yet."
-          />
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-/** The Actions measured on this prompt, and when each was marked implemented. */
-function Implementations({ history }: Readonly<{ history: PromptHistory }>) {
-  const timeZone = useDisplayTimeZone();
-  if (!history.implementations.length) return null;
-  return (
-    <DataTable
-      title="Work marked implemented"
-      columns={IMPLEMENTATION_COLUMNS}
-      footer={
-        <p className="type-caption">
-          A marker shows when work went live, not that it changed these rates: other changes and
-          answer-engine updates can overlap.
-        </p>
+      actions={actionId ? <ActionHandoff actionId={actionId} /> : undefined}
+      filters={filters}
+      identity={
+        history.prompt.status === 'archived' ? (
+          <ArchivedNotice promptId={history.prompt.id} onRestored={() => void query.refetch()} />
+        ) : undefined
       }
     >
-      {history.implementations.map((item) => (
-        <TableRow key={`${item.action_id}:${item.implemented_at}`}>
-          <TableCell>
-            <ClampText lines={1} tooltip={item.title}>
-              <TextLink href={`/agent/actions/${item.action_id}`}>{item.title}</TextLink>
-            </ClampText>
-          </TableCell>
-          <TableCell numeric>{formatDisplayDate(item.implemented_at, timeZone)}</TableCell>
-          <TableCell>
-            <ActionStatusBadge status={item.status} />
-          </TableCell>
-        </TableRow>
-      ))}
-    </DataTable>
+      {history.points.length ? (
+        <PromptKeyFigures history={history} />
+      ) : (
+        <StateBlock
+          kind="empty"
+          inline
+          message="No run has asked this prompt in this market yet."
+        />
+      )}
+      <PromptPastAnswers
+        key={JSON.stringify(answerFilters.answers)}
+        promptId={history.prompt.id}
+        promptText={history.prompt.text}
+        params={answerFilters.answers}
+        markets={markets}
+      />
+      {history.points.length ? (
+        <>
+          <PromptTrend history={history} />
+          <PromptEngineCoverage latest={history.latest} />
+        </>
+      ) : null}
+      <PromptImplementations history={history} />
+    </RecordPage>
   );
 }
 
-const IMPLEMENTATION_COLUMNS: readonly DataTableColumn[] = [
-  { key: 'action', label: 'Action' },
-  { key: 'live', label: 'Live from', width: 'date', numeric: true },
-  { key: 'status', label: 'Status', width: 'status' },
-];
+function ActionHandoff({ actionId }: Readonly<{ actionId: string }>) {
+  return (
+    <>
+      <ActionButton action="openAction" href={`/actions/${actionId}`} />
+      <ActionButton action="workWithAgent" href={agentHandoffHref({ actionId })} />
+    </>
+  );
+}
+
+function ArchivedNotice({
+  promptId,
+  onRestored,
+}: Readonly<{ promptId: string; onRestored: () => void }>) {
+  const { workspaceId, projectId } = useProjectScope();
+  const canWrite = useWorkspaceCapability('write');
+  const restore = useMutation(promptsMutations.update({ workspaceId, projectId }));
+  return (
+    <Stack gap="compact">
+      <Notice
+        tone="warning"
+        title="Archived"
+        action={
+          canWrite ? (
+            <Button
+              variant="secondary"
+              disabled={restore.isPending}
+              onClick={() =>
+                restore.mutate({ promptId, input: { status: 'active' } }, { onSuccess: onRestored })
+              }
+            >
+              <Icon icon={ArchiveRestore} />
+              Restore
+            </Button>
+          ) : undefined
+        }
+      >
+        Runs no longer ask this prompt.
+      </Notice>
+      {restore.error ? (
+        <Notice
+          kind="mutation"
+          notice={mutationNoticeForError(restore.error, { action: 'restore the prompt' })}
+        />
+      ) : null}
+    </Stack>
+  );
+}

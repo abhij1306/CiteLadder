@@ -45,8 +45,6 @@ const awaiting = {
 
 describe('upload processing wait', () => {
   it('compares the server completion time with the server processing time, not the browser clock', () => {
-    // An earlier rollup does not count; one at or after the completion does,
-    // whatever the device clock says.
     expect(uploadProcessing(sources('2026-10-04T11:59:59.000Z'), awaiting)).toBe('processing');
     expect(uploadProcessing(sources(null), awaiting)).toBe('processing');
     expect(uploadProcessing(sources('2026-10-04T12:00:00Z'), awaiting)).toBe('processed');

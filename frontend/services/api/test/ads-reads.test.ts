@@ -1,8 +1,3 @@
-/**
- * Ads in AI answers over HTTP: the selection summary and its states, creative
- * pages, the execution evidence section, ads kept out of Sources, and
- * workspace isolation.
- */
 import { randomUUID } from 'node:crypto';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -30,7 +25,6 @@ async function get(tenant: Tenant, path: string, query: Record<string, string> =
 
 type Ad = { rank: number; domain: string; title: string; ownership?: string };
 
-/** One answer; `ads` undefined leaves it unparsed for ads. */
 async function answer(
   tenant: Tenant,
   auditId: string,

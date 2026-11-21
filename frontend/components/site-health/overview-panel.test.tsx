@@ -1,8 +1,9 @@
 import { http, HttpResponse } from 'msw';
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vite-plus/test';
 
+import { figureText } from '@/test/figures';
 import { mswServer } from '@/test/msw-server';
 import { renderWithProviders } from '@/test/render';
 import {
@@ -25,13 +26,11 @@ beforeAll(() => mswServer.listen({ onUnhandledFrame: 'error' }));
 afterEach(() => mswServer.resetHandlers());
 afterAll(() => mswServer.close());
 
-/** One figure of the Overview's score row: its label, value, sub-line and link. */
 function stat(label: string) {
   const term = within(screen.getByTestId('overview-metrics')).getByText(label);
-  return term.closest('[data-stat-segment]');
+  return term.closest('[data-figure-cell]');
 }
 
-/** A terminal overview snapshot; each test overrides only what it is about. */
 const terminalOverview = (overrides: Record<string, unknown> = {}) => ({
   project_id: PROJECT,
   crawl_id: CRAWL,
@@ -39,7 +38,6 @@ const terminalOverview = (overrides: Record<string, unknown> = {}) => ({
   ...COMPLETE_CLASSIFICATION_PROJECTION,
   search_eligibility: 'eligible',
   eligibility_totals: { eligible: 1, blocked: 0, unknown: 0, excluded: 0 },
-  eligibility_reasons: [],
   web_fundamentals_score: 88,
   web_fundamentals_coverage: 1,
   web_fundamentals_state: 'measured',
@@ -202,24 +200,15 @@ describe('OverviewPanel', () => {
       />,
     );
 
-    expect(
-      screen.getByRole('img', { name: 'Web Fundamentals score: 81 out of 100' }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole('img', { name: 'AEO Readiness score: 62 out of 100' }),
-    ).toBeInTheDocument();
+    expect(figureText('Web fundamentals')).toBe('81');
+    expect(figureText('AEO readiness')).toBe('62');
     expect(
       screen.queryByRole('heading', { name: 'Classification completeness' }),
     ).not.toBeInTheDocument();
-    // The two completion shares are rings too, each with its link.
-    expect(
-      screen.getByRole('img', { name: 'AEO Checklist Completion: 50 out of 100' }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole('img', { name: 'Crawl Coverage score: 40 out of 100' }),
-    ).toBeInTheDocument();
-    // A score is a ring, never a segmented bar (decision D8).
+    expect(figureText('AEO checklist completion')).toBe('50%');
+    expect(figureText('Crawl coverage')).toBe('40%');
     expect(screen.queryByRole('meter')).not.toBeInTheDocument();
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Loading Overview details')).not.toBeInTheDocument();
     expect(overviewRequests).toBe(0);
   });
@@ -253,10 +242,7 @@ describe('OverviewPanel', () => {
       />,
     );
 
-    // 20 analyzed of 100 found is 20% coverage, not 100% of the 20 selected.
-    expect(
-      await screen.findByRole('img', { name: 'Crawl Coverage score: 20 out of 100' }),
-    ).toBeInTheDocument();
+    await waitFor(() => expect(figureText('Crawl coverage')).toBe('20%'));
   });
 
   it('keeps an unknown crawl that found nothing from reading as a percentage', async () => {
@@ -289,8 +275,8 @@ describe('OverviewPanel', () => {
     );
 
     await screen.findByRole('table', { name: 'Top issues' });
-    expect(stat('Crawl Coverage')).toHaveTextContent('Not measured');
-    expect(screen.queryByRole('img', { name: /Crawl Coverage score/ })).not.toBeInTheDocument();
+    expect(stat('Crawl coverage')).toHaveTextContent('Not measured');
+    expect(screen.queryByRole('progressbar', { name: 'Crawl coverage' })).not.toBeInTheDocument();
   });
 
   it('links each score to where it is acted on', () => {
@@ -304,10 +290,10 @@ describe('OverviewPanel', () => {
     );
     const links = within(screen.getByTestId('overview-metrics')).getAllByRole('link');
     expect(links.map((link) => [link.textContent, link.getAttribute('href')])).toEqual([
-      ['View details', '/issues?section=technical'],
-      ['View details', '/issues?section=aeo'],
-      ['View details', '/site?tab=aeo-readiness'],
-      ['View details', '/site?tab=pages'],
+      ['Web fundamentals', '/issues?section=technical'],
+      ['AEO readiness', '/issues?section=aeo'],
+      ['AEO checklist completion', '/site?tab=aeo-readiness'],
+      ['Crawl coverage', '/site?tab=pages'],
     ]);
   });
 
@@ -339,7 +325,7 @@ describe('OverviewPanel', () => {
         .getAllByRole('row')
         .map((row) => row.textContent),
     ).toEqual(['Series2026-08-282026-08-30', 'Open issues129']);
-    expect(screen.queryByRole('heading', { name: 'AEO Readiness trend' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'AEO readiness trend' })).not.toBeInTheDocument();
   });
 
   it('explains a changed scored cohort once, beside the score changes', async () => {
@@ -372,16 +358,12 @@ describe('OverviewPanel', () => {
       />,
     );
 
-    expect(await screen.findByRole('heading', { name: 'Change summary' })).toBeVisible();
+    expect(await screen.findByRole('heading', { name: 'Score change' })).toBeVisible();
     expect(screen.getAllByText('Scored cohort composition changed.')).toHaveLength(1);
-    expect(
-      screen.getByText(
-        'Added page kinds: Product. Score movement is not split into quality versus cohort effects.',
-      ),
-    ).toBeInTheDocument();
+    expect(screen.getByText('Added page kinds: Product.')).toBeInTheDocument();
   });
 
-  it('opens HTTP Web Fundamentals evidence without browser-only checks', async () => {
+  it('opens HTTP Web fundamentals evidence without browser-only checks', async () => {
     mswServer.use(
       http.get(`/api/v1/projects/${PROJECT}/site-health/overview`, () =>
         HttpResponse.json(terminalOverview()),
@@ -398,11 +380,10 @@ describe('OverviewPanel', () => {
     );
 
     await screen.findByRole('table', { name: 'Top issues' });
-    // One list, one area a row, each with its state.
-    const areas = within(screen.getByRole('list', { name: 'Web Fundamentals areas' }));
+    const areas = within(screen.getByRole('list', { name: 'Web fundamentals areas' }));
     expect(areas.getAllByRole('listitem').map((item) => item.textContent)).toEqual([
       'accessibilityMeasured',
-      'mobileLimited Evidence',
+      'mobileLimited evidence',
     ]);
     await user.click(screen.getByRole('button', { name: 'View evidence' }));
     expect(screen.getByRole('dialog')).toHaveTextContent('Images missing alt attributes');
@@ -429,24 +410,65 @@ describe('OverviewPanel', () => {
     const table = await screen.findByRole('table', { name: 'Top issues' });
     expect(
       screen.getByRole('link', { name: 'Visible creator attribution incomplete' }),
-    ).toHaveAttribute(
-      'href',
-      '/issues?rule=aeo.visible_attribution&section=content&finding_class=advisory',
-    );
+    ).toHaveAttribute('href', '/issues?rule=aeo.visible_attribution&section=content');
     expect(screen.getByRole('link', { name: 'Missing page title' })).toHaveAttribute(
       'href',
       '/issues?rule=technical.title_present',
     );
     const rows = within(table).getAllByRole('row');
     expect(rows.map((row) => row.textContent)).toEqual([
-      'ImpactIssuePages',
+      'ImpactIssuePages affected',
       'HighMissing page title1',
       'MediumVisible creator attribution incompleteAdvisory1',
       'LowMissing meta descriptionAdvisory1',
     ]);
   });
 
-  const ALERT = 'Could not load the Website overview.';
+  it('says a pillar with no applicable checks is not applicable, apart from one not measured', async () => {
+    const pillar = (key: string, label: string, applicability: string) => ({
+      key,
+      label,
+      description: `${label} checks.`,
+      dimension_applicability: applicability,
+      dimension_measurement_state: 'not_measured',
+      score: null,
+      coverage: null,
+      earned_points: 0,
+      determinate_points: 0,
+      expected_points: 0,
+      determinate_checkpoint_ids: [],
+      unresolved_count: 0,
+      reason: 'no_evidence',
+    });
+    mswServer.use(
+      http.get(`/api/v1/projects/${PROJECT}/site-health/overview`, () =>
+        HttpResponse.json(
+          terminalOverview({
+            aeo_dimensions: [
+              pillar('commerce', 'Commerce', 'not_applicable'),
+              pillar('answerability', 'Answerability', 'applicable'),
+            ],
+          }),
+        ),
+      ),
+    );
+    renderWithProviders(
+      <OverviewPanel
+        projectId={PROJECT}
+        crawlId={CRAWL}
+        crawl={{ status: 'completed' } as never}
+        dashboard={undefined}
+      />,
+    );
+
+    const table = await screen.findByRole('region', { name: 'AEO readiness by pillar' });
+    const scoreOf = (label: string) =>
+      within(within(table).getByText(label).closest('tr')!).getAllByRole('cell')[1]!.textContent;
+    expect(scoreOf('Commerce')).toBe('—Not applicable');
+    expect(scoreOf('Answerability')).toBe('—Not measured');
+  });
+
+  const ALERT = "Couldn't load the Site health overview";
 
   function renderTerminal() {
     renderWithProviders(
@@ -460,10 +482,6 @@ describe('OverviewPanel', () => {
   }
 
   it('stays silent when the snapshot simply does not exist yet', async () => {
-    // Terminalization WRITES the snapshot, so 404 is this endpoint saying
-    // "not yet", not "something went wrong". It was reported as a red alert
-    // over a healthy run, because hovering the Overview tab warmed this key
-    // mid-crawl and the cached error outlived the disabled query.
     mswServer.use(
       http.get(`/api/v1/projects/${PROJECT}/site-health/overview`, () =>
         HttpResponse.json(
@@ -480,8 +498,6 @@ describe('OverviewPanel', () => {
   });
 
   it('still reports a snapshot read that genuinely failed', async () => {
-    // 403, not 500: the real retry policy applies in these tests, and a
-    // retried 5xx outlives the assertion's window rather than the condition.
     mswServer.use(
       http.get(`/api/v1/projects/${PROJECT}/site-health/overview`, () =>
         HttpResponse.json({ error: { message: 'Forbidden' } }, { status: 403 }),
@@ -490,9 +506,8 @@ describe('OverviewPanel', () => {
 
     renderTerminal();
 
-    // The shared read error names the failure and, for 403, the one recovery.
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Check your workspace access, then try again.',
-    );
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Check your workspace access, then try again.');
+    expect(alert).toHaveTextContent(ALERT);
   });
 });

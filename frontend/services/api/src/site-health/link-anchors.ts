@@ -1,4 +1,3 @@
-/** Descriptive anchor diagnostics; lexical overlap is never a relevance score. */
 import { policy } from '../config.ts';
 import { record } from '../db/json.ts';
 import { compareText } from '../text-order.ts';
@@ -58,7 +57,6 @@ function diagnoses(text: string, target: LinkPage | undefined, destinations: Set
     });
   return rows;
 }
-/** Site-wide destinations per normalized anchor text; build once per graph. */
 export function anchorDestinations(outgoing: Map<string, LinkEdge[]>) {
   const destinations = new Map<string, Set<string>>();
   for (const sourceEdges of outgoing.values())

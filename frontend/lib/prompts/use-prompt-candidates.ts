@@ -21,11 +21,6 @@ function reviewNotice(result: PromptCandidateReviewResponse): string {
   return parts.length ? `${parts.join('; ')}.` : 'Nothing changed.';
 }
 
-/**
- * Pending generated candidates for a prompt set, plus accept/reject. A
- * review refreshes the library through its descriptor; `onAccepted` is the
- * screen's own reaction to newly tracked prompts.
- */
 export function usePromptCandidates({
   projectId,
   promptSet,

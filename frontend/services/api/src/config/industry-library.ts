@@ -1,4 +1,3 @@
-/** Supported onboarding industries and their subindustry choices. */
 export const industryLibrary = {
   industries: {
     General: {

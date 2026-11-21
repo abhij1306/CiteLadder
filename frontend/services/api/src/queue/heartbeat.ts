@@ -1,11 +1,9 @@
 import { heartbeatFailureLimit } from '../config/execution.ts';
 
-/** The lease signal, also aborted by the caller's own signal when one is given. */
 export function leaseSignal(lease: AbortSignal, signal?: AbortSignal | null): AbortSignal {
   return signal ? AbortSignal.any([lease, signal]) : lease;
 }
 
-/** Serialize renewals; a definite loss or sustained failure stops further I/O. */
 export function maintainLease(
   renew: () => Promise<boolean>,
   intervalMs: number,

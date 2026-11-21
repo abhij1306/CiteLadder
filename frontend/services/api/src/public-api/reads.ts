@@ -1,8 +1,3 @@
-/**
- * Public read shapes that compose existing owners: the project's prompts with
- * their latest measurement, and a prompt set's generation runs. Both read
- * persisted rows only.
- */
 import { promptSchema } from '@citeladder/contracts/project';
 import { sql } from 'kysely';
 import { z } from 'zod';
@@ -15,10 +10,6 @@ import { cursorId, nextCursor, pageAfter } from './pagination.ts';
 
 type Scope = { workspaceId: string; projectId: string };
 
-/**
- * A prompt's latest completed brand run: `not_measured` until one includes it;
- * a measured rate is `null` when that run could not determine it.
- */
 const latestMeasurementSchema = z.discriminatedUnion('state', [
   z.object({
     state: z.literal('measured'),
@@ -27,10 +18,8 @@ const latestMeasurementSchema = z.discriminatedUnion('state', [
     citation_rate: z.number().nullable(),
   }),
   z.object({ state: z.literal('not_measured') }),
-  // A cohort with no per-prompt visibility reading (brand diagnostics).
   z.object({ state: z.literal('unavailable') }),
 ]);
-// A prompt's own cohort; "all" pools cohorts and is no prompt's measurement.
 const MEASURED_COHORTS: readonly string[] = policy.visibility.requestable_cohorts.filter(
   (cohort) => cohort !== policy.visibility.all_cohort,
 );
@@ -111,7 +100,6 @@ export async function listPublicPrompts(
   };
 }
 
-/** A prompt set's generation runs, newest first, one keyset page at a time. */
 export async function listGenerationRuns(
   db: Database,
   workspaceId: string,

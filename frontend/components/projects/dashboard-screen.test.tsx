@@ -2,7 +2,7 @@ import { render as raw, screen, waitFor, within } from '@testing-library/react';
 import type { ReactElement, ReactNode } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import userEvent from '@testing-library/user-event';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vite-plus/test';
 const { project, downloadOverviewReport, queryResult, promptsResult, layoutResult, role } =
   vi.hoisted(() => ({
     project: {
@@ -11,11 +11,10 @@ const { project, downloadOverviewReport, queryResult, promptsResult, layoutResul
       name: 'Acme',
       brand_name: 'Acme',
       website_url: 'https://acme.com',
-      brand: { aliases: [], logo_url: null },
+      brand: { alias_suggestions: [], aliases: [], logo_url: null },
       competitors: [],
     },
     downloadOverviewReport: vi.fn().mockResolvedValue(new Blob(['pdf'])),
-    // The project's saved Overview layout; the default until a test changes it.
     layoutResult: {
       data: undefined as unknown,
       error: null as unknown,
@@ -31,7 +30,6 @@ const { project, downloadOverviewReport, queryResult, promptsResult, layoutResul
       isError: false,
       refetch: vi.fn(),
     },
-    // The latest run's prompt results, read by "Where you're missing".
     promptsResult: {
       data: [] as unknown,
       error: null as unknown,
@@ -84,7 +82,7 @@ const commandCenter = {
   next_action: {
     kind: 'monitor',
     title: 'Monitor — no required action',
-    href: '/visibility?tab=trends',
+    href: '/insights',
     opportunity_id: null,
   },
   active_prompt_count: 12,
@@ -108,28 +106,28 @@ const commandCenter = {
     brand_rank: { value: 2, delta: -1 },
   },
   movements: [
-    { label: 'visibility', direction: 'positive', current: 72.5, previous: 68.3, delta: 4.2 },
+    { label: 'chatgpt', direction: 'positive', current: 72.5, previous: 68.3, delta: 4.2 },
   ],
   actions: [],
   action_order_version: 0,
-  resolved_actions: {
-    since_audit_id: '00000000-0000-4000-8000-000000000004',
-    count: 2,
-    titles: ['Fixed citations', 'Expanded evidence'],
-  },
   report_available: true,
   stale: false,
 };
 
+const promptSetsResult = vi.hoisted(() => ({
+  status: 'success',
+  data: { prompt_sets: [{ prompts: [{ enabled: true, status: 'active' }] }] },
+}));
 // The Launch audit dialog has its own suite; here only whether it opens matters.
 vi.mock('@/components/runs/launch-dialog', () => ({
   LaunchDialog: ({ open }: { open: boolean }) =>
-    open ? <dialog open aria-label="Launch audit" /> : null,
+    open ? <dialog open aria-label="Launch run" /> : null,
 }));
 vi.mock('@tanstack/react-query', () => ({
   queryOptions: <T,>(options: T) => options,
   useQuery: (options: { queryKey: readonly unknown[] }) => {
     if (options.queryKey[0] === 'providers') return { data: providerCatalogFixture };
+    if (options.queryKey[0] === 'prompts') return promptSetsResult;
     if (options.queryKey[1] === 'overview-layout') return layoutResult;
     return options.queryKey[0] === 'visibility' ? promptsResult : queryResult;
   },
@@ -146,8 +144,6 @@ vi.mock('@/lib/project/project-context', () => {
   });
   return {
     useActiveWorkspaceId: () => 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-    // `ProjectControls` gates the create affordance on the caller's role as
-    // well as on the remaining allowance; this fixture is an Owner.
     useWorkspaceCapability: () => role.canWrite,
     useActiveProject: () => project,
     useOptionalProjectContext: context,
@@ -175,7 +171,6 @@ import { makeProject } from '@/test/fixtures/project';
 import { providerCatalogFixture } from '@/test/provider-catalog-fixture';
 import { DashboardScreen } from './dashboard-screen';
 
-// `/projects` is a project route: the gate hands the screen this project.
 const scopeProject = makeProject({
   id: project.id,
   workspace_id: project.workspace_id,
@@ -196,15 +191,22 @@ function renderDashboard(ui: ReactElement) {
   return raw(ui, { wrapper: RouterTestWrapper });
 }
 
+async function openMore(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole('button', { name: 'More' }));
+  return screen.findByRole('menu');
+}
+
+async function exportPdf(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(within(await openMore(user)).getByRole('menuitem', { name: 'Export PDF' }));
+}
+
 const DEFAULT_LAYOUT = {
   widgets: [
-    { key: 'project_state', size: 'half' },
-    { key: 'citation_share', size: 'half' },
+    { key: 'project_state', size: 'full' },
     { key: 'movement', size: 'half' },
     { key: 'next_action', size: 'half' },
     { key: 'missing_prompts', size: 'full' },
-    { key: 'ranked_actions', size: 'half' },
-    { key: 'progress_proof', size: 'half' },
+    { key: 'ranked_actions', size: 'full' },
     { key: 'company_facts', size: 'full' },
   ],
   version: 0,
@@ -226,51 +228,44 @@ describe('DashboardScreen', () => {
     layoutResult.data = DEFAULT_LAYOUT;
     role.canWrite = true;
   });
-  it('renders state, comparable movement, actions, and report proof', () => {
+  it('renders state, comparable movement and actions', () => {
     renderDashboard(
       <TooltipProvider>
         <DashboardScreen />
       </TooltipProvider>,
     );
-    // The project is named by the sidebar's switcher; the Overview keeps one
-    // line with the site and the run it was tracked in.
     expect(screen.queryByRole('heading', { name: 'Acme' })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: /^acme\.com/ })).toHaveAttribute(
       'href',
       'https://acme.com/',
     );
-    expect(screen.getByText(/^Tracked .*· chatgpt, gemini$/u)).toBeVisible();
-    // The names and whole-percent precision AI Visibility uses for the same run.
+    expect(screen.getByText(/^Tracked .*· ChatGPT API, Gemini API$/u)).toBeVisible();
     const state = within(screen.getByRole('region', { name: 'Project state' }));
     expect(state.getByText('Visibility')).toBeVisible();
-    expect(state.getByText('73%')).toBeVisible();
+    expect(state.getByText('72.5%')).toBeVisible();
     expect(state.getByText('Share of voice')).toBeVisible();
-    expect(state.getByText('48%')).toBeVisible();
+    expect(state.getByText('48.1%')).toBeVisible();
     expect(state.getByText('Rank')).toBeVisible();
     expect(state.getByText('#2')).toBeVisible();
     expect(state.queryByText('Brand rank')).not.toBeInTheDocument();
-    // Rank is better when it falls, so climbing one place reads as an improvement.
     const rankChange = state
-      .getAllByText('vs previous')
+      .getAllByText('compared with the previous run')
       .map((context) => context.closest('[data-outcome]'))
-      .find((delta) => delta?.textContent === '↓down 1vs previous');
+      .find((delta) => delta?.textContent === 'down −1 compared with the previous run');
     expect(rankChange).toHaveAttribute('data-outcome', 'improved');
+    expect(screen.queryByText('vs previous')).toBeNull();
     expect(
-      within(screen.getByRole('region', { name: 'Owned citation rate' })).getByText('33%'),
+      within(screen.getByRole('region', { name: 'Project state' })).getByText('32.5%'),
     ).toBeVisible();
-    expect(within(screen.getByRole('region', { name: 'Movement' })).getByText('68%')).toBeVisible();
-    // With no open actions the section is only its empty state, still linking to every action.
-    expect(screen.getByRole('heading', { name: 'No open actions' })).toBeVisible();
-    expect(screen.queryByRole('heading', { name: 'Ranked actions' })).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'View all' })).toHaveAttribute(
+    expect(
+      within(screen.getByRole('region', { name: 'Movement' })).getByText('68.3%'),
+    ).toBeVisible();
+    const ranked = within(screen.getByRole('region', { name: 'Ranked actions' }));
+    expect(ranked.getByRole('heading', { name: 'No open actions' })).toBeVisible();
+    expect(ranked.getByRole('link', { name: 'View all' })).toHaveAttribute(
       'href',
-      '/agent/actions?project=00000000-0000-4000-8000-000000000001',
+      '/actions?project=00000000-0000-4000-8000-000000000001',
     );
-    expect(
-      within(screen.getByRole('region', { name: 'Progress and report proof' })).getByText(
-        '2 actions resolved since the comparable run.',
-      ),
-    ).toBeVisible();
     expect(screen.getByText('Evidence-first analytics')).toBeVisible();
     expect(screen.getByText('Growth leaders')).toBeVisible();
     expect(screen.getByText('Analytics')).toBeVisible();
@@ -300,22 +295,65 @@ describe('DashboardScreen', () => {
     const ranked = within(screen.getByRole('region', { name: 'Ranked actions' }));
     expect(ranked.getByRole('link', { name: 'Publish a comparison page' })).toHaveAttribute(
       'href',
-      '/agent/actions/00000000-0000-4000-8000-0000000000d1?project=00000000-0000-4000-8000-000000000001',
+      '/actions/00000000-0000-4000-8000-0000000000d1?project=00000000-0000-4000-8000-000000000001',
     );
-    expect(ranked.getByText('/pricing · 3 persisted evidence item(s)')).toBeVisible();
-    // The badge carries the priority; the score is not repeated beside it (D14).
+    expect(ranked.getByText('/pricing · 3 evidence items')).toBeVisible();
     expect(ranked.getByText('High')).toBeVisible();
     expect(ranked.queryByText('7.5')).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'No open actions' })).not.toBeInTheDocument();
   });
-  it('notes a missing comparable run in one line of the movement card', async () => {
+  it('notes why no run is comparable in one line of the movement card', async () => {
     const user = userEvent.setup();
     queryResult.data = {
       ...commandCenter,
       measurement: {
         ...commandCenter.measurement,
         comparable_audit_id: null,
-        comparison_status: 'no_baseline',
+        comparison_status: 'changed_context',
+      },
+      movements: [],
+    };
+    role.canWrite = false;
+    const viewer = renderDashboard(
+      <TooltipProvider>
+        <DashboardScreen />
+      </TooltipProvider>,
+    );
+    expect(
+      within(screen.getByRole('region', { name: 'Movement' })).getByText(
+        'The earlier run used different settings.',
+      ),
+    ).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Launch run' })).not.toBeInTheDocument();
+    viewer.unmount();
+    role.canWrite = true;
+    renderDashboard(
+      <TooltipProvider>
+        <DashboardScreen />
+      </TooltipProvider>,
+    );
+    const movement = within(screen.getByRole('region', { name: 'Movement' }));
+    const reason = 'The earlier run used different settings. Launch run to measure movement.';
+    expect(movement.getByText(reason)).toBeVisible();
+    expect(screen.queryByRole('heading', { name: reason })).not.toBeInTheDocument();
+    expect(movement.queryByRole('button', { name: 'Launch run' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Launch run' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Launch run' }));
+    expect(screen.getByRole('dialog', { name: 'Launch run' })).toBeInTheDocument();
+  });
+  it('shows a matched-subset change with its note, and says why per-engine movement is absent', () => {
+    queryResult.data = {
+      ...commandCenter,
+      measurement: {
+        ...commandCenter.measurement,
+        comparable_audit_id: null,
+        comparison_status: 'matched_subset',
+        comparison_answers: { matched: 8, total: 12 },
+      },
+      track: {
+        ...commandCenter.track,
+        citation_share: { value: 83, delta: 25 },
+        limitations: ['8 of 12 answers comparable'],
       },
       movements: [],
     };
@@ -324,16 +362,25 @@ describe('DashboardScreen', () => {
         <DashboardScreen />
       </TooltipProvider>,
     );
-    const movement = within(screen.getByRole('region', { name: 'Movement' }));
-    expect(movement.getByText('No comparable measurement yet')).toBeVisible();
-    // A compact note, not a block empty state with a heading of its own.
+    const state = within(screen.getByRole('region', { name: 'Project state' }));
+    expect(state.getByRole('button', { name: 'Basis of Visibility' })).toHaveAccessibleDescription(
+      '8 of 12 answers comparable',
+    );
+    expect(state.getByText('8 of 12 answers comparable')).not.toBeVisible();
     expect(
-      screen.queryByRole('heading', { name: 'No comparable measurement yet' }),
-    ).not.toBeInTheDocument();
-    // Its action opens the Launch audit dialog, where the run is confirmed.
-    expect(screen.queryByRole('dialog', { name: 'Launch audit' })).not.toBeInTheDocument();
-    await user.click(movement.getByRole('button', { name: 'Launch audit' }));
-    expect(screen.getByRole('dialog', { name: 'Launch audit' })).toBeInTheDocument();
+      state.getByRole('button', { name: 'Basis of Owned citation rate' }),
+    ).toHaveAccessibleDescription(/^\d+ engines? · 8 of 12 answers comparable$/);
+    expect(state.getByRole('link', { name: 'Owned citation rate' })).toHaveAttribute(
+      'href',
+      expect.stringContaining('/insights?metric=owned_citation_rate'),
+    );
+    const movement = within(screen.getByRole('region', { name: 'Movement' }));
+    expect(
+      movement.getByText(
+        '8 of 12 answers comparable; per-engine movement needs a fully comparable run.',
+      ),
+    ).toBeVisible();
+    expect(movement.queryByRole('button', { name: 'Launch run' })).not.toBeInTheDocument();
   });
   it('says a comparable run produced no change, without offering another run', () => {
     queryResult.data = { ...commandCenter, movements: [] };
@@ -344,8 +391,8 @@ describe('DashboardScreen', () => {
     );
     const movement = within(screen.getByRole('region', { name: 'Movement' }));
     expect(movement.getByText('No movement to show')).toBeVisible();
-    expect(movement.queryByText('No comparable measurement yet')).not.toBeInTheDocument();
-    expect(movement.queryByRole('button', { name: 'Launch audit' })).not.toBeInTheDocument();
+    expect(movement.queryByText(/earlier run/)).not.toBeInTheDocument();
+    expect(movement.queryByRole('button', { name: 'Launch run' })).not.toBeInTheDocument();
   });
   it("gives the next Action its reason and the Action's evidence", () => {
     queryResult.data = {
@@ -353,7 +400,7 @@ describe('DashboardScreen', () => {
       next_action: {
         kind: 'opportunity',
         title: 'Publish a comparison page',
-        href: '/agent/actions/00000000-0000-4000-8000-0000000000d1',
+        href: '/actions/00000000-0000-4000-8000-0000000000d1',
         opportunity_id: '00000000-0000-4000-8000-0000000000c1',
       },
       actions: [
@@ -373,12 +420,13 @@ describe('DashboardScreen', () => {
         <DashboardScreen />
       </TooltipProvider>,
     );
-    const next = within(screen.getByRole('region', { name: 'Publish a comparison page' }));
+    const next = within(screen.getByRole('region', { name: 'Next action' }));
+    expect(next.getByText('Publish a comparison page')).toBeVisible();
     expect(next.getByText('/pricing · 3 evidence items')).toBeVisible();
     expect(next.getByText('High')).toBeVisible();
-    expect(next.getByRole('link', { name: 'Open the Action' })).toHaveAttribute(
+    expect(next.getByRole('link', { name: 'Open Action' })).toHaveAttribute(
       'href',
-      '/agent/actions/00000000-0000-4000-8000-0000000000d1?project=00000000-0000-4000-8000-000000000001',
+      '/actions/00000000-0000-4000-8000-0000000000d1?project=00000000-0000-4000-8000-000000000001',
     );
   });
   it("lists prompts where answers named a competitor but not the brand, with each prompt's Action", () => {
@@ -426,12 +474,12 @@ describe('DashboardScreen', () => {
     const section = within(screen.getByRole('region', { name: "Where you're missing" }));
     const rows = section.getAllByRole('listitem');
     expect(rows.map((row) => row.textContent)).toEqual([
-      'crm for agenciesChatGPT API, Gemini API named Globex, InitechOpen the Action',
-      'best crmChatGPT API named GlobexNo Action yet',
+      'crm for agenciesOpen ActionChatGPT API, Gemini API named Globex, Initech',
+      'best crm—No Action yetChatGPT API named Globex',
     ]);
-    expect(section.getByRole('link', { name: 'Open the Action' })).toHaveAttribute(
+    expect(section.getByRole('link', { name: 'Open Action for crm for agencies' })).toHaveAttribute(
       'href',
-      '/agent/actions/00000000-0000-4000-8000-0000000000b2?project=00000000-0000-4000-8000-000000000001',
+      '/actions/00000000-0000-4000-8000-0000000000b2?project=00000000-0000-4000-8000-000000000001',
     );
     expect(section.getByRole('link', { name: 'best crm' })).toHaveAttribute(
       'href',
@@ -478,23 +526,50 @@ describe('DashboardScreen', () => {
     ).toEqual(['company_facts', 'project_state']);
     expect(screen.queryByRole('heading', { name: 'Movement' })).not.toBeInTheDocument();
   });
-  it('offers the layout menu to editors only', () => {
-    renderDashboard(
+  it('keeps Layout and Export PDF behind More at desktop width, Layout for editors only', async () => {
+    // jsdom loads no Tailwind, so the masthead's row is drawn as at desktop width;
+    // it has no `checkVisibility`, so it answers as a browser would here.
+    Object.defineProperty(HTMLElement.prototype, 'checkVisibility', {
+      configurable: true,
+      value(this: HTMLElement) {
+        return !this.closest('[hidden]');
+      },
+    });
+    onTestFinished(() => {
+      Reflect.deleteProperty(HTMLElement.prototype, 'checkVisibility');
+    });
+    const user = userEvent.setup();
+    const editor = renderDashboard(
       <TooltipProvider>
         <DashboardScreen />
       </TooltipProvider>,
     );
-    expect(screen.getByRole('button', { name: 'Layout' })).toBeVisible();
-  });
-  it('hides the layout menu from viewers', () => {
+    expect(screen.getByRole('button', { name: /manage project/i })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Launch run' })).toBeVisible();
+    const menu = await openMore(user);
+    expect(
+      within(menu)
+        .getAllByRole('menuitem')
+        .map((item) => item.textContent),
+    ).toEqual(['Layout', 'Export PDF']);
+    expect(within(menu).getByRole('menuitem', { name: 'Layout' })).toHaveAttribute(
+      'aria-haspopup',
+      'menu',
+    );
+    await user.keyboard('{Escape}');
+    editor.unmount();
+
     role.canWrite = false;
     renderDashboard(
       <TooltipProvider>
         <DashboardScreen />
       </TooltipProvider>,
     );
-    expect(screen.queryByRole('button', { name: 'Layout' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /export pdf/i })).toBeVisible();
+    expect(
+      within(await openMore(user))
+        .getAllByRole('menuitem')
+        .map((item) => item.textContent),
+    ).toEqual(['Export PDF']);
   });
   it('downloads the authenticated Overview PDF', async () => {
     const user = userEvent.setup();
@@ -515,8 +590,7 @@ describe('DashboardScreen', () => {
         <DashboardScreen />
       </TooltipProvider>,
     );
-    expect(screen.getAllByRole('button', { name: /export pdf/i })).toHaveLength(1);
-    await user.click(screen.getByRole('button', { name: /export pdf/i }));
+    await exportPdf(user);
     expect(downloadOverviewReport).toHaveBeenCalledWith(project.id, {
       workspaceId: project.workspace_id,
     });
@@ -540,16 +614,17 @@ describe('DashboardScreen', () => {
         <DashboardScreen />
       </TooltipProvider>,
     );
-    await user.click(screen.getByRole('button', { name: /export pdf/i }));
+    await exportPdf(user);
     expect(await screen.findByText('The report could not be downloaded. Try again.')).toBeVisible();
-    await user.click(screen.getByRole('button', { name: /export pdf/i }));
+    await exportPdf(user);
     await waitFor(() =>
       expect(
         screen.queryByText('The report could not be downloaded. Try again.'),
       ).not.toBeInTheDocument(),
     );
   });
-  it('renders facts and a real next action before the first audit', () => {
+  it('renders facts and a real next action before the first audit', async () => {
+    const user = userEvent.setup();
     queryResult.data = {
       ...commandCenter,
       measurement: null,
@@ -582,47 +657,44 @@ describe('DashboardScreen', () => {
         <DashboardScreen />
       </TooltipProvider>,
     );
+    const start = within(screen.getByRole('region', { name: 'Get your first results' }));
+    expect(start.getByRole('list', { name: 'Steps to your first results' })).toBeVisible();
+    const next = within(start.getByRole('listitem', { current: 'step' }));
+    expect(next.getByText('Next')).toBeVisible();
+    expect(next.getByRole('button', { name: 'Launch run' })).toBeVisible();
+    expect(start.getAllByRole('listitem')[0]).toHaveTextContent('Add prompts, Done');
+    expect(screen.getAllByRole('button', { name: 'Launch run' })).toHaveLength(1);
+    expect(screen.queryByRole('region', { name: 'Project state' })).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Company facts' })).toBeVisible();
-    // The Product loop strip was removed from Overview; loop evidence still
-    // arrives on the projection but no longer has a station-tile surface.
-    expect(screen.queryByRole('heading', { name: 'Product loop' })).not.toBeInTheDocument();
-    expect(screen.getByText('Run the first visibility audit')).toBeVisible();
-    // The next step's button says where it goes, never a bare "Continue".
     expect(
-      within(screen.getByRole('region', { name: 'Run the first visibility audit' })).getByRole(
-        'link',
-        { name: 'Open Runs' },
-      ),
-    ).toHaveAttribute('href', '/runs?project=00000000-0000-4000-8000-000000000001');
-    expect(
-      within(screen.getByRole('region', { name: 'Owned citation rate' })).getByText('Not run'),
+      within(await openMore(user)).getByRole('menuitem', { name: 'Export PDF' }),
     ).toBeVisible();
-    // The PDF exports the layout, so it is available before the first audit too.
-    expect(screen.getByRole('button', { name: /export pdf/i })).toBeVisible();
   });
-  it('asks a project with no active prompts to choose what to track', () => {
+  it('asks a project with no active prompts to add some', () => {
     queryResult.data = { ...commandCenter, active_prompt_count: 0 };
     renderDashboard(
       <TooltipProvider>
         <DashboardScreen />
       </TooltipProvider>,
     );
-    const setup = screen.getByRole('region', { name: 'Choose the questions you want to track' });
-    expect(within(setup).getByRole('link', { name: 'Generate prompts' })).toHaveAttribute(
+    const setup = within(screen.getByRole('region', { name: 'Track prompts again' }));
+    expect(setup.getByRole('link', { name: 'Add prompts' })).toHaveAttribute(
       'href',
-      expect.stringContaining('/prompts?generate=1'),
+      '/prompts/build?project=00000000-0000-4000-8000-000000000001',
     );
-    expect(within(setup).getByRole('link', { name: 'Add or import prompts' })).toBeVisible();
+    expect(screen.getByRole('region', { name: 'Project state' })).toBeVisible();
   });
-  it('omits prompt setup once the project tracks prompts', () => {
+  it('omits the start card once a run is measured and prompts are tracked', () => {
     renderDashboard(
       <TooltipProvider>
         <DashboardScreen />
       </TooltipProvider>,
     );
+    expect(screen.queryByRole('region', { name: 'Track prompts again' })).not.toBeInTheDocument();
     expect(
-      screen.queryByRole('region', { name: 'Choose the questions you want to track' }),
+      screen.queryByRole('region', { name: 'Get your first results' }),
     ).not.toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Project state' })).toBeVisible();
   });
   it('labels a null owned citation rate from an observed run as unavailable', () => {
     queryResult.data = {
@@ -639,7 +711,7 @@ describe('DashboardScreen', () => {
       </TooltipProvider>,
     );
     expect(
-      within(screen.getByRole('region', { name: 'Owned citation rate' })).getByText('Unavailable'),
+      within(screen.getByRole('region', { name: 'Project state' })).getByText('Unavailable'),
     ).toBeVisible();
   });
   it('keeps observed zero distinct from an unavailable value', () => {
@@ -655,7 +727,7 @@ describe('DashboardScreen', () => {
         <DashboardScreen />
       </TooltipProvider>,
     );
-    expect(screen.getByText('0%')).toBeVisible();
+    expect(screen.getByText('0.0%')).toBeVisible();
     expect(screen.queryByText('Not measured')).not.toBeInTheDocument();
   });
 });

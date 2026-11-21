@@ -1,9 +1,7 @@
 import { z } from 'zod';
 import { enginesOfKind } from '../config/providers.ts';
 
-/** An execution consumes frozen request policy; it never supplies a policy default. */
 export const answerRequestSchema = z.object({
-  // Only engines whose provider route is asked (`llm`) take an answer request.
   logical_engine: z.enum(enginesOfKind('llm')),
   transport_provider: z.enum(['openai', 'google', 'anthropic']),
   transport_model: z.string().min(1),
@@ -13,7 +11,6 @@ export const answerRequestSchema = z.object({
   max_output_tokens: z.number().int().positive(),
   retrieval_enabled: z.boolean(),
   reasoning_effort: z.string(),
-  /** Anthropic thinking mode frozen with the route; `null` leaves the model default. */
   anthropic_thinking: z.enum(['adaptive', 'between_tools', 'disabled']).nullable(),
   country_code: z.string(),
   anthropic_max_uses: z.number().int().nonnegative(),
@@ -26,7 +23,6 @@ export type FinishReason =
   | 'tool_error'
   | 'content_filter'
   | 'cancelled'
-  /** The provider stopped before finishing and expects the exchange to continue. */
   | 'paused'
   | 'error'
   | 'unknown';
@@ -39,7 +35,6 @@ export type Usage = {
   web_search_requests: number | null;
   provider_cost_microusd: number | null;
 };
-/** Persist the established granular shape, including the aliases used by historical readers. */
 export function normalizedUsage(usage: Usage) {
   const { web_search_requests: searches, ...counts } = usage;
   return {
@@ -65,7 +60,6 @@ export type Citation = {
   end_index: number | null;
   cited_text: string;
 };
-/** A page the engine read while answering, whether or not the answer cites it. */
 export type RetrievedSource = {
   ordinal: number;
   url: string;
@@ -80,7 +74,6 @@ export type Answer = Pick<
   search_used: boolean;
   search_events: SearchEvent[];
   citations: Citation[];
-  /** `null` when the surface does not expose what it read; `[]` is an observed empty read. */
   retrieved_sources: RetrievedSource[] | null;
   finish_reason: FinishReason;
   raw_finish_reason: string;

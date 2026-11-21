@@ -1,4 +1,3 @@
-/** OpenAI-compatible usage under the gateway's own names; an invalid count is unknown (null). */
 export function normalizedUsage(raw: Record<string, unknown> | undefined) {
   const usage: Record<string, number | null> = {};
   const nested = (name: string, field: string) => {

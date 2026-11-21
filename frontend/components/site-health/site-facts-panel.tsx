@@ -1,13 +1,12 @@
 import { Fragment, useState } from 'react';
 import { choiceFilter, type FilterDefinition } from '@/components/ui/all-filters';
-import { Badge } from '@/components/ui/badge';
+import { Tag } from '@/components/ui/tag';
 import { Button } from '@/components/ui/button';
-import { Callout } from '@/components/ui/callout';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
 import { Disclosure } from '@/components/ui/disclosure';
 import { Inline, Stack } from '@/components/ui/layout';
-import { ClampText, TableCell, TableHead, TableRow } from '@/components/ui/table';
+import { ClampText } from '@/components/ui/clamp-text';
+import { TableCell, TableHead, TableRow } from '@/components/ui/table';
 import { textRole } from '@/components/ui/typography';
 import { ProjectLink } from '@/components/ui/project-link';
 import type { SiteCrawl, SiteHealthDashboard } from '@citeladder/contracts';
@@ -24,6 +23,14 @@ import {
   type SiteFactsView,
 } from '@/lib/site-health/site-facts';
 import { RobotsHistory } from './robots-history';
+import { Notice } from '@/components/ui/notice';
+import {
+  Section,
+  SectionContent,
+  SectionDescription,
+  SectionHeader,
+  SectionTitle,
+} from '@/components/ui/section';
 
 export function SiteFactsPanel({
   crawl,
@@ -53,8 +60,8 @@ function SiteFactsViewPanel({ crawl, view }: Readonly<{ crawl: SiteCrawl; view: 
   let llmsStatus = 'not fetched';
   if (view.llms_txt.fetched) llmsStatus = view.llms_txt.present ? 'present' : 'absent';
   return (
-    <Card className="min-w-0">
-      <CardHeader
+    <Section className="min-w-0">
+      <SectionHeader
         actions={
           <Button variant="secondary" asChild>
             <ProjectLink
@@ -69,29 +76,16 @@ function SiteFactsViewPanel({ crawl, view }: Readonly<{ crawl: SiteCrawl; view: 
           </Button>
         }
       >
-        <CardTitle>AI crawler robots policy</CardTitle>
-        <p className={textRole('caption')}>
-          What robots.txt permits over known URLs. This does not prove that a crawler retrieved a
-          page.
-        </p>
-        <p className={textRole('caption')}>
+        <SectionTitle>AI crawler robots policy</SectionTitle>
+        <SectionDescription>
           robots.txt: {robotsStatusLabels[view.robots.status]}
           {view.robots.status_code !== null ? ` (HTTP ${view.robots.status_code})` : ''} · llms.txt:{' '}
           {llmsStatus}
-        </p>
-      </CardHeader>
-      <CardContent>
-        <Stack className="min-w-0">
-          {unknown ? (
-            <Callout tone="warning">
-              robots.txt could not be read. Root access and robots policy are unknown.
-            </Callout>
-          ) : null}
-          {view.robots.status === 'not_found' ? (
-            <Callout tone="info">
-              No robots.txt was found. No robots rules restrict these known URLs.
-            </Callout>
-          ) : null}
+        </SectionDescription>
+      </SectionHeader>
+      <SectionContent>
+        <Stack gap="workspace" className="min-w-0">
+          {unknown ? <Notice tone="warning">robots.txt could not be read.</Notice> : null}
           <Disclosure title={crawlerSummary(view)}>
             <CrawlerTable
               view={view}
@@ -120,15 +114,13 @@ function SiteFactsViewPanel({ crawl, view }: Readonly<{ crawl: SiteCrawl; view: 
             ) : null}
           </Disclosure>
         </Stack>
-      </CardContent>
-    </Card>
+      </SectionContent>
+    </Section>
   );
 }
 
-/** One line for the closed crawler list: the total, then each policy that occurs. */
 function crawlerSummary(view: SiteFactsView): string {
   const bots = view.robots.bots;
-  // The label table lists every policy in display order, so a new one is counted.
   const policies = Object.entries(crawlerPolicyLabels)
     .map(([policy, label]) => ({
       label,
@@ -144,11 +136,11 @@ function crawlerSummary(view: SiteFactsView): string {
 type CrawlerBot = SiteFactsView['robots']['bots'][number];
 
 const CRAWLER_COLUMNS: readonly DataTableColumn[] = [
-  { key: 'bot', label: 'Bot' },
-  { key: 'operator', label: 'Operator', width: 'status' },
-  { key: 'matched', label: 'Matched group', width: 'status' },
-  { key: 'root', label: 'Root access', width: 'status' },
-  { key: 'policy', label: 'Robots policy', width: 'name' },
+  { key: 'bot', label: 'Bot', kind: 'identity' },
+  { key: 'operator', label: 'Operator', kind: 'text', width: 'status' },
+  { key: 'matched', label: 'Matched group', kind: 'text', width: 'status' },
+  { key: 'root', label: 'Root access', kind: 'status' },
+  { key: 'policy', label: 'Robots policy', kind: 'status', width: 'name' },
 ];
 
 function CrawlerTable({
@@ -166,7 +158,6 @@ function CrawlerTable({
     <DataTable
       label="Crawler robots policy by purpose"
       columns={CRAWLER_COLUMNS}
-      minWidth="md"
       toolbar={{ filters: [filter] }}
     >
       {purposes
@@ -186,11 +177,11 @@ function CrawlerTable({
                   <TableCell>{bot.operator}</TableCell>
                   <TableCell>{crawlerMatchedLabels[bot.matched]}</TableCell>
                   <TableCell className="whitespace-nowrap">
-                    <Badge>{crawlerRootAccessLabels[bot.root_access]}</Badge>
+                    <Tag>{crawlerRootAccessLabels[bot.root_access]}</Tag>
                   </TableCell>
                   <TableCell>
                     <Inline className="whitespace-nowrap">
-                      <Badge>{crawlerPolicyLabels[bot.policy]}</Badge>
+                      <Tag>{crawlerPolicyLabels[bot.policy]}</Tag>
                       <PolicySample bot={bot} />
                     </Inline>
                   </TableCell>
@@ -205,9 +196,8 @@ function CrawlerTable({
 function PolicySample({ bot }: Readonly<{ bot: CrawlerBot }>) {
   const sample =
     bot.policy === 'unknown'
-      ? 'No complete policy sample is available.'
-      : `${bot.disallowed_url_count} of ${bot.evaluated_url_count} known URLs disallowed`;
-  // One line per crawler: the sample truncates in a narrow column and keeps its full text.
+      ? 'Unknown'
+      : `${formatCount(bot.disallowed_url_count)} of ${formatCount(bot.evaluated_url_count)} known URLs disallowed`;
   return (
     <ClampText lines={1} className={textRole('caption')}>
       {sample}

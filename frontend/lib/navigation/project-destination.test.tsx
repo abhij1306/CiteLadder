@@ -13,9 +13,15 @@ vi.mock('react-router-dom', () => ({
 }));
 
 const setActiveProjectId = vi.fn();
+const setActiveWorkspaceId = vi.fn();
 let activeProjectId: string | null = null;
 vi.mock('@/lib/project/project-context', () => ({
-  useProjectContext: () => ({ activeProjectId, setActiveProjectId }),
+  useProjectContext: () => ({
+    activeProjectId,
+    setActiveProjectId,
+    activeWorkspaceId: WORKSPACE,
+    setActiveWorkspaceId,
+  }),
 }));
 
 import {
@@ -23,6 +29,7 @@ import {
   projectDestination,
   scopedNavigationDestination,
   useSelectProject,
+  useSelectWorkspace,
   workspaceDestination,
 } from './project-destination';
 
@@ -40,8 +47,6 @@ beforeEach(() => {
 
 describe('projectDestination', () => {
   it('keeps the destination parameters and drops the workspace', () => {
-    // A verified project id already names its workspace; keeping both invites
-    // the contradictory pair the provider has to reject.
     const href = projectDestination(
       '/visibility',
       new URLSearchParams({ tab: 'sources', workspace: WORKSPACE }),
@@ -108,8 +113,6 @@ describe('useSelectProject', () => {
   });
 
   it('replaces when it is only filling in an absent parameter', () => {
-    // Bookkeeping, not navigation: pushing here would make Back land on the
-    // same page minus a query string and look like it did nothing.
     activeProjectId = PROJECT_1;
     const { result } = renderHook(() => useSelectProject());
 
@@ -128,15 +131,12 @@ describe('useSelectProject', () => {
 
     act(() => result.current(PROJECT_1));
     const calls = [...navigate.mock.calls];
-    // The same hook navigates for a different project.
     act(() => result.current(PROJECT_2));
 
     expect([calls, navigate.mock.calls]).toEqual([[], [[`/projects?project=${PROJECT_2}`]]]);
   });
 
   it('replaces when the entry being left behind is dead', () => {
-    // After deleting the active project, Back must not return to a URL naming
-    // a project that no longer exists.
     activeProjectId = PROJECT_1;
     search = new URLSearchParams({ project: PROJECT_1 });
     const { result } = renderHook(() => useSelectProject());
@@ -159,10 +159,6 @@ describe('useSelectProject', () => {
   });
 
   it('leaves a path that names the outgoing project crawl', () => {
-    // The crawl in this path belongs to PROJECT_1. Carrying it into PROJECT_2
-    // asks that project for another project's crawl, which resolves to
-    // "unavailable" — the reader then has to navigate out by hand, which is
-    // what "I have to refresh to get data after switching" looks like.
     activeProjectId = PROJECT_1;
     pathname = '/site/crawls/22222222-2222-4222-8222-222222222222/pages/abc';
     const { result } = renderHook(() => useSelectProject());
@@ -226,9 +222,6 @@ describe('useSelectProject', () => {
   });
 
   it('keeps a crawl detail path when the ACTIVE project is re-selected', () => {
-    // Re-picking the project already active is bookkeeping, not a switch.
-    // Redirecting it to /site would throw the reader off the page they are
-    // reading to protect them from a project change that is not happening.
     activeProjectId = PROJECT_1;
     pathname = '/site/crawls/22222222-2222-4222-8222-222222222222/pages/abc';
     const { result } = renderHook(() => useSelectProject());
@@ -249,5 +242,36 @@ describe('useSelectProject', () => {
     act(() => result.current(PROJECT_2, { destination: '/settings' }));
 
     expect(navigate).toHaveBeenCalledWith(`/settings?project=${PROJECT_2}`);
+  });
+});
+
+describe('useSelectWorkspace', () => {
+  const OTHER = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  const switchFrom = (path: string, params: Record<string, string> = {}) => {
+    pathname = path;
+    search = new URLSearchParams(params);
+    navigate.mockClear();
+    const { result } = renderHook(() => useSelectWorkspace());
+    act(() => result.current(OTHER));
+    return navigate.mock.calls.at(-1)?.[0];
+  };
+
+  it('stays on the page, dropping record ids, and lands on Overview from a path no screen owns', () => {
+    expect(switchFrom('/insights', { project: PROJECT_1, tab: 'trend', run: 'r1' })).toBe(
+      `/insights?tab=trend&workspace=${OTHER}`,
+    );
+    expect(switchFrom(`/prompts/${PROJECT_2}`)).toBe(`/prompts?workspace=${OTHER}`);
+    expect(switchFrom('/settings')).toBe(`/settings?workspace=${OTHER}`);
+    expect(switchFrom('/no-such-page')).toBe(`/projects?workspace=${OTHER}`);
+    expect(switchFrom(`/prompts/${PROJECT_2}/extra`)).toBe(`/projects?workspace=${OTHER}`);
+  });
+
+  it('does nothing when the active workspace is picked again', () => {
+    pathname = '/insights';
+    const { result } = renderHook(() => useSelectWorkspace());
+    act(() => result.current(WORKSPACE));
+    expect(navigate).not.toHaveBeenCalled();
+    act(() => result.current(OTHER));
+    expect(navigate).toHaveBeenCalledWith(`/insights?workspace=${OTHER}`);
   });
 });

@@ -46,7 +46,6 @@ const ARTICLE = `<!doctype html><html><head>
 <footer>Copyright Example</footer>
 </body></html>`;
 
-/** A crawled project whose content page (a comparison) is PAGE. */
 async function project() {
   const seed = await fixtures.crawl();
   workspaces.push(seed.workspaceId);
@@ -67,7 +66,6 @@ async function bindings() {
   return agent;
 }
 
-/** Starts an optimize-page chat on PAGE and runs its fetch against `site`. */
 async function fetchedChat(site: Record<string, Served>) {
   const seed = await project();
   const agent = await bindings();
@@ -179,7 +177,6 @@ describe('the page fetch task', () => {
       { status: 'queued', requested_skill_id: 'content_optimize' },
     ]);
     expect(await snapshotsOf(created.chatId)).toMatchObject([
-      // Classified from this fetch, not copied from the crawl.
       { outcome: 'fetched', outcome_reason: null, http_status: 200, page_kind: 'other' },
     ]);
   });
@@ -217,7 +214,6 @@ describe('the page fetch task', () => {
     const { seed, created, chat } = await fetchedChat({ '/crm-pricing': { body: ARTICLE } });
     const [document] = chat.outputs;
     if (!document) throw new Error('Expected the page document');
-    // The queued first turn ends without changing the document.
     const now = new Date();
     await db
       .updateTable('agent_runs')
@@ -253,7 +249,6 @@ describe('the page fetch task', () => {
     expect(await snapshotsOf(created.chatId)).toMatchObject([
       { outcome: 'http_error', outcome_reason: 'http_404', http_status: 404, page_kind: null },
     ]);
-    // No turn ran, so no model call was reserved or settled.
     expect({ runs: await runsOf(created.chatId), outputs: chat.outputs.length }).toEqual({
       runs: [],
       outputs: 0,

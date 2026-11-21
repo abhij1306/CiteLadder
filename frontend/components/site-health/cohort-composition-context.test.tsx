@@ -22,7 +22,6 @@ describe('CohortCompositionContext', () => {
     expect(screen.getByText(/Removed page kinds: Article/)).toBeInTheDocument();
     expect(screen.getByText('Article 3 · Homepage 1')).toBeInTheDocument();
     expect(screen.getByText('Homepage 1 · Product 2')).toBeInTheDocument();
-    expect(screen.getByText(/not split into quality versus cohort effects/)).toBeInTheDocument();
   });
 
   it('omits the added and removed clauses when no kind joined or left', () => {
@@ -38,9 +37,6 @@ describe('CohortCompositionContext', () => {
       />,
     );
 
-    expect(
-      screen.getByText('Score movement is not split into quality versus cohort effects.'),
-    ).toBeInTheDocument();
     expect(screen.queryByText(/Added page kinds|Removed page kinds|None/)).not.toBeInTheDocument();
     expect(screen.getByText('Category 50 · Product 50')).toBeInTheDocument();
     expect(screen.getByText('Category 30 · Product 70')).toBeInTheDocument();

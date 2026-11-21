@@ -1,31 +1,40 @@
-/**
- * Workspace-authorized Action reads, workflow decisions, declarations, and
- * Analyze a page (its content-page picker and the Action plus chat it starts).
- */
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { agentBindings } from '../agent/bindings.ts';
 import { agentPolicy } from '../agent/contracts.ts';
 import { runView } from '../agent/reads.ts';
 import { requestProjectOf } from '../auth/actor.ts';
-import { ACTIONS_WRITE, declareAction, setActionStatus } from '../commands/actions.ts';
+import {
+  ACTIONS_WRITE,
+  declareAction,
+  setActionStatus,
+  setActionStatuses,
+} from '../commands/actions.ts';
 import { routeActor } from '../commands/permission.ts';
 import { policy } from '../config.ts';
 import { ApiError } from '../errors.ts';
 import { readBody } from '../http/body.ts';
-import { getAction, listActions } from '../opportunities/actions.ts';
+import { getAction, getActionUrls, listActions } from '../opportunities/actions.ts';
+import { actionTree, urlActions } from '../opportunities/action-tree.ts';
 import { analyzePage, listAnalyzablePages } from '../page-documents/analyze.ts';
 import { mapped } from './agent.ts';
 import { defineGetRoute, definePatchRoute, definePostRoute } from './define.ts';
 import {
+  ACTION_TOPIC_MAX_CHARS,
   actionAnalyzeRequestSchema,
   actionAnalyzeResultSchema,
+  actionBulkStatusRequestSchema,
+  actionBulkStatusResultSchema,
   actionDeclarationRequestSchema,
   actionDeclarationSchema,
   actionDetailSchema,
   actionItemSchema,
   actionsPageSchema,
+  actionTreeGroupBySchema,
+  actionTreeSchema,
+  actionUrlsPageSchema,
   analyzablePagesSchema,
+  urlActionsSchema,
 } from '@citeladder/contracts/actions';
 import { statusPatch } from './action-contracts.ts';
 
@@ -37,6 +46,16 @@ const o = policy.opportunity.opportunities;
 const actionPath = { action_id: { scalar: { kind: 'uuid' }, required: true } } as const;
 const publicAction = `${policy.api.machine_prefix}/projects/{project_id}/actions/{action_id}`;
 const publicWrite = { exposure: 'both', permission: ACTIONS_WRITE } as const;
+const listFilters = {
+  status_filter: { scalar: { kind: 'str' }, alias: 'status' },
+  q: { scalar: { kind: 'str', maxLength: a.ACTION_SEARCH_MAX_CHARS } },
+  target_kind: { scalar: { kind: 'str' } },
+  approach: { scalar: { kind: 'str' } },
+  priority: { scalar: { kind: 'str' } },
+  family: { scalar: { kind: 'str' } },
+  ownership: { scalar: { kind: 'str' } },
+  topic: { scalar: { kind: 'str', maxLength: ACTION_TOPIC_MAX_CHARS } },
+} as const;
 export const actionRoutes = [
   defineGetRoute({
     family,
@@ -51,12 +70,8 @@ export const actionRoutes = [
           default: a.ACTION_LIST_DEFAULT_LIMIT,
         },
         cursor: { scalar: { kind: 'str' } },
-        status_filter: { scalar: { kind: 'str' }, alias: 'status' },
-        target_kind: { scalar: { kind: 'str' } },
-        group: { scalar: { kind: 'str' } },
-        approach: { scalar: { kind: 'str' } },
-        priority: { scalar: { kind: 'str' } },
-        family: { scalar: { kind: 'str' } },
+        ...listFilters,
+        grouping: { scalar: { kind: 'str' } },
       },
     },
     response: actionsPageSchema,
@@ -67,6 +82,56 @@ export const actionRoutes = [
         { ...query, status: query.status_filter },
       );
     },
+  }),
+  defineGetRoute({
+    family,
+    authorize: 'active-project',
+    exposure: 'both',
+    path: '/api/v1/projects/{project_id}/actions/tree',
+    params: {
+      path: projectPath,
+      query: {
+        group_by: { scalar: { kind: 'str' }, default: 'goal' },
+        ...listFilters,
+      },
+    },
+    response: actionTreeSchema,
+    async handle({ c, db }, { path, query }) {
+      const groupBy = actionTreeGroupBySchema.safeParse(query.group_by);
+      if (!groupBy.success) throw new ApiError(422, `Unknown group_by: ${query.group_by}`);
+      return actionTree(
+        db,
+        { workspaceId: c.get('workspace').workspaceId, projectId: path.project_id },
+        { ...query, group_by: groupBy.data, status: query.status_filter },
+      );
+    },
+  }),
+  defineGetRoute({
+    family,
+    authorize: 'active-project',
+    exposure: 'both',
+    path: '/api/v1/projects/{project_id}/urls/{site_url_id}/actions',
+    params: {
+      path: { ...projectPath, site_url_id: { scalar: { kind: 'uuid' }, required: true } },
+      query: {},
+    },
+    response: urlActionsSchema,
+    handle: ({ c, db }, { path }) =>
+      urlActions(
+        db,
+        { workspaceId: c.get('workspace').workspaceId, projectId: path.project_id },
+        path.site_url_id,
+      ),
+  }),
+  defineGetRoute({
+    family,
+    exposure: 'both',
+    publicPath: `${publicAction}/urls`,
+    path: '/api/v1/actions/{action_id}/urls',
+    params: { path: actionPath, query: { cursor: { scalar: { kind: 'str' } } } },
+    response: actionUrlsPageSchema,
+    handle: ({ c, db }, { path, query }) =>
+      getActionUrls(db, c.get('workspace').workspaceId, path.action_id, query.cursor ?? null),
   }),
   defineGetRoute({
     family,
@@ -118,7 +183,6 @@ export const actionRoutes = [
     family,
     authorize: 'active-project',
     path: '/api/v1/projects/{project_id}/actions/analyze',
-    // It starts an Agent chat, so it needs what starting one needs.
     capability: 'run',
     params: { path: projectPath, query: {} },
     headers: z.object({
@@ -144,6 +208,23 @@ export const actionRoutes = [
         chat_id: started.chatId,
         run: started.run ? runView(started.run) : null,
       };
+    },
+  }),
+  definePostRoute({
+    family,
+    authorize: 'active-project',
+    ...publicWrite,
+    path: '/api/v1/projects/{project_id}/actions/status',
+    params: { path: projectPath, query: {} },
+    body: actionBulkStatusRequestSchema,
+    response: actionBulkStatusResultSchema,
+    async handle({ c, db }, { path }) {
+      return setActionStatuses(
+        db,
+        routeActor(c, ACTIONS_WRITE),
+        path.project_id,
+        await readBody(c, actionBulkStatusRequestSchema),
+      );
     },
   }),
   definePostRoute({

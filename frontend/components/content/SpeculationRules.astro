@@ -1,0 +1,6 @@
+---
+// Prefetch rules for the website and docs; the CSP allows this exact text by hash.
+import { SPECULATION_RULES_JSON } from '@/lib/config/speculation-rules';
+---
+
+<script type="speculationrules" set:html={SPECULATION_RULES_JSON} />

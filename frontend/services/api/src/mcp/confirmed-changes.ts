@@ -1,20 +1,18 @@
-/**
- * The changes an MCP grant prepares and the user then confirms: one entry per
- * kind holding the permission its command needs, the payload stored behind the
- * confirmation token and the one `execute` both steps run. A prepare tool
- * rehearses `execute` in a rolled-back transaction before it stores the
- * payload; `confirm_change` parses the stored payload back and runs the same
- * `execute` for real, inside the confirmation's transaction.
- */
 import { z } from 'zod';
 import { actionDeclarationRequestSchema } from '@citeladder/contracts/actions';
+import { promptStatusSchema } from '@citeladder/contracts/project';
 import type { Actor } from '../auth/actor.ts';
 import { scheduleCreate } from '../audits/schedule-inputs.ts';
 import { auditLaunchInput } from '../audits/inputs.ts';
 import { ACTIONS_WRITE, declareAction } from '../commands/actions.ts';
 import { AUDITS_RUN, launchAudit } from '../commands/audits.ts';
 import { authorize, type Authorized, type Permission } from '../commands/permission.ts';
-import { createPrompts, PROMPTS_WRITE, setPromptStatuses } from '../commands/prompts.ts';
+import {
+  assignPromptTopic,
+  createPrompts,
+  PROMPTS_WRITE,
+  setPromptStatuses,
+} from '../commands/prompts.ts';
 import { createSchedule, SCHEDULES_WRITE } from '../commands/schedules.ts';
 import type { ServiceConfig } from '../config.ts';
 import type { Database } from '../db/database.ts';
@@ -22,7 +20,6 @@ import { operatorTransaction } from '../db/operator-transaction.ts';
 import { promptInput } from '../prompts/prompts.ts';
 import type { Evidence } from './types.ts';
 
-/** A prepared change's identity: its confirmation id and the project it was authorized for. */
 export type PreparedChange = Readonly<{ id: string; projectId: string }>;
 
 type Execute<S extends z.ZodType, P extends Permission> = (
@@ -40,11 +37,6 @@ function preparedKind<S extends z.ZodType, P extends Permission>(entry: {
 }) {
   return {
     permission: entry.permission,
-    /**
-     * The dry run: `execute` with every check, admission and write it makes,
-     * rolled back; owners join this transaction. `inspect` reads the
-     * rehearsed state before the rollback. Returns the payload to store.
-     */
     async rehearse<T>(
       db: Database,
       config: ServiceConfig,
@@ -60,7 +52,6 @@ function preparedKind<S extends z.ZodType, P extends Permission>(entry: {
       });
       return { payload, inspected };
     },
-    /** The confirmed run: the member's live role decides, as at prepare time. */
     confirm(
       trx: Database,
       config: ServiceConfig,
@@ -79,7 +70,6 @@ function preparedKind<S extends z.ZodType, P extends Permission>(entry: {
   };
 }
 
-/** The idempotency key a declaration confirmed through MCP records. */
 const declarationKey = (confirmationId: string) => `mcp:${confirmationId}`;
 
 export const preparedChanges = {
@@ -100,22 +90,50 @@ export const preparedChanges = {
       };
     },
   }),
-  archive_prompts: preparedKind({
+  update_prompts: preparedKind({
     permission: PROMPTS_WRITE,
-    payload: z.strictObject({
-      groups: z.array(z.strictObject({ prompt_set_id: z.uuid(), prompt_ids: z.array(z.uuid()) })),
-    }),
+    payload: z.discriminatedUnion('kind', [
+      z.strictObject({
+        kind: z.literal('status'),
+        status: promptStatusSchema,
+        groups: z.array(
+          z.strictObject({ prompt_set_id: z.uuid(), prompt_ids: z.array(z.uuid()).min(1) }),
+        ),
+      }),
+      z.strictObject({
+        kind: z.literal('topic'),
+        topic_id: z.uuid().nullable(),
+        prompt_ids: z.array(z.uuid()).min(1),
+      }),
+    ]),
     async execute(trx, _config, actor, change, payload) {
-      for (const group of payload.groups)
-        await /* NOSONAR -- One transaction: groups apply in order. */ setPromptStatuses(
-          trx,
-          actor,
-          change.projectId,
-          group.prompt_set_id,
-          { prompt_ids: group.prompt_ids, status: 'archived' },
-        );
-      const count = payload.groups.reduce((total, group) => total + group.prompt_ids.length, 0);
-      return { summary: `Archived ${count} prompt(s).` };
+      switch (payload.kind) {
+        case 'status': {
+          for (const group of payload.groups)
+            await /* NOSONAR -- One transaction: groups apply in order. */ setPromptStatuses(
+              trx,
+              actor,
+              change.projectId,
+              group.prompt_set_id,
+              { prompt_ids: group.prompt_ids, status: payload.status },
+            );
+          const count = payload.groups.reduce((total, group) => total + group.prompt_ids.length, 0);
+          const verb = payload.status === 'archived' ? 'Archived' : 'Activated';
+          return { summary: `${verb} ${count} prompt(s).` };
+        }
+        case 'topic': {
+          const { count } = await assignPromptTopic(trx, actor, change.projectId, {
+            prompt_ids: payload.prompt_ids,
+            topic_id: payload.topic_id,
+          });
+          const where = payload.topic_id === null ? 'out of every topic' : 'under the topic';
+          return { summary: `Filed ${count} prompt(s) ${where}.` };
+        }
+        default: {
+          const unhandled: never = payload;
+          throw new Error(`Unknown prompt change: ${JSON.stringify(unhandled)}`);
+        }
+      }
     },
   }),
   launch_audit: preparedKind({

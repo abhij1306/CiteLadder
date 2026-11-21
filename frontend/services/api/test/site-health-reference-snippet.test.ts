@@ -5,7 +5,6 @@ import { bodyFacts } from './site-health-fixtures.ts';
 
 const cap = policy.site_health.page_analysis.facts.limits.reference_snippet_chars;
 
-/** The reference snippet the extractor keeps for a page whose body is `body`. */
 const snippetOf = (body: string) =>
   bodyFacts(body).accessibility.controls_missing_accessible_name_snippet;
 

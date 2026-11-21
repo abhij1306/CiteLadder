@@ -1,5 +1,5 @@
 import { useEffect, useRef, type InputHTMLAttributes, type ReactNode } from 'react';
-import { Search, X } from 'lucide-react';
+import { Search, X } from '@/lib/icons';
 
 import { Icon } from './icon';
 import { FieldEndButton, Input } from './input';
@@ -14,20 +14,9 @@ export type SearchFieldProps = Omit<
   onValueChange: (value: string) => void;
   pending?: boolean;
   onClear?: () => void;
-  /**
-   * A cap shown while the field is empty; ⌘ or Ctrl plus its last key focuses
-   * the field. `true` is "⌘K". Only the page's main search takes one.
-   */
   shortcut?: true | string;
 };
 
-/**
- * SearchField — the search and filter box at the top of a list: the search
- * icon (a spinner while results load), the query, and one fixed-width end
- * slot holding the shortcut cap when empty or the clear button with a query,
- * so nothing moves when the query appears. The x button and Escape both clear
- * and keep focus. It filters as you type: no submit button.
- */
 export function SearchField({
   value,
   onValueChange,
@@ -88,8 +77,10 @@ export function SearchField({
       aria-busy={pending || undefined}
       containerClassName={className}
       className="[appearance:textfield] [&::-webkit-search-cancel-button]:hidden [&::-webkit-search-decoration]:hidden"
-      startContent={pending ? <Spinner /> : <Icon icon={Search} className="text-ink-muted" />}
-      endContent={<span className="inline-flex h-5 min-w-7 items-center justify-end">{end}</span>}
+      startContent={pending ? <Spinner /> : <Icon icon={Search} className="text-ink-2" />}
+      endContent={
+        <span className="inline-flex min-h-5 min-w-7 items-center justify-end">{end}</span>
+      }
     />
   );
 }

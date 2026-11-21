@@ -4,8 +4,9 @@ import { http, HttpResponse, type RequestHandler } from 'msw';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vite-plus/test';
 
 import { queryKeys } from '@/lib/api/query-keys';
-import type { BrandProfile } from '@citeladder/contracts';
+import type { BrandProfile, BusinessMap } from '@citeladder/contracts';
 import { makeProject } from '@/test/fixtures/project';
+import { makeSetList } from '@/test/fixtures/prompts';
 import { mswServer } from '@/test/msw-server';
 import { renderWithProviders, testProjectSelection } from '@/test/render';
 import { ActiveProjectScopeProvider } from '@/lib/project/active-project-scope';
@@ -16,8 +17,8 @@ import { ContextScreen } from './context-screen';
 const project = makeProject();
 const instructionsEndpoint = `/api/v1/projects/${project.id}/agent/instructions`;
 const profileEndpoint = `/api/v1/projects/${project.id}/brand-profile`;
+const limits = { statement_max_chars: 300, facts_import_max_rows: 150 };
 const saved = (text: string) => ({ text, revision: 1, created_at: '2026-09-26T10:00:00Z' });
-/** The instructions read as the harness's active workspace caches it. */
 const instructionsKey = queryKeys.agent.instructions({
   workspaceId: testProjectSelection().activeWorkspaceId,
   projectId: project.id,
@@ -67,10 +68,6 @@ function ContextScope({ activeProject }: { activeProject: ReturnType<typeof make
   );
 }
 
-/**
- * A project's Context reads: its profile, saved instructions, no suggestions,
- * and outside the fact-checking pilot unless a test says otherwise.
- */
 function renderContext({
   profile = emptyProfile,
   activeProject = project,
@@ -80,15 +77,13 @@ function renderContext({
   profile?: BrandProfile;
   activeProject?: ReturnType<typeof makeProject>;
   tab?: string;
-  /** Reads that replace the defaults. */
   handlers?: RequestHandler[];
 } = {}) {
   mswServer.use(
     http.get(instructionsEndpoint, () => HttpResponse.json(saved('Original'))),
     http.get('/api/v1/projects/:id/brand-profile', () => HttpResponse.json(profile)),
-    http.get('/api/v1/projects/:id/competitor-suggestions', () => HttpResponse.json([])),
     http.get('/api/v1/projects/:id/brand-facts', () =>
-      HttpResponse.json({ enabled: false, facts: [] }),
+      HttpResponse.json({ enabled: false, facts: [], limits }),
     ),
   );
   mswServer.use(...handlers);
@@ -96,7 +91,13 @@ function renderContext({
   return renderWithProviders(<ContextScope activeProject={activeProject} />);
 }
 
-/** Records the body of the next profile save and answers with `reply`. */
+function mapReads(map: BusinessMap = { available_offerings: [], offerings: [] }) {
+  return [
+    http.get(`/api/v1/projects/${project.id}/business-map`, () => HttpResponse.json(map)),
+    http.get('/api/v1/prompt-sets', () => HttpResponse.json(makeSetList([]))),
+  ];
+}
+
 function captureProfileSave(reply: (body: unknown) => Response) {
   const capture: { body?: unknown } = {};
   mswServer.use(
@@ -116,14 +117,7 @@ describe('Context layout', () => {
       within(tabs)
         .getAllByRole('tab')
         .map((tab) => tab.textContent),
-    ).toEqual([
-      'Company',
-      'Audience & Offerings',
-      'Business map',
-      'Competitors',
-      'Agent instructions',
-    ]);
-    // The instructions are a tab of their own, not a section under every tab.
+    ).toEqual(['Company', 'Themes', 'Business map', 'Competitors', 'Instructions', 'Brand facts']);
     expect(screen.queryByRole('textbox', { name: 'Agent instructions' })).not.toBeInTheDocument();
   });
 
@@ -137,19 +131,27 @@ describe('Context layout', () => {
     expect(window.location.search).toBe('?tab=competitors');
   });
 
-  it('offers the save that belongs to the active tab, and none on a read-only tab', async () => {
+  it('offers the save that belongs to the active tab', async () => {
     const user = userEvent.setup({ delay: null });
-    mswServer.use(
-      http.get(`/api/v1/projects/${project.id}/business-map`, () =>
-        HttpResponse.json({ available_offerings: [], offerings: [] }),
-      ),
-    );
-    renderContext();
-    expect(await screen.findByRole('button', { name: 'Save brand knowledge' })).toBeEnabled();
+    renderContext({ handlers: mapReads() });
+    const idle = await screen.findByRole('button', { name: 'Save brand knowledge' });
+    expect(idle).toHaveAttribute('aria-disabled', 'true');
+    expect(idle).toHaveAccessibleDescription('No changes to save');
+    await user.type(screen.getByLabelText('Description'), 'Coffee');
+    const save = screen.getByRole('button', { name: 'Save brand knowledge' });
+    expect(save).toBeEnabled();
+    expect(save).not.toHaveAttribute('aria-disabled');
+    expect(save).not.toHaveAccessibleDescription('No changes to save');
     await user.click(screen.getByRole('tab', { name: 'Business map' }));
-    expect(screen.queryByRole('button', { name: /^save/i })).not.toBeInTheDocument();
-    await user.click(screen.getByRole('tab', { name: 'Agent instructions' }));
-    expect(await screen.findByRole('button', { name: 'Save instructions' })).toBeDisabled();
+    expect(await screen.findByRole('button', { name: 'Save business map' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+    expect(screen.queryByRole('button', { name: 'Save brand knowledge' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('tab', { name: 'Instructions' }));
+    const idleInstructions = await screen.findByRole('button', { name: 'Save instructions' });
+    expect(idleInstructions).toHaveAttribute('aria-disabled', 'true');
+    expect(idleInstructions).toHaveAccessibleDescription('No changes to save');
   });
 
   it('shows the Brand facts tab with its error when the pilot gate cannot be read', async () => {
@@ -168,67 +170,48 @@ describe('Context layout', () => {
     expect(await screen.findByText('The fact-checking pilot is unavailable.')).toBeVisible();
   });
 
-  it('shows the fixed tabs while the pilot gate is read and adds Brand facts at the end', async () => {
-    let release!: () => void;
-    const gate = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    renderContext({
-      handlers: [
-        http.get('/api/v1/projects/:id/brand-facts', async () => {
-          await gate;
-          return HttpResponse.json({ enabled: true, facts: [] });
-        }),
-      ],
-    });
-    const tabs = await screen.findByRole('tablist', { name: 'Context sections' });
-    const labels = () =>
-      within(tabs)
-        .getAllByRole('tab')
-        .map((tab) => tab.textContent);
-    expect(labels()).toEqual([
-      'Company',
-      'Audience & Offerings',
-      'Business map',
-      'Competitors',
-      'Agent instructions',
-    ]);
-    // The fixed tabs are usable before the gate answers.
-    expect(await screen.findByLabelText('Description')).toBeVisible();
-    release();
-    expect(await within(tabs).findByRole('tab', { name: 'Brand facts' })).toBeVisible();
-    expect(labels()).toEqual([
-      'Company',
-      'Audience & Offerings',
-      'Business map',
-      'Competitors',
-      'Agent instructions',
-      'Brand facts',
-    ]);
-  });
-
-  it('holds a link to Brand facts on its loading state until the pilot gate answers', async () => {
+  it('offers Brand facts with its aliases before the pilot gate answers', async () => {
     let release!: () => void;
     const gate = new Promise<void>((resolve) => {
       release = resolve;
     });
     renderContext({
       tab: 'brand-facts',
+      activeProject: makeProject({
+        brand: { alias_suggestions: [], aliases: ['Best&Less'], logo_url: null },
+      }),
       handlers: [
         http.get('/api/v1/projects/:id/brand-facts', async () => {
           await gate;
-          return HttpResponse.json({ enabled: true, facts: [] });
+          return HttpResponse.json({ enabled: true, facts: [], limits });
         }),
       ],
     });
+    const tabs = await screen.findByRole('tablist', { name: 'Context sections' });
+    expect(
+      within(tabs)
+        .getAllByRole('tab')
+        .map((tab) => tab.textContent),
+    ).toEqual(['Company', 'Themes', 'Business map', 'Competitors', 'Instructions', 'Brand facts']);
+    const aliases = screen.getByRole('group', { name: 'Aliases' });
+    expect(within(aliases).getByText('Best&Less')).toBeVisible();
     expect(await screen.findByRole('status', { name: 'Loading brand facts…' })).toBeVisible();
-    // The link is not answered with the Company tab while the gate is read.
-    expect(screen.queryByLabelText('Description')).not.toBeInTheDocument();
     release();
-    expect(await screen.findByRole('tab', { name: 'Brand facts' })).toHaveAttribute(
-      'aria-selected',
-      'true',
+    expect(await screen.findByText(/No facts yet/)).toBeVisible();
+  });
+
+  it('keeps the aliases and hides the facts outside the pilot', async () => {
+    renderContext({
+      tab: 'brand-facts',
+      activeProject: makeProject({
+        brand: { alias_suggestions: [], aliases: ['Best&Less'], logo_url: null },
+      }),
+    });
+    expect(await screen.findByText('Best&Less')).toBeVisible();
+    await waitFor(() =>
+      expect(screen.queryByRole('status', { name: 'Loading brand facts…' })).toBeNull(),
     );
+    expect(screen.queryByRole('heading', { name: 'Brand facts' })).not.toBeInTheDocument();
   });
 
   it('keeps pilot Brand facts on their own tab', async () => {
@@ -249,6 +232,7 @@ describe('Context layout', () => {
                 updated_at: '2026-11-01T00:00:00Z',
               },
             ],
+            limits,
           }),
         ),
       ],
@@ -261,7 +245,7 @@ describe('Context layout', () => {
 });
 
 describe('Company facts', () => {
-  it('saves direct edits, keeping drafts across tabs and a typed but unadded offering', async () => {
+  it('saves direct edits, keeping drafts across tabs', async () => {
     const user = userEvent.setup({ delay: null });
     const save = captureProfileSave(() =>
       HttpResponse.json({ ...emptyProfile, description: 'A value-focused family retailer.' }),
@@ -271,8 +255,8 @@ describe('Company facts', () => {
       await screen.findByLabelText('Description'),
       'A value-focused family retailer.',
     );
-    await user.click(screen.getByRole('tab', { name: 'Audience & Offerings' }));
-    await user.type(screen.getByLabelText('Add to Products and services'), 'Clothing');
+    await user.type(screen.getByLabelText('Target audience'), 'Families');
+    await user.click(screen.getByRole('tab', { name: 'Competitors' }));
     await user.click(screen.getByRole('tab', { name: 'Company' }));
     expect(screen.getByLabelText('Description')).toHaveValue('A value-focused family retailer.');
     await user.click(screen.getByRole('button', { name: 'Save brand knowledge' }));
@@ -280,52 +264,8 @@ describe('Company facts', () => {
     expect(await screen.findByText(/brand knowledge saved/i)).toBeInTheDocument();
     expect(save.body).toEqual({
       description: 'A value-focused family retailer.',
-      products_services: ['Clothing'],
+      target_audience: 'Families',
     });
-  });
-
-  it('keeps an offering containing a comma as one chip through a save', async () => {
-    const user = userEvent.setup({ delay: null });
-    const bays = 'Commercial simulator bays for golf courses, and community centers';
-    const save = captureProfileSave(() =>
-      HttpResponse.json({
-        ...emptyProfile,
-        products_services: [bays, 'Golf nets, cages and mats'],
-      }),
-    );
-    renderContext({ profile: { ...emptyProfile, products_services: [bays] }, tab: 'audience' });
-    const field = await screen.findByLabelText('Add to Products and services');
-    await user.type(field, 'Golf nets, cages and mats{Enter}');
-    // A duplicate, in any case, cannot be added twice.
-    await user.type(field, 'golf NETS, cages and mats{Enter}');
-    expect(
-      within(screen.getByRole('list', { name: 'Products and services' })).getAllByRole('listitem'),
-    ).toHaveLength(2);
-    await user.clear(field);
-    await user.click(screen.getByRole('button', { name: 'Save brand knowledge' }));
-
-    expect(await screen.findByText(/brand knowledge saved/i)).toBeInTheDocument();
-    expect(save.body).toEqual({ products_services: [bays, 'Golf nets, cages and mats'] });
-    const list = screen.getByRole('list', { name: 'Products and services' });
-    expect(
-      within(list)
-        .getAllByRole('listitem')
-        .map((item) => item.textContent),
-    ).toEqual([bays, 'Golf nets, cages and mats']);
-  });
-
-  it('removes an offering chip from the saved list', async () => {
-    const user = userEvent.setup({ delay: null });
-    const save = captureProfileSave(() =>
-      HttpResponse.json({ ...emptyProfile, products_services: ['Golf mats'] }),
-    );
-    renderContext({
-      profile: { ...emptyProfile, products_services: ['Golf nets', 'Golf mats'] },
-      tab: 'audience',
-    });
-    await user.click(await screen.findByRole('button', { name: 'Remove Golf nets' }));
-    await user.click(screen.getByRole('button', { name: 'Save brand knowledge' }));
-    await waitFor(() => expect(save.body).toEqual({ products_services: ['Golf mats'] }));
   });
 
   it('sends only the category, buyer and market a reader changed', async () => {
@@ -337,14 +277,14 @@ describe('Company facts', () => {
         business_context: { category: 'feed software', buyer_type: 'b2b' },
       },
     });
-    const category = await screen.findByLabelText(/what you sell/i);
+    const category = await screen.findByLabelText('Category');
     expect(category).toHaveValue('feed software');
-    expect(screen.getByRole('radio', { name: 'Businesses' })).toBeChecked();
+    expect(screen.getByLabelText('Who buys it')).toHaveTextContent('Businesses');
     await user.clear(category);
     await user.type(category, 'product feed management platform');
-    await user.click(screen.getByRole('radio', { name: 'Worldwide' }));
+    await user.click(screen.getByLabelText('Where they buy it'));
+    await user.click(screen.getByRole('option', { name: 'Worldwide' }));
     await user.click(screen.getByRole('button', { name: 'Save brand knowledge' }));
-    // Untouched facets and fields are not resubmitted, so they are not marked reviewed.
     await waitFor(() =>
       expect(save.body).toEqual({
         category: 'product feed management platform',
@@ -361,12 +301,12 @@ describe('Company facts', () => {
     renderContext({
       profile: { ...emptyProfile, business_context: { category: 'feed software' } },
     });
-    await user.clear(await screen.findByLabelText(/what you sell/i));
+    await user.clear(await screen.findByLabelText('Category'));
     await user.click(screen.getByRole('button', { name: 'Save brand knowledge' }));
 
     expect(await screen.findByText('category is required')).toBeVisible();
     expect(save.body).toEqual({ category: '' });
-    expect(screen.getByLabelText(/what you sell/i)).toHaveValue('');
+    expect(screen.getByLabelText('Category')).toHaveValue('');
   });
 
   it('locks profile fields while a save is pending', async () => {
@@ -394,9 +334,8 @@ describe('Company facts', () => {
 });
 
 describe('Competitors', () => {
-  it('lists tracked competitors as marked chips, adds a suggestion and opens their editor', async () => {
+  it('lists tracked competitors one row each and opens their editor', async () => {
     const user = userEvent.setup({ delay: null });
-    let accepted: string | undefined;
     const withCompetitors = makeProject({
       competitors: [
         {
@@ -415,52 +354,18 @@ describe('Competitors', () => {
         },
       ],
     });
-    const handlers = [
-      http.get('/api/v1/projects/:id/competitor-suggestions', () =>
-        HttpResponse.json([
-          {
-            id: '66666666-6666-4666-8666-666666666666',
-            audit_id: '77777777-7777-4777-8777-777777777777',
-            name: 'Globex',
-            domain: 'globex.test',
-            qualification_reason: 'Repeated third-party citations',
-            prompt_count: 3,
-            engine_count: 2,
-            market_relevant: true,
-            analyzer_version: 'competitor-v1',
-            source_analysis_ids: [],
-            source_artifact_ids: [],
-            status: 'candidate',
-            created_at: '2026-11-01T00:00:00Z',
-          },
-        ]),
-      ),
-      http.post('/api/v1/projects/:id/competitor-suggestions/:candidate/accept', ({ params }) => {
-        accepted = String(params.candidate);
-        return HttpResponse.json({
-          id: '88888888-8888-4888-8888-888888888883',
-          name: 'Globex',
-          aliases: [],
-          domains: ['globex.test'],
-        });
-      }),
-    ];
-    renderContext({ activeProject: withCompetitors, tab: 'competitors', handlers });
+    renderContext({ activeProject: withCompetitors, tab: 'competitors' });
 
-    const tracked = await screen.findByRole('list', { name: 'Tracked competitors' });
-    // Contoso has no cached logo, so its mark falls back to its first letter.
-    expect(
-      within(tracked)
-        .getAllByRole('listitem')
-        .map((item) => item.textContent),
-    ).toEqual(['Northstar', 'CContoso']);
-    expect(within(tracked).getAllByRole('listitem')[0]?.querySelector('img')).toHaveAttribute(
+    const tracked = await screen.findByRole('group', { name: 'Tracked competitors' });
+    const rows = [...tracked.querySelectorAll('[data-setting-row]')];
+    expect(rows.map((row) => row.textContent)).toEqual([
+      'Northstar—Not set',
+      'CContosocontoso.test',
+    ]);
+    expect(rows[0]?.querySelector('img')).toHaveAttribute(
       'src',
       'https://assets.test/northstar.png',
     );
-
-    await user.click(await screen.findByRole('button', { name: 'Add competitor' }));
-    await waitFor(() => expect(accepted).toBe('66666666-6666-4666-8666-666666666666'));
 
     await user.click(screen.getByRole('button', { name: 'Edit competitors' }));
     expect(await screen.findByRole('dialog', { name: 'Edit Acme' })).toBeVisible();
@@ -469,86 +374,121 @@ describe('Competitors', () => {
 });
 
 describe('Business map', () => {
-  it('shows the map read-only as chips, marking suggestions, linked to the Prompt Builder', async () => {
-    const offering = 'Golf practice net';
-    mswServer.use(
-      http.get(`/api/v1/projects/${project.id}/business-map`, () =>
-        HttpResponse.json({
-          available_offerings: [offering],
-          offerings: [
-            {
-              offering,
-              attributes: [],
-              situations: [
-                {
-                  value: 'Small garden',
-                  origin: 'model',
-                  review_state: 'suggested',
-                  reviewed_by: null,
-                  reviewed_at: null,
-                  source: {},
-                },
-              ],
-              audiences: [],
-              exclusions: [],
-            },
-          ],
-        }),
-      ),
-    );
-    renderContext({
-      profile: {
-        ...emptyProfile,
-        products_services: [offering],
-        business_context: {
-          buyer_roles: ['Club coach', 'Parent'],
-          business_model: 'd2c_product',
-          // Discovery inferred the roles; a person has saved the business model.
-          field_sources: { buyer_roles: 'inferred', business_model: 'reviewed' },
-        },
-      },
-      tab: 'map',
-    });
+  const offering = 'Golf practice net';
+  const suggested = {
+    value: 'Small garden',
+    origin: 'model' as const,
+    review_state: 'suggested' as const,
+    reviewed_by: null,
+    reviewed_at: null,
+    source: {},
+  };
+  const golfMap: BusinessMap = {
+    available_offerings: [offering],
+    offerings: [
+      { offering, attributes: [], situations: [suggested], audiences: [], exclusions: [] },
+    ],
+  };
+  const golfProfile: BrandProfile = {
+    ...emptyProfile,
+    products_services: [offering],
+    business_context: {
+      buyer_roles: ['Club coach', 'Parent'],
+      business_model: 'd2c_product',
+      field_sources: { buyer_roles: 'inferred', business_model: 'reviewed' },
+    },
+  };
 
-    const details = await screen.findByLabelText('Business details');
-    const [roles] = within(details).getAllByRole('list');
-    if (!roles) throw new Error('Buyer roles render as a list');
-    expect(
-      within(roles)
-        .getAllByRole('listitem')
-        .map((item) => item.textContent),
-    ).toEqual(['Club coachSuggested', 'ParentSuggested']);
-    expect(details).toHaveTextContent('Business modelProducts sold direct');
-    expect(details).not.toHaveTextContent('Products sold directSuggested');
-    expect(screen.getByRole('region', { name: offering })).toHaveTextContent(
-      'Situations and constraintsSmall gardenSuggested',
+  it('edits the map in place and saves accepted suggestions through the profile and map owners', async () => {
+    const user = userEvent.setup({ delay: null });
+    const profileSave = captureProfileSave(() => HttpResponse.json(golfProfile));
+    const mapSave: { body?: unknown } = {};
+    mswServer.use(
+      http.put(`/api/v1/projects/${project.id}/business-map`, async ({ request }) => {
+        mapSave.body = await request.json();
+        return HttpResponse.json(golfMap);
+      }),
     );
-    expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Edit in Prompt Builder' })).toHaveAttribute(
-      'href',
-      expect.stringContaining('/prompts?generate=1'),
+    renderContext({ profile: golfProfile, tab: 'map', handlers: mapReads(golfMap) });
+
+    expect(await screen.findByText('3 suggestions')).toBeVisible();
+    expect(
+      within(screen.getByRole('list', { name: `Situations: ${offering}` })).getByRole('listitem'),
+    ).toHaveTextContent('Small garden (suggested)');
+    expect(screen.getByRole('combobox', { name: 'Business model' })).toHaveTextContent(
+      'Products sold direct',
+    );
+
+    const add = screen.getByRole('textbox', { name: 'Add offering' });
+    await user.type(add, 'Nets, cages and mats{Enter}');
+    await user.type(add, 'golf PRACTICE net{Enter}');
+    expect(
+      within(screen.getByRole('list', { name: 'Offerings' }))
+        .getAllByRole('listitem', { name: /./ })
+        .map((row) => row.getAttribute('aria-label')),
+    ).toEqual([offering, 'Nets, cages and mats']);
+
+    await user.click(screen.getByRole('button', { name: 'Accept all' }));
+    expect(screen.queryByText(/suggestions?$/)).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Save business map' }));
+
+    await waitFor(() =>
+      expect(mapSave.body).toEqual({
+        offerings: [
+          {
+            offering,
+            attributes: [],
+            situations: [{ value: 'Small garden', review_state: 'confirmed' }],
+            audiences: [],
+            exclusions: [],
+          },
+          {
+            offering: 'Nets, cages and mats',
+            attributes: [],
+            situations: [],
+            audiences: [],
+            exclusions: [],
+          },
+        ],
+      }),
+    );
+    expect(profileSave.body).toEqual({
+      products_services: [offering, 'Nets, cages and mats'],
+      buyer_roles: ['Club coach', 'Parent'],
+    });
+  });
+
+  it('keeps unsaved map edits across tab switches', async () => {
+    const user = userEvent.setup({ delay: null });
+    renderContext({ profile: golfProfile, tab: 'map', handlers: mapReads(golfMap) });
+    await user.type(
+      await screen.findByRole('textbox', { name: 'Add offering' }),
+      'Hitting mats{Enter}',
+    );
+    await user.click(screen.getByRole('tab', { name: 'Competitors' }));
+    await user.click(screen.getByRole('tab', { name: 'Business map' }));
+    expect(await screen.findByRole('listitem', { name: 'Hitting mats' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Save business map' })).not.toHaveAttribute(
+      'aria-disabled',
     );
   });
 
   it('tells an unrecognized saved business model apart from none', async () => {
-    mswServer.use(
-      http.get(`/api/v1/projects/${project.id}/business-map`, () =>
-        HttpResponse.json({ available_offerings: [], offerings: [] }),
-      ),
-    );
     const view = renderContext({
       profile: { ...emptyProfile, business_context: { business_model: 'franchise' } },
       tab: 'map',
+      handlers: mapReads(),
     });
-    expect(await screen.findByLabelText('Business details')).toHaveTextContent(
-      'Business modelUnknown',
+    expect(await screen.findByRole('combobox', { name: 'Business model' })).toHaveTextContent(
+      'Unknown',
     );
     view.unmount();
 
-    renderContext({ tab: 'map' });
-    expect(await screen.findByLabelText('Business details')).toHaveTextContent(
-      'Business modelNot set',
+    renderContext({ tab: 'map', handlers: mapReads() });
+    expect(await screen.findByRole('combobox', { name: 'Business model' })).toHaveTextContent(
+      'Not set',
     );
+    expect(screen.queryByRole('button', { name: 'Accept all' })).not.toBeInTheDocument();
   });
 });
 
@@ -573,7 +513,7 @@ describe('Agent instruction drafts', () => {
       target: { value: 'Plain, warm tone.' },
     });
     await user.click(screen.getByRole('tab', { name: 'Competitors' }));
-    await user.click(screen.getByRole('tab', { name: 'Agent instructions' }));
+    await user.click(screen.getByRole('tab', { name: 'Instructions' }));
     expect(screen.getByRole('textbox', { name: 'Agent instructions' })).toHaveValue(
       'Plain, warm tone.',
     );
@@ -615,7 +555,7 @@ describe('Agent instruction drafts', () => {
       http.get('/api/v1/projects/:id/brand-profile', () => HttpResponse.json(emptyProfile)),
       http.get('/api/v1/projects/:id/competitor-suggestions', () => HttpResponse.json([])),
       http.get('/api/v1/projects/:id/brand-facts', () =>
-        HttpResponse.json({ enabled: false, facts: [] }),
+        HttpResponse.json({ enabled: false, facts: [], limits }),
       ),
     );
     window.history.replaceState(null, '', '/agent/context?tab=instructions');

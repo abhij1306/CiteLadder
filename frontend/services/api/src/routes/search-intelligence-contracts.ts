@@ -1,4 +1,3 @@
-/** Search Intelligence request bodies, bounded by the configured policy. */
 import {
   SEARCH_DATASET_KINDS,
   searchDatasetSchema,
@@ -15,7 +14,6 @@ import { policy } from '../config.ts';
 const si = policy.search_intelligence;
 const researchScope = searchDatasetSchema.shape.research_scope;
 
-/** Saved acquisition defaults; omitted fields take the policy defaults. */
 export const preferencesBody = searchPreferencesRequestSchema.extend({
   research_scope: researchScope.default(researchScope.parse(si.default_research_scope)),
   depths: z

@@ -212,6 +212,27 @@ describe('audit schedule management', () => {
     expect(
       (await request(a.userId, 'PATCH', a.projectId, `/${row.id}`, { cadence: null })).status,
     ).toBe(422);
+    expect(
+      (
+        await request(a.userId, 'POST', a.projectId, '', {
+          ...input(a.setId),
+          audit_scope: 'probe',
+        })
+      ).status,
+    ).toBe(422);
+    expect(
+      (await request(a.userId, 'PATCH', a.projectId, `/${row.id}`, { audit_scope: 'probe' }))
+        .status,
+    ).toBe(422);
+    await db
+      .updateTable('audit_schedules')
+      .set({ audit_scope: 'probe' })
+      .where('id', '=', row.id)
+      .execute();
+    expect([
+      (await request(a.userId, 'PATCH', a.projectId, `/${row.id}`, { cadence: 'weekly' })).status,
+      (await request(a.userId, 'PATCH', a.projectId, `/${row.id}`, { enabled: false })).status,
+    ]).toEqual([409, 200]);
     expect((await request(a.userId, 'DELETE', a.projectId, `/${row.id}`)).status).toBe(204);
   });
 });

@@ -1,4 +1,3 @@
-/** A failed provider execution, with its stable error code and whether a retry may succeed. */
 export class ProviderError extends Error {
   readonly code: string;
   readonly retryable: boolean;

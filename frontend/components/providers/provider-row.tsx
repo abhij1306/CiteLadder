@@ -1,11 +1,9 @@
 import { useId, useState } from 'react';
 
-import { Badge } from '@/components/ui/badge';
+import { StatusMark } from '@/components/ui/status-mark';
 import { BrandMark } from '@/components/ui/brand-mark';
 import { Button } from '@/components/ui/button';
 import { Inline, Stack } from '@/components/ui/layout';
-import { panelClasses } from '@/components/ui/panel';
-import { ledgerItemClasses } from '@/components/ui/workspace';
 import { textRole } from '@/components/ui/typography';
 import type { ProviderConnection } from '@citeladder/contracts';
 import {
@@ -19,42 +17,48 @@ import { useProviderConnection } from '@/lib/providers/use-provider-connection';
 import { useWorkspaceCapability } from '@/lib/project/project-context';
 
 import { ProviderConnectionFields } from './provider-connection-fields';
+import { wellClasses } from '@/components/ui/slip';
 
 type ConnectionState = ReturnType<typeof useProviderConnection>;
 
-/** Anthropic's mark ships locally; the other transports resolve by domain. */
 const TRANSPORT_LOGOS: Partial<Record<ProviderGroup['transport'], string>> = {
   anthropic: ENGINE_LOGOS.claude,
 };
 
-/**
- * One badge for the credential. The engines share it, so any verified engine
- * means the key works; a stored key nobody has verified is not "connected".
- */
 function StatusBadge({
   group,
   connection,
-}: Readonly<{ group: ProviderGroup; connection: ProviderConnection | undefined }>) {
+  compact,
+}: Readonly<{
+  group: ProviderGroup;
+  connection: ProviderConnection | undefined;
+  compact: boolean;
+}>) {
   if (group.engines.some((engine) => engine.state === 'connected')) {
     return (
-      <Badge variant="status" value="success">
+      <StatusMark variant="status" value="success">
         Connected
-      </Badge>
+      </StatusMark>
     );
   }
   if (group.engines.some((engine) => engine.state === 'failed')) {
     return (
-      <Badge variant="status" value="danger">
+      <StatusMark variant="status" value="danger">
         Failed
-      </Badge>
+      </StatusMark>
     );
   }
-  return <Badge>{isConfigured(connection) ? 'Not verified' : 'Not connected'}</Badge>;
+  if (isConfigured(connection)) {
+    return (
+      <StatusMark variant="status" value="warning">
+        Not verified
+      </StatusMark>
+    );
+  }
+  return compact ? null : <StatusMark>Not connected</StatusMark>;
 }
 
-/** "ChatGPT API · gpt-6.1-terra" for an API; the bare surface name for a consumer app. */
 function engineSummary(engine: EngineCardModel): string {
-  // An observed surface's model is the vendor's endpoint name, not provenance.
   const model = engine.route?.surface_kind === 'llm' ? engine.route.model : null;
   return model ? `${engine.label} · ${model}` : engine.label;
 }
@@ -86,7 +90,7 @@ function CredentialForm({ id, state }: Readonly<{ id: string; state: ConnectionS
   const saveVerb = configured ? 'Update' : 'Save';
   const saveLabel = saveMutation.isPending ? 'Saving & testing…' : `${saveVerb} ${noun}`;
   return (
-    <Stack gap="compact" id={id} className={panelClasses()}>
+    <Stack gap="compact" id={id} className={wellClasses()}>
       <ProviderConnectionFields state={state} />
       <Inline className="flex-wrap justify-end">
         <Button
@@ -110,22 +114,17 @@ function CredentialForm({ id, state }: Readonly<{ id: string; state: ConnectionS
   );
 }
 
-/**
- * One provider credential as a list row: who it is, what it measures, whether
- * it works, and — on demand — its write-only credential form. A verified save
- * collapses the row; a failed one keeps it open with the reason.
- */
 export function ProviderRow({
   group,
   connections,
   defaultOpen = false,
+  compact = false,
 }: Readonly<{
   group: ProviderGroup;
   connections: ProviderConnection[];
   defaultOpen?: boolean;
+  compact?: boolean;
 }>) {
-  // A credential is offered only to a role that manages credentials; the rest
-  // read whether each provider works.
   const canManage = useWorkspaceCapability('manage_credentials');
   const [open, setOpen] = useState(defaultOpen && canManage);
   const formId = useId();
@@ -133,7 +132,7 @@ export function ProviderRow({
   const closedAction = state.configured ? 'Manage' : 'Connect';
   const toggleLabel = open ? 'Close' : closedAction;
   return (
-    <Stack as="li" gap="compact" className={ledgerItemClasses()}>
+    <Stack as="li" gap="compact">
       <Inline gap="workspace" className="flex-wrap">
         <Inline gap="compact" className="flex-1">
           <BrandMark
@@ -142,16 +141,18 @@ export function ProviderRow({
             websiteUrl={TRANSPORT_DOMAINS[group.transport]}
           />
           <div className="grid min-w-0">
-            <h3 className={textRole('itemTitle')}>{group.label}</h3>
-            <p className={textRole('caption')}>{group.engines.map(engineSummary).join(' · ')}</p>
+            <h3 className={textRole('subheading')}>{group.label}</h3>
+            {compact ? null : (
+              <p className={textRole('caption')}>{group.engines.map(engineSummary).join(' · ')}</p>
+            )}
           </div>
         </Inline>
         <Inline>
-          <StatusBadge group={group} connection={state.connection} />
+          <StatusBadge group={group} connection={state.connection} compact={compact} />
           {canManage ? (
             <Button
               type="button"
-              variant={open ? 'ghost' : 'secondary'}
+              variant={open ? 'quiet' : 'secondary'}
               aria-expanded={open}
               aria-controls={formId}
               aria-label={`${toggleLabel} ${group.label}`}

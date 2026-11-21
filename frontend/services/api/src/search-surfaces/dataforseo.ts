@@ -13,7 +13,6 @@ import { ProviderError } from '../providers/errors.ts';
 
 export const searchPolicy = policy.dataforseo;
 export type SearchEngine = SearchSurface;
-/** An observed engine reached through DataForSEO's LLM scraper, with its scraper product. */
 export type ScraperEngine = keyof typeof searchPolicy.scraper.products;
 export const isScraperEngine = (engine: string): engine is ScraperEngine =>
   surfaceKindOf(engine) === 'llm_scraper' && Object.hasOwn(searchPolicy.scraper.products, engine);
@@ -63,7 +62,6 @@ export function searchSettings(env: SettingSource = process.env) {
   );
   return { timeoutSeconds, recoveryDeadlineHours, accountPauseMinutes };
 }
-/** A consumer-app surface's DataForSEO product and request settings, frozen with each task. */
 export function scraperConfiguration(engine: string) {
   const products: Record<string, string | undefined> = searchPolicy.scraper.products;
   const settings: Record<string, Record<string, unknown> | undefined> =
@@ -122,7 +120,6 @@ function requireAccepted(envelope: Envelope) {
   if (!acceptedStatus(envelope.status_code)) throw envelopeStatusError(envelope.status_code);
 }
 
-/** No internal retries. Paid POST, free retrieval and reconciliation are separate operations. */
 export function createDataforseoClient(
   credential: { secret: string; base_url: string },
   providerSettings: ProviderSettings,
@@ -142,7 +139,6 @@ export function createDataforseoClient(
       ...(externalSignal ? { signal: externalSignal } : {}),
     },
   );
-  /** The shared envelope, read with the task shape search surfaces rely on. */
   async function call(path: string, payload?: unknown, timeout?: number): Promise<Envelope> {
     const parsed = envelopeSchema.safeParse(await transport.call(path, payload, timeout));
     if (!parsed.success) throw new ProviderError('parse_error');

@@ -1,20 +1,11 @@
-/**
- * Model output admitted as-is or rejected whole: nothing is repaired. A
- * rejected output fails the run with its reason.
- */
 import type { ClusterResponse, MatchResponse } from './model.ts';
 
 export type Validated<T> = { ok: true; value: T } | { ok: false; reason: string };
 
-/** An admitted angle: its label and member IDs as the model gave them. */
 export type ValidAngle = { label: string; memberIds: string[] };
 
 const reject = (reason: string): { ok: false; reason: string } => ({ ok: false, reason });
 
-/**
- * Rejects a member ID that was not in the input, a URL in two angles, an
- * empty angle and an empty or over-long label.
- */
 export function validateAngles(
   response: ClusterResponse,
   input: { memberIds: readonly string[]; maxLabelChars: number },
@@ -40,10 +31,6 @@ export function validateAngles(
   };
 }
 
-/**
- * Each angle's picked page ID or null. Rejects an unknown, repeated or missing
- * angle and a page that was not among that angle's candidates.
- */
 export function validateMatches(
   response: MatchResponse,
   input: { angles: readonly { id: string; candidateIds: readonly string[] }[] },

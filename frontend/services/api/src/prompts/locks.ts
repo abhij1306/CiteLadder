@@ -11,12 +11,10 @@ import { advisoryXactLock } from '../db/advisory-lock.ts';
 
 const { project, prompt_set: promptSet } = policy.prompts.locks;
 
-/** Serialize this project's topic-level, prompt and Opportunity writers. */
 export async function acquireProjectLock(db: Database, projectId: string): Promise<void> {
   await advisoryXactLock(db, project, projectId);
 }
 
-/** Serialize one prompt set's inserts, deletes and candidate review. */
 export async function acquirePromptSetLock(db: Database, promptSetId: string): Promise<void> {
   await advisoryXactLock(db, promptSet, promptSetId);
 }

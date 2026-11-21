@@ -3,95 +3,23 @@ import type {
   PerceptionQuote,
   PerceptionResponse,
 } from '@citeladder/contracts/visibility-perception';
-import { MessageSquareQuote } from 'lucide-react';
-import type { ComponentProps } from 'react';
 
-import { AppGrid } from '@/components/ui/app-grid';
-import { Badge } from '@/components/ui/badge';
-import { BusyBar } from '@/components/ui/progress-bar';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { BrandMark } from '@/components/ui/brand-mark';
+import { StatusMark } from '@/components/ui/status-mark';
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
 import { Inline, Stack } from '@/components/ui/layout';
-import { QueryState } from '@/components/ui/query-state';
-import { ReadError } from '@/components/ui/read-error';
-import { Skeleton } from '@/components/ui/skeleton';
-import { StatRow } from '@/components/ui/stat-row';
-import { ClampText, TableCell, TableRow } from '@/components/ui/table';
-import { TAG_FACE } from '@/components/ui/tag';
+import { ClampText } from '@/components/ui/clamp-text';
+import { TableCell, TableRow, YouTag } from '@/components/ui/table';
 import { TextLink } from '@/components/ui/text-link';
 import { textRole } from '@/components/ui/typography';
-import { MissingValue } from '@/components/ui/unavailable-value';
+import { MessageSquareQuote } from '@/lib/icons';
 import { useEngineCatalog } from '@/lib/providers/engines';
-import {
-  coverageLine,
-  formatNet,
-  formatShare,
-  stateCopy,
-  themeLabel,
-} from '@/lib/visibility/perception';
-import { usePerception } from '@/lib/visibility/use-perception';
-import type { SourceFilters } from '@/components/visibility/source-rows';
-import type { SourceQueries } from '@/lib/visibility/use-source-analysis';
+import { coverageLine, stateCopy } from '@/lib/visibility/perception';
+import { SentimentValue } from '@/components/visibility/sentiment-value';
+import { StateBlock } from '@/components/ui/state-block';
+import { SectionContent, TitledSection } from '@/components/ui/section';
 
-/**
- * How answers portray the brand and its competitors. Every figure travels with
- * the coverage it was computed over, and a missing classification is a named
- * state, never a zero.
- */
-export function VisibilityPerception({
-  filters,
-  queries,
-}: Readonly<{ filters: SourceFilters; queries: SourceQueries }>) {
-  const query = usePerception(filters, queries);
-  if (query.error)
-    return (
-      <ReadError
-        error={query.error}
-        fallback="Could not load perception. Check your connection and try again."
-        onRetry={() => void query.refetch()}
-        pending={query.isFetching}
-      />
-    );
-  // The selection above has settled on a measured run (`SelectionGate`), so
-  // no data is this read still on its way, never "no mentions".
-  if (!query.data) return <PerceptionLoading />;
-  return (
-    <div className="relative">
-      <BusyBar active={query.isFetching} label="Updating perception" />
-      <PerceptionView data={query.data} />
-    </div>
-  );
-}
-
-function PerceptionLoading() {
-  return (
-    <Stack gap="workspace" aria-busy>
-      <Skeleton variant="block" />
-      <Skeleton variant="chart" />
-    </Stack>
-  );
-}
-
-export function PerceptionView({ data }: Readonly<{ data: PerceptionResponse }>) {
-  if (data.state !== 'value')
-    return <PerceptionState state={data.state} reason={data.reason} coverage={data.coverage} />;
-  return (
-    <Stack gap="workspace">
-      <Headline data={data} />
-      <EntityTable entities={data.entities} />
-      <ThemeTable themes={data.themes} />
-      {/* The criticism and the sources cited beside it are one question; the
-          two-column table sits beside the quotes where the width allows. */}
-      <AppGrid layout="halves">
-        <NegativeQuotes quotes={data.negative_quotes} />
-        <DriverTable drivers={data.drivers} />
-      </AppGrid>
-    </Stack>
-  );
-}
-
-/** A read with no value to show: pending, unavailable with its reason, or no mentions. */
-function PerceptionState({
+export function PerceptionState({
   state,
   reason,
   coverage,
@@ -101,160 +29,63 @@ function PerceptionState({
   coverage?: PerceptionCoverage;
 }>) {
   const copy = stateCopy(state, reason);
-  // One state box at the shared footprint: the coverage it read is part of
-  // the same sentence, not a caption that grows the box.
+  const counted = coverage?.mentions ? coverageLine(coverage) : null;
   return (
-    <QueryState
+    <StateBlock
       kind="empty"
       headingLevel={3}
       icon={MessageSquareQuote}
       heading={copy.heading}
-      description={
-        coverage?.mentions ? `${copy.description} ${coverageLine(coverage)}.` : copy.description
-      }
+      description={[copy.description, counted].filter(Boolean).join(' ') || undefined}
     />
   );
 }
 
-function CoverageNote({ coverage }: Readonly<{ coverage: PerceptionCoverage }>) {
-  return <p className={textRole('caption', 'text-ink-muted')}>{coverageLine(coverage)}</p>;
-}
-
-function Headline({ data }: Readonly<{ data: PerceptionResponse }>) {
-  const score = data.brand?.score;
-  const recommended = data.recommended;
+export function EntityTable({ entities }: Readonly<{ entities: PerceptionResponse['entities'] }>) {
   return (
-    <Card>
-      <CardContent>
-        <Stack gap="item">
-          <StatRow
-            label="Brand perception"
-            segments={[
-              {
-                key: 'net',
-                label: 'Net sentiment',
-                value: formatNet(score?.net_sentiment ?? null),
-                missingLabel: 'Unavailable',
-                sub: 'Positive minus negative, of classified mentions (−100 to +100).',
-              },
-              {
-                key: 'positive',
-                label: 'Positive',
-                value: formatShare(score?.positive_share ?? null),
-                missingLabel: 'Unavailable',
-                sub: classifiedOf(score?.positive, score?.classified),
-              },
-              {
-                key: 'negative',
-                label: 'Negative',
-                value: formatShare(score?.negative_share ?? null),
-                missingLabel: 'Unavailable',
-                sub: classifiedOf(score?.negative, score?.classified),
-              },
-              {
-                key: 'recommended',
-                label: 'Recommended',
-                value: formatShare(recommended.rate),
-                missingLabel: 'Unavailable',
-                sub:
-                  `${recommended.recommended} of ${recommended.mentioned} answers naming you` +
-                  (recommended.recommended_against
-                    ? `; ${recommended.recommended_against} advised against`
-                    : ''),
-              },
-            ]}
-          />
-          <CoverageNote coverage={data.coverage} />
-        </Stack>
-      </CardContent>
-    </Card>
-  );
-}
-
-/**
- * "3 of 4 classified mentions", or the unavailable mark when the brand has no
- * score: an unknown count is never printed as a zero.
- */
-function classifiedOf(count: number | undefined, classified: number | undefined) {
-  if (count === undefined || classified === undefined) return <MissingValue />;
-  return `${count} of ${classified} classified mentions`;
-}
-
-function EntityTable({ entities }: Readonly<{ entities: PerceptionResponse['entities'] }>) {
-  return (
-    <DataTable
-      title="You and competitors"
-      columns={ENTITY_COLUMNS}
-      footer="Classified mentions of each business in the selected answers."
-    >
-      {entities.map((entity) => (
-        // Your own row is highlighted, as in the Trends brand table.
-        <TableRow key={entity.name} highlight={entity.is_brand}>
-          <TableCell>
-            <Inline as="span">
-              <ClampText>{entity.name}</ClampText>
-              {entity.is_brand ? <span className={textRole('label', TAG_FACE)}>You</span> : null}
-            </Inline>
-          </TableCell>
-          <TableCell numeric>
-            {entity.score.classified} of {entity.coverage.mentions}
-          </TableCell>
-          <TableCell numeric>{entity.score.positive}</TableCell>
-          <TableCell numeric>{entity.score.negative}</TableCell>
-          <TableCell numeric>{formatNet(entity.score.net_sentiment) ?? <MissingValue />}</TableCell>
-        </TableRow>
-      ))}
-    </DataTable>
+    <TitledSection title="You and competitors">
+      <DataTable label="You and competitors" columns={ENTITY_COLUMNS}>
+        {entities.map((entity) => (
+          <TableRow key={entity.name} highlight={entity.is_brand}>
+            <TableCell>
+              <Inline as="span">
+                <BrandMark
+                  name={entity.name}
+                  logoUrl={entity.logo_url}
+                  websiteUrl={entity.website_url}
+                />
+                <ClampText>{entity.name}</ClampText>
+                {entity.is_brand ? <YouTag /> : null}
+              </Inline>
+            </TableCell>
+            <TableCell numeric>
+              {entity.score.classified} of {entity.coverage.mentions}
+            </TableCell>
+            <TableCell numeric>{entity.score.positive}</TableCell>
+            <TableCell numeric>{entity.score.negative}</TableCell>
+            <TableCell numeric>
+              <SentimentValue
+                sentiment={{ ...entity.score, mentions: entity.coverage.mentions }}
+                tooFew="Too few"
+                showCount={false}
+              />
+            </TableCell>
+          </TableRow>
+        ))}
+      </DataTable>
+    </TitledSection>
   );
 }
 
 const ENTITY_COLUMNS: readonly DataTableColumn[] = [
   { key: 'business', label: 'Business' },
-  { key: 'classified', label: 'Classified', width: 'figure', numeric: true },
-  { key: 'positive', label: 'Positive', width: 'figure', numeric: true },
-  { key: 'negative', label: 'Negative', width: 'figure', numeric: true },
-  { key: 'net', label: 'Net sentiment', width: 'figure', numeric: true },
+  { key: 'classified', label: 'Classified', width: 'figure', kind: 'number', priority: 'low' },
+  { key: 'positive', label: 'Positive', width: 'figure', kind: 'number' },
+  { key: 'negative', label: 'Negative', width: 'figure', kind: 'number' },
+  { key: 'net', label: 'Net sentiment', width: 'figure', kind: 'number', priority: 'low' },
 ];
 
-const THEME_COLUMNS: readonly DataTableColumn[] = [
-  { key: 'theme', label: 'Theme', width: 'name' },
-  { key: 'positive', label: 'Positive', width: 'figure', numeric: true },
-  { key: 'negative', label: 'Negative', width: 'figure', numeric: true },
-  { key: 'quote', label: 'Top quote' },
-];
-
-/** A table with nothing to list says so in one line, not a block state. */
-function noneHere(message: string): ComponentProps<typeof DataTable>['state'] {
-  return { kind: 'empty', inline: true, message };
-}
-
-function ThemeTable({ themes }: Readonly<{ themes: PerceptionResponse['themes'] }>) {
-  return (
-    <DataTable
-      title="Themes"
-      columns={THEME_COLUMNS}
-      footer="What answers praised or criticised about you, with a verified quote."
-      state={themes.length ? undefined : noneHere('No themes in these answers.')}
-    >
-      {themes.map((theme) => (
-        <TableRow key={theme.theme}>
-          <TableCell>{themeLabel(theme.theme)}</TableCell>
-          <TableCell numeric>{theme.positive}</TableCell>
-          <TableCell numeric>{theme.negative}</TableCell>
-          <TableCell>
-            {theme.quotes[0] ? (
-              <ClampText tooltip={`“${theme.quotes[0].text}”`}>
-                <QuoteLink quote={theme.quotes[0]} />
-              </ClampText>
-            ) : null}
-          </TableCell>
-        </TableRow>
-      ))}
-    </DataTable>
-  );
-}
-
-function QuoteLink({ quote }: Readonly<{ quote: PerceptionQuote }>) {
+export function QuoteLink({ quote }: Readonly<{ quote: PerceptionQuote }>) {
   return (
     <TextLink href={`/runs/${quote.run_id}?execution=${quote.execution_id}`}>
       “{quote.text}”
@@ -262,19 +93,13 @@ function QuoteLink({ quote }: Readonly<{ quote: PerceptionQuote }>) {
   );
 }
 
-function NegativeQuotes({ quotes }: Readonly<{ quotes: PerceptionQuote[] }>) {
+export function NegativeQuotes({ quotes }: Readonly<{ quotes: PerceptionQuote[] }>) {
   const { label: engineLabel } = useEngineCatalog();
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Criticism in answers</CardTitle>
-        <CardDescription>
-          Negative points about you, quoted exactly as the answer put them.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
+    <TitledSection title="Criticism in answers">
+      <SectionContent>
         {!quotes.length ? (
-          <QueryState
+          <StateBlock
             kind="empty"
             inline
             message="No negative points about you in these answers."
@@ -284,38 +109,17 @@ function NegativeQuotes({ quotes }: Readonly<{ quotes: PerceptionQuote[] }>) {
             {quotes.map((quote) => (
               <Stack as="li" gap="tight" key={`${quote.execution_id}:${quote.text}`}>
                 <QuoteLink quote={quote} />
-                <Inline as="span" className={textRole('caption', 'text-ink-muted flex-wrap')}>
-                  <Badge variant="sentiment" value="negative">
-                    {themeLabel(quote.theme)}
-                  </Badge>
+                <Inline as="span" className={textRole('caption', 'text-ink-2 flex-wrap')}>
+                  <StatusMark variant="sentiment" value="negative">
+                    {quote.theme}
+                  </StatusMark>
                   {engineLabel(quote.logical_engine)} · {quote.prompt}
                 </Inline>
               </Stack>
             ))}
           </Stack>
         )}
-      </CardContent>
-    </Card>
-  );
-}
-
-function DriverTable({ drivers }: Readonly<{ drivers: PerceptionResponse['drivers'] }>) {
-  return (
-    <DataTable
-      title="Sources cited alongside criticism"
-      columns={[
-        { key: 'domain', label: 'Domain' },
-        { key: 'answers', label: 'Answers', width: 'figure', numeric: true },
-      ]}
-      footer="Domains cited in answers that criticised you. Cited alongside, not shown to be the cause."
-      state={drivers.length ? undefined : noneHere('No sources cited alongside criticism.')}
-    >
-      {drivers.map((driver) => (
-        <TableRow key={driver.domain}>
-          <TableCell>{driver.domain}</TableCell>
-          <TableCell numeric>{driver.answers}</TableCell>
-        </TableRow>
-      ))}
-    </DataTable>
+      </SectionContent>
+    </TitledSection>
   );
 }

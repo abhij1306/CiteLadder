@@ -19,6 +19,7 @@ import {
   type ResearchEvidence,
   type ResearchTransport,
 } from './research-evidence.ts';
+import { researchThemes, themeCandidates } from './research-themes.ts';
 import type { ResolvedSite } from './site-resolution.ts';
 import { fetchWebsite, websiteIdentity, type WebsiteFetcher } from '../safe-fetch.ts';
 import type { Meter } from '../models/metering.ts';
@@ -26,7 +27,6 @@ import type { Meter } from '../models/metering.ts';
 const cfg = policy.discovery.constants;
 const logger = getLogger('app.projects.research');
 
-/** A failure's class and code for logs; no provider body, credential or customer text. */
 export function failureFields(error: unknown) {
   if (error instanceof ModelError)
     return { error_class: 'ModelError', reason: error.code, status: error.status };
@@ -35,21 +35,15 @@ export function failureFields(error: unknown) {
   return { error_class: error instanceof Error ? error.name : typeof error };
 }
 
-/** A failed research call; the class, code and duration make it diagnosable. */
 function logModelFailure(phase: string, error: unknown, started: number) {
   logger.warning('brand_discovery.model_call_failed', {
     phase,
-    // Anything else a model call throws is its answer failing validation.
     reason: 'unusable_answer',
     ...failureFields(error),
     elapsed_ms: Math.round(performance.now() - started),
   });
 }
 
-/**
- * Research that cannot produce a reviewable result. The worker retries it within
- * the task's attempts unless retrying cannot help, then settles it as failed.
- */
 export class ResearchFailure extends Error {
   readonly code: string;
   readonly retryable: boolean;
@@ -61,7 +55,6 @@ export class ResearchFailure extends Error {
   }
 }
 
-/** A phase's own deadline on the timer clock, or the caller's signal if it fires first. */
 function phaseDeadline(milliseconds: number, signal?: AbortSignal) {
   const controller = new AbortController();
   const timer = setTimeout(
@@ -87,6 +80,7 @@ export const identityEnvelope = z.object({
     })
     .default({ category: '', buyer: '', core_job: '', delivery_model: '', market_context: '' }),
   field_evidence_refs: z.record(z.string(), z.array(z.string())).default({}),
+  themes: themeCandidates,
 });
 type Identity = z.output<typeof identityEnvelope>;
 export function validateIdentity(identity: Identity, items: readonly ResearchEvidence[]): Identity {
@@ -136,14 +130,8 @@ export type ResearchDependencies = {
   onCompetitors?: () => Promise<void>;
   checkCancelled?: () => void;
   signal?: AbortSignal;
-  /** `performance.now()` at which the run's whole budget ends; defaults to one interactive budget from now. */
   budgetEndsAt?: number;
 };
-/**
- * One identity request under its own deadline. Without a configured model the
- * review degrades; a request that fails or times out is a `ResearchFailure`,
- * never a quiet review without competitors.
- */
 async function generateIdentity(
   gateway: ModelGateway | null,
   input: DiscoveryInput,
@@ -214,7 +202,6 @@ async function suggestCompetitors({
   evidence: readonly ResearchEvidence[];
   settings: ReturnType<typeof discoverySettings>;
   modelCalls: Record<string, unknown>[];
-  /** The whole phase, every attempt included, shares what is left of the budget. */
   timeoutMs: number;
   signal?: AbortSignal;
 }) {
@@ -224,7 +211,6 @@ async function suggestCompetitors({
   });
   const deadline = phaseDeadline(timeoutMs, signal);
   try {
-    // A passed phase deadline leaves no time for another attempt.
     for (
       let attempt = 0;
       attempt < settings.competitor_model_maximum_attempts && !deadline.signal.aborted;
@@ -303,10 +289,6 @@ function researchWarnings(
     warnings.add('conflicting_evidence');
   return [...warnings];
 }
-/**
- * Metered research gateways. Phase deadlines bound each call, so the gateway's own
- * timeout is the whole budget; the identity request asks only for the output it needs.
- */
 function researchGateways(
   dependencies: ResearchDependencies,
   settings: ReturnType<typeof discoverySettings>,
@@ -345,7 +327,6 @@ export async function researchBrand(
 ) {
   dependencies.checkCancelled?.();
   const settings = discoverySettings(dependencies.env);
-  // Identity and competitors share one budget, so both fit inside the interactive deadline.
   const budgetEndsAt =
     dependencies.budgetEndsAt ?? performance.now() + settings.interactive_timeout_seconds * 1000;
   const remaining = () => Math.max(0, budgetEndsAt - performance.now());
@@ -454,7 +435,6 @@ export async function researchBrand(
     pagesRead: firstParty.pages.length,
     snapshot: {
       review_state: 'unreviewed',
-      // The identity model's own verdict; null when no model judged the evidence.
       identity_status: identity?.status ?? null,
       profile,
       competitive_signature: identity?.signature ?? {},
@@ -463,6 +443,7 @@ export async function researchBrand(
       evidence_manifest: manifest,
       model_calls: modelCalls,
       field_evidence_refs: identity?.field_evidence_refs ?? {},
+      themes: researchThemes(identity, policy.perception.project_themes),
       metrics: {
         keenable_calls_used: budget.used,
         first_party_capture_version: policy.brand_evidence.version,

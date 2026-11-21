@@ -5,31 +5,18 @@ import { visibilityQueries } from '@/lib/api/visibility-queries';
 import { useEngineCatalog } from '@/lib/providers/engines';
 import type { ActiveProjectScope } from '@/lib/project/active-project-scope';
 
-/**
- * The observed-surface rates, scoped to the same resolved run selection the
- * rest of the tab reads.
- *
- * Its own hook rather than more lines inside `useVisibilityQueries`: it is the
- * only read here that is gated on WHICH surface is selected, and folding that
- * condition into the shared body put a filter-specific branch in front of
- * every other query.
- *
- * Requested only when the filter names an observed surface. The five rates are
- * properties of that surface, and asking an answer engine for a trigger rate
- * is a category error rather than a query with an empty result.
- */
 export function useSurfaceRates({
   requestScope,
   engine,
   cohort,
-  onTrendsTab,
+  onInsights,
   activeRunId,
   selectedRunIds,
 }: {
   requestScope: Pick<ActiveProjectScope, 'workspaceId' | 'projectId'>;
   engine: string | undefined;
   cohort: string;
-  onTrendsTab: boolean;
+  onInsights: boolean;
   activeRunId: string | null;
   selectedRunIds: string[] | undefined;
 }) {
@@ -44,7 +31,7 @@ export function useSurfaceRates({
   const surfaceRatesQuery = useQuery({
     ...visibilityQueries.surfaceRates(requestScope, params),
     enabled:
-      onTrendsTab && surfaceEngine !== null && Boolean(activeRunId) && selectedRunIds?.length !== 0,
+      onInsights && surfaceEngine !== null && Boolean(activeRunId) && selectedRunIds?.length !== 0,
     placeholderData: (data, query) =>
       retainPreviousDataForScope(requestScope.projectId, data, query),
   });

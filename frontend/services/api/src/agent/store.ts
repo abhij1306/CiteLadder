@@ -6,6 +6,7 @@ import { subjectXactLock } from '../db/advisory-lock.ts';
 import type { Database } from '../db/database.ts';
 import { notFound } from '../errors.ts';
 import { jsonObject } from '../db/json.ts';
+import { acceptForAgent } from '../opportunities/action-decisions.ts';
 import { authorize } from './access.ts';
 import {
   agentPolicy,
@@ -32,6 +33,7 @@ import { appendMessage, appendRecoveryReply, getChat } from './messages.ts';
 import { requestedPageUrl } from './page-url.ts';
 import { fetchesPage } from './skills.ts';
 import type { WorkflowCatalog } from './workflows.ts';
+import type { AgentAttachment } from '@citeladder/contracts/agent';
 
 export type AdmittedModel = Pick<Run, 'requested_model'>;
 /** Admission owns the model configuration check and abuse capacity, in this transaction.
@@ -48,11 +50,11 @@ export type TurnInput = {
   message: string;
   key: string;
   skillId?: string | null;
-  /** A defined workflow pins its skill and format; follow-ups inherit it. */
   workflowId?: string;
   actionId?: string;
   refs?: Record<string, Json>;
   mentionIds?: string[];
+  attachments?: AgentAttachment[];
 };
 
 async function requireNoActiveRun(db: Database, chat: Chat) {
@@ -65,7 +67,6 @@ async function requireNoActiveRun(db: Database, chat: Chat) {
     .executeTakeFirst();
   if (run) throw new AgentError('agent_run_active');
 }
-/** No turn is queued or running, and no page is being read for the chat's first turn. */
 export async function requireIdle(db: Database, chat: Chat) {
   await requireNoActiveRun(db, chat);
   if (await pageFetchActive(db, chat.workspace_id, chat.id))
@@ -81,6 +82,7 @@ function requestIdentity(scope: Scope, input: TurnInput) {
       skill: input.skillId === undefined ? { mode: 'inherit' } : input.skillId,
       workflow: input.workflowId ?? null,
       mentions: input.mentionIds ?? [],
+      attachments: input.attachments ?? [],
     };
   return {
     op: 'create_chat',
@@ -91,6 +93,7 @@ function requestIdentity(scope: Scope, input: TurnInput) {
     action: input.actionId ?? null,
     context: input.refs ?? {},
     mentions: input.mentionIds ?? [],
+    attachments: input.attachments ?? [],
   };
 }
 async function replayedRun(db: Database, scope: Scope, key: string, hash: string) {
@@ -103,12 +106,10 @@ async function replayedRun(db: Database, scope: Scope, key: string, hash: string
   if (!replay) return undefined;
   if (replay.project_id !== scope.projectId) throw notFound('Run');
   if (replay.user_id !== scope.userId) throw new AgentError('agent_idempotency_conflict');
-  // Every runtime version shares one request fingerprint.
   if (replay.request_fingerprint !== hash) throw new AgentError('agent_idempotency_conflict');
   return replay;
 }
 type Workflow = NonNullable<ReturnType<WorkflowCatalog['byId']['get']>>;
-/** The Actions a message @-mentioned, as resolved when it was sent. */
 function mentionsOf(manifest: Manifest) {
   return manifest.mentions.map((action) => ({
     kind: 'action',
@@ -145,31 +146,25 @@ export class AgentStore {
     this.db = db;
     this.dependencies = dependencies;
   }
-  /** The workflow a request names; a missing one is refused. */
   private workflowFor(workflowId: string | undefined) {
     if (!workflowId) return undefined;
     const chosen = this.dependencies.catalog.workflows?.byId.get(workflowId);
     if (!chosen) throw new AgentError('agent_workflow_unavailable');
     return chosen;
   }
-  /** Whether the workflow's skill writes a fetched page, so its chat starts with a page fetch. */
   private startsWithFetch(workflow: Workflow | undefined) {
     const skill = workflow ? this.dependencies.catalog.skills.get(workflow.skill_id) : undefined;
     return skill !== undefined && fetchesPage(skill);
   }
-  /** The request as admitted: a bounded message and key, its workflow's skill, its fingerprint. */
   private admitted(scope: Scope, raw: TurnInput, chosen: Workflow | undefined) {
     const input = {
       ...raw,
       message: messageSchema.parse(raw.message),
-      // A workflow is an explicit choice of its skill.
       ...(chosen ? { skillId: chosen.skill_id } : {}),
     };
     z.string().trim().min(1).max(agentPolicy.idempotency_key_max_chars).parse(input.key);
-    // Canonical JSON binds nested refs as well as the visible message.
     return { input, hash: fingerprint(requestIdentity(scope, input)) };
   }
-  /** One workspace's admissions run one at a time: identical races share the winner. */
   private async lockWorkspace(trx: Database, scope: Scope) {
     await authorize(trx, scope);
     // Serialize workspace keys before chat locks.
@@ -201,7 +196,6 @@ export class AgentStore {
     } catch (error) {
       return Promise.reject(error);
     }
-    // A page workflow's chat starts with its page fetch, never with a turn.
     if (this.startsWithFetch(chosen))
       return Promise.reject(new AgentError('agent_workflow_unavailable'));
     const { input, hash } = this.admitted(scope, raw, chosen);
@@ -240,6 +234,7 @@ export class AgentStore {
         skillId: input.skillId,
         skillSource: userSkillSource(input.skillId),
         mentions: mentionsOf(manifest),
+        attachments: input.attachments ?? [],
       });
       return this.queueTurn(trx, scope, {
         chat,
@@ -254,7 +249,6 @@ export class AgentStore {
       });
     });
   }
-  /** Inserts one queued turn and counts it against the chat. */
   private async queueTurn(
     trx: Database,
     scope: Scope,
@@ -332,7 +326,6 @@ export class AgentStore {
       .execute();
     return run;
   }
-  /** The page a page chat fetches: the request's page, else its Action's, else one its message names. */
   private async requestedPage(trx: Database, scope: Scope, input: TurnInput) {
     const named = input.refs?.target_url;
     if (typeof named === 'string' && named.trim()) return named;
@@ -354,7 +347,6 @@ export class AgentStore {
       .executeTakeFirstOrThrow();
     return requestedPageUrl(input.message, project.website_url);
   }
-  /** A retried page-chat request: the chat it created, and its turn once the fetch queued one. */
   private async replayedPageChat(trx: Database, scope: Scope, key: string, hash: string) {
     const task = await pageFetchByRequest(trx, scope.workspaceId, key);
     if (!task) return undefined;
@@ -397,7 +389,6 @@ export class AgentStore {
       });
       const { requested_model } = await this.dependencies.admission(trx, scope);
       const refs = { ...input.refs, target_url: page.url };
-      // Every reference resolves now, so a page is never fetched for a chat whose context cannot load.
       const manifest = await buildManifest(
         trx,
         scope,
@@ -417,6 +408,7 @@ export class AgentStore {
         skillId: chosen.skill_id,
         skillSource: userSkillSource(chosen.skill_id),
         mentions: mentionsOf(manifest),
+        attachments: input.attachments ?? [],
       });
       await enqueuePageFetch(trx, scope, {
         chat_id: chat.id,
@@ -455,7 +447,6 @@ export class AgentStore {
     const workflow = this.workflowFor(payload.workflow_id);
     const chat = await getChat(trx, scope, payload.chat_id, true);
     if (chat.archived_at) throw notFound('Chat');
-    // The fetch itself is still running, so only a turn makes the chat busy here.
     await requireNoActiveRun(trx, chat);
     const message = await trx
       .selectFrom('agent_messages')
@@ -512,7 +503,9 @@ export class AgentStore {
         .execute();
     });
   }
-  private createChat(db: Database, scope: Scope, input: TurnInput) {
+  private async createChat(db: Database, scope: Scope, input: TurnInput) {
+    // Work with Agent on a New Action accepts it (owner 2026-11-16).
+    if (input.actionId) await acceptForAgent(db, scope, input.actionId, scope.userId);
     const now = new Date();
     return db
       .insertInto('agent_chats')
@@ -534,7 +527,6 @@ export class AgentStore {
       .returningAll()
       .executeTakeFirstOrThrow();
   }
-  /** A follow-up keeps its chat's workflow while it still runs that workflow's skill. */
   private async inheritedWorkflow(db: Database, chat: Chat, skillId: string | null) {
     const latest = await db
       .selectFrom('agent_runs')
@@ -551,7 +543,6 @@ export class AgentStore {
   }
   private turnSkill(chat: Chat, explicit: string | null | undefined, actionSkill: string | null) {
     const catalog = this.dependencies.catalog.skills;
-    // A chat holds documents of several kinds, so any skill may run in it.
     const id =
       explicit ??
       (explicit === null ? null : chat.pinned_skill_id) ??

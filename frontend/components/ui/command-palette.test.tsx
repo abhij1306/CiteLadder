@@ -44,7 +44,8 @@ vi.mock('@/lib/project/project-context', () => ({
   useProjectContext: () => projectContext,
 }));
 
-import { CommandPalette, CommandPaletteTrigger } from './command-palette';
+import { CommandPalette } from './command-palette';
+import { CommandPaletteHost, CommandPaletteTrigger } from './command-palette-launcher';
 
 function LocationDisplay() {
   const { pathname, search } = useLocation();
@@ -76,12 +77,11 @@ function Palette() {
   return (
     <>
       <CommandPaletteTrigger />
-      <CommandPalette destinations={resolveCommandGroups} />
+      <CommandPaletteHost destinations={resolveCommandGroups} />
     </>
   );
 }
 
-/** Opens via the sidebar trigger and returns the user-event instance. */
 async function open() {
   const user = userEvent.setup();
   renderPalette(<Palette />);
@@ -146,10 +146,40 @@ describe('CommandPalette', () => {
     await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
   });
 
+  it('loads on the first Ctrl+K with focus in its field, and returns focus on close', async () => {
+    const user = userEvent.setup();
+    renderPalette(
+      <>
+        <button type="button">Before</button>
+        <Palette />
+      </>,
+    );
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Before' }));
+
+    await user.keyboard('{Control>}k{/Control}');
+    const dialog = await screen.findByRole('dialog', { name: 'Command palette' });
+    const field = within(dialog).getByRole('combobox', { name: 'Search commands' });
+    await waitFor(() => expect(field).toHaveFocus());
+    await user.keyboard('zzzzz');
+    expect(screen.getByRole('status')).toHaveTextContent('No matches for “zzzzz”');
+
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(screen.getByRole('button', { name: 'Before' })).toHaveFocus();
+  });
+
+  it('loads from the search button and returns focus to it', async () => {
+    const user = await open();
+    expect(screen.getByRole('dialog', { name: 'Command palette' })).toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(screen.getByRole('button', { name: /search or jump to/i })).toHaveFocus();
+  });
+
   it('lists every nav destination and every project', async () => {
     await open();
-    // Layer destinations, plus both projects.
-    expect(screen.getByRole('option', { name: /demand/i })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /keyword research/i })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: /site/i })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: /acme/i })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: /orbit/i })).toBeInTheDocument();
@@ -184,8 +214,25 @@ describe('CommandPalette', () => {
 
   it('navigates to the highlighted route on Enter', async () => {
     const user = await open();
-    await user.keyboard('demand{Enter}');
-    expect(screen.getByTestId('location')).toHaveTextContent('/demand?project=p1');
+    await user.keyboard('keyword research{Enter}');
+    expect(screen.getByTestId('location')).toHaveTextContent('/search-intelligence?project=p1');
+  });
+
+  it('deep-links the palette-only tabs and pages under their sidebar group', async () => {
+    const user = await open();
+    const visits = [
+      ['Fact-checking', 'Brand', '/perception?tab=fact-checking&project=p1'],
+      ['Query fanouts', 'Tracking', '/visibility?tab=query-fanout&project=p1'],
+      ['Prompt builder', 'Tracking', '/prompts/build?project=p1'],
+    ] as const;
+    for (const [label, group, href] of visits) {
+      if (!screen.queryByRole('listbox')) {
+        await user.click(screen.getByRole('button', { name: /search or jump to/i }));
+      }
+      const section = await screen.findByRole('group', { name: group });
+      await user.click(within(section).getByRole('option', { name: label }));
+      expect(screen.getByTestId('location')).toHaveTextContent(href);
+    }
   });
 
   it('keeps workspace commands out of project scope', async () => {
@@ -211,19 +258,21 @@ describe('CommandPalette', () => {
     await user.keyboard('{ArrowDown}');
     expect(screen.getAllByRole('option')[1]).toHaveAttribute('aria-selected', 'true');
 
-    // Wraps backwards past the start to the last result.
     await user.keyboard('{ArrowUp}{ArrowUp}');
     const after = screen.getAllByRole('option');
     expect(after[after.length - 1]).toHaveAttribute('aria-selected', 'true');
   });
 
-  it('reports no matches instead of an empty list', async () => {
+  it('reports and announces no matches instead of an empty list', async () => {
     const user = await open();
+    await user.keyboard('ce');
+    const found = screen.getAllByRole('option').length;
+    expect(screen.getByRole('status')).toHaveTextContent(`${found} result`);
     await user.keyboard('zzzzz');
     expect(screen.queryAllByRole('option')).toHaveLength(0);
     expect(screen.getByRole('combobox')).toHaveAttribute('aria-expanded', 'false');
-    // The message is not an option, so it sits outside the listbox.
-    expect(screen.getByText(/no matches for/i)).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('No matches for “cezzzzz”');
+    expect(screen.getAllByText('No matches for “cezzzzz”')).toHaveLength(2);
     expect(within(screen.getByRole('listbox')).queryByText(/no matches for/i)).toBeNull();
   });
 
@@ -235,9 +284,6 @@ describe('CommandPalette', () => {
   });
 
   it('returns focus to where the caller was before ⌘K', async () => {
-    // Radix restores focus to its own Trigger; the shortcut path has none, so
-    // without an explicit hand-back focus falls to <body> and the caller
-    // loses their place in the page.
     const user = userEvent.setup();
     renderPalette(
       <>
@@ -254,6 +300,21 @@ describe('CommandPalette', () => {
 
     await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
     await waitFor(() => expect(document.activeElement).toBe(outside));
+  });
+
+  it('returns focus to the search trigger when opened with nothing focused', async () => {
+    const user = userEvent.setup();
+    renderPalette(<Palette />);
+    expect(document.activeElement).toBe(document.body);
+
+    await user.keyboard('{Control>}k{/Control}');
+    await screen.findByRole('listbox');
+    await user.keyboard('{Escape}');
+
+    await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /search or jump to/i })).toHaveFocus(),
+    );
   });
 
   it('gives the dialog an accessible name without a visible heading', async () => {

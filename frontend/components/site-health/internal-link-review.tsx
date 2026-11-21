@@ -2,15 +2,20 @@ import type { InternalLink } from '@citeladder/contracts/site-health';
 import { useState } from 'react';
 
 import { ProjectLink } from '@/components/ui/project-link';
+import { ActionButton } from '@/components/ui/actions';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+
+import { ClampText } from '@/components/ui/clamp-text';
 import { CopyButton } from '@/components/ui/copy-button';
 import { Drawer } from '@/components/ui/drawer';
+import { Icon } from '@/components/ui/icon';
 import { Inline, Stack } from '@/components/ui/layout';
 import { TextLink } from '@/components/ui/text-link';
 import { EditorialSectionHeader } from '@/components/ui/workspace';
 import { MarkActionImplemented } from '@/components/agent/action-declaration';
-import { formatCount } from '@/lib/format';
+import { FileSearch } from '@/lib/icons';
+import { formatCount, readableUrl } from '@/lib/format';
 import { useWorkspaceCapability } from '@/lib/project/project-context';
 
 const escapeHtml = (value: string) =>
@@ -23,11 +28,11 @@ function PageSummary({
   return (
     <Stack as="section" className="justify-items-start">
       <EditorialSectionHeader title={heading} />
-      <TextLink variant="external" text="body" className="break-all" href={page.url}>
-        {page.title || page.url}
+      <TextLink variant="external" text="body" className="block max-w-full min-w-0" href={page.url}>
+        <ClampText tooltip={page.url}>{page.title || readableUrl(page.url)}</ClampText>
       </TextLink>
       {page.description || page.excerpt ? (
-        <p className="type-body">{page.description || page.excerpt}</p>
+        <p className="type-body text-ink-2">{page.description || page.excerpt}</p>
       ) : null}
     </Stack>
   );
@@ -55,7 +60,6 @@ export function InternalLinkReview({
         if (!open) onClose();
       }}
       title="Review internal link"
-      description="Add a contextual link from the source page to the destination."
     >
       {link ? (
         <Stack gap="section">
@@ -69,25 +73,23 @@ export function InternalLinkReview({
                 {link.placement.text.slice(link.placement.anchor_start + link.anchor.length)}
               </p>
             ) : (
-              <p className="type-caption">
-                This saved suggestion has no captured placement. Run a new analysis to check it.
-              </p>
+              <p className="type-caption">No captured placement.</p>
             )}
           </Stack>
           <PageSummary heading="Add a link to" page={link.target} />
           <Stack as="section">
-            <EditorialSectionHeader title="Suggested anchor text" />
-            <p className="type-body text-ink">{link.anchor}</p>
+            {link.placement ? null : (
+              <>
+                <EditorialSectionHeader title="Suggested anchor text" />
+                <p className="type-body text-ink">{link.anchor}</p>
+              </>
+            )}
             <p className="type-caption">
               {link.target.contextual_inbound === null
-                ? 'Existing contextual links to the destination were not measured.'
-                : `The destination currently has ${formatCount(link.target.contextual_inbound)} contextual links from other pages.`}{' '}
-              {link.placement
-                ? 'Link the highlighted phrase in the captured passage. Check the current page before editing.'
-                : 'Verify the source text before using this historical suggestion.'}
+                ? 'Contextual inbound links not counted'
+                : `${formatCount(link.target.contextual_inbound)} contextual inbound links`}
             </p>
           </Stack>
-          {/* One primary: the ready-to-paste link. Its parts are secondary. */}
           <Inline className="flex-wrap">
             <CopyButton
               variant="primary"
@@ -103,18 +105,15 @@ export function InternalLinkReview({
             </CopyButton>
             <Button asChild variant="secondary">
               <ProjectLink href={`/site/crawls/${crawlId}/pages/${link.source.site_url_id}`}>
+                <Icon icon={FileSearch} />
                 View source page evidence
               </ProjectLink>
             </Button>
             {link.action_id ? (
-              <Button asChild variant="secondary">
-                <ProjectLink href={`/agent/actions/${link.action_id}`}>Open Action</ProjectLink>
-              </Button>
+              <ActionButton action="openAction" href={`/actions/${link.action_id}`} />
             ) : null}
           </Inline>
-          <p className="type-caption">
-            Make the edit in your site editor. Copying does not mark it implemented.
-          </p>
+          <p className="type-caption">Copying does not mark it implemented.</p>
           <LinkDeclaration
             key={`${link.source.analysis_id}:${links.map((item) => item.id).join(',')}`}
             link={link}
@@ -152,10 +151,7 @@ function LinkDeclaration({
   const selectedIds = new Set(selected);
   return (
     <Stack as="section">
-      <EditorialSectionHeader
-        title="Which links are live on this page?"
-        description="Select every link you have added before declaring this page Action."
-      />
+      <EditorialSectionHeader title="Which links are live on this page?" />
       {related.map((item) => (
         <Checkbox
           key={item.id}
@@ -174,7 +170,6 @@ function LinkDeclaration({
         revision={null}
         recommendationIds={selected}
         disabled={!selected.length}
-        selectionDescription="Declare that the selected internal links are live on this source page."
       />
     </Stack>
   );

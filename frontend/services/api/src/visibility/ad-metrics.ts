@@ -1,8 +1,3 @@
-/**
- * Deterministic ads metrics over a selection's answers: applicability,
- * presence rate, advertisers, creatives, prompts and ads beside organic
- * mentions. Pure; the reader supplies persisted answers and observations.
- */
 import type {
   AdApplicability,
   AdOwnership,
@@ -25,14 +20,12 @@ export type AdObservation = {
 
 export type AdAnswer = {
   auditId: string;
-  /** Wire UTC text; sorts chronologically. */
   observedAt: string;
   engine: string;
   prompt: string;
   topic: string;
   adsParserVersion: string | null;
   brandMentioned: boolean;
-  /** The answer's ads at its own parser version. */
   ads: readonly AdObservation[];
 };
 
@@ -50,7 +43,6 @@ function adApplicability(
   return answer.adsParserVersion ? 'applicable' : 'unavailable';
 }
 
-/** Applicable if any answer is, else unavailable if any is, else not applicable. */
 function foldedApplicability(answers: readonly AdAnswer[], adsEngine: string): AdApplicability {
   const states = new Set(answers.map((answer) => adApplicability(answer, adsEngine)));
   if (states.has('applicable')) return 'applicable';
@@ -88,7 +80,6 @@ function sightings(answers: readonly AdAnswer[]): Sighting[] {
   );
 }
 
-/** Appearance counts and the first/last sighting of one group; identity from the latest. */
 function rollup(group: NonEmpty<Sighting>) {
   let first = group[0],
     latest = group[0];
@@ -105,7 +96,6 @@ function rollup(group: NonEmpty<Sighting>) {
   };
 }
 
-/** The most frequent name in a group, ties broken alphabetically. */
 function commonName(group: readonly Sighting[]): string {
   const counts = new Map<string, number>();
   for (const row of group)
@@ -158,7 +148,6 @@ function creatives(seen: readonly Sighting[]): AdCreative[] {
     .sort(creativeOrder);
 }
 
-/** Most appearances first, then most recent, then a stable key. */
 export function creativeOrder(
   a: Pick<AdCreative, 'appearances' | 'last_seen_at' | 'key'>,
   b: Pick<AdCreative, 'appearances' | 'last_seen_at' | 'key'>,

@@ -1,14 +1,3 @@
-/**
- * The `content_gaps` refresh family's source and hits (content optimization
- * section 2). The source is the latest succeeded content-angle run; a failed
- * run is never read, so after one the earlier succeeded run keeps its gaps. A
- * run whose newest audit is older than `max_source_age_days` is no longer a
- * source, so its gaps clear with a limitation. Reads only persisted rows,
- * scoped to the workspace and project; nothing here calls a model.
- *
- * A new-page gap targets its lineage's planned-page key, fixed when the
- * lineage was created, so a later label never moves the Action.
- */
 import {
   detectContentGaps,
   type ContentGapAngle,
@@ -27,12 +16,10 @@ const p = policy.content_optimization;
 const CONTENT_GAPS_NOT_COMPUTED = 'Content gaps not computed yet.';
 const CONTENT_GAPS_OUT_OF_DATE = `Content-gap evidence is out of date: its newest audit is more than ${p.max_source_age_days} days old.`;
 
-/** The run a refresh reads content gaps from, or none with the reason as a limitation. */
 export type ContentGapSource =
   | { run: ContentGapRun; limitation: null }
   | { run: null; limitation: string };
 
-/** The latest succeeded run, when its window ends within `max_source_age_days` of `at`. */
 export async function contentGapSource(
   db: Database,
   scope: Scope,
@@ -116,11 +103,6 @@ async function angleMembers(db: Database, scope: Scope, angleIds: string[]) {
   return groupBy(rows, (row) => row.angle_id);
 }
 
-/**
- * The text of each prompt as the project's library holds it now, by id. A
- * prompt the library no longer has is absent, and its angle records it with
- * no text.
- */
 async function promptTexts(db: Database, scope: Scope, ids: string[]) {
   if (!ids.length) return new Map<string, string>();
   const rows = await db
@@ -135,7 +117,6 @@ async function promptTexts(db: Database, scope: Scope, ids: string[]) {
   return new Map(rows.map((row) => [row.id, row.text]));
 }
 
-/** The Actions on these planned-page keys, by key. */
 async function plannedActions(db: Database, scope: Scope, keys: string[]) {
   if (!keys.length) return new Map<string, string>();
   const rows = await db
@@ -150,7 +131,6 @@ async function plannedActions(db: Database, scope: Scope, keys: string[]) {
 
 type AngleRow = Awaited<ReturnType<typeof runAngles>>[number];
 
-/** Content-gap hits for one refresh, with why there are none when there is no source. */
 export async function contentGapHits(
   db: Database,
   scope: Scope,
@@ -164,7 +144,6 @@ export async function contentGapHits(
     rows.map((row) => row.id),
   );
   const texts = await promptTexts(db, scope, [...new Set(rows.flatMap((row) => row.prompt_ids))]);
-  // A page that later matches a lineage continues the planned page its new-page gap opened.
   const continued = await plannedActions(db, scope, [
     ...new Set(
       rows.flatMap((row) =>
@@ -185,7 +164,6 @@ export async function contentGapHits(
         lineage_id: row.lineage_id,
         label: row.label,
         topic_id: row.topic_id,
-        // Stored in text order by the run (`aggregateAngle`).
         prompts: row.prompt_ids.map((id) => ({ id, text: texts.get(id) ?? null })),
         engines: row.engines,
         citation_count: row.citation_count,
@@ -216,7 +194,6 @@ export async function contentGapHits(
   };
 }
 
-/** The angle's match; null when its matched page is no longer tracked. */
 function angleMatch(row: AngleRow): ContentGapAngle['match'] | null {
   if (row.method === 'model_pick') {
     if (row.site_url_id === null || row.normalized_url === null) return null;

@@ -5,14 +5,6 @@ import { parseSseFrame, splitSseFrames, type RawSseFrame } from '@/lib/sse/frame
 type SseEventStreamOptions = {
   enabled: boolean;
   url: string | null;
-  /**
-   * The workspace this stream belongs to.
-   *
-   * Read from the caller rather than from the module-level selection, and part
-   * of the effect's identity: a reconnect therefore resends the workspace the
-   * stream STARTED under, and switching workspace tears the stream down
-   * instead of silently resuming someone else's run under the new one.
-   */
   workspaceId: string | null;
   invalidateDebounceMs: number;
   reconnectBaseMs: number;
@@ -22,11 +14,6 @@ type SseEventStreamOptions = {
   streamName: string;
 };
 
-/**
- * Refusals a reconnect cannot change: the session ended (401), access to the
- * workspace or record ended (403), or the run or crawl is gone (404). Anything
- * else (a dropped connection, 408, 429, 5xx) is worth asking again.
- */
 const REFUSALS: ReadonlySet<number> = new Set([401, 403, 404]);
 
 type StreamOutcome =
@@ -68,12 +55,6 @@ export async function readSseResponse(
   }
 }
 
-/**
- * Shared credentialed SSE transport for polling-backed screens. It handles
- * chunk framing, workspace credentials, resumption, reconnects, aborting, and
- * trailing debounce; callers retain their event classification and invalidation
- * targets so a stream remains an accelerator rather than a data source.
- */
 export function useSseEventStream({
   enabled,
   url,
@@ -90,7 +71,6 @@ export function useSseEventStream({
 
     const controller = new AbortController();
     let cancelled = false;
-    // Written by the async reader and reconnect loop, so held in one effect-local object.
     const stream: {
       invalidateTimer: ReturnType<typeof setTimeout> | null;
       reconnectTimer: ReturnType<typeof setTimeout> | null;
@@ -135,9 +115,6 @@ export function useSseEventStream({
         console.error(`[${streamName}] event stream failed`, { attempt, error });
       }
       if (cancelled || controller.signal.aborted) return;
-      // Asking again cannot change a refusal. The screen's polled read stays
-      // authoritative and reports why (an ended session reaches the session
-      // guard from there).
       if (outcome.kind === 'refused') return;
 
       const hitDurationCap = outcome.kind === 'read' && outcome.frames > 0;

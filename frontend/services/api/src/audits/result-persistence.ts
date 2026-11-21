@@ -23,7 +23,6 @@ export type DeriveExecution = (
   artifactId: string,
 ) => Promise<void>;
 
-/** Evidence numbering counts every exchange; surface polling never spends the paid retry budget. */
 export async function appendProviderAttempt(
   db: Database,
   task: AuditTask,
@@ -61,7 +60,7 @@ export async function appendProviderAttempt(
     .execute();
 }
 
-function retryDelay(runtime: AuditRuntime, attempt: number, retryAfter?: number) {
+export function retryDelay(runtime: AuditRuntime, attempt: number, retryAfter?: number) {
   const settings = runtime.audits;
   if (retryAfter !== undefined && Number.isFinite(retryAfter))
     return Math.min(Math.max(0, retryAfter), settings.retry_max_delay_seconds);
@@ -198,16 +197,10 @@ async function insertFailureArtifact(
     })
     .execute();
 }
-/** How one failure settles: what it spends, records and may retry. Built only by the exported writers. */
 type FailurePlan = {
   spendsAttempt: boolean;
   mayRetry: boolean;
   recordsAttempt: boolean;
-  /**
-   * A failed surface exchange keeps its own immutable artifact with this outcome: always
-   * (scraper), or only once a paid submission reported its charge (AI Overview), so the
-   * paid request has a cost projection.
-   */
   artifact: { outcome: string; when: 'always' | 'charged' } | null;
   evidence: ((db: Database, task: AuditTask) => Promise<void>) | null;
   context: ExecutionContext | undefined;
@@ -236,11 +229,6 @@ async function markTaskFailed(db: Database, task: AuditTask, at: Date) {
     .where('workspace_id', '=', task.workspace_id)
     .execute();
 }
-/**
- * An answer-engine failure. Before any call (`called: false`) it terminalizes the task
- * without inventing a provider attempt or debit; after a call it spends an attempt and a
- * retryable error parks the task for retry within its budget.
- */
 export function persistAnswerFailure(
   db: Database,
   claimed: AuditTask,
@@ -260,18 +248,9 @@ export function persistAnswerFailure(
   });
 }
 
-/**
- * What an observed surface's failure keeps beside the task: a failure artifact, or its own
- * observation (plus a failure artifact carrying the charge once a paid submission reported one).
- */
 export type SurfaceFailureRecord =
   | { kind: 'failure_artifact'; outcome: string }
   | { kind: 'observation'; append: (db: Database, task: AuditTask) => Promise<void> };
-/**
- * An observed surface's failure is terminal: provider recovery already happened through
- * polling and reconciliation. `exchange` says what reached the provider: nothing, a free
- * retrieval, or the paid submission (the only exchange that spends an attempt).
- */
 export function persistSurfaceFailure(
   db: Database,
   claimed: AuditTask,
@@ -321,14 +300,12 @@ function persistFailure(
   });
 }
 type Failure = { error: ProviderError; attempt: number; retry: boolean };
-/** The outcome a failure artifact records, or null when this failure writes none. */
 function artifactOutcome(plan: FailurePlan, current: AuditTask) {
   if (!plan.artifact) return null;
   if (plan.artifact.when === 'always') return plan.artifact.outcome;
   const charged = record(current.provider_metadata).provider_submission_cost_microusd;
   return typeof charged === 'number' ? plan.artifact.outcome : null;
 }
-/** Writes the failed attempt: optional failure artifact, task row, attempt and cost projection. */
 async function recordFailedAttempt(
   trx: Database,
   claimed: AuditTask,

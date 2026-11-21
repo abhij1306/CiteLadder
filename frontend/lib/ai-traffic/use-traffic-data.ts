@@ -70,27 +70,15 @@ function viewFilters(tab: TrafficDataTab, selection: ReturnType<typeof useTraffi
     return { bot_id: selection.bot, status: trafficStatusCode(selection.status) };
   return {};
 }
-/** The typed status as the code the Activity read filters by; anything but a 100–599 code filters nothing. */
 export function trafficStatusCode(status: string | null): number | undefined {
   return status && /^[1-5]\d{2}$/u.test(status) ? Number(status) : undefined;
 }
-/**
- * Start the Overview tab's reads together, before the tab is chosen.
- *
- * The screen picks its default tab from crawl log availability, and the
- * insights strip mounts only under a rendered overview, so left to the tree
- * the three reads ran in series: sources, then overview, then insights. None
- * needs another's answer. Warming overview and insights here, under the keys
- * the tab reads, runs all three side by side.
- */
 export function useOverviewWarmup(active: boolean) {
   const client = useQueryClient();
   const { workspaceId, projectId } = useProjectScope();
   const { range, verification } = selectedFilters('overview', useTrafficSelection());
   useEffect(() => {
     if (!active) return;
-    // The overview's own filters: its folder and resource narrowing are unset,
-    // and an unset filter is absent from both the key and the request.
     const scope = { workspaceId, projectId };
     void client.prefetchQuery(aiTrafficQueries.overview(scope, { range, verification }));
     void client.prefetchQuery(aiTrafficQueries.insights(scope, range));
@@ -106,8 +94,6 @@ export function useTrafficData(tab: TrafficDataTab) {
     ...aiTrafficQueries.overview({ workspaceId, projectId }, filters),
     enabled: tab === 'overview',
   });
-  // The table tabs read their own pages (`useCursorTableQuery`), so a page
-  // turn keeps the rows and the pager on screen.
   const catalog = useQuery({
     ...aiTrafficQueries.catalog({ workspaceId, projectId }),
     enabled: tab !== 'overview',

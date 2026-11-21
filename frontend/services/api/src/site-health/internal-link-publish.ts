@@ -24,7 +24,6 @@ function summary(page: InternalLinkPage) {
   return rest;
 }
 
-/** Only an explicit selection of a frozen, source-grounded placement can publish. */
 function selectedPlacement(candidate: LinkCandidate, source: InternalLinkPage, raw: unknown) {
   const answer = choice.safeParse(raw);
   const index = answer.success ? /^a(\d+)$/u.exec(answer.data.choice) : null;
@@ -66,7 +65,6 @@ function countReason(diagnostics: Diagnostics, reason: string) {
   diagnostics.reasons[reason] = (diagnostics.reasons[reason] ?? 0) + 1;
 }
 
-/** One judged candidate as a publishable link, or null after counting why not. */
 function resolveCandidate(
   candidate: LinkCandidate,
   outcome: Record<string, unknown>,
@@ -121,10 +119,6 @@ function linkState(diagnostics: Diagnostics, omittedPages: unknown) {
   return 'completed';
 }
 
-/**
- * Most useful first; a link whose anchor overlaps a kept one on the same source
- * is dropped, and a destination keeps at most `perTarget` of its best links.
- */
 function dedupeOverlaps(links: InternalLink[], perTarget: number, diagnostics: Diagnostics) {
   const anchorStart = (link: InternalLink) => link.placement!.start + link.placement!.anchor_start;
   const recommendations: InternalLink[] = [];
@@ -218,7 +212,6 @@ export const publishInternalLinks: Executor = async (task, { db, checkCancelled 
       (run.result && !['queued', 'running'].includes(run.state))
     )
       return;
-    // Outcomes only: dispatch rows carry request bodies publication never needs.
     const events = await trx
       .selectFrom('site_internal_link_events')
       .select(['candidate_id', 'kind', 'created_at', 'evidence'])

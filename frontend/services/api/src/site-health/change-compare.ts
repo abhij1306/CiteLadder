@@ -1,4 +1,3 @@
-/** Pure deterministic comparison of two explicitly comparable crawls' page evidence. */
 import { isDeepStrictEqual } from 'node:util';
 import { compareText } from '../text-order.ts';
 import { policy } from '../config.ts';
@@ -14,13 +13,10 @@ export type ChangePage = {
   artifactId: string;
   fields: Record<string, unknown>;
   rules: Record<string, RuleState>;
-  /** True only when the indexability rule recorded an explicit intent to index. */
   intendedIndexable: boolean;
 };
 export type ExpectedChange = { eventId: string; expectedValue: unknown };
-/** Declared implementation outcomes, keyed by `expectedKey(siteUrlId, field)`. */
 export type ExpectedChanges = ReadonlyMap<string, ExpectedChange>;
-/** One changed field, shaped as its `site_change_observations` row. */
 export type ChangeObservation = {
   site_url_id: string;
   normalized_url: string;
@@ -39,7 +35,6 @@ export type ChangeObservation = {
 };
 type ContentRecord = Record<string, unknown>;
 
-/** A declared check may name a rule outcome by its pass/fail alias. */
 const OUTCOME_ALIASES: Record<string, string> = { pass: 'satisfied', fail: 'missing' };
 
 export const expectedKey = (siteUrlId: string, field: string) => `${siteUrlId} ${field}`;
@@ -92,7 +87,6 @@ function expectedLink(
     : { expected: false, implementation_event_id: null };
 }
 
-// ISO 8601 with a `T` or space separator; a value without an offset is UTC.
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}/;
 const ISO_TIME = /^[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?/;
 const ISO_OFFSET = /^(?:Z|[+-]\d{2}:?\d{2})$/;
@@ -127,7 +121,6 @@ function contentClassification(coverage: string, delta: number, added: number, r
   if (delta > p.cosmetic_delta_ceiling || added || removed) return 'minor_change';
   return 'unchanged';
 }
-/** Whether the modification date moved exactly when the text did. */
 function metadataConsistency(before: ContentRecord, after: ContentRecord, contentMoved: boolean) {
   const modifiedBefore = instant(before.modified);
   const modifiedAfter = instant(after.modified);
@@ -236,16 +229,10 @@ function presence(page: ChangePage, present: boolean): ChangeObservation {
   };
 }
 
-/**
- * Which URL-presence claims the pair supports. Only a complete pair claims
- * presence, and a page is removed only when it is absent from B's observed
- * inventory (`inventoryB`, site URL ids), not merely unanalyzed in B.
- */
 export type PresenceScope =
   | { completePair: false }
   | { completePair: true; inventoryB: ReadonlySet<string> };
 
-/** Compare selected evidence; URL presence is claimed only for a complete pair. */
 export function compareCrawls(
   crawlA: readonly ChangePage[],
   crawlB: readonly ChangePage[],

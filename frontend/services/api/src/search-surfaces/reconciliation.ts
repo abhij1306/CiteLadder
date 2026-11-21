@@ -24,7 +24,6 @@ const rowSchema = z.object({
   }),
 });
 
-/** A sweep freezes its upper bound and accumulates matches across persisted pages. */
 export function reconcilePage(
   envelope: Envelope,
   engine: SearchEngine,

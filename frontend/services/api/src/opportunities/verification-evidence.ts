@@ -1,8 +1,3 @@
-/**
- * One source's reading of a declaration's expected checks. Each source reads
- * only the check kinds it can measure and leaves the others untouched, so
- * their earlier states carry forward in the merged observation.
- */
 import { expectedCheckSchema, type ExpectedCheck } from '@citeladder/contracts/opportunities';
 import { DAY_MS } from '../calendar-days.ts';
 import type { Database } from '../db/database.ts';
@@ -22,7 +17,6 @@ function readCheck(ctx: ReadContext, source: Source, check: ExpectedCheck) {
   return module.read(ctx, source, check);
 }
 
-/** This source's outcomes for the declaration's checks it can read. */
 export async function evidenceFor(
   db: Database,
   declaration: Declaration,
@@ -41,9 +35,7 @@ export async function evidenceFor(
   for (const [index, raw] of checksOf(declaration).entries()) {
     const kind = readable.find((item) => item === raw.kind);
     if (!kind) continue;
-    // Past its own window a check keeps its last reading.
     if (age > checkWindowDays(kind) * DAY_MS) continue;
-    // A frozen check that no longer parses cannot be read; say so rather than wait.
     const parsed = expectedCheckSchema.safeParse(raw);
     const found = parsed.success
       ? await readCheck(ctx, source, parsed.data) // NOSONAR -- One source reads its checks in order on the caller's connection.

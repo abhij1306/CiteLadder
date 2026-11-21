@@ -2,7 +2,6 @@ import type { Database } from '../db/database.ts';
 import { providerPolicy } from './config.ts';
 import { tenantConnections } from './connections.ts';
 
-/** Read only the latest persisted probe; never test or repair a connection. */
 export async function connectionStates(db: Database, workspaceId: string, at = new Date()) {
   const connections = await tenantConnections(db, workspaceId)
     .where('c.active', '=', true)

@@ -1,9 +1,3 @@
-/**
- * Persisted Opportunity row projections and their deterministic presentation.
- *
- * Every value is read from the row a refresh froze; nothing is re-scored or
- * re-derived at read time.
- */
 import {
   opportunityDetailSchema,
   opportunitySeveritySchema,
@@ -16,7 +10,6 @@ import { isoUtc, isoUtcOrNull, utcText, utcTextOf } from '../db/timestamps.ts';
 import { record } from '../db/json.ts';
 import { scalarText } from '../text-order.ts';
 
-/** One `opportunities` row with its timestamps as `utcText`. */
 export type OpportunityRow = {
   id: string;
   project_id: string;
@@ -45,7 +38,6 @@ export type OpportunityRow = {
   superseded_text: string | null;
 };
 
-/** The `opportunities` columns every projection reads. */
 export const OPPORTUNITY_COLUMNS = [
   'opportunities.id',
   'opportunities.project_id',
@@ -84,16 +76,13 @@ function humanizeTheme(theme: string): string {
   return `${first.toUpperCase()}${rest.join('')} theme`;
 }
 
-/** The user-facing target label, from persisted frozen evidence only. */
 function targetLabel(row: Pick<OpportunityRow, 'evidence' | 'target_theme' | 'target_url'>) {
   const evidence = record(row.evidence);
-  // Detector hits store `prompt_text`; confirmed declines store `prompt`.
   const prompt = scalarText(evidence.prompt_text).trim() || scalarText(evidence.prompt).trim();
   const product = scalarText(evidence.product_name).trim();
   return row.target_url || prompt || humanizeTheme(row.target_theme ?? '') || product || null;
 }
 
-/** The one encoding of an opportunity's identity across refreshes. */
 export const stableKey = (row: Pick<OpportunityRow, 'rule_id' | 'target_key'>): string =>
   JSON.stringify([row.rule_id, row.target_key]);
 
@@ -112,9 +101,7 @@ function evidenceSummary(row: OpportunityRow) {
 
 type Rank = { system_rank: number; display_rank: number; order_source: 'system' | 'manual' };
 
-/** The factors shown beside a score: its inputs plus the detector's own. */
 function priorityFactors(row: OpportunityRow): Record<string, string | number> {
-  // The detector's factors, then the row's own values, which always win.
   const factors = {
     ...record(record(row.evidence).priority_factors),
     severity: row.severity,
@@ -154,7 +141,6 @@ export function projectItem(row: OpportunityRow, rank: Rank = DEFAULT_RANK) {
   };
 }
 
-/** Rows in the shared manual order, unranked rows after it by system rank. */
 export function orderedItems(rows: OpportunityRow[], orderedKeys: unknown) {
   const systemRank = new Map(rows.map((row, index) => [row.id, index + 1]));
   const keys = list(orderedKeys);
@@ -178,7 +164,6 @@ export function orderedItems(rows: OpportunityRow[], orderedKeys: unknown) {
   );
 }
 
-/** The brief a detector froze on this row, or empty when it froze none. */
 const persistedHandoff = (row: Pick<OpportunityRow, 'evidence'>): Record<string, unknown> => ({
   ...record(record(row.evidence).content_handoff),
 });
@@ -198,8 +183,6 @@ function projectContentHandoff(row: OpportunityRow): Record<string, unknown> {
   const skill = persisted.suggested_skill_id
     ? scalarText(persisted.suggested_skill_id)
     : DEFAULT_FORMAT;
-  // A detector's frozen brief overlays the row's default brief, so a brief
-  // frozen before a field existed still carries every published field.
   return {
     ...defaultHandoff(row),
     ...persisted,

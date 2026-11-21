@@ -1,14 +1,10 @@
-/**
- * The deterministic core of fact-checking: which extracted claims survive,
- * how verdicts are downgraded, the claims addendum, and the accuracy metrics
- * with their coverage states.
- */
 import { describe, expect, it } from 'vitest';
 
 import { policy } from '../src/config.ts';
 import {
   accuracySummary,
   claimStatus,
+  factBreakdown,
   type ClaimRow,
   type FactAnswer,
 } from '../src/perception/fact-metrics.ts';
@@ -19,7 +15,6 @@ import { validateVerdicts, verifyPackage } from '../src/perception/verify.ts';
 import { checkedTopics, factScope, type FrozenFactCheck } from '../src/perception/admission.ts';
 
 const facts = policy.perception.fact_check;
-/** A frozen fact check with one fact per listed topic and the configured neighbours. */
 const frozenWith = (...topics: FrozenFactCheck['facts'][number]['topic'][]): FrozenFactCheck => ({
   claims_version: 'c',
   verify_template_version: 'v',
@@ -36,6 +31,7 @@ const pkg: PerceptionPackage = {
   template_version: 't',
   language: 'en',
   prompt: 'best tools?',
+  themes: [],
   entities: [
     {
       entity_id: 'brand:acme',
@@ -180,7 +176,6 @@ describe('verdict validation', () => {
 
   it('checks a claim filed under an adjacent topic against the fact that decides it', () => {
     const factCheck = frozenWith('specs', 'markets');
-    // A plan's contents filed under plans, and a country filed under availability.
     const built = verifyPackage({
       version: 'v',
       brand: 'Acme',
@@ -242,7 +237,6 @@ describe('verdict validation', () => {
       ['claim-a', 'contradicted', ['rev-price'], false, false],
       ['claim-b', 'inconclusive', [], false, false],
       ['claim-c', 'inconclusive', ['rev-price'], true, false],
-      // The model left claim-d out: flagged, so it never reads as "no fact covers it".
       ['claim-d', 'not_covered', [], false, true],
     ]);
     expect(result.drops).toEqual({
@@ -265,6 +259,8 @@ describe('accuracy metrics', () => {
     end: 5,
     status,
     facts: [],
+    verdictId: null,
+    edited: null,
   });
   const answer = (overrides: Partial<FactAnswer>): FactAnswer => ({
     auditId: '00000000-0000-4000-8000-000000000001',
@@ -286,7 +282,10 @@ describe('accuracy metrics', () => {
           claims: [
             row(0, { kind: 'verdict', verdict: 'supported' }),
             row(1, { kind: 'verdict', verdict: 'supported' }),
-            row(2, { kind: 'verdict', verdict: 'contradicted' }),
+            {
+              ...row(2, { kind: 'verdict', verdict: 'contradicted' }),
+              edited: { model_verdict: 'supported', note: null, at: '2026-10-02T00:00:00Z' },
+            },
             row(3, { kind: 'verdict', verdict: 'not_covered' }),
             row(4, { kind: 'low_confidence' }),
             row(5, { kind: 'unavailable', reason: 'platform_cap' }),
@@ -315,6 +314,7 @@ describe('accuracy metrics', () => {
         unavailable: [{ reason: 'platform_cap', count: 1 }],
         answers_pending: 1,
         answers_unavailable: 0,
+        edited: 1,
       },
     });
     expect(summary.contradicted.map((claim) => claim.quote)).toEqual(['quote 2']);
@@ -338,9 +338,24 @@ describe('accuracy metrics', () => {
       facts,
     );
     expect([failed.state, failed.reason]).toEqual(['unavailable', 'model_error']);
-    // A checked run whose answers never named the brand has no claims, not no facts.
     expect(accuracySummary([], true, facts).state).toBe('no_claims');
     expect(accuracySummary([], false, facts).state).toBe('no_facts');
+
+    const revision = {
+      revision_id: '00000000-0000-4000-8000-0000000000f1',
+      fact_id: '00000000-0000-4000-8000-0000000000f2',
+      revision: 1,
+      topic: 'pricing',
+      statement: 'Pro costs $59 per month.',
+      source_url: null,
+    } as const;
+    const countsOf = (answers: FactAnswer[]) =>
+      factBreakdown(answers, [revision]).map((fact) => fact.counts);
+    expect(countsOf([answer({ claims: [row(0, { kind: 'pending' })] })])).toEqual([
+      { kind: 'pending' },
+    ]);
+    expect(countsOf([answer({ extraction: { kind: 'pending' } })])).toEqual([{ kind: 'pending' }]);
+    expect(countsOf([answer({})])).toEqual([{ kind: 'not_raised' }]);
   });
 
   it('marks a trend point not comparable when the fact set or versions change', () => {
@@ -372,9 +387,19 @@ describe('accuracy metrics', () => {
       verdict: 'supported' as const,
       low_confidence: false,
       model_omitted: false,
+      override: null,
     };
-    // The placeholder verdict an omitted claim is stored with.
-    const omitted = { verdict: 'not_covered' as const, low_confidence: false, model_omitted: true };
+    const omitted = {
+      verdict: 'not_covered' as const,
+      low_confidence: false,
+      model_omitted: true,
+      override: null,
+    };
+    const overridden = {
+      ...supported,
+      low_confidence: true,
+      override: 'contradicted' as const,
+    };
     expect([
       claimStatus({
         lowConfidenceClaim: true,
@@ -412,6 +437,12 @@ describe('accuracy metrics', () => {
         verification: verified,
         verdict: omitted,
       }),
+      claimStatus({
+        lowConfidenceClaim: false,
+        topicHasFact: true,
+        verification: verified,
+        verdict: overridden,
+      }),
     ]).toEqual([
       { kind: 'low_confidence' },
       { kind: 'verdict', verdict: 'not_covered' },
@@ -419,6 +450,7 @@ describe('accuracy metrics', () => {
       { kind: 'unavailable', reason: 'model_not_configured' },
       { kind: 'verdict', verdict: 'supported' },
       { kind: 'unavailable', reason: 'model_omitted' },
+      { kind: 'verdict', verdict: 'contradicted' },
     ]);
   });
 });

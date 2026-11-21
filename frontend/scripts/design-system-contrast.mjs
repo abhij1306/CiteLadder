@@ -1,7 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { join, relative } from 'node:path';
-
-import { composite, contrastRatio, isHex, separation } from './design-system-color.mjs';
+import { join } from 'node:path';
 
 const TOKEN_CSS = 'apps/app/src/globals.css';
 const LIGHT = ':root';
@@ -16,15 +14,15 @@ const APP_DARK = ":root[data-theme='dark']:not([data-public-surface])";
  * stylesheet without the app blocks resolves to the system's two themes.
  */
 const SCOPES = [
-  { name: LIGHT, layers: [LIGHT, APP_LIGHT] },
-  { name: DARK, layers: [DARK, APP_LIGHT, APP_DARK] },
+  { name: LIGHT, layers: [LIGHT, APP_LIGHT], kind: 'app' },
+  { name: DARK, layers: [DARK, APP_LIGHT, APP_DARK], kind: 'app' },
 ];
 
 const color = (role) => `--color-${role}`;
 const STATUSES = ['positive', 'negative', 'warning', 'info'];
-const SOFTS = ['accent', ...STATUSES].map((role) => color(`${role}-soft`));
-const GROUNDS = ['paper', 'sidebar', 'surface', 'surface-sunken'].map(color);
-const SERIES = ['data-1', 'data-2', 'data-3'].map(color);
+const WEBSITE_GROUNDS = ['paper', 'chrome', 'surface', 'surface-sunken'].map(color);
+const APP_FILLS = ['ground', 'panel', 'raised', 'raised-2'].map(color);
+const APP_SERIES = ['data-you', 'data-rival-1', 'data-rival-2', 'data-rival-3', 'data-rival-4'];
 
 /**
  * The contrast matrix, the design system's own (Colors): every
@@ -35,44 +33,104 @@ const SERIES = ['data-1', 'data-2', 'data-3'].map(color);
  * beneath it.
  */
 const CONTRAST_PAIRS = [
-  // The three inks on the page, the sidebar, the card and the inset.
-  { inks: ['ink', 'ink-secondary', 'ink-muted'].map(color), surfaces: GROUNDS, minimum: 4.5 },
-  // A hovered, pressed or selected row keeps its text readable (D51). The
-  // states are overlays, so each is checked over every ground it can tint.
+  {
+    inks: ['ink', 'ink-secondary', 'ink-muted'].map(color),
+    surfaces: WEBSITE_GROUNDS,
+    minimum: 4.5,
+  },
   {
     inks: ['ink', 'ink-secondary'].map(color),
     surfaces: ['state-hover', 'state-pressed', 'state-selected'].map(color),
-    over: GROUNDS,
+    over: WEBSITE_GROUNDS,
     minimum: 4.5,
   },
-  // Callout and badge bodies are ink on every tint.
-  { inks: [color('ink')], surfaces: SOFTS, minimum: 4.5 },
-  // A status ink on paper, surface and its own tint.
+  {
+    inks: [color('ink')],
+    surfaces: ['accent', ...STATUSES].map((role) => color(`${role}-soft`)),
+    minimum: 4.5,
+  },
+  {
+    inks: [color('ink'), color('ink-secondary')],
+    surfaces: ['stage-sky', 'stage-mint', 'stage-lilac', 'stage-peach'].map(color),
+    minimum: 4.5,
+    only: 'website',
+  },
   ...STATUSES.map((status) => ({
     inks: [color(status)],
     surfaces: [color('paper'), color('surface'), color(`${status}-soft`)],
     minimum: 4.5,
   })),
-  // Accent as text: links in reading copy, on paper, surface and accent-soft.
   {
     inks: [color('accent-ink')],
     surfaces: [color('paper'), color('surface'), color('accent-soft')],
     minimum: 4.5,
   },
-  // Labels on fills: the primary button (and its hover) and the own-brand number.
   { inks: [color('on-ink')], surfaces: [color('ink'), color('ink-hover')], minimum: 4.5 },
-  { inks: [color('on-accent')], surfaces: [color('accent')], minimum: 4.5 },
-  // Marks: Flare, the named chart series, control marks and the focus ring.
   {
-    inks: [color('accent'), ...SERIES, color('line-control'), color('focus')],
-    surfaces: GROUNDS,
+    inks: [color('on-primary')],
+    surfaces: [color('primary-from'), color('primary-to')],
+    minimum: 4.5,
+  },
+  { inks: [color('ink')], surfaces: [color('button-from'), color('button-to')], minimum: 4.5 },
+  { inks: [color('negative')], surfaces: [color('button-from')], minimum: 4.5 },
+  { inks: [color('accent'), color('focus')], surfaces: WEBSITE_GROUNDS, minimum: 3 },
+  { inks: [color('line-control')], surfaces: WEBSITE_GROUNDS, minimum: 3, only: 'website' },
+  {
+    inks: ['ink', 'ink-secondary', 'ink-muted'].map(color),
+    surfaces: ['site-page', 'site-well'].map(color),
+    minimum: 4.5,
+    only: 'marketing',
+  },
+  {
+    inks: [color('site-chip-ink')],
+    surfaces: [color('site-chip')],
+    minimum: 4.5,
+    only: 'marketing',
+  },
+  {
+    inks: [color('ink'), color('site-band-ink-secondary')],
+    surfaces: ['site-band-from', 'site-band-mid', 'site-band-to'].map(color),
+    minimum: 4.5,
+    only: 'marketing',
+  },
+  { inks: [color('site-mark')], surfaces: [color('site-page')], minimum: 3, only: 'marketing' },
+  { inks: ['ink', 'ink-2'].map(color), surfaces: APP_FILLS, minimum: 4.5, only: 'app' },
+  { inks: [color('focus')], surfaces: APP_FILLS, minimum: 3, only: 'app' },
+  {
+    inks: ['ink', 'ink-2'].map(color),
+    surfaces: ['state-hover', 'state-pressed', 'state-selected'].map(color),
+    over: ['ground', 'panel', 'raised'].map(color),
+    minimum: 4.5,
+    only: 'app',
+  },
+  {
+    inks: ['ink', 'ink-2'].map(color),
+    surfaces: ['accent', ...STATUSES].map((role) => color(`${role}-wash`)),
+    minimum: 4.5,
+    only: 'app',
+  },
+  ...STATUSES.map((status) => ({
+    inks: [color(status)],
+    surfaces: [...APP_FILLS, color(`${status}-wash`)],
+    minimum: 4.5,
+    only: 'app',
+  })),
+  {
+    inks: [color('accent-text')],
+    surfaces: [...APP_FILLS, color('accent-wash')],
+    minimum: 4.5,
+    only: 'app',
+  },
+  {
+    inks: [color('accent'), ...APP_SERIES.map(color), color('data-other')],
+    surfaces: APP_FILLS,
     minimum: 3,
+    only: 'app',
   },
 ];
 
 /**
- * Every ink and every surface token the contrast matrix reads, so a fixture
- * can bind a complete palette without restating the matrix row by row.
+ * Every ink and surface the matrix reads, so a fixture can bind a complete palette.
  * @public — imported by the scripts/ fixture tests.
  */
 export function contrastRoles() {
@@ -82,25 +140,88 @@ export function contrastRoles() {
   };
 }
 
-/**
- * Marks that must stay distinguishable without full colour vision: by
- * lightness alone, or by hue under both red–green deficiencies. Status hues
- * always ship beside an arrow, icon or word too.
- */
-const MIN_LIGHTNESS_STEP = 15;
-const MIN_SIMULATED_DISTANCE = 10;
-const pairsOf = (tokens) =>
-  tokens.flatMap((first, index) => tokens.slice(index + 1).map((second) => [first, second]));
-const SEPARATED_SETS = [
-  { name: 'positive and negative', pairs: [[color('positive'), color('negative')]] },
-  { name: 'named chart series', pairs: pairsOf(SERIES) },
+const channels = (hex) =>
+  hex
+    .slice(1)
+    .match(/../g)
+    .map((channel) => Number.parseInt(channel, 16));
+const isHex = (value) => /^#[0-9a-f]{6}$/i.test(value ?? '');
+const toHex = (rgb) =>
+  '#' + rgb.map((channel) => Math.round(channel).toString(16).padStart(2, '0')).join('');
+const toLinear = (channel) =>
+  channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+const fromLinear = (channel) =>
+  channel <= 0.0031308 ? channel * 12.92 : 1.055 * channel ** (1 / 2.4) - 0.055;
+const multiply = (matrix, vector) =>
+  matrix.map((row) => row.reduce((sum, weight, index) => sum + weight * vector[index], 0));
+
+// CSS Color 4: OKLab to LMS, then LMS to linear sRGB.
+const OKLAB_TO_LMS = [
+  [1, 0.3963377773761749, 0.2158037573099136],
+  [1, -0.1055613458156586, -0.0638541728258133],
+  [1, -0.0894841775298119, -1.2914855480194092],
+];
+const LMS_TO_SRGB = [
+  [4.0767416360759583, -3.3077115392580629, 0.2309699031821043],
+  [-1.2684379732850315, 2.6097573492876882, -0.341319376002657],
+  [-0.0041960761386756, -0.7034186179359362, 1.7076146940746117],
 ];
 
-function escapeRegExp(value) {
-  return value.replace(/[.*+?^$(){}|[\]\\]/g, String.raw`\$&`);
+function oklchChannels(lightness, chroma, hue) {
+  const radians = (hue * Math.PI) / 180;
+  const lab = [lightness, chroma * Math.cos(radians), chroma * Math.sin(radians)];
+  const lms = multiply(OKLAB_TO_LMS, lab).map((value) => value ** 3);
+  return multiply(LMS_TO_SRGB, lms).map((linear) =>
+    Math.round(Math.min(1, Math.max(0, fromLinear(linear))) * 255),
+  );
 }
 
-/** Top-level rules as `{ selectors, body }`; nested blocks are skipped whole. */
+const alphaOf = (text) => {
+  if (text === undefined) return 1;
+  return text.endsWith('%') ? Number(text.slice(0, -1)) / 100 : Number(text);
+};
+
+function parseColour(value) {
+  const text = String(value ?? '')
+    .trim()
+    .toLowerCase();
+  if (isHex(text)) return { rgb: channels(text), alpha: 1 };
+  const rgb = /^rgb\(\s*(\d+)\s+(\d+)\s+(\d+)\s*(?:\/\s*([\d.]+%?)\s*)?\)$/.exec(text);
+  if (rgb) return { rgb: [rgb[1], rgb[2], rgb[3]].map(Number), alpha: alphaOf(rgb[4]) };
+  const oklch = /^oklch\(\s*([\d.]+)%\s+([\d.]+)\s+([\d.]+)\s*(?:\/\s*([\d.]+%?)\s*)?\)$/.exec(
+    text,
+  );
+  if (!oklch) return undefined;
+  const [lightness, chroma, hue] = [oklch[1], oklch[2], oklch[3]].map(Number);
+  return { rgb: oklchChannels(lightness / 100, chroma, hue), alpha: alphaOf(oklch[4]) };
+}
+
+function formatColour({ rgb, alpha }) {
+  if (alpha >= 1) return toHex(rgb);
+  return `rgb(${rgb.map(Math.round).join(' ')} / ${Number((alpha * 100).toFixed(4))}%)`;
+}
+
+function relativeLuminance(hex) {
+  const [red, green, blue] = channels(hex).map((channel) => toLinear(channel / 255));
+  return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+}
+
+function contrastRatio(first, second) {
+  const a = relativeLuminance(first);
+  const b = relativeLuminance(second);
+  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+}
+
+function composite(value, backdrop) {
+  const colour = parseColour(value);
+  if (colour?.alpha === 1) return toHex(colour.rgb);
+  if (!colour || !isHex(backdrop)) return undefined;
+  const base = channels(backdrop);
+  return toHex(
+    colour.rgb.map((channel, index) => channel * colour.alpha + base[index] * (1 - colour.alpha)),
+  );
+}
+
 function topLevelRules(clean) {
   const rules = [];
   let cursor = 0;
@@ -114,7 +235,6 @@ function topLevelRules(clean) {
       if (clean[close] === '}') depth -= 1;
       close += 1;
     }
-    // A preceding at-statement (`@import …;`) is not part of the selector.
     const prelude = clean.slice(cursor, open).split(';').at(-1).trim();
     rules.push({
       selectors: prelude.split(',').map((part) => part.replace(/\s+/g, ' ').trim()),
@@ -125,10 +245,6 @@ function topLevelRules(clean) {
   return rules;
 }
 
-/**
- * A rule body's own `--token: value;` declarations, skipping nested blocks.
- * Split on `;` rather than scanned with one regex, so parsing stays linear.
- */
 function customProperties(body) {
   const segments = body.replace(/\{[^{}]*\}/g, ';').split(';');
   return segments.flatMap((segment) => {
@@ -140,13 +256,11 @@ function customProperties(body) {
 }
 
 /**
- * The raw declared value of every token a scope sees, before alias
- * resolution: `@theme` and `:root` for light, then each rebinding block on
- * top in order. `selector` is one block's selector or the list of them.
+ * Every token's raw value a scope sees: `@theme`, `:root`, then each layer in order.
+ * @public — imported by the scripts/ fixture tests.
  */
 export function paletteDeclarations(source, selector) {
-  const clean = source.replace(/\/\*[\s\S]*?\*\//g, '');
-  const rules = topLevelRules(clean);
+  const rules = topLevelRules(source.replace(/\/\*[\s\S]*?\*\//g, ''));
   const declarations = (scope) =>
     rules
       .filter(({ selectors }) => selectors.includes(scope))
@@ -156,26 +270,18 @@ export function paletteDeclarations(source, selector) {
   );
   return new Map([
     ...declarations('@theme'),
+    ...declarations('@theme inline'),
     ...declarations(LIGHT),
     ...layers.flatMap((layer) => declarations(layer)),
   ]);
 }
 
-/**
- * An opaque `rgb(r g b)` as `#rrggbb`. A translucent `rgb(r g b / a%)` stays
- * as written: `composite` lays it on the surface beneath it.
- */
-function hexOf(value) {
-  if (isHex(value)) return value.toLowerCase();
-  const rgb = /^rgb\(\s*(\d+)\s+(\d+)\s+(\d+)\s*\)$/.exec(value ?? '');
-  if (!rgb) return value;
-  const channels = [rgb[1], rgb[2], rgb[3]].map((channel) =>
-    Number(channel).toString(16).padStart(2, '0'),
-  );
-  return `#${channels.join('')}`;
-}
+const RELATIVE = /^oklch\(\s*from\s+var\((--[\w-]+)\)\s+l\s+c\s+h\s*(?:\/\s*([\d.]+)%\s*)?\)$/;
 
-/** Resolve `var()` aliases for every token a scope sees. */
+/**
+ * Every token a scope sees, with `var()` aliases and relative colours resolved.
+ * @public — imported by the scripts/ fixture tests.
+ */
 export function resolvePalette(source, selector) {
   const values = paletteDeclarations(source, selector);
   const resolve = (token, seen = new Set()) => {
@@ -183,103 +289,62 @@ export function resolvePalette(source, selector) {
     seen.add(token);
     const value = values.get(token);
     const alias = value?.match(/^var\((--[\w-]+)\)$/)?.[1];
-    return alias ? resolve(alias, seen) : hexOf(value);
+    if (alias) return resolve(alias, seen);
+    const relative = RELATIVE.exec(value ?? '');
+    if (!relative) {
+      const colour = parseColour(value);
+      return colour ? formatColour(colour) : value;
+    }
+    const base = parseColour(resolve(relative[1], seen));
+    if (!base) return undefined;
+    const alpha = relative[2] === undefined ? base.alpha : Number(relative[2]) / 100;
+    return formatColour({ rgb: base.rgb, alpha });
   };
   return new Map([...values.keys()].map((token) => [token, resolve(token)]));
 }
 
-/** An opaque hex for a token, composited onto `backdrop` when translucent. */
-function opaque(palette, token, backdrop) {
-  return composite(palette.get(token), backdrop);
-}
-
-/** The violation for one ink on one surface, or null when it reads. */
-function inkViolation(palette, { scope, cssLabel, minimum }, inkToken, surfaceToken, surface) {
-  const ink = opaque(palette, inkToken, surface);
-  if (!isHex(ink) || !isHex(surface)) {
-    return `${cssLabel}: ${scope} cannot resolve ${inkToken} on ${surfaceToken}`;
-  }
-  const ratio = contrastRatio(ink, surface);
-  if (ratio < minimum) {
-    return `${cssLabel}: ${scope} ${inkToken} on ${surfaceToken} is ${ratio.toFixed(2)}:1; needs ${minimum}:1`;
-  }
-  return null;
-}
-
-/** One contrast row's violations: each ink on each surface, over each of the row's grounds. */
-function rowViolations(palette, { scope, cssLabel }, row) {
-  const { inks, surfaces, over = [color('surface')], minimum } = row;
-  return over.flatMap((groundToken) => {
-    const ground = palette.get(groundToken);
-    return surfaces.flatMap((surfaceToken) => {
-      const surface = opaque(palette, surfaceToken, ground);
-      // A row with several grounds names the one a failure sits on.
+function rowViolations(palette, scope, { inks, surfaces, over = [color('surface')], minimum }) {
+  return over.flatMap((groundToken) =>
+    surfaces.flatMap((surfaceToken) => {
+      const surface = composite(palette.get(surfaceToken), palette.get(groundToken));
       const label = over.length > 1 ? `${surfaceToken} over ${groundToken}` : surfaceToken;
-      return inks
-        .map((inkToken) =>
-          inkViolation(palette, { scope, cssLabel, minimum }, inkToken, label, surface),
-        )
-        .filter((violation) => violation !== null);
-    });
-  });
-}
-
-function contrastViolations(palette, { name: scope }, cssLabel) {
-  return CONTRAST_PAIRS.flatMap((row) => rowViolations(palette, { scope, cssLabel }, row));
-}
-
-function separationViolations(palette, scope, cssLabel) {
-  const base = palette.get(color('surface'));
-  const violations = [];
-  for (const { name, pairs } of SEPARATED_SETS) {
-    for (const [firstToken, secondToken] of pairs) {
-      const first = opaque(palette, firstToken, base);
-      const second = opaque(palette, secondToken, base);
-      if (!isHex(first) || !isHex(second)) {
-        violations.push(`${cssLabel}: ${scope} cannot resolve ${firstToken} / ${secondToken}`);
-        continue;
-      }
-      const gap = separation(first, second);
-      const separable =
-        gap.lightness >= MIN_LIGHTNESS_STEP ||
-        (gap.deuteranopia >= MIN_SIMULATED_DISTANCE && gap.protanopia >= MIN_SIMULATED_DISTANCE);
-      if (!separable) {
-        violations.push(
-          `${cssLabel}: ${scope} ${name} ${firstToken} / ${secondToken} are too close ` +
-            `(ΔL* ${gap.lightness.toFixed(1)}, deuteranopia ΔE ${gap.deuteranopia.toFixed(1)}, ` +
-            `protanopia ΔE ${gap.protanopia.toFixed(1)})`,
-        );
-      }
-    }
-  }
-  return violations;
+      return inks.flatMap((inkToken) => {
+        const ink = composite(palette.get(inkToken), surface);
+        if (!isHex(ink) || !isHex(surface))
+          return [`${TOKEN_CSS}: ${scope} cannot resolve ${inkToken} on ${label}`];
+        const ratio = contrastRatio(ink, surface);
+        return ratio < minimum
+          ? [
+              `${TOKEN_CSS}: ${scope} ${inkToken} on ${label} is ${ratio.toFixed(2)}:1; needs ${minimum}:1`,
+            ]
+          : [];
+      });
+    }),
+  );
 }
 
 /**
- * The whole matrix for a token stylesheet's text, in both themes.
- * @public — also imported by the scripts/frontend fixture tests.
+ * The whole matrix for a token stylesheet's text, in every scope.
+ * @public — also imported by the scripts/ fixture tests.
  */
-export function paletteViolations(source, cssLabel = TOKEN_CSS) {
-  const violations = [];
-  if (
-    !new RegExp(escapeRegExp(DARK) + String.raw`\s*\{`).test(
-      source.replace(/\/\*[\s\S]*?\*\//g, ''),
-    )
-  ) {
-    violations.push(`${cssLabel}: dark theme token mapping is missing`);
-  }
-  for (const scope of SCOPES) {
-    const palette = resolvePalette(source, scope.layers);
+export function paletteViolations(source) {
+  const clean = source.replace(/\/\*[\s\S]*?\*\//g, '');
+  const violations = clean.includes(`${DARK} {`)
+    ? []
+    : [`${TOKEN_CSS}: dark theme token mapping is missing`];
+  for (const { name, layers, kind } of SCOPES) {
+    const palette = resolvePalette(source, layers);
+    const holds = (row) =>
+      row.only === undefined ||
+      row.only === kind ||
+      (row.only === 'website' && kind === 'marketing');
     violations.push(
-      ...contrastViolations(palette, scope, cssLabel),
-      ...separationViolations(palette, scope.name, cssLabel),
+      ...CONTRAST_PAIRS.filter(holds).flatMap((row) => rowViolations(palette, name, row)),
     );
   }
   return violations;
 }
 
 export function textContrastViolations(root) {
-  const cssPath = join(root, ...TOKEN_CSS.split('/'));
-  const cssLabel = relative(root, cssPath).replaceAll('\\', '/');
-  return paletteViolations(readFileSync(cssPath, 'utf8'), cssLabel);
+  return paletteViolations(readFileSync(join(root, ...TOKEN_CSS.split('/')), 'utf8'));
 }

@@ -1,8 +1,3 @@
-/**
- * The `page_fetch` analytics task's identity and payload: one task per chat and
- * page URL. Kept apart from the executor so the Agent store can enqueue it and
- * check for it without importing the fetch.
- */
 import { sql } from 'kysely';
 import { z } from 'zod';
 
@@ -21,10 +16,8 @@ export const pageFetchPayloadSchema = z.object({
   url: z.url(),
   site_url_id: z.uuid().nullable(),
   action_id: z.uuid().nullable(),
-  /** The chat's first message, which the queued turn answers. */
   user_message_id: z.uuid(),
   user_id: z.uuid(),
-  /** The creating request's key and fingerprint, so a retried request replays this chat. */
   request_key: z.string().min(1),
   request_fingerprint: z.string().min(1),
   /** The model admission chose when the chat was created; each model call re-checks it. */
@@ -34,7 +27,6 @@ export const pageFetchPayloadSchema = z.object({
 });
 export type PageFetchPayload = z.infer<typeof pageFetchPayloadSchema>;
 
-/** Commits the chat's page fetch in the caller's transaction, before any network I/O. */
 export function enqueuePageFetch(
   db: Database,
   scope: { workspaceId: string; projectId: string },
@@ -50,12 +42,10 @@ export function enqueuePageFetch(
   });
 }
 
-/** The idempotency key of the turn a page fetch queues: one turn per fetch task. */
 export function pageTurnKey(taskId: string) {
   return `${PAGE_FETCH_KIND}:${taskId}`;
 }
 
-/** The page fetch a create request already committed, found by the request's key. */
 export function pageFetchByRequest(db: Database, workspaceId: string, requestKey: string) {
   return db
     .selectFrom('analytics_tasks')
@@ -66,7 +56,6 @@ export function pageFetchByRequest(db: Database, workspaceId: string, requestKey
     .executeTakeFirst();
 }
 
-/** The chat's page fetch task, the newest first; undefined for a chat that never fetched. */
 export function chatPageFetch(db: Database, workspaceId: string, chatId: string) {
   return db
     .selectFrom('analytics_tasks')
@@ -79,7 +68,6 @@ export function chatPageFetch(db: Database, workspaceId: string, chatId: string)
     .executeTakeFirst();
 }
 
-/** Whether the chat's page is still being read: no turn may start until it is. */
 export async function pageFetchActive(db: Database, workspaceId: string, chatId: string) {
   const task = await chatPageFetch(db, workspaceId, chatId);
   return task !== undefined && policy.task_queue.active.includes(task.status);

@@ -81,7 +81,6 @@ describe('loadConfig', () => {
   });
 
   it('validates every owner setting at startup and hands owners the startup values', () => {
-    // Settings no startup field reads still refuse a bad value before any work.
     expect(() => loadConfig({ APP_ENV: 'test', INTEGRATION_LEASE_TTL_SECONDS: '0' })).toThrow(
       ConfigError,
     );

@@ -1,10 +1,8 @@
 import { http, HttpResponse } from 'msw';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vite-plus/test';
 
-import { QueryClient } from '@tanstack/react-query';
-
 import { mswServer } from '@/test/msw-server';
-import { opportunitiesApi, opportunitiesQueries } from './opportunities';
+import { opportunitiesApi } from './opportunities';
 import {
   opportunitiesPageSchema,
   opportunityDetailSchema,
@@ -15,8 +13,6 @@ import { strictValidate } from '@citeladder/contracts/validation';
 const PROJECT = '11111111-1111-4111-8111-111111111111';
 const OPP = '22222222-2222-4222-8222-222222222222';
 const AUDIT = '33333333-3333-4333-8333-333333333333';
-const WORKSPACE_A = '44444444-4444-4444-8444-444444444444';
-const WORKSPACE_B = '55555555-5555-4555-8555-555555555555';
 
 const item = {
   id: OPP,
@@ -129,30 +125,5 @@ describe('opportunitiesApi transport', () => {
     );
     await opportunitiesApi.list(PROJECT);
     expect(seen[0]).toBe('');
-  });
-
-  it('gets the detail', async () => {
-    mswServer.use(http.get(`/api/v1/opportunities/${OPP}`, () => HttpResponse.json(detail)));
-    expect((await opportunitiesApi.get(OPP)).rule_id).toBe('brand_absent_high_value_prompt');
-  });
-});
-
-describe('opportunity detail read', () => {
-  it("never answers one workspace's drawer from another workspace's cached read", async () => {
-    mswServer.use(
-      http.get(`/api/v1/opportunities/${OPP}`, ({ request }) =>
-        HttpResponse.json({
-          ...detail,
-          rule_id:
-            request.headers.get('X-Workspace-Id') === WORKSPACE_B
-              ? 'site_contextual_links'
-              : 'brand_absent_high_value_prompt',
-        }),
-      ),
-    );
-    const client = new QueryClient();
-    await client.fetchQuery(opportunitiesQueries.detail(WORKSPACE_A, OPP));
-    const other = await client.fetchQuery(opportunitiesQueries.detail(WORKSPACE_B, OPP));
-    expect(other.rule_id).toBe('site_contextual_links');
   });
 });

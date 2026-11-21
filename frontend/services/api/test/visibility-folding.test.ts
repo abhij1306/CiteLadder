@@ -1,8 +1,3 @@
-/**
- * The pure decisions behind folded visibility trends: UTC bucket
- * boundaries, share of voice across a renamed brand, and a rate a run never
- * recorded, which is absent rather than zero.
- */
 import { describe, expect, it } from 'vitest';
 
 import { mentionSov } from '../src/visibility/metrics.ts';
@@ -18,6 +13,8 @@ function source(metrics: Record<string, unknown>, completed: number): TrendSourc
     transportModel: 'model-a',
     retrievalEnabled: true,
     modelProvenance: [],
+    panelHash: null,
+    wholeSet: true,
     analyzerVersion: 'v1',
     scoringRuleVersion: 'v1',
     totalCompleted: completed,
@@ -53,7 +50,6 @@ describe('foldBucket', () => {
     const point = foldBucket('2026-03-02T00:00:00.000000', [recorded, unrecorded]);
 
     expect(point.visibility_rate).toBe(0.5);
-    // Only the run that recorded an owned rate contributes to it.
     expect(point.owned_citation_rate).toBe(0.5);
     expect(point.completed_at).toBe('2026-03-02T00:00:00Z');
   });

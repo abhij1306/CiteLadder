@@ -1,4 +1,3 @@
-/** Page equivalence needs recorded redirect/canonical proof; variants alone abstain. */
 import type { Database } from '../db/database.ts';
 import { WorkspaceScope } from '../db/workspace-scope.ts';
 import { policy } from '../config.ts';

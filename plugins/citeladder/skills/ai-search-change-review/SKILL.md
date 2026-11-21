@@ -11,7 +11,10 @@ the preceding 30 days, said so), and what to do next for each change reviewed.
 ## Where the data is
 
 - `list_projects` to resolve the project, then `read_visibility_trends` with
-  explicit `from_at` and `to_at`; missing points are gaps, never zero.
+  explicit `from_at` and `to_at`; missing points are gaps, never zero. Each
+  point lists its events. Pass `topic_id` to follow one topic.
+- `read_prompt_metrics` with `view: history` for one prompt's score per run
+  beside the Actions implemented.
 - `read_visibility_overview` with the later `audit_id` and the earlier
   `baseline_id` for a direct comparison of two runs.
 - `read_actions` for what changed on the site and when it went live;
@@ -22,6 +25,10 @@ the preceding 30 days, said so), and what to do next for each change reviewed.
 
 - Compare like with like: same prompts, cohort, engine and settings; anything
   that changed is a break, not movement.
+- Name the trend events in the window: a prompt panel or model change is a
+  break; an Action going live is the date to measure from.
+- Topics are frozen per run, so refiling a prompt never rewrites earlier runs;
+  a topic's series changes membership from the run after a refile.
 - Show count/denominator and rate on both sides and the change in percentage
   points.
 - A before/after change is not proof of cause; small samples limit what you

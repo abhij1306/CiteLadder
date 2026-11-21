@@ -33,7 +33,6 @@ describe('Overview opening requests', () => {
     await vi.waitFor(() =>
       expect([...asked].sort()).toEqual(['command-center', 'layout', 'prompts']),
     );
-    // Still behind the command center: none of the Overview has painted.
     expect(screen.queryByRole('heading', { name: project.name })).not.toBeInTheDocument();
   });
 });

@@ -1,0 +1,33 @@
+{
+  "audit_scope": "probe",
+  "cohort": "probe",
+  "task_kind": "probe_labelling",
+  "labelling_version": "probe-labelling-v1",
+  "repetitions": 3,
+  "engines": ["chatgpt", "claude", "gemini", "chatgpt_search", "gemini_consumer"],
+  "answer_credits": {
+    "chatgpt": 100,
+    "claude": 100,
+    "gemini": 100,
+    "chatgpt_search": 100,
+    "gemini_consumer": 100
+  },
+  "label_credits": 5,
+  "questions": {
+    "known_for": "What is {brand} known for?",
+    "objection": "Why might someone not choose {brand}?",
+    "theme": "Which {category} brands in {country} are best known for {theme}?"
+  },
+  "max_answer_chars": 6000,
+  "max_items_per_answer": 10,
+  "max_new_groups_per_probe": 12,
+  "group_name_max_chars": 120,
+  "max_attempts": 2,
+  "task_max_attempts": 3,
+  "history_probes": 6,
+  "max_sources_per_group": 10,
+  "known_for_template": "Each answer below replies to \"What is {brand} known for?\". For each answer, list what it says {brand} is known for, in the order the answer raises them, and map each point to exactly one of these themes: {themes}. Use \"{fallback}\" for a buyer-facing point no theme fits. Skip company facts such as funding, ownership, valuation or history. Give each point a short exact quote from the answer. At most {max_items} points per answer.\n\nReturn JSON: {\"answers\":[{\"answer\":1,\"points\":[{\"theme\":\"\",\"quote\":\"\"}]}]}\n\n{answers}",
+  "objection_template": "Each answer below replies to \"Why might someone not choose {brand}?\". For each answer, list every reason it gives, in the order the answer raises them, with a short exact quote. Put each reason in one group. Existing groups: {groups}. Use an existing group's exact name whenever the reason means the same thing; name a new group (2 to 5 words, plain buyer wording) only for a reason no existing group covers, and reuse that new name for every reason with the same meaning. At most {max_items} reasons per answer.\n\nReturn JSON: {\"answers\":[{\"answer\":1,\"reasons\":[{\"group\":\"\",\"quote\":\"\"}]}]}\n\n{answers}",
+  "theme_template": "Each answer below replies to \"{question}\". For each answer, list every brand or business it names as an option, in the order first named, exactly as written. At most {max_items} names per answer.\n\nReturn JSON: {\"answers\":[{\"answer\":1,\"brands\":[\"\"]}]}\n\n{answers}",
+  "system_template": "You label AI answers about a brand for a market research report. Read only the answers given. Return only valid JSON in the shape asked."
+}

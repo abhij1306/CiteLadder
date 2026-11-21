@@ -88,7 +88,6 @@ export async function completeUpload(
     throw new ApiError(422, 'Invalid scan span');
   if (input.scanned_lines > 0 && (!scanFirst || !scanLast))
     throw new ApiError(422, 'Scan timestamps are required');
-  // A long-retention file is admitted for the part of its span inside the window.
   const floor = new Date(now.getTime() - crawlLogs.max_backdate_days * 86400000),
     ceiling = new Date(now.getTime() + crawlLogs.max_clock_skew_hours * 3600000);
   const first = scanFirst && (scanFirst < floor ? floor : scanFirst),
@@ -176,7 +175,6 @@ async function scannedDays(
       )) as overlapping
     from generate_series((${first}::timestamptz at time zone ${tz})::date,
       (${last}::timestamptz at time zone ${tz})::date, interval '1 day') day`.execute(db);
-  // Another source already owns an overlapping day; this upload declares only the rest.
   return result.rows
     .filter((row) => !row.overlapping)
     .map(({ date, complete }) => ({ date, complete }));

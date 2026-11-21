@@ -1,68 +1,226 @@
-/* Authenticated interaction motion. Timing lives in globals.css; feature files
-   consume semantic component classes rather than defining local animation. */
-.menu-panel {
-  transform-origin: var(
-    --radix-dropdown-menu-content-transform-origin,
-    var(--radix-popover-content-transform-origin, var(--radix-select-content-transform-origin, top))
-  );
+.tooltip-panel {
+  --popup-from: 0 -4px;
 }
-
-@keyframes modal-overlay-in {
+.tooltip-panel[data-side] {
+  --popup-from: 0 2px;
+}
+:is(.menu-panel, .popover-panel)[class] {
+  --popup-from: 0;
+  --popup-scale: 0.96;
+  transform-origin: var(--radix-popper-transform-origin, var(--popup-origin, center));
+}
+@keyframes popup-in {
   from {
     opacity: 0;
+    translate: var(--popup-from);
+    scale: var(--popup-scale, 1);
   }
+}
+@keyframes popup-out {
   to {
+    opacity: 0;
+    translate: var(--popup-from);
+    scale: var(--popup-scale, 1);
+  }
+}
+:is(.tooltip-panel[data-state$='open'], .menu-panel:is([data-state$='open'], [data-open])) {
+  animation: popup-in var(--motion-open) var(--ease-standard);
+}
+:is(.menu-panel, .tooltip-panel)[data-state='closed'] {
+  animation: popup-out var(--motion-close) var(--ease-exit) both;
+}
+[data-selection-dock] {
+  --popup-from: -50% 8px;
+  animation: popup-in var(--motion-open) var(--ease-standard);
+}
+
+.toast-stack {
+  height: calc(var(--front-height) + (var(--toast-count) - 1) * 8px);
+}
+.toast-panel {
+  --toast-y: calc(var(--toast-index) * 8px);
+  --toast-scale: calc(1 - var(--toast-index) * 0.04);
+  --popup-from: 0 calc(var(--toast-y) - 10px);
+  --popup-scale: var(--toast-scale);
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  z-index: calc(3 - var(--toast-index));
+  height: var(--toast-height, auto);
+  translate: 0 var(--toast-y);
+  scale: var(--toast-scale);
+  transform-origin: top;
+  transition-property: translate, scale;
+  transition-duration: var(--motion-open);
+  transition-timing-function: var(--ease-fluid);
+}
+.toast-panel:not([data-front]) {
+  height: var(--front-height, auto);
+}
+.toast-panel > * {
+  transition: opacity var(--motion-fast) var(--ease-fluid);
+}
+.toast-stack .toast-panel:not([data-front]) > * {
+  opacity: 0;
+}
+.toast-stack:focus-within .toast-panel {
+  --toast-y: var(--toast-offset);
+  --toast-scale: 1;
+  height: var(--toast-height, auto);
+  & > * {
     opacity: 1;
   }
 }
-
-@keyframes modal-panel-in {
-  from {
-    opacity: 0;
-    scale: 0.985;
-  }
-  to {
-    opacity: 1;
-    scale: 1;
+@media (hover: hover) and (pointer: fine) {
+  .toast-stack:hover .toast-panel {
+    --toast-y: var(--toast-offset);
+    --toast-scale: 1;
+    height: var(--toast-height, auto);
+    & > * {
+      opacity: 1;
+    }
   }
 }
+.toast-panel[data-state='open'] {
+  --popup-from: 0 -16px;
+  animation: popup-in var(--motion-open) var(--ease-fluid);
+}
+.toast-panel[data-state='closed'] {
+  z-index: 0;
+  animation: popup-out var(--motion-close) var(--ease-fluid) both;
+}
 
+/* A swipe moves the toast 1:1, eases back on cancel (Radix clears both
+   offsets) and slides out from where it was let go on end. */
+.toast-panel[data-swipe] {
+  translate: var(--radix-toast-swipe-move-x, var(--radix-toast-swipe-end-x, 0)) var(--toast-y);
+}
+.toast-panel[data-swipe='cancel'] {
+  transition: translate var(--motion-close) var(--ease-standard);
+}
+.toast-panel[data-swipe='end'] {
+  --popup-from: 100% var(--toast-y);
+}
+
+:is(.dialog-overlay, .drawer-overlay) {
+  --popup-from: 0;
+}
+.dialog-panel {
+  --popup-from: -50% 6px;
+  --popup-scale: 0.985;
+}
 .dialog-overlay[data-state='open'] {
-  animation: modal-overlay-in var(--motion-slow) var(--ease-standard) both;
-}
-.dialog-overlay[data-state='closed'] {
-  animation: modal-overlay-in var(--motion-normal) var(--ease-exit) reverse both;
+  animation: popup-in var(--motion-open) var(--ease-standard) both;
 }
 .dialog-panel[data-state='open'] {
-  animation: modal-panel-in var(--motion-slow) var(--ease-standard) both;
+  animation: popup-in var(--motion-open) var(--ease-quad) both;
 }
 .dialog-panel[data-state='closed'] {
-  animation: modal-panel-in var(--motion-normal) var(--ease-exit) reverse both;
+  --popup-from: -50% 0;
+  --popup-scale: 0.99;
+}
+:is(.dialog-overlay, .dialog-panel)[data-state='closed'] {
+  animation: popup-out var(--motion-close) var(--ease-exit) both;
 }
 
-.tooltip-panel,
-.toast-panel {
-  transition:
-    opacity var(--motion-normal) var(--ease-standard),
-    transform var(--motion-normal) var(--ease-standard);
+.drawer-panel {
+  --popup-from: 100% 0;
 }
-
-.toast-panel {
-  transition-duration: var(--motion-slow);
+.drawer-panel[data-side='left'] {
+  --popup-from: -100% 0;
 }
-
-.tooltip-panel[data-state='closed'],
-.toast-panel[data-state='closed'] {
-  opacity: 0;
-  transform: translateY(2px);
-  transition-timing-function: var(--ease-exit);
-}
-
-@starting-style {
-  .tooltip-panel[data-state='delayed-open'],
-  .tooltip-panel[data-state='instant-open'],
-  .toast-panel[data-state='open'] {
-    opacity: 0;
-    transform: translateY(2px);
+@keyframes slide-in {
+  from {
+    translate: var(--popup-from);
   }
+}
+@keyframes slide-out {
+  to {
+    translate: var(--popup-from);
+  }
+}
+.drawer-overlay[data-state='open'] {
+  animation: popup-in var(--motion-open) var(--ease-fluid) both;
+}
+.drawer-panel[data-state='open'] {
+  animation: slide-in var(--motion-open) var(--ease-fluid) both;
+}
+.drawer-overlay[data-state='closed'] {
+  animation: popup-out var(--motion-close) var(--ease-fluid) both;
+}
+.drawer-panel[data-state='closed'] {
+  animation: slide-out var(--motion-close) var(--ease-fluid) both;
+}
+
+.disclosure > summary > svg {
+  transition: rotate var(--motion-open) var(--ease-quad);
+}
+.disclosure[open] > summary > svg {
+  rotate: -180deg;
+}
+@supports selector(::details-content) and (interpolate-size: allow-keywords) {
+  .disclosure {
+    interpolate-size: allow-keywords;
+  }
+  .disclosure::details-content {
+    block-size: 0;
+    opacity: 0;
+    overflow-y: clip;
+    transition:
+      block-size var(--motion-open) var(--ease-quad),
+      opacity var(--motion-open) var(--ease-standard),
+      content-visibility var(--motion-open) allow-discrete;
+  }
+  .disclosure[open]::details-content {
+    block-size: auto;
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .skeleton-sweep {
+    position: relative;
+    overflow: clip;
+  }
+  .skeleton-sweep::after {
+    content: '';
+    position: absolute;
+    inset-block: 0;
+    left: 0;
+    width: 50%;
+    pointer-events: none;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      color-mix(in oklch, var(--color-surface) 55%, transparent),
+      transparent
+    );
+    translate: -100% 0;
+    animation: skeleton-sweep var(--motion-sweep) var(--ease-sweep) infinite;
+  }
+  .skeleton-sweep .skeleton-sweep::after {
+    content: none;
+  }
+}
+@keyframes skeleton-sweep {
+  to {
+    translate: 200% 0;
+  }
+}
+
+@keyframes sidebar-labelled-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes sidebar-rail-in {
+  from {
+    opacity: 0;
+  }
+}
+[data-sidebar-toggled] [data-sidebar-frame] {
+  animation: sidebar-labelled-in var(--motion-open) var(--ease-standard);
+}
+[data-sidebar-toggled][data-sidebar-state='collapsed'] [data-sidebar-frame] {
+  animation-name: sidebar-rail-in;
 }

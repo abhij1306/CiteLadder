@@ -6,7 +6,7 @@ import type { ComponentProps } from 'react';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import type { Topic } from '@citeladder/contracts';
 
-import { AllFilters } from '@/components/ui/all-filters';
+import { FiltersMenu } from '@/components/ui/filters-menu';
 import { chooseFilterOption, openFilterOptions } from '@/test/all-filters';
 
 import { AddTopicDialog, ManageTopicsDialog, topicFilter } from './topic-controls';
@@ -35,7 +35,7 @@ const child = makeTopic({
 
 function renderFilter(props: Partial<Parameters<typeof topicFilter>[0]> = {}) {
   return render(
-    <AllFilters
+    <FiltersMenu
       filters={[
         topicFilter({
           topics: [child, parent],
@@ -99,7 +99,7 @@ describe('topicFilter', () => {
     const onSelect = vi.fn();
     renderFilter({ selectedTopicId: parent.id, onSelect });
 
-    expect(screen.getByRole('button', { name: 'All filters (1)' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Filters (1)' })).toBeInTheDocument();
     await chooseFilterOption(user, 'Topic', 'All topics');
     expect(onSelect).toHaveBeenCalledWith(null);
   });
@@ -221,8 +221,18 @@ describe('ManageTopicsDialog', () => {
     expect(dialog.queryByRole('textbox')).not.toBeInTheDocument();
   });
 
-  it('says when the topics could not be loaded', () => {
-    renderManage({ topics: [], loadError: true });
+  it('says when the topics could not be loaded, not that there are none, and reads them again on Retry', async () => {
+    const refetch = vi.fn();
+    const empty = renderManage({ topics: [] });
+    expect(screen.getByText('No topics yet.')).toBeVisible();
+    empty.unmount();
+    renderManage({
+      topics: [],
+      loadError: { error: new Error('offline'), refetch, isFetching: false },
+    });
     expect(screen.getByRole('alert')).toHaveTextContent("Couldn't load topics");
+    expect(screen.queryByText('No topics yet.')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(refetch).toHaveBeenCalledTimes(1);
   });
 });

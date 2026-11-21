@@ -1,4 +1,3 @@
-/** The answer perception and fact verification analytics kinds. */
 import type { AnalyticsKinds } from '../queue/executor.ts';
 import { answerPerception, compensatePerception } from './executor.ts';
 import { compensateFactVerification, factVerification } from './fact-verification.ts';

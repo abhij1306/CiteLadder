@@ -1,8 +1,3 @@
-/**
- * Scheduled crawls: each cadence's step and the scheduler's lease and retry
- * limits. A cadence steps in whole UTC days or calendar months from the
- * schedule's last occurrence.
- */
 export const crawlSchedules = {
   cadences: {
     weekly: { days: 7, months: 0 },

@@ -88,7 +88,6 @@ export async function readSchedule(db: Database, scope: ScheduleScope, id: strin
   return view(row);
 }
 
-/** An omitted next run re-arms a schedule being enabled with nothing pending. */
 function nextRunPatch(input: ScheduleUpdate, current: Row, now: Date) {
   if (input.next_run_at === undefined)
     return input.enabled === true && current.next_run_at === null ? { next_run_at: now } : {};
@@ -101,7 +100,7 @@ export function updateSchedule(
   id: string,
   input: ScheduleUpdate,
 ) {
-  return db.transaction().execute(async (trx) => {
+  return inTransaction(db, async (trx) => {
     const current = await scoped(trx, scope)
       .selectAll()
       .where('id', '=', id)
@@ -121,7 +120,6 @@ export function updateSchedule(
         ...(engines === undefined ? {} : { engines: JSON.stringify(engines) }),
         ...(markets === undefined ? {} : { market_ids: JSON.stringify(markets) }),
         ...nextRunPatch(input, current, now),
-        // Resuming a schedule paused by failures starts its failure count afresh.
         ...(input.enabled === true && !current.enabled ? { failure_count: 0, last_error: '' } : {}),
         updated_at: now,
       })

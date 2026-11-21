@@ -1,4 +1,3 @@
-/** The `llm_scraper` surface (consumer chat apps through DataForSEO's LLM scraper). */
 import { createHash } from 'node:crypto';
 import { providerPolicy } from '../../providers/config.ts';
 import { ProviderError } from '../../providers/errors.ts';
@@ -19,7 +18,6 @@ function recoveryDeadline(task: AuditTask): Date | null {
 }
 
 export const llmScraperSurface: ObservedSurface = {
-  /** A submission with no task id yet reconciles under the reconciliation pool, not the answer pool. */
   capacity(task, context) {
     const capacity = { ...context.capacity };
     if (task.provider_submission_ref && !task.provider_task_id) {
@@ -31,7 +29,6 @@ export const llmScraperSurface: ObservedSurface = {
     return capacity;
   },
   recoveryDeadline,
-  // Retrieval is bounded by the recovery deadline, never by a poll count.
   pollCeiling: false,
   requestSettings: frozenRequestSettings,
   async settle(deps, context, payload, taskId) {

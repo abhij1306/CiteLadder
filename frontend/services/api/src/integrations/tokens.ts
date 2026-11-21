@@ -12,11 +12,6 @@ function decryptCredential(client: IntegrationClient, value: string): string {
   }
 }
 
-/**
- * Refresh a grant outside a transaction and persist only while its fence holds.
- * `rejected` is a token the provider just refused: it is refreshed even before
- * its expiry, unless another caller has already rotated it.
- */
 export async function freshAccessToken(
   db: Database,
   grantId: string,
@@ -26,7 +21,6 @@ export async function freshAccessToken(
 ): Promise<string> {
   const settings = client.settings;
   const cutoff = Date.now() + settings.token_refresh_skew_seconds * 1000;
-  // Recheck the committed claim fence before each bounded refresh attempt.
   for (
     let wait = 0;
     wait <= settings.token_refresh_wait_seconds * 1000;
@@ -45,7 +39,6 @@ export async function freshAccessToken(
     if (claim === null) throw new Error('refresh claim was not returned');
     const token = await rotateToken(db, grantId, workspaceId, client, claim);
     if (token !== null) return token;
-    // Losing the fence re-enters the locked status/expiry check on the next iteration.
   }
   throw new IntegrationError('token_refresh_failed', 'Integration token refresh is busy', true);
 }

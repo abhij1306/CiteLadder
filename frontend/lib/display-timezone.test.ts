@@ -5,7 +5,6 @@ import {
   endOfDayInZone,
   readTimeZonePreference,
   resolveDisplayTimeZone,
-  resolveServerDisplayTimeZone,
   saveTimeZonePreference,
 } from './display-timezone';
 import {
@@ -25,7 +24,6 @@ describe('display timezone', () => {
     expect(endOfDayInZone('2026-11-30', 'UTC')).toBe('2026-11-30T23:59:59.000Z');
     expect(endOfDayInZone('2026-11-30', 'America/Los_Angeles')).toBe('2026-12-01T07:59:59.000Z');
     expect(endOfDayInZone('2026-11-30', 'Asia/Kolkata')).toBe('2026-11-30T18:29:59.000Z');
-    // New York switches to daylight time on 2026-03-08: the day ends at UTC-4.
     expect(endOfDayInZone('2026-03-08', 'America/New_York')).toBe('2026-03-09T03:59:59.000Z');
     expect(endOfDayInZone('2026-11-01', 'America/New_York')).toBe('2026-11-02T04:59:59.000Z');
   });
@@ -37,15 +35,13 @@ describe('display timezone', () => {
     expect(resolveDisplayTimeZone('not/a-zone', 'Asia/Kolkata')).toBe('UTC');
   });
 
-  it('keeps a selected named zone fixed and uses only an explicit cookie on the server', () => {
+  it('keeps a selected named zone fixed and reads only an explicit cookie choice', () => {
     expect(resolveDisplayTimeZone('America/New_York', 'Asia/Kolkata')).toBe('America/New_York');
     expect(resolveDisplayTimeZone('UTC', 'Asia/Kolkata')).toBe('UTC');
-    expect(resolveServerDisplayTimeZone('')).toBe('UTC');
-    expect(resolveServerDisplayTimeZone(`${DISPLAY_TIME_ZONE_COOKIE}=auto`)).toBe('UTC');
-    expect(resolveServerDisplayTimeZone(`${DISPLAY_TIME_ZONE_COOKIE}=Asia%2FKolkata`)).toBe(
+    expect(readTimeZonePreference('')).toBe('auto');
+    expect(readTimeZonePreference(`${DISPLAY_TIME_ZONE_COOKIE}=Asia%2FKolkata`)).toBe(
       'Asia/Kolkata',
     );
-    expect(resolveServerDisplayTimeZone(`${DISPLAY_TIME_ZONE_COOKIE}=bad%2Fzone`)).toBe('UTC');
     expect(readTimeZonePreference(`${DISPLAY_TIME_ZONE_COOKIE}=bad%2Fzone`)).toBe('UTC');
   });
 
@@ -65,7 +61,7 @@ describe('display timezone', () => {
     expect(after).toContain('3:30');
     expect(formatDisplayDate('2026-01-01T00:30:00Z', 'America/New_York')).toContain('Dec 31, 2025');
     expect(formatDisplayShortDate('2026-01-01T00:30:00Z', 'America/New_York')).toBe('Dec 31');
-    expect(formatDisplayTime('2026-01-01T00:30:00Z', 'Asia/Kolkata')).toBe('06:00 AM GMT+5:30');
+    expect(formatDisplayTime('2026-01-01T00:30:00Z', 'Asia/Kolkata')).toBe('06:00 AM');
     expect(formatWindowDate('2026-01-01')).toBe('Jan 1, 2026');
   });
 });

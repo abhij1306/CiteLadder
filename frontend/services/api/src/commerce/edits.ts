@@ -1,15 +1,3 @@
-/**
- * In-app product edits, archive and restore (commerce improvement PR 7).
- *
- * Every edit appends a `source_kind = 'edit'` observation with the edit
- * version, then updates the product row and its field provenance. An edited
- * field wins over crawl projection for good and over CSV until a later import
- * changes it: an import that repeats the value the field last imported (the
- * `imported` baseline the edit keeps) leaves the edit in place, any other
- * value replaces it. Archive moves the product out of the catalog, matching
- * and prompt context while its observations and answers stay. Each change
- * records a catalog revision, so recent answers re-match the new identity.
- */
 import { isDeepStrictEqual } from 'node:util';
 import { productEditRequestSchema } from '@citeladder/contracts/commerce-requests';
 import { commerceProductSchema } from '@citeladder/contracts/commerce-suite';
@@ -58,7 +46,6 @@ export const productEditInput = productEditRequestSchema
 export type ProductEdit = z.output<typeof productEditInput>;
 export { productLifecycleRequestSchema as productLifecycleInput } from '@citeladder/contracts/commerce-requests';
 
-/** The product columns an edit writes directly. */
 const SCALAR_FIELDS = [
   'canonical_url',
   'name',
@@ -73,14 +60,12 @@ const SCALAR_FIELDS = [
 ] as const;
 type ScalarField = (typeof SCALAR_FIELDS)[number];
 
-/** A field's value as the import baseline compares it: missing is empty, prices are numbers. */
 export function comparable(field: string, value: string | number | null | undefined): string {
   if (value === null || value === undefined) return '';
   if (field === 'price') return String(Number(value));
   return String(value);
 }
 
-/** Category names as one comparable set: normalized keys, sorted. */
 export const categorySet = (names: Iterable<string>) =>
   [...new Set([...names].map(categoryKey))].sort((a, b) => a.localeCompare(b));
 
@@ -88,27 +73,16 @@ function provenance(value: unknown, field: string): Record<string, unknown> {
   return value === undefined ? {} : jsonObject(value, `field_sources.${field}`);
 }
 
-/** What an edited field last imported; undefined when it is not edited or was never imported. */
 export function importedBaseline(sources: Record<string, unknown>, field: string): unknown {
   const source = provenance(sources[field], field);
   return source.kind === 'edit' ? source.imported : undefined;
 }
 
-/**
- * True when an edit holds `field` against an import supplying `value`: the
- * edit's baseline is exactly what the field last imported, so this import
- * does not change the field.
- */
 export function editHolds(sources: Record<string, unknown>, field: string, value: unknown) {
   const imported = importedBaseline(sources, field);
   return imported !== undefined && isDeepStrictEqual(imported, value);
 }
 
-/**
- * The provenance an edit records: the observation, the edit version, and the
- * value the field last imported, carried from an earlier edit or taken from
- * the CSV value it replaces.
- */
 function editSource(prior: unknown, field: string, current: unknown, observationId: string) {
   const previous = provenance(prior, field);
   let imported: unknown;
@@ -139,7 +113,6 @@ async function lockedProduct(db: Database, scope: CommerceScope, id: string) {
   return product;
 }
 
-/** The column values an edit writes: identifiers clear to null, the URL canonicalized. */
 function columnValues(edit: ProductEdit): Updateable<CommerceProducts> {
   const values: Updateable<CommerceProducts> = {};
   if (edit.canonical_url !== undefined)
@@ -147,7 +120,6 @@ function columnValues(edit: ProductEdit): Updateable<CommerceProducts> {
   if (edit.name !== undefined) values.name = edit.name;
   if (edit.description !== undefined) values.description = edit.description;
   if (edit.brand !== undefined) values.brand = edit.brand;
-  // An edited price is the whole catalog price: an imported variant range ends.
   if (edit.price !== undefined) {
     values.price = edit.price;
     values.price_max = null;
@@ -161,7 +133,6 @@ function columnValues(edit: ProductEdit): Updateable<CommerceProducts> {
   return values;
 }
 
-/** Another product of the project already holding an identity this edit claims. */
 async function refuseIdentityConflict(
   db: Database,
   scope: CommerceScope,
@@ -184,7 +155,6 @@ async function refuseIdentityConflict(
   if (other) conflict('Another product already has this URL, SKU or GTIN');
 }
 
-/** The category set a product's edit leaves: exactly the named categories. */
 async function replaceCategories(
   db: Database,
   scope: CommerceScope,
@@ -205,7 +175,6 @@ async function replaceCategories(
   for (const id of ids) await addMembership(db, scope, productId, id, observationId); // NOSONAR -- One edit transaction: statements run in order.
 }
 
-/** One catalog product as the catalog list shows it. */
 async function catalogProduct(db: Database, scope: CommerceScope, product: { id: string }) {
   const row = await db
     .selectFrom('commerce_products')
@@ -228,7 +197,6 @@ function currentValue(product: Selectable<CommerceProducts>, field: ScalarField)
   return comparable(field, product[field]);
 }
 
-/** Edit one catalog product; only the fields sent change. */
 export function editProduct(db: Database, scope: CommerceScope, id: string, edit: ProductEdit) {
   return db.transaction().execute(async (trx) => {
     const product = await lockedProduct(trx, scope, id);
@@ -265,16 +233,11 @@ export function editProduct(db: Database, scope: CommerceScope, id: string, edit
       .where('workspace_id', '=', scope.workspaceId)
       .where('project_id', '=', scope.projectId)
       .execute();
-    // A changed identity is a new catalog revision that re-matches recent answers.
     await recordCatalogRevision(trx, scope, { kind: 'edit', id: observationId });
     return catalogProduct(trx, scope, product);
   });
 }
 
-/**
- * Archive or restore one catalog product. Archived, it leaves the catalog,
- * new matching and prompt context; its observations and answers stay.
- */
 export function setProductLifecycle(
   db: Database,
   scope: CommerceScope,

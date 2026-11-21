@@ -9,7 +9,7 @@ import { makeProject } from '@/test/fixtures/project';
 import { mswServer } from '@/test/msw-server';
 import { renderWithProviders } from '@/test/render';
 
-import { AnalyzePageButton } from './analyze-page-dialog';
+import { AnalyzePageDialog } from './analyze-page-dialog';
 
 const PROJECT = '11111111-1111-4111-8111-111111111111';
 const CRAWL = '99999999-9999-4999-8999-999999999999';
@@ -41,7 +41,6 @@ const cheapest = makePrompt({
   topic_id: CRM,
 });
 
-/** The project's crawl pages, topics and prompts as the API answers; posts are recorded. */
 function serve(pages: { crawl_id: string | null; items: unknown[] }, posted: unknown[] = []) {
   mswServer.use(
     http.get(`/api/v1/projects/${PROJECT}/actions/analyze/pages`, () =>
@@ -79,11 +78,11 @@ async function openDialog() {
   const user = userEvent.setup();
   renderWithProviders(
     <Routes>
-      <Route path="/agent/actions" element={<AnalyzePageButton />} />
+      <Route path="/actions" element={<AnalyzePageDialog onClose={() => {}} />} />
       <Route path="/agent/chats/:chatId" element={<ChatRoute />} />
     </Routes>,
     {
-      initialEntries: ['/agent/actions'],
+      initialEntries: ['/actions'],
       projectSelection: {
         activeProjectId: PROJECT,
         activeProject: makeProject({ id: PROJECT }),
@@ -91,7 +90,6 @@ async function openDialog() {
       },
     },
   );
-  await user.click(screen.getByRole('button', { name: 'Analyze a page' }));
   return { user, dialog: await screen.findByRole('dialog', { name: 'Analyze a page' }) };
 }
 
@@ -132,7 +130,6 @@ describe('Analyze a page', () => {
 
     await user.click(within(dialog).getByRole('combobox', { name: 'Topic' }));
     await user.click(await screen.findByRole('option', { name: /CRM software/ }));
-    // Every prompt of the topic starts selected.
     expect(within(dialog).getByText('2 of 2')).toBeVisible();
     expect(generate).toBeEnabled();
 

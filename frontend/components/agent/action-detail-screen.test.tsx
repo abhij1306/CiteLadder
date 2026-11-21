@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { Route, Routes } from 'react-router-dom';
@@ -36,26 +36,49 @@ const action: Action = {
   target_prompt_id: null,
   origin: 'evidence',
   status: 'open',
+  measurement: null,
   priority_score: 82.5,
   priority_band: 'high',
-  families: ['site_health'],
+  families: ['site_changes'],
   approach: 'fix_technical',
-  group: 'fix_site',
+  goal: 'own_pages',
+  grouping: 'regressed',
   skill_id: 'technical_health',
   member_count: 1,
   declarable_member_count: 1,
   page_count: null,
+  finding_class: null,
+  summary: null,
   handoff: { context: 'action', message: MESSAGE },
   evidence_cleared_at: null,
   created_at: NOW,
   updated_at: NOW,
 };
 
+const group: Action = {
+  ...action,
+  target_kind: 'issue_family',
+  target_label: 'Form controls missing accessible names',
+  target_url: null,
+  families: ['site_health'],
+  goal: 'read_site',
+  grouping: 'aeo',
+  page_count: 12,
+};
+
+const urlId = (index: number) => `55555555-5555-4555-8555-${String(index + 1).padStart(12, '0')}`;
+const url = (index: number) => ({
+  site_url_id: urlId(index),
+  url: `https://acme.test/shop/p${String(index + 1).padStart(2, '0')}`,
+  page_kind: 'product',
+  open_action_count: 2,
+});
+
 function finding(target: Pick<Action, 'id' | 'target_url' | 'target_label'>, extra = {}) {
   return {
     id: FINDING,
     project_id: PROJECT,
-    rule_id: 'missing_structured_data',
+    rule_id: 'site_change_potential_regression',
     opportunity_type: 'site',
     severity: 'medium',
     priority_score: 82.5,
@@ -79,20 +102,16 @@ function finding(target: Pick<Action, 'id' | 'target_url' | 'target_label'>, ext
   };
 }
 
-/** Serves one Action's detail and records every status change the page sends. */
 function serve(current: Action, detail: Record<string, unknown> = {}) {
   const patches: unknown[] = [];
+  const cursors: (string | null)[] = [];
   let status = current.status;
   mswServer.use(
     http.get(`/api/v1/actions/${current.id}`, () =>
       HttpResponse.json({
         ...current,
         status,
-        diagnosis: {
-          approach: current.approach,
-          donts: ['Do not rewrite the page copy to work around a technical defect.'],
-          measure_with: ['next_crawl'],
-        },
+        diagnosis: { approach: current.approach },
         members: [finding(current)],
         member_measurement: { [FINDING]: 'next_crawl' },
         declarable_since: '2026-01-01T00:00:00Z',
@@ -100,136 +119,227 @@ function serve(current: Action, detail: Record<string, unknown> = {}) {
         ...detail,
       }),
     ),
+    http.get(`/api/v1/actions/${current.id}/urls`, ({ request }) => {
+      cursors.push(new URL(request.url).searchParams.get('cursor'));
+      return HttpResponse.json({
+        whole_site: false,
+        total: 12,
+        items: [url(10), url(11)],
+        next_cursor: null,
+      });
+    }),
     http.patch(`/api/v1/actions/${current.id}`, async ({ request }) => {
       const body = actionStatusUpdateRequestSchema.parse(await request.json());
       patches.push(body);
       status = body.status;
       return HttpResponse.json({ ...current, status });
     }),
-    http.get(`/api/v1/projects/${PROJECT}/agent/chats`, () =>
-      HttpResponse.json({ items: [], next_cursor: null }),
-    ),
-    http.get('/api/v1/agent/skills', () =>
-      HttpResponse.json({ skills: [], limits: { mentions_max: 5 } }),
-    ),
   );
-  return patches;
+  return { patches, cursors };
 }
 
-function renderDetail(actionId = ACTION) {
-  renderWithProviders(
+const GROUP_URLS = {
+  urls: {
+    whole_site: false,
+    total: 12,
+    items: Array.from({ length: 10 }, (_, index) => url(index)),
+    next_cursor: 'after-ten',
+  },
+  cohort: null,
+};
+
+function renderDetail() {
+  return renderWithProviders(
     <Routes>
-      <Route path="/agent/actions/:actionId" element={<ActionDetailScreen />} />
+      <Route path="/actions/:actionId" element={<ActionDetailScreen />} />
     </Routes>,
-    { initialEntries: [`/agent/actions/${actionId}`], projectSelection: selection },
+    { initialEntries: [`/actions/${ACTION}`], projectSelection: selection },
   );
 }
 
-/** The New chat a link opens: its path and its query, as one object. */
 function chatOf(link: HTMLElement) {
-  const url = new URL(link.getAttribute('href')!, 'https://app.test');
-  return { path: url.pathname, ...Object.fromEntries(url.searchParams) };
+  const target = new URL(link.getAttribute('href')!, 'https://app.test');
+  const query: Record<string, string | string[]> = {};
+  for (const key of new Set(target.searchParams.keys())) {
+    const values = target.searchParams.getAll(key);
+    query[key] = values.length > 1 ? values : values[0]!;
+  }
+  return { path: target.pathname, ...query };
 }
+
+const dockButtons = async () =>
+  within(await screen.findByRole('toolbar', { name: 'Work on this action' }))
+    .queryAllByRole('button')
+    .map((button) => button.textContent);
 
 beforeAll(() => mswServer.listen({ onUnhandledFrame: 'error' }));
 afterEach(() => mswServer.resetHandlers());
 afterAll(() => mswServer.close());
 
-describe('An Action page', () => {
-  it('reads as one column from the breadcrumb to the chats', async () => {
-    serve(action);
+describe('An issue-group Action page', () => {
+  it('lists its first 10 URLs, then appends 11–12 from the URL read with Show 2 more', async () => {
+    const { cursors } = serve(group, GROUP_URLS);
     const user = userEvent.setup();
     renderDetail();
 
-    expect(
-      await screen.findByRole('heading', { level: 1, name: 'acme.test/pricing' }),
-    ).toBeVisible();
-    const trail = screen.getByRole('navigation', { name: 'Breadcrumb' });
-    expect(within(trail).getByRole('link', { name: 'Actions' })).toHaveAttribute(
-      'href',
-      `/agent/actions?project=${PROJECT}`,
-    );
-    expect(within(trail).getByText('https://acme.test/pricing')).toHaveAttribute(
-      'aria-current',
-      'page',
-    );
-    expect(
-      screen.getAllByRole('heading', { level: 2 }).map((heading) => heading.textContent),
-    ).toEqual(['Overview', 'Evidence', 'What to do', 'Measure with', 'Avoid', 'Findings', 'Chats']);
+    const urls = await screen.findByRole('list', { name: 'URLs' });
+    expect(screen.getByRole('heading', { name: 'URLs · 12' })).toBeVisible();
+    expect(within(urls).getAllByRole('listitem')).toHaveLength(10);
+    expect(within(urls).getAllByRole('listitem')[0]).toHaveTextContent('/shop/p01Product2 actions');
+    await user.click(screen.getByRole('button', { name: 'Show 2 more' }));
 
-    const overview = screen.getByRole('region', { name: 'Overview' });
-    expect(within(overview).getByText(MESSAGE)).toBeVisible();
-    expect(within(overview).getByText('Missing structured data on owned page')).toBeVisible();
-
-    const details = within(screen.getByRole('region', { name: 'Details' }));
-    expect(details.getAllByRole('term').map((term) => term.textContent)).toEqual([
-      'Status',
-      'Priority',
-      'Action type',
-      'Target',
-      'Source',
+    expect(await within(urls).findByText('p12')).toBeVisible();
+    expect(
+      within(urls)
+        .getAllByRole('link')
+        .slice(9)
+        .map((link) => link.getAttribute('href')),
+    ).toEqual([
+      `/actions/urls/${urlId(9)}?project=${PROJECT}`,
+      `/actions/urls/${urlId(10)}?project=${PROJECT}`,
+      `/actions/urls/${urlId(11)}?project=${PROJECT}`,
     ]);
-    expect(details.getAllByRole('definition').map((value) => value.textContent)).toEqual([
-      'Open',
-      'High',
-      'Fix a technical issue',
-      'PageOpen the page (opens in a new tab)',
-      'Site Health',
-    ]);
-
-    expect(
-      within(screen.getByRole('region', { name: 'What to do' })).getByRole('listitem'),
-    ).toHaveTextContent('Add schema.org structured data.');
-    expect(screen.getByText('The next crawl of this page')).toBeVisible();
-
-    await user.click(within(overview).getByRole('button', { name: 'Copy as prompt' }));
-    expect(await navigator.clipboard.readText()).toBe(
-      `${MESSAGE}\n\nWhat to do:\n1. Add schema.org structured data.`,
-    );
+    expect(cursors).toEqual(['after-ten']);
+    expect(screen.queryByRole('button', { name: /more/ })).toBeNull();
   });
 
-  it('names a long page short in the header and shows its full address in the breadcrumb', async () => {
-    const stored =
-      'https://www.bestandless.com.au/Categories/Women/Women%2527s-Clothing/Women%2527s-Dresses/WR3458_PAISLEY';
-    serve({ ...action, target_label: stored, target_url: stored });
-    renderDetail();
-
-    expect(
-      await screen.findByRole('heading', { level: 1, name: 'bestandless.com.au/…/WR3458_PAISLEY' }),
-    ).toBeVisible();
-    const trail = screen.getByRole('navigation', { name: 'Breadcrumb' });
-    expect(
-      within(trail).getByText(
-        "https://www.bestandless.com.au/Categories/Women/Women's-Clothing/Women's-Dresses/WR3458_PAISLEY",
-      ),
-    ).toHaveAttribute('aria-current', 'page');
-  });
-
-  it('floats Dismiss, Mark implemented and Work with the agent at the foot of the page', async () => {
-    const patches = serve(action);
+  it('sends the whole group to the Agent, or only the ticked URLs', async () => {
+    serve(group, GROUP_URLS);
     const user = userEvent.setup();
     renderDetail();
 
-    const bar = within(await screen.findByRole('group', { name: 'Work on this Action' }));
-    expect(bar.getAllByRole('button').map((button) => button.textContent)).toEqual([
-      'Dismiss',
-      'Mark implemented',
-    ]);
-    expect(chatOf(bar.getByRole('link', { name: 'Work with the agent' }))).toEqual({
+    const all = await screen.findByRole('link', { name: 'Fix all 12 with Agent' });
+    expect(chatOf(all)).toEqual({ path: '/agent', action_id: ACTION, project: PROJECT });
+
+    await user.click(screen.getByRole('checkbox', { name: 'Select https://acme.test/shop/p02' }));
+    await user.click(screen.getByRole('checkbox', { name: 'Select https://acme.test/shop/p05' }));
+    expect(chatOf(screen.getByRole('link', { name: 'Fix 2 selected with Agent' }))).toEqual({
       path: '/agent',
       action_id: ACTION,
+      action_url_id: [urlId(1), urlId(4)],
       project: PROJECT,
     });
+  });
+});
 
-    await user.click(bar.getByRole('button', { name: 'Mark implemented' }));
-    expect(await screen.findByRole('dialog', { name: 'Mark implemented' })).toBeVisible();
-    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+const declared = (checks: unknown[]) => ({
+  id: '77777777-7777-4777-8777-777777777777',
+  action_id: ACTION,
+  output_revision_id: null,
+  member_opportunity_ids: [FINDING],
+  opportunity_snapshot_id: null,
+  resolved_before_snapshot_id: null,
+  target_site_url_ids: [],
+  target_external_url: null,
+  declared_implemented_at: NOW,
+  deployed_by: null,
+  deployment_reference: null,
+  expected_checks: [],
+  state: 'observed',
+  limitations: [],
+  verification_events: [],
+  legs: [],
+  checks,
+  measured_until: NOW,
+  created_at: NOW,
+});
+const metCheck = {
+  index: 0,
+  kind: 'site_rule',
+  leg: 'next_crawl',
+  state: 'met',
+  reason: null,
+  observed_at: NOW,
+  source_kind: 'site_crawl',
+  source_id: null,
+  subject: 'Missing structured data',
+};
 
-    await user.click(bar.getByRole('button', { name: 'Dismiss' }));
-    expect(await bar.findByRole('button', { name: 'Reopen' })).toBeVisible();
-    expect(patches).toEqual([{ status: 'dismissed' }]);
-    // A dismissed Action is not declared, so only Reopen and the Agent remain.
-    expect(bar.queryByRole('button', { name: 'Mark implemented' })).toBeNull();
+describe('A missing Action', () => {
+  it('reads Not found on a 404, and Couldn’t load on any other failure', async () => {
+    mswServer.use(
+      http.get(`/api/v1/actions/${ACTION}`, () =>
+        HttpResponse.json({ detail: 'Not found' }, { status: 404 }),
+      ),
+    );
+    const first = renderDetail();
+    expect(await screen.findByRole('heading', { name: 'Page not found' })).toBeInTheDocument();
+    expect(screen.queryByText("Couldn't load this Action")).toBeNull();
+    first.unmount();
+
+    mswServer.use(
+      http.get(`/api/v1/actions/${ACTION}`, () =>
+        HttpResponse.json({ detail: 'Unavailable' }, { status: 503 }),
+      ),
+    );
+    renderDetail();
+    expect(await screen.findByText("Couldn't load this Action")).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Page not found' })).toBeNull();
+  });
+});
+
+describe('A Done Action’s status', () => {
+  it.each([
+    ['Done', 'with no check', []],
+    ['DoneVerified', 'with a passing check', [metCheck]],
+  ] as const)('reads %j %s', async (status, _, checks) => {
+    serve(
+      { ...action, status: 'done', measurement: 'verified' },
+      { declaration: declared([...checks]) },
+    );
+    renderDetail();
+
+    const details = await screen.findByRole('region', { name: 'Details' });
+    expect(within(details).getAllByRole('definition').at(0)?.textContent).toBe(status);
+  });
+});
+
+describe('An Action page’s dock', () => {
+  it.each([
+    ['open', ['Decline', 'Accept']],
+    ['in_progress', ['Decline', 'Mark implemented']],
+    ['dismissed', ['Restore', 'Accept']],
+    ['done', []],
+  ] as const)('offers %s Actions %j', async (status, buttons) => {
+    serve({ ...action, status });
+    renderDetail();
+    expect(await dockButtons()).toEqual(buttons);
+  });
+
+  it('moves a New Action to In progress on Accept, then offers Decline and Mark implemented', async () => {
+    const { patches } = serve(action);
+    const user = userEvent.setup();
+    renderDetail();
+
+    const details = await screen.findByRole('region', { name: 'Details' });
+    expect(within(details).getAllByRole('definition')[0]).toHaveTextContent('New');
+    await user.click(screen.getByRole('button', { name: 'Accept' }));
+
+    expect(within(details).getAllByRole('definition')[0]).toHaveTextContent('In progress');
+    expect(await screen.findByText('Action accepted. It is in progress.')).toBeInTheDocument();
+    expect(patches).toEqual([{ status: 'in_progress' }]);
+    expect(await dockButtons()).toEqual(['Decline', 'Mark implemented']);
+  });
+
+  it('puts the status back when the server refuses the change', async () => {
+    serve(action);
+    let refused = 0;
+    mswServer.use(
+      http.patch(`/api/v1/actions/${ACTION}`, () => {
+        refused += 1;
+        return HttpResponse.json({ detail: 'Conflict' }, { status: 409 });
+      }),
+    );
+    const user = userEvent.setup();
+    renderDetail();
+
+    const details = await screen.findByRole('region', { name: 'Details' });
+    await user.click(screen.getByRole('button', { name: 'Decline' }));
+    await waitFor(() => expect(refused).toBe(1));
+    await waitFor(() =>
+      expect(within(details).getAllByRole('definition')[0]).toHaveTextContent('New'),
+    );
+    expect(await dockButtons()).toEqual(['Decline', 'Accept']);
   });
 });
 
@@ -237,7 +347,6 @@ const angleEvidence = {
   run_id: '77777777-7777-4777-8777-777777777777',
   lineage_id: '88888888-8888-4888-8888-888888888888',
   topic_id: null,
-  // As recorded at the refresh: one prompt with its text, one the library no longer had.
   prompts: [
     { id: PROMPT, text: 'Which CRM is cheapest?' },
     { id: '67676767-6767-4767-8767-676767676767', text: null },
@@ -256,14 +365,6 @@ const angleEvidence = {
       classification: 'competitor',
       matched_competitor: 'Globex',
       citation_count: 5,
-    },
-    {
-      url: 'https://review.example/crm-pricing',
-      title: 'CRM pricing compared',
-      domain: 'review.example',
-      classification: 'third_party',
-      matched_competitor: null,
-      citation_count: 4,
     },
   ],
   window: { start: '2026-10-01T00:00:00Z', end: '2026-10-31T00:00:00Z' },
@@ -286,9 +387,8 @@ const pageGap: Action = {
   },
 };
 
-describe('A content-gap Action', () => {
-  it('explains the gap from its evidence and hands the page to the page workflow', async () => {
-    const libraryReads: string[] = [];
+describe('An Action page’s sections and hand-off', () => {
+  it('explains a content gap from its evidence and hands the page to the page workflow', async () => {
     serve(pageGap, {
       members: [
         finding(pageGap, {
@@ -306,49 +406,17 @@ describe('A content-gap Action', () => {
         }),
       ],
     });
-    mswServer.use(
-      http.get('/api/v1/opportunities/:id', ({ params }) => {
-        libraryReads.push(`opportunity ${String(params.id)}`);
-        return HttpResponse.json({ detail: 'Not found' }, { status: 404 });
-      }),
-      http.get('/api/v1/prompt-sets', () => {
-        libraryReads.push('prompt-sets');
-        return HttpResponse.json({ prompt_sets: [] });
-      }),
-    );
     renderDetail();
 
     const why = await screen.findByRole('region', { name: 'Why this matters' });
-    expect(await within(why).findByText('Pricing comparison')).toBeVisible();
-    const counts = within(within(why).getByLabelText('Counts'));
-    expect(counts.getAllByRole('definition').map((value) => value.textContent)).toEqual([
-      '9',
-      '4',
-      '2',
-      '2',
-      'Oct 1, 2026 to Oct 31, 2026',
-    ]);
-    expect(
-      within(why).getByRole('link', { name: 'Globex pricing explained (opens in a new tab)' }),
-    ).toHaveAttribute('href', 'https://globex.com/pricing');
+    expect(within(why).getByText('Pricing comparison')).toBeVisible();
     expect(within(why).getByText('Globex (globex.com) · 5 citations')).toBeVisible();
-    expect(within(why).getByText('Competitor')).toBeVisible();
-    expect(within(why).getByText('review.example · 4 citations')).toBeVisible();
-    expect(within(why).getByText('Third-party')).toBeVisible();
-    expect(within(why).getByText('The 2 most cited of 25 pages.')).toBeVisible();
-    // Both stored prompts are listed, with no library or Opportunity read.
-    const prompts = within(within(why).getByRole('region', { name: 'Prompts' }));
-    expect(prompts.getAllByRole('listitem').map((item) => item.textContent)).toEqual([
-      'Which CRM is cheapest?',
-      'A prompt no longer in your library',
-    ]);
-    expect(prompts.getByRole('link', { name: 'Which CRM is cheapest?' })).toHaveAttribute(
-      'href',
-      `/prompts/${PROMPT}?project=${PROJECT}`,
-    );
-    expect(libraryReads).toEqual([]);
-
-    expect(chatOf(screen.getByRole('link', { name: 'Work with the agent' }))).toEqual({
+    expect(
+      within(screen.getByRole('region', { name: 'What to do' })).getByRole('checkbox', {
+        name: 'Cover the angle.',
+      }),
+    ).not.toBeChecked();
+    expect(chatOf(screen.getByRole('link', { name: 'Work with Agent' }))).toEqual({
       path: '/agent',
       action_id: ACTION,
       target_url: 'https://acme.test/crm-pricing',
@@ -357,103 +425,8 @@ describe('A content-gap Action', () => {
     });
   });
 
-  it('opens an Action on one of the site’s content pages in the page workspace', async () => {
-    serve(action, { editable_page: true });
-    renderDetail();
-
-    // Without `editable_page` this Action opens a plain Action chat (the floating bar test above).
-    expect(chatOf(await screen.findByRole('link', { name: 'Work with the agent' }))).toEqual({
-      path: '/agent',
-      action_id: ACTION,
-      target_url: 'https://acme.test/pricing',
-      workflow: 'optimize_page',
-      project: PROJECT,
-    });
-  });
-
-  it('shows an issue family’s crawl and affected pages, and says how many are not listed', async () => {
-    const family: Action = {
-      ...action,
-      target_kind: 'issue_family',
-      target_label: 'Missing viewport meta tag',
-      target_url: null,
-      page_count: 179,
-      handoff: {
-        context: 'action',
-        message: 'Write one fix that clears "Missing viewport meta tag" on every affected page.',
-      },
-    };
-    const pages = Array.from({ length: 25 }, (_, index) => ({
-      site_url_id: `77777777-7777-4777-8777-${String(index).padStart(12, '0')}`,
-      url: `https://acme.test/p${String(index).padStart(2, '0')}`,
-    }));
-    serve(family, {
-      cohort: {
-        rule_id: 'web.mobile_viewport',
-        rule_label: 'Missing viewport meta tag',
-        crawl_id: '88888888-8888-4888-8888-888888888888',
-        group_id: '99999999-9999-4999-8999-999999999999',
-        page_count: 179,
-        pages,
-        crawl_completed_at: '2026-11-01T09:00:00Z',
-      },
-    });
-    const user = userEvent.setup();
-    renderDetail();
-
-    const section = await screen.findByRole('region', { name: 'Affected pages' });
-    expect(
-      within(section).getByText(
-        /Missing viewport meta tag fails on 179 pages in the crawl completed/,
-      ),
-    ).toBeVisible();
-    const list = within(section).getByRole('list', { name: 'Affected pages' });
-    expect(within(list).getAllByRole('link')).toHaveLength(20);
-    expect(
-      within(section).getByText('154 more pages share this issue and are not listed.'),
-    ).toBeVisible();
-    await user.click(within(section).getByRole('button', { name: 'Show all 25 listed pages' }));
-    expect(within(list).getAllByRole('link')).toHaveLength(25);
-    expect(within(list).getAllByRole('link')[0]).toHaveAttribute('href', 'https://acme.test/p00');
-  });
-
-  it('prepares a developer ticket as Markdown and lists each record dated and marked inferred or observed', async () => {
-    serve(action);
-    const user = userEvent.setup();
-    renderDetail();
-
-    const evidence = await screen.findByRole('list', { name: 'Evidence records' });
-    expect(within(evidence).getByRole('listitem').textContent).toBe(
-      'Missing structured data on owned page · Inferred · Nov 10, 2026',
-    );
-
-    const overview = screen.getByRole('region', { name: 'Overview' });
-    await user.click(within(overview).getByRole('button', { name: 'Prepare developer ticket' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Developer ticket' });
-    const markdown = within(dialog).getByRole('textbox', { name: 'Developer ticket Markdown' });
-    expect((markdown as HTMLTextAreaElement).value.split('\n').slice(0, 15)).toEqual([
-      '# https://acme.test/pricing',
-      '',
-      MESSAGE,
-      '',
-      '## Issue',
-      '',
-      '- Missing structured data on owned page',
-      '',
-      '## Affected pages',
-      '',
-      '- https://acme.test/pricing',
-      '',
-      '## Evidence',
-      '',
-      '- Missing structured data on owned page: inferred, Nov 10, 2026',
-    ]);
-    await user.click(within(dialog).getByRole('button', { name: 'Copy Markdown' }));
-    expect(await navigator.clipboard.readText()).toBe((markdown as HTMLTextAreaElement).value);
-  });
-
   it('hands a planned page to the article workflow with its finding', async () => {
-    const planned: Action = {
+    serve({
       ...action,
       target_kind: 'planned_page',
       target_label: 'Setup guide',
@@ -465,16 +438,54 @@ describe('A content-gap Action', () => {
         opportunity_id: FINDING,
         message: 'Write a page about Setup guide for the prompts in this Action.',
       },
-    };
-    serve(planned);
+    });
     renderDetail();
 
-    expect(chatOf(await screen.findByRole('link', { name: 'Work with the agent' }))).toEqual({
+    expect(chatOf(await screen.findByRole('link', { name: 'Work with Agent' }))).toEqual({
       path: '/agent',
       action_id: ACTION,
       opportunity_id: FINDING,
       workflow: 'article',
       project: PROJECT,
     });
+  });
+
+  it('captions an agent-proposed Action’s words as its suggestion', async () => {
+    serve({ ...action, origin: 'agent' });
+    renderDetail();
+
+    const overview = await screen.findByRole('region', { name: 'Overview' });
+    expect(within(overview).getByText('Suggested by the agent')).toBeVisible();
+    expect(
+      within(screen.getByRole('region', { name: 'What to do' })).queryByText(
+        'Suggested by the agent',
+      ),
+    ).toBeNull();
+  });
+
+  it('copies the hand-off message and steps as a prompt', async () => {
+    serve(action);
+    const user = userEvent.setup();
+    renderDetail();
+
+    await user.click(await screen.findByRole('button', { name: 'Copy as prompt' }));
+    expect(await navigator.clipboard.readText()).toBe(
+      [MESSAGE, '', 'What to do:', '1. Add schema.org structured data.'].join('\n'),
+    );
+  });
+
+  it('prepares a developer ticket as Markdown', async () => {
+    serve(action);
+    const user = userEvent.setup();
+    renderDetail();
+
+    await user.click(await screen.findByRole('button', { name: 'Prepare developer ticket' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Developer ticket' });
+    const markdown = within(dialog).getByRole('textbox', { name: 'Developer ticket Markdown' });
+    expect((markdown as HTMLTextAreaElement).value.split('\n').slice(0, 3)).toEqual([
+      '# https://acme.test/pricing',
+      '',
+      MESSAGE,
+    ]);
   });
 });

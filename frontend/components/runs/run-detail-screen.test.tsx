@@ -12,7 +12,6 @@ import { mswServer } from '@/test/msw-server';
 import { renderWithProviders, selectionAs } from '@/test/render';
 import { RunDetailScreen } from './run-detail-screen';
 
-// The live stream only accelerates polling; this test drives the cancel path.
 vi.mock('@/lib/runs/use-run-events', () => ({ useRunEvents: () => {} }));
 
 const RUN = '00000001-1111-4111-8111-111111111111';
@@ -45,7 +44,6 @@ function audit(status: Audit['status']): Audit {
   };
 }
 
-/** A Commerce read mounted beside the run, counting how often it is fetched. */
 function ShelfReader({ onFetch }: Readonly<{ onFetch: () => void }>) {
   useQuery({
     queryKey: [...queryKeys.commerce.all, 'shelf-under-test'],
@@ -120,5 +118,64 @@ describe('RunDetailScreen', () => {
 
     expect(await screen.findByRole('button', { name: 'Export CSV' })).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Cancel run' })).toBeNull();
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
+      'Commerce audit · Aug 1, 2026',
+    );
+  });
+
+  it('names a failed run read once, without a second failure for its executions', async () => {
+    const failure = () => HttpResponse.json({ error: { message: 'down' } }, { status: 500 });
+    mswServer.use(
+      http.get(`/api/v1/audits/${RUN}`, failure),
+      http.get(`/api/v1/audits/${RUN}/executions`, failure),
+    );
+    renderWithProviders(
+      <Routes>
+        <Route path="/runs/:runId" element={<RunDetailScreen />} />
+      </Routes>,
+      {
+        initialEntries: [`/runs/${RUN}`],
+        projectSelection: {
+          activeProject: makeProject({ id: '33333333-3333-4333-8333-333333333333' }),
+        },
+      },
+    );
+
+    expect(await screen.findByText("Couldn't load this run")).toBeVisible();
+    expect(screen.getAllByRole('button', { name: /Retry/ })).toHaveLength(1);
+    expect(screen.queryByText("Couldn't load the executions")).toBeNull();
+  });
+
+  it('keeps executions that loaded when only the run read failed', async () => {
+    const answered = {
+      id: '11111111-1111-4111-8111-000000000001',
+      prompt_index: 0,
+      logical_engine: 'gemini',
+      transport_provider: 'google',
+      status: 'succeeded',
+      prompt_text: 'Best trail running shoes',
+      error_code: '',
+      latency_ms: 1200,
+    };
+    mswServer.use(
+      http.get(`/api/v1/audits/${RUN}`, () =>
+        HttpResponse.json({ error: { message: 'down' } }, { status: 500 }),
+      ),
+      http.get(`/api/v1/audits/${RUN}/executions`, () => HttpResponse.json([answered])),
+    );
+    renderWithProviders(
+      <Routes>
+        <Route path="/runs/:runId" element={<RunDetailScreen />} />
+      </Routes>,
+      {
+        initialEntries: [`/runs/${RUN}`],
+        projectSelection: {
+          activeProject: makeProject({ id: '33333333-3333-4333-8333-333333333333' }),
+        },
+      },
+    );
+
+    expect(await screen.findByText("Couldn't load this run")).toBeVisible();
+    expect(await screen.findByText('Best trail running shoes')).toBeVisible();
   });
 });

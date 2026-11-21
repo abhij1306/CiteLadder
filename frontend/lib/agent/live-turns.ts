@@ -1,41 +1,29 @@
-/**
- * Turns this tab started. Admission opens one streamed request per accepted
- * run, and the turn runs inside that request: it lives in this module, so
- * moving around the app keeps it running, while closing the tab ends the turn
- * as interrupted. Its events show the agent's calls and reads, its thinking
- * summary, and the reply and document as they are written; the persisted chat
- * read stays the record.
- */
 import { useSyncExternalStore } from 'react';
 import type { z } from 'zod';
 
 import { agentTurnEventSchema } from '@citeladder/contracts/agent';
 import { retryAfterSeconds } from '@citeladder/contracts/retry-after';
-import { AGENT_RUN_RETRY, AGENT_STREAM_IDLE_MS } from '@/lib/config/agent';
+import {
+  AGENT_RUN_RETRY,
+  AGENT_STREAM_IDLE_MS,
+  AGENT_STREAM_NOTIFY_FALLBACK_MS,
+} from '@/lib/config/agent';
 import { API_BASE_URL } from '@/lib/config/operational';
 import { readSseResponse, streamHeaders } from '@/lib/sse/use-event-stream';
 
 export type TurnEvent = z.infer<typeof agentTurnEventSchema>;
 type ToolEvent = Extract<TurnEvent, { type: 'tool' }>;
-/** One call's latest state; calls from one model response run together. */
 type LiveTool = Omit<ToolEvent, 'type'>;
-/** Text built from one model call's deltas; a later call's text replaces it. */
 type Written = { ordinal: number; text: string };
 
 export type LiveTurn = {
   startedAt: number;
-  /** True while the stream is open; polling resumes when it closes. */
   connected: boolean;
-  /** The ordinal of the newest model call. */
   step: number | null;
-  /** The reply so far, kept through later calls until a newer call writes or the saved reply arrives. */
-  reply: Written | null;
-  /** The document being saved, so far. */
+  reply: Written[];
   document: { title: string | null; body: string | null } | null;
-  /** Every call this turn, in the order they started. */
   tools: LiveTool[];
-  /** The newest call's thinking summary. */
-  thinking: Written | null;
+  thinking: Written[];
 };
 
 export function liveTurn(startedAt: number): LiveTurn {
@@ -43,33 +31,57 @@ export function liveTurn(startedAt: number): LiveTurn {
     startedAt,
     connected: true,
     step: null,
-    reply: null,
+    reply: [],
     document: null,
     tools: [],
-    thinking: null,
+    thinking: [],
   };
 }
 
-function appended(current: Written | null, { ordinal, text }: Written): Written {
-  return current?.ordinal === ordinal ? { ordinal, text: current.text + text } : { ordinal, text };
+function appended(segments: readonly Written[], { ordinal, text }: Written): Written[] {
+  const last = segments.at(-1);
+  return last?.ordinal === ordinal
+    ? [...segments.slice(0, -1), { ordinal, text: last.text + text }]
+    : [...segments, { ordinal, text }];
 }
 
-// Turns this tab is showing; only the most recent few are kept.
 const KEEP = 20;
 const turns = new Map<string, LiveTurn>();
+const chatOf = new Map<string, string>();
 const listeners = new Set<() => void>();
+const closeListeners = new Set<() => void>();
+let frame: number | undefined;
+let fallback: ReturnType<typeof setTimeout> | undefined;
 
-function update(runId: string, change: (turn: LiveTurn) => LiveTurn) {
-  const current = turns.get(runId);
-  if (!current) return;
-  turns.set(runId, change(current));
+function notify() {
+  if (frame !== undefined) cancelAnimationFrame(frame);
+  clearTimeout(fallback);
+  frame = undefined;
+  fallback = undefined;
   for (const listener of listeners) listener();
 }
 
-/** Folds one stream event into the turn's live view. */
+/** Listeners hear once a frame however many events arrive; a hidden tab pauses frames, so a timeout backs them up. */
+function notifyNextFrame() {
+  if (fallback !== undefined) return;
+  frame = requestAnimationFrame(notify);
+  fallback = setTimeout(notify, AGENT_STREAM_NOTIFY_FALLBACK_MS);
+}
+
+function update(runId: string, change: (turn: LiveTurn) => LiveTurn) {
+  const current = turns.get(runId);
+  if (current) turns.set(runId, change(current));
+}
+
+function withDocument(turn: LiveTurn, event: Extract<TurnEvent, { type: 'document_delta' }>) {
+  if (event.from === 0) return { ...turn, document: { title: event.title, body: event.text } };
+  const body = turn.document?.body;
+  if (body?.length !== event.from) return turn;
+  return { ...turn, document: { title: event.title, body: body + (event.text ?? '') } };
+}
+
 export function applyTurnEvent(turn: LiveTurn, event: TurnEvent): LiveTurn {
   switch (event.type) {
-    // Text stays through later steps, so a reply never blanks while the agent continues.
     case 'step':
       return { ...turn, step: event.ordinal };
     case 'reply_delta':
@@ -77,13 +89,14 @@ export function applyTurnEvent(turn: LiveTurn, event: TurnEvent): LiveTurn {
     case 'thinking':
       return { ...turn, thinking: appended(turn.thinking, event) };
     case 'document_delta':
-      return { ...turn, document: { title: event.title, body: event.body } };
+      return withDocument(turn, event);
     case 'tool': {
       const tool = {
         ordinal: event.ordinal,
         call_id: event.call_id,
         tool: event.tool,
         status: event.status,
+        target: event.target,
       };
       const known = turn.tools.some((item) => item.call_id === tool.call_id);
       return {
@@ -93,8 +106,6 @@ export function applyTurnEvent(turn: LiveTurn, event: TurnEvent): LiveTurn {
           : [...turn.tools, tool],
       };
     }
-    // The stream closes after either; the persisted run read then shows how
-    // the turn ended, including a failure, so neither changes the live view.
     case 'done':
     case 'error':
       return turn;
@@ -105,10 +116,6 @@ export function applyTurnEvent(turn: LiveTurn, event: TurnEvent): LiveTurn {
   }
 }
 
-/**
- * Reads the stream until it ends. A stream with no frame, keep-alives
- * included, for the idle bound is aborted, which closes it.
- */
 async function read(
   response: Response,
   controller: AbortController,
@@ -131,9 +138,7 @@ async function read(
         try {
           const parsed = agentTurnEventSchema.safeParse(JSON.parse(data));
           if (parsed.success) onEvent(parsed.data);
-        } catch {
-          // An unreadable frame is skipped; the persisted read still arrives.
-        }
+        } catch {}
       },
     );
   } finally {
@@ -141,18 +146,11 @@ async function read(
   }
 }
 
-/** The 429 `Retry-After` delay in milliseconds, or the default when it gives no positive wait. */
 function retryDelayMs(response: Response): number {
   const seconds = retryAfterSeconds(response.headers.get('retry-after'));
   return seconds === undefined ? AGENT_RUN_RETRY.defaultDelayMs : Math.ceil(seconds) * 1000;
 }
 
-/**
- * Posts `/run` and reads its stream. A busy instance answers 429: the queued
- * run waits for this retry, so it re-posts after `Retry-After` (a run another
- * request claimed or ended answers done, so a re-post is safe). Any other
- * refusal ends the live turn and the persisted read shows the run.
- */
 async function runStream(url: string, workspaceId: string | null, runId: string) {
   for (let attempt = 1; ; attempt += 1) {
     const controller = new AbortController();
@@ -170,28 +168,47 @@ async function runStream(url: string, workspaceId: string | null, runId: string)
       continue;
     }
     if (!response.ok) return;
-    await read(response, controller, (event) =>
-      update(runId, (turn) => applyTurnEvent(turn, event)),
-    );
+    await read(response, controller, (event) => {
+      update(runId, (turn) => applyTurnEvent(turn, event));
+      notifyNextFrame();
+    });
     return;
   }
 }
 
-/** Opens the run's stream; the server's turn limit bounds it, and a silent stream closes after the idle bound. */
 export function startLiveTurn(chatId: string, runId: string, workspaceId: string | null) {
   if (turns.has(runId)) return;
   turns.set(runId, liveTurn(Date.now()));
-  for (const stale of [...turns.keys()].slice(0, Math.max(0, turns.size - KEEP)))
+  chatOf.set(runId, chatId);
+  for (const stale of [...turns.keys()].slice(0, Math.max(0, turns.size - KEEP))) {
     turns.delete(stale);
+    chatOf.delete(stale);
+  }
   void runStream(`${API_BASE_URL}/agent/chats/${chatId}/runs/${runId}/run`, workspaceId, runId)
     .catch(() => undefined)
-    .finally(() => update(runId, (turn) => ({ ...turn, connected: false })));
-  for (const listener of listeners) listener();
+    .finally(() => {
+      update(runId, (turn) => ({ ...turn, connected: false }));
+      notify();
+      for (const listener of closeListeners) listener();
+    });
+  notify();
 }
 
-/** Whether this tab holds an open stream for the run, so polling can wait. */
 export function isLiveTurnConnected(runId: string | null | undefined) {
   return Boolean(runId && turns.get(runId)?.connected);
+}
+
+export function isChatLiveTurnConnected(chatId: string) {
+  for (const [runId, chat] of chatOf)
+    if (chat === chatId && isLiveTurnConnected(runId)) return true;
+  return false;
+}
+
+export function onLiveTurnClosed(listener: () => void) {
+  closeListeners.add(listener);
+  return () => {
+    closeListeners.delete(listener);
+  };
 }
 
 function subscribe(listener: () => void) {
@@ -201,12 +218,19 @@ function subscribe(listener: () => void) {
   };
 }
 
-/** Re-renders only when the run's stream opens or closes, not on every event. */
 export function useLiveTurnConnected(runId: string | null | undefined): boolean | undefined {
   return useSyncExternalStore(
     subscribe,
     () => (runId ? turns.get(runId)?.connected : undefined),
     () => undefined,
+  );
+}
+
+export function useLiveDocumentBody(runId: string | null | undefined): string | null {
+  return useSyncExternalStore(
+    subscribe,
+    () => (runId ? (turns.get(runId)?.document?.body ?? null) : null),
+    () => null,
   );
 }
 

@@ -48,8 +48,9 @@ test('Site Health retries only its failed initial read inside the authenticated 
   });
 
   await page.goto(fixtureProjectPath('/site'));
-  await expect(page.getByText('Dashboard temporarily unavailable')).toBeVisible();
-  await expect(page.getByRole('navigation', { name: 'Primary' })).toBeVisible();
+  await expect(page.getByText('The request failed or timed out.')).toBeVisible();
+  await expect(page.getByText('Dashboard temporarily unavailable')).toHaveCount(0);
+  await expect(page.getByRole('navigation', { name: 'Dashboard' })).toBeVisible();
   await page.keyboard.press('Tab');
   await expect(page.getByRole('link', { name: 'Skip to main content' })).toBeFocused();
   await page.keyboard.press('Enter');

@@ -1,8 +1,3 @@
-/**
- * Site Health downloads: the inventory, pages and issues tables, and the
- * observed architecture as a tree. Each renders the same workspace-scoped
- * projection the JSON API returns, so an export never discloses more.
- */
 import { policy } from '../../config.ts';
 import type { Database } from '../../db/database.ts';
 import { tableCsv, tableMarkdown } from '../../http/table-export.ts';
@@ -23,7 +18,6 @@ const MEASUREMENT = [
   'aeo_measurement_reason',
   'last_audited',
 ];
-/** The exportable table views, in the order the export route lists them. */
 const VIEW_NAMES = ['inventory', 'pages', 'issues'] as const;
 export type TableView = (typeof VIEW_NAMES)[number];
 export const TABLE_VIEWS: TableView[] = [...VIEW_NAMES];
@@ -67,7 +61,6 @@ const VIEWS = {
       'category',
       'severity',
       'finding_class',
-      // The distinct page kinds of the group's affected pages.
       'page_kind',
       'affected_url_count',
       'description',
@@ -81,7 +74,6 @@ const VIEWS = {
 
 const EXPORT_PAGE = policy.site_health.reads.export_page_size;
 
-/** Rows of one table view, at most `max_export_items`, and whether more were left out. */
 async function tableRows(db: Database, workspaceId: string, crawlId: string, view: TableView) {
   const max = siteReadSettings().maxExportItems;
   const rows: Record<string, unknown>[] = [];
@@ -152,11 +144,6 @@ type Node = {
 const byUrl = (a: Node, b: Node) =>
   compareText(a.url, b.url) || compareText(a.site_url_id, b.site_url_id);
 
-/**
- * Children by parent, where every node no root reaches becomes a root: its
- * parent is outside the projection, it names itself, or it sits in a cycle.
- * A tree that silently drops pages is worse than a flat one.
- */
 function rootedTree(nodes: Node[]) {
   const children = new Map<string | null, Node[]>();
   for (const node of nodes) {
@@ -194,7 +181,6 @@ function treeLines(
 ): string[] {
   const group = children.get(nodeId) ?? [];
   const kind = onlyOf(new Set(group.map((node) => node.page_kind)));
-  // A large homogeneous set of leaf pages reads as one count, not a URL list.
   const collapse =
     nodeId !== null &&
     group.length >= policy.site_health.architecture.page_kind_collapse_min &&
@@ -216,7 +202,6 @@ function treeLines(
   return lines;
 }
 
-/** The crawl's observed architecture as Markdown with an ASCII tree, coverage stated. */
 export async function architectureMarkdown(db: Database, workspaceId: string, crawlId: string) {
   const crawl = await loadCrawl(db, workspaceId, crawlId);
   const model = await architecture(db, workspaceId, crawl.project_id, crawl.id);

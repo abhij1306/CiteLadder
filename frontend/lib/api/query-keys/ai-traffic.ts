@@ -1,8 +1,3 @@
-/**
- * AI Traffic queries sit on the shared scoped-key builder: every read binds
- * the project, the view (resource), the workspace and the selected filters.
- * The retained referrals dashboard keeps its window and granularity in the key.
- */
 import { scopedKeys, type ProjectScope } from './scope';
 import type { ListFilters } from './shared';
 

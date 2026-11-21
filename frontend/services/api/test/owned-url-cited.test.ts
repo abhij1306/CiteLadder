@@ -1,9 +1,3 @@
-/**
- * The `owned_url_cited` declaration check against real PostgreSQL: what a
- * content-gap declaration freezes, how a later visibility run reads it through
- * the verification worker, and what the Action detail then says. Content-angle
- * runs and audits are seeded directly; nothing calls a provider or a model.
- */
 import { randomUUID } from 'node:crypto';
 import { sql } from 'kysely';
 import { afterAll, describe, expect, it } from 'vitest';
@@ -39,11 +33,6 @@ const scopeOf = (p: Project) => ({ workspaceId: p.workspace_id, projectId: p.pro
 const tenantOf = (p: Project) => ({ ...scopeOf(p), userId: p.user_id });
 const goLive = () => new Date(Date.now() - 2 * DAY).toISOString();
 
-/**
- * The opportunity scenario: its audit (three days ago, before go-live)
- * answered the first prompt with a competitor page and the second with an
- * owned page, acme.com/guide.
- */
 async function project(): Promise<Project> {
   const seed = await seedOpportunityScenario(db);
   seeds.push(seed);
@@ -70,7 +59,6 @@ const SETUP = [
   { url: 'https://news.example/crm-setup', title: 'How to set up a CRM' },
 ];
 
-/** Gaps on the page at PAGE and on a planned page, both over the scenario's two prompts. */
 async function gaps(p: Project) {
   const prompts = [p.prompt0_id, p.prompt1_id];
   const { lineages } = await angleRun(db, scopeOf(p), {
@@ -101,13 +89,8 @@ function declare(p: Project, actionId: string, revision: string | null = null) {
   );
 }
 
-/** One owned or third-party URL an answer cites. */
 type Cited = { url: string; owned?: boolean };
 
-/**
- * A visibility run after go-live answering each listed prompt once with the
- * listed citations, then the verification worker reading it.
- */
 async function laterRun(
   p: Project,
   answers: [promptId: string, cited: Cited[]][],
@@ -139,7 +122,6 @@ async function laterRun(
   return auditId;
 }
 
-/** The Action detail's owned-URL check, as a reader sees it. */
 async function citedCheck(p: Project, actionId: string) {
   const detail = await getAction(db, p.workspace_id, actionId);
   const check = detail.declaration?.checks.find((item) => item.kind === 'owned_url_cited');
@@ -171,7 +153,6 @@ describe('owned_url_cited', () => {
         expectation: { target: 'page', url: PAGE, site_url_id: p.pageId },
       },
     ]);
-    // No run after go-live yet: waiting, never unmet.
     expect(await citedCheck(p, improve)).toEqual({ state: 'waiting', reason: null, subject: PAGE });
 
     await laterRun(p, [
@@ -200,11 +181,9 @@ describe('owned_url_cited', () => {
     });
     expect(await citedCheck(p, planned)).toEqual({ state: 'waiting', reason: null, subject: null });
 
-    // An owned page that was already cited is not the new page.
     await laterRun(p, [[p.prompt1_id, [{ url: ALREADY_CITED }]]]);
     expect(await citedCheck(p, planned)).toEqual({ state: 'unmet', reason: null, subject: null });
 
-    // A new third-party page is not yours either; a new owned one is.
     await laterRun(p, [
       [p.prompt0_id, [{ url: 'https://news.example/new-guide', owned: false }]],
       [p.prompt1_id, [{ url: 'https://acme.test/crm-setup-guide' }]],
@@ -218,7 +197,6 @@ describe('owned_url_cited', () => {
     await declare(p, improve);
     const before = await frozen(improve);
 
-    // The lineage now matches another page on only the second prompt.
     await angleRun(db, scopeOf(p), {
       angles: [
         {
@@ -243,7 +221,6 @@ describe('owned_url_cited', () => {
     const p = await project();
     const { improve } = await gaps(p);
     await declare(p, improve);
-    // Both prompts are deleted after declaration; later runs ask another one.
     const { prompt_set_id: setId } = await db
       .selectFrom('prompts')
       .select('prompt_set_id')
@@ -280,11 +257,9 @@ describe('owned_url_cited', () => {
     const own = await project();
     const foreign = await project();
     const { planned } = await gaps(own);
-    // Another workspace's run cannot name this project's prompt at all.
     await expect(
       laterRun(foreign, [[own.prompt1_id, [{ url: 'https://acme.test/elsewhere' }]]]),
     ).rejects.toMatchObject({ code: '23503' });
-    // Another workspace's run before go-live.
     await laterRun(
       foreign,
       [[foreign.prompt1_id, [{ url: 'https://acme.test/elsewhere' }]]],
@@ -295,7 +270,6 @@ describe('owned_url_cited', () => {
       expectation: { baseline_urls: [ALREADY_CITED], baseline_audit_ids: [own.audit_id] },
     });
 
-    // Its run citing the page after go-live, even when announced to this project, is never read.
     const foreignRun = await laterRun(foreign, [
       [foreign.prompt1_id, [{ url: 'https://acme.test/crm-setup-guide' }]],
     ]);
@@ -311,7 +285,6 @@ describe('owned_url_cited', () => {
   });
 });
 
-/** Another workspace's run announced to this project: the worker must refuse to read it. */
 async function enqueueAndDrain(p: Project, auditId: string) {
   await enqueueImplementationVerification(db, {
     ...scopeOf(p),
@@ -322,10 +295,6 @@ async function enqueueAndDrain(p: Project, auditId: string) {
   await drainWorkspace(db, p.workspace_id, { owner: `owned-url-cited-${randomUUID()}` });
 }
 
-/**
- * The output revision of an Analyze a page chat on this Action, started for
- * the page at PAGE and these prompts.
- */
 async function analysisRevision(p: Project, actionId: string, promptIds: string[]) {
   const scope = { workspace_id: p.workspace_id, project_id: p.project_id };
   const now = new Date();

@@ -87,7 +87,6 @@ describe('a Merchant Center feed', () => {
       ['TR-1-9', '0012345678905', 119],
       ['TR-1-10', '0012345678912', 129],
     ]);
-    // A lone item keeps its own identifiers and a single price.
     expect(sock).toEqual({
       kind: 'item',
       row_number: 3,

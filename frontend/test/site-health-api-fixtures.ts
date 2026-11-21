@@ -1,14 +1,3 @@
-/**
- * Raw API payloads for the site-health SCHEMA-CONTRACT tests
- * (lib/api/site-health*.test.ts). These are deliberately untyped literals: the
- * point is to feed the zod parser something shaped like a real response, and
- * `SITE_HEALTH_CRAWL` deliberately OMITS the optional `discovered_count` /
- * `has_more_site_urls` keys to exercise the Free-redaction path where the
- * backend drops them entirely.
- *
- * Component tests want typed builders with overrides instead — use
- * `@/test/fixtures/site-health` (makeSiteCrawl / makePageSummary / ...).
- */
 export const SITE_HEALTH_UUID = '11111111-1111-4111-8111-111111111111';
 export const SITE_HEALTH_UUID_2 = '22222222-2222-4222-8222-222222222222';
 

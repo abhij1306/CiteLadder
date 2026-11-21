@@ -12,36 +12,12 @@ import {
   type ProviderGroup,
 } from './catalog';
 
-/** Result of an inline "Test connection" run. */
 export type ConnectionTestState = { status: 'ok' | 'failed'; message: string } | null;
 
-/** A failed save or probe as the test result's line. */
 function errorMessage(error: unknown): string {
   return humanizeApiError(error).message;
 }
 
-/**
- * Shared BYOK connection state machine for one provider credential, rendered
- * by every `ProviderRow` (Settings and the launch dialog's inline setup).
- *
- * Owns the write-only credential input state (never pre-filled — the stored
- * secret is never on the wire), the save mutation (create or rotate the
- * transport's connection and route EVERY engine it measures, so one DataForSEO
- * login serves all its surfaces), and the "Test connection" mutation.
- *
- * SAVING ALWAYS PROBES. Storing a key does not make it executable: admission
- * only resolves a BYOK route whose LATEST probe succeeded, so a key that was
- * saved and never tested is invisible to the planner and a launch refuses with
- * `execution_credentials_unavailable`. Settings hid that because the row stays
- * on screen and users click "Test connection" themselves; the launch flow moves
- * on after a save, so the probe never happened and the very next launch
- * failed. Folding the probe into the save makes "connected" mean the same
- * thing — verified — on every surface.
- *
- * A save clears the key and invalidates the shared `providers.connections()`
- * query either way; `onSaved` fires ONLY on a verified save, so a host
- * collapses on success and stays open showing the failure.
- */
 export function useProviderConnection({
   group,
   connections,
@@ -55,27 +31,15 @@ export function useProviderConnection({
   const workspaceId = useActiveWorkspaceId();
 
   const transport = group.transport;
-  // Two credential SHAPES, one state machine. Bearer transports fill
-  // `apiKey`; DataForSEO authenticates with an HTTP Basic pair and fills
-  // `apiLogin` + `apiPassword`. All three stay write-only and are never
-  // pre-filled — the stored secret is never on the wire.
   const credentialShape = group.credential_shape;
   const [apiKey, setApiKey] = useState('');
   const [apiLogin, setApiLogin] = useState('');
   const [apiPassword, setApiPassword] = useState('');
   const [testResult, setTestResult] = useState<ConnectionTestState>(null);
 
-  // Whether the user has entered a COMPLETE credential. A half-entered pair
-  // is not input: sending one half would rotate the stored credential into a
-  // state nobody typed.
   const hasCredentialInput =
     credentialShape === 'basic' ? Boolean(apiLogin.trim() && apiPassword) : Boolean(apiKey);
 
-  // ...and a half-entered pair is not "nothing" either. On an already
-  // configured connection the save button is enabled (you may be updating
-  // only the routes), so without this a half-typed pair would be quietly
-  // dropped and the save would report success — telling the user their
-  // credentials were updated when the field they typed into was ignored.
   const hasPartialCredentialInput =
     credentialShape === 'basic' && Boolean(apiLogin.trim()) !== Boolean(apiPassword);
 
@@ -85,7 +49,6 @@ export function useProviderConnection({
     setApiPassword('');
   };
 
-  /** The write-only credential fields for this shape, or nothing to rotate. */
   const credentialPayload = () =>
     credentialShape === 'basic'
       ? { api_login: apiLogin.trim(), api_password: apiPassword }
@@ -95,10 +58,6 @@ export function useProviderConnection({
 
   const configured = isConfigured(connection);
 
-  /**
-   * Probe one connection and fold the outcome into the alert model. Returns
-   * the state so the save path can decide whether the connect flow is done.
-   */
   const probe = async (connectionId: string): Promise<ConnectionTestState> => {
     const result = await providersApi.testConnection(connectionId, { workspaceId });
     const state: ConnectionTestState =
@@ -112,14 +71,10 @@ export function useProviderConnection({
   const saveMutation = useMutation({
     onMutate: () => setTestResult(null),
     mutationFn: async () => {
-      // A group only holds connectable engines; an empty one would store a
-      // credential with nothing to measure.
       if (!group.engines.length) throw new Error('No route available.');
       if (hasPartialCredentialInput) {
         throw new Error('Enter both the API login and the API password.');
       }
-      // A new connection needs a complete credential; creating one from empty
-      // fields would store a connection nobody can use.
       if (!connection && !hasCredentialInput) {
         throw new Error('Enter the credentials before saving.');
       }

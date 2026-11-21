@@ -1,4 +1,3 @@
-/** Owner/Admin management of the active workspace's public API keys. */
 import {
   apiKeyCreateSchema,
   apiKeyCreatedSchema,

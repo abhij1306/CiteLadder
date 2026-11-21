@@ -45,7 +45,6 @@ const needsInput = spanSuggestion(NEEDS, BODY, 'Teams pay more', {
 const pageChat = (body = BODY, revisionId = REV1, number = 1) =>
   sharedPageChat(body, { revisionId, number });
 
-/** Serves a page chat and its suggestions; `state` changes what later reads return. */
 function serve(initial: { chat: Record<string, unknown>; suggestions: Record<string, unknown> }) {
   const state = { ...initial, chatReads: 0, sent: [] as unknown[] };
   mswServer.use(
@@ -101,8 +100,13 @@ describe('The page workspace', () => {
     renderChat();
 
     expect(
-      await screen.findByRole('heading', { level: 1, name: 'Actions › acme.test/pricing' }),
+      await screen.findByRole('heading', { level: 1, name: 'acme.test/pricing' }),
     ).toBeVisible();
+    expect(
+      within(await screen.findByRole('navigation', { name: 'Breadcrumb' }))
+        .getAllByRole('link')
+        .map((link) => link.textContent),
+    ).toEqual(['Actions']);
     expect(screen.getByRole('textbox', { name: 'Page content (Markdown)' })).toHaveTextContent(
       'Our plans start at ten dollars.',
     );

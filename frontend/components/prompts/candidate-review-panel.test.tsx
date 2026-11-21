@@ -18,9 +18,15 @@ const review: ComponentProps<typeof CandidateReviewPanel>['review'] = {
   clearNotice: vi.fn(),
 };
 
+const selection = { picked: new Set<string>(), setPicked: vi.fn(), selected: [] };
+
 it('says it is loading, then explains an empty or expired batch', () => {
   const view = (loading: boolean) => (
-    <CandidateReviewPanel review={{ ...review, isLoading: loading }} topics={[]} />
+    <CandidateReviewPanel
+      review={{ ...review, isLoading: loading }}
+      topics={[]}
+      selection={selection}
+    />
   );
   const { rerender } = render(view(true));
   expect(screen.getByRole('status')).toHaveTextContent('Loading suggestions…');
@@ -29,7 +35,13 @@ it('says it is loading, then explains an empty or expired batch', () => {
 });
 
 it('offers retry rather than showing an empty batch when the read fails', async () => {
-  render(<CandidateReviewPanel review={{ ...review, loadError: 'Connection lost' }} topics={[]} />);
+  render(
+    <CandidateReviewPanel
+      review={{ ...review, loadError: 'Connection lost' }}
+      topics={[]}
+      selection={selection}
+    />,
+  );
   expect(screen.getByRole('alert')).toHaveTextContent('Connection lost');
   await userEvent.setup().click(screen.getByRole('button', { name: 'Retry' }));
   expect(review.retry).toHaveBeenCalledOnce();

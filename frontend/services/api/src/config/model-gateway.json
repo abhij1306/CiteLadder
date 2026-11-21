@@ -70,6 +70,7 @@
     "commerce_buyer_prompts": 8000,
     "answer_perception": 8000,
     "fact_verification": 8000,
+    "probe_labelling": 8000,
     "commerce_shelf": 8000,
     "content_angles": 8000
   }

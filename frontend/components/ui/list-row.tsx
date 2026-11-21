@@ -1,48 +1,31 @@
-import { Check } from 'lucide-react';
-import type { FormEvent, ReactNode } from 'react';
+import {
+  useId,
+  useState,
+  type ComponentPropsWithoutRef,
+  type FormEvent,
+  type ReactNode,
+} from 'react';
 
 import { Checkbox } from '@/components/ui/checkbox';
 import { Icon } from '@/components/ui/icon';
 import { Pressable } from '@/components/ui/pressable';
 import { Spinner } from '@/components/ui/spinner';
-import { ClampText } from '@/components/ui/table';
+import { ClampText } from '@/components/ui/clamp-text';
+import { pressableRowClasses } from '@/components/ui/open-row-skeleton';
 import { textRole } from '@/components/ui/typography';
+import { Check, ChevronDown } from '@/lib/icons';
+import { formatCount } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
-/**
- * The one selected-row treatment for a selectable list beside its detail
- * (catalog tree, issue list).
- *
- * Selected takes the shared selected tint and the foreground ink, the same
- * filled face as a selected tab, segment or navigation row (owner,
- * 2026-11-04: active states are buttons, not marks). Unselected rows take the
- * neutral hover and pressed tints. The state itself must also be in the markup — the caller
- * sets `aria-current` (navigation-like lists), `aria-selected` (a
- * listbox/grid option) or `aria-pressed` (a toggle); colour is never the only
- * signal.
- *
- * Layout (padding, gap, grid) stays with the caller: rows differ in anatomy,
- * not in state.
- */
 function listRowClasses({ selected = false }: Readonly<{ selected?: boolean }> = {}) {
   return cn(
-    'relative rounded-md transition-[background-color,color] duration-[var(--motion-fast)] ease-[var(--ease-standard)]',
-    // Three states, three overlays (D51): selected never looks hovered.
+    'relative rounded-control transition-[background-color,color] duration-[var(--motion-fast)] ease-[var(--ease-standard)]',
     selected
       ? 'overlay-selected text-ink'
-      : 'text-ink-secondary hover:overlay-hover hover:text-ink active:overlay-pressed',
+      : 'text-ink-2 hover:overlay-hover hover:text-ink active:overlay-pressed',
   );
 }
 
-/** A padded row's own geometry: 12 across, 8 down, its parts 12 apart. */
-const paddedRowClasses = 'focus-ring flex w-full items-center gap-3 px-3 py-2 text-start';
-
-/**
- * One choice in a list where pressing the row IS the commit (a property to
- * import, an account to use): a title, one caption line, and at the end a
- * spinner while the choice is being applied or the check once it is. The row
- * owns its padding (12 across, 8 down) and the pressed state.
- */
 export function OptionRow({
   title,
   caption,
@@ -66,59 +49,65 @@ export function OptionRow({
       aria-pressed={selected}
       className={cn(
         listRowClasses({ selected }),
-        paddedRowClasses,
-        'disabled:pointer-events-none disabled:[&_.type-item-title]:text-ink-muted',
+        pressableRowClasses,
+        'disabled:pointer-events-none disabled:[&_.type-body]:text-ink-2',
       )}
     >
       <span className="min-w-0 flex-1">
-        <span className={textRole('itemTitle', 'block truncate')}>{title}</span>
-        {caption ? (
-          <span className="type-caption block truncate tabular-nums">{caption}</span>
-        ) : null}
+        <ClampText className={textRole('body')}>{title}</ClampText>
+        {caption ? <ClampText className="type-caption tabular-nums">{caption}</ClampText> : null}
       </span>
-      {pending ? <Spinner className="text-ink-muted" /> : null}
-      {selected && !pending ? <Icon icon={Check} className="text-accent" /> : null}
+      {pending ? <Spinner className="text-ink-2" /> : null}
+      {selected && !pending ? <Icon icon={Check} className="text-ink" /> : null}
     </Pressable>
   );
 }
 
-/**
- * A ledger list's row that opens its item (an issue's detail): an optional
- * leading number, the title, the item's meta at the end of the same wrapping
- * line, and an optional caption under it. The row owns its padding (8 across,
- * 4 down), its gaps and the hover state; the caller passes the content.
- */
-export function OpenRow({
-  number,
+export function DisclosureList({ children }: Readonly<{ children: ReactNode }>) {
+  return <ul className="divide-rule grid min-w-0 divide-y">{children}</ul>;
+}
+
+export function DisclosureRow({
   title,
   meta,
-  caption,
-  onOpen,
+  children,
 }: Readonly<{
-  number?: number;
   title: ReactNode;
-  meta?: ReactNode;
-  caption?: ReactNode;
-  onOpen: () => void;
+  meta: ReactNode;
+  children: ReactNode;
 }>) {
+  const [open, setOpen] = useState(false);
+  const panelId = useId();
   return (
-    <Pressable
-      onClick={onOpen}
-      className={cn(listRowClasses(), 'focus-ring grid min-w-0 gap-1 px-2 py-1 text-start')}
-    >
-      <span className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-        {number === undefined ? null : (
-          <span className="type-caption w-6 shrink-0 tabular-nums">{number}</span>
-        )}
-        <span className={textRole('itemTitle', 'min-w-0 flex-1')}>{title}</span>
-        {meta}
-      </span>
-      {caption ? <span className="type-caption">{caption}</span> : null}
-    </Pressable>
+    <li className="grid min-w-0">
+      <Pressable
+        aria-expanded={open}
+        aria-controls={panelId}
+        onClick={() => setOpen(!open)}
+        className={cn(listRowClasses(), pressableRowClasses, 'min-h-10')}
+      >
+        <span className="flex min-w-0 flex-1 items-center gap-3">
+          <ClampText className={textRole('label', 'text-ink min-w-0')}>{title}</ClampText>
+          <span className={textRole('caption', 'text-ink-2 flex shrink-0 items-center gap-3')}>
+            {meta}
+          </span>
+        </span>
+        <Icon
+          icon={ChevronDown}
+          className={cn('text-ink-2 shrink-0 transition-transform', open && 'rotate-180')}
+        />
+      </Pressable>
+      <div
+        id={panelId}
+        hidden={!open}
+        className="bg-well rounded-control mb-2 grid min-w-0 gap-3 px-4 py-3"
+      >
+        {open ? children : null}
+      </div>
+    </li>
   );
 }
 
-/** A tree list: its `TreeItem`s and `TreeItemForm`s, 2 apart. */
 export function TreeList({ label, children }: Readonly<{ label: string; children: ReactNode }>) {
   return (
     <ul aria-label={label} className="flex min-w-0 flex-col gap-0.5">
@@ -127,14 +116,6 @@ export function TreeList({ label, children }: Readonly<{ label: string; children
   );
 }
 
-/**
- * A tree list's row (topics and their subtopics, in the dialog that manages
- * them): one control tall — the label, truncated with the whole name behind
- * a tooltip, an optional count, and icon actions (`IconButton`s) at the
- * row's end. A nested item (one level deep) is indented 12 from its parent.
- * The row owns the height, the indent and the gaps; the page passes names,
- * counts and actions.
- */
 export function TreeItem({
   label,
   count,
@@ -150,31 +131,23 @@ export function TreeItem({
     <li
       data-tree-item=""
       className={cn(
-        'text-ink flex min-h-[var(--nav-item-height)] min-w-0 items-center gap-2 ps-3 pe-0.5',
+        'text-ink flex min-h-[var(--control-md)] min-w-0 items-center gap-2 ps-3 pe-0.5',
         nested && 'ms-3',
         listRowClasses(),
       )}
     >
-      <ClampText lines={1} className="type-control flex-1">
-        {label}
-      </ClampText>
+      <ClampText className="type-body flex-1">{label}</ClampText>
       {typeof count === 'number' ? (
-        <span className="type-caption shrink-0 font-mono">{count}</span>
+        <span className="type-caption shrink-0 tabular-nums">{formatCount(count)}</span>
       ) : null}
       {actions}
     </li>
   );
 }
 
-/** A tree option's indent per depth, 16 a level (category paths stop at six levels). */
 const TREE_INDENT = ['', 'ms-4', 'ms-8', 'ms-12', 'ms-16', 'ms-20'] as const;
 const treeIndent = (depth: number) => TREE_INDENT[Math.min(depth, TREE_INDENT.length - 1)];
 
-/**
- * A tree list's row that is a box to tick (a proposed category to keep):
- * the checkbox and its label, an optional badge after it, indented 16 a
- * level of `depth`.
- */
 export function TreeCheckOption({
   label,
   checked,
@@ -192,10 +165,7 @@ export function TreeCheckOption({
 }>) {
   return (
     <li
-      className={cn(
-        'flex min-h-[var(--nav-item-height)] min-w-0 items-center gap-2',
-        treeIndent(depth),
-      )}
+      className={cn('flex min-h-[var(--control-md)] min-w-0 items-center gap-2', treeIndent(depth))}
     >
       <Checkbox
         label={label}
@@ -208,51 +178,6 @@ export function TreeCheckOption({
   );
 }
 
-/**
- * A tree list's row that is itself the choice (a category narrowing a table):
- * one control tall, the label truncated and its count at the end, pressed to
- * select, marked `aria-current` while selected. Each level of `depth` is
- * indented 16 from its parent.
- */
-export function TreeOption({
-  label,
-  count,
-  selected,
-  depth = 0,
-  onSelect,
-}: Readonly<{
-  label: string;
-  count?: string;
-  selected: boolean;
-  depth?: number;
-  onSelect: () => void;
-}>) {
-  return (
-    <li className={cn('min-w-0', treeIndent(depth))}>
-      <Pressable
-        type="button"
-        onClick={onSelect}
-        aria-current={selected ? 'true' : undefined}
-        className={cn(
-          listRowClasses({ selected }),
-          'focus-ring flex min-h-[var(--nav-item-height)] w-full min-w-0 items-center gap-2 ps-3 pe-2 text-start',
-        )}
-      >
-        <ClampText lines={1} className="type-control flex-1">
-          {label}
-        </ClampText>
-        {count === undefined ? null : (
-          <span className="type-caption shrink-0 tabular-nums">{count}</span>
-        )}
-      </Pressable>
-    </li>
-  );
-}
-
-/**
- * A tree item's name edited in place: the field and its submit on one row,
- * at the item's own indent so the edit stays where the name was.
- */
 export function TreeItemForm({
   nested = false,
   onSubmit,
@@ -269,6 +194,47 @@ export function TreeItemForm({
       >
         {children}
       </form>
+    </li>
+  );
+}
+
+export function ItemRow({
+  icon,
+  title,
+  caption,
+  status,
+  actions,
+  ...props
+}: Readonly<
+  Omit<ComponentPropsWithoutRef<'li'>, 'className' | 'children' | 'title'> & {
+    icon: ReactNode;
+    title: ReactNode;
+    caption: ReactNode;
+    status: ReactNode;
+    actions: ReactNode;
+  }
+>) {
+  return (
+    <li
+      {...props}
+      className="grid grid-cols-[20px_minmax(0,1fr)_fit-content(40%)] items-center gap-3 py-3 @[640px]:grid-cols-[20px_minmax(0,1fr)_fit-content(40%)_auto]"
+    >
+      <span className="flex size-5 items-center justify-center self-start">{icon}</span>
+      <div className="grid min-w-0 gap-0.5">
+        <p className={textRole('label', 'text-ink')}>{title}</p>
+        <div
+          data-item-caption=""
+          className={textRole('caption', 'text-ink-2 flex min-w-0 items-baseline gap-1')}
+        >
+          {caption}
+        </div>
+      </div>
+      <div className={textRole('caption', 'text-ink-2 flex min-w-0 items-center gap-2')}>
+        {status}
+      </div>
+      <div className="col-[2/-1] flex flex-wrap items-center gap-2 @[640px]:col-auto">
+        {actions}
+      </div>
     </li>
   );
 }

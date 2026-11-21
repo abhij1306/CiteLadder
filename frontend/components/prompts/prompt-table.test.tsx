@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vite-plus/test';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 
 import { TooltipProvider } from '@/components/ui/tooltip';
 import type { Prompt } from '@citeladder/contracts';
@@ -27,7 +27,16 @@ const TOPIC_ID = '22222222-2222-4222-8222-222222222222';
 
 const ANSWER = { auditId: '33333333-3333-4333-8333-333333333333', promptIndex: 0 };
 
-const NO_OP_ACTIONS = { onEdit: () => {}, onDelete: () => {}, onToggleEnabled: () => {} };
+const NO_OP_ACTIONS = {
+  onEdit: () => {},
+  onDelete: () => {},
+  onToggleEnabled: () => {},
+  onSetStatus: () => {},
+};
+
+function Pathname() {
+  return <output data-testid="pathname">{useLocation().pathname}</output>;
+}
 
 function renderTable(prompts: Prompt[]) {
   return render(
@@ -40,18 +49,90 @@ function renderTable(prompts: Prompt[]) {
 }
 
 describe('PromptTable pagination', () => {
-  it('shows each question without tags', () => {
-    renderTable([
-      makePrompt(1, { branded: true, buyer_stage: 'consideration', topic_id: TOPIC_ID }),
-    ]);
+  it('says a Commerce prompt has no per-prompt figures while a brand prompt shows its own', () => {
+    const COMMERCE_SET = '44444444-4444-4444-8444-444444444444';
+    const brandPrompt = makePrompt(1);
+    const shelfPrompt = makePrompt(2, { prompt_set_id: COMMERCE_SET });
+    render(
+      <MemoryRouter>
+        <TooltipProvider>
+          <PromptTable
+            prompts={[brandPrompt, shelfPrompt]}
+            commerceSetIds={new Set([COMMERCE_SET])}
+            measurements={
+              new Map([
+                [
+                  brandPrompt.id,
+                  {
+                    visibilityRate: 0.5,
+                    ownedCitationRate: 0.25,
+                    change: { kind: 'first' },
+                    position: 2,
+                    shareOfVoice: null,
+                    sentiment: null,
+                    answer: ANSWER,
+                    mentions: 0,
+                    brands: [],
+                    named: [],
+                    sources: [],
+                  },
+                ],
+              ])
+            }
+          />
+        </TooltipProvider>
+      </MemoryRouter>,
+    );
 
-    const [, measured] = screen.getAllByRole('row');
-    expect(within(measured!).getAllByRole('cell')[0]!.textContent).toBe('Prompt number 1');
+    const [, brandRow, shelfRow] = screen.getAllByRole('row');
+    expect(within(brandRow!).getAllByRole('cell')[2]!.textContent).toBe('50.0%');
+    const shelfCells = within(shelfRow!).getAllByRole('cell');
+    expect(shelfCells[2]!.textContent).toBe('—Measured with Shopping');
+    expect(shelfRow!.querySelectorAll('[data-absence="not_applicable"]')).toHaveLength(7);
+    expect(shelfCells).toHaveLength(within(brandRow!).getAllByRole('cell').length);
+    expect(within(shelfRow!).queryByText('Not measured')).toBeNull();
+  });
+
+  it('shows each question with its topic, captioning only a prompt that audits skip', () => {
+    render(
+      <MemoryRouter>
+        <TooltipProvider>
+          <PromptTable
+            prompts={[
+              makePrompt(1, { branded: true, buyer_stage: 'consideration', topic_id: TOPIC_ID }),
+              makePrompt(2, { over_plan_limit: true }),
+              makePrompt(3, { topic_id: '55555555-5555-4555-8555-555555555555' }),
+            ]}
+            topicNames={new Map([[TOPIC_ID, 'Espresso at home']])}
+          />
+        </TooltipProvider>
+      </MemoryRouter>,
+    );
+
+    const [, filed, overLimit, unknownTopic] = screen.getAllByRole('row');
+    const cells = (row: HTMLElement | undefined) =>
+      within(row!)
+        .getAllByRole('cell')
+        .slice(0, 2)
+        .map((cell) => cell.textContent);
+    expect(cells(filed)).toEqual(['Prompt number 1', 'Espresso at home']);
+    expect(cells(overLimit)).toEqual(['Prompt number 2Beyond the plan limit', '—No topic']);
+    expect(
+      within(overLimit!).getAllByRole('cell')[1]!.querySelector('[data-absence]'),
+    ).toHaveAttribute('data-absence', 'none');
+    expect(
+      within(unknownTopic!).getAllByRole('cell')[1]!.querySelector('[data-absence]'),
+    ).toHaveAttribute('data-absence', 'unavailable');
   });
 
   it('carries the whole question in a tooltip when the row cuts it', async () => {
-    // jsdom lays nothing out; report the question as wider than its line.
-    const scrollWidth = vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockReturnValue(1000);
+    // jsdom lays nothing out; report the question as wider than its line and
+    // the table as fitting its frame, so the frame takes no tab stop.
+    const scrollWidth = vi
+      .spyOn(HTMLElement.prototype, 'scrollWidth', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        return this.hasAttribute('data-scroll-content') ? 0 : 1000;
+      });
     renderTable([makePrompt(1)]);
 
     await userEvent.setup().tab();
@@ -83,8 +164,16 @@ describe('PromptTable pagination', () => {
                   {
                     visibilityRate: 0.5,
                     ownedCitationRate: 0.25,
-                    change: null,
+                    change: { kind: 'first' },
                     position: 2,
+                    shareOfVoice: 0.4,
+                    sentiment: {
+                      mentions: 31,
+                      classified: 30,
+                      positive: 20,
+                      negative: 5,
+                      net_sentiment: 50,
+                    },
                     answer: ANSWER,
                     mentions: 4,
                     brands: [
@@ -92,6 +181,8 @@ describe('PromptTable pagination', () => {
                       brand('Globex', 'competitor'),
                       brand('Initech', 'competitor'),
                     ],
+                    named: [],
+                    sources: [],
                   },
                 ],
                 [
@@ -99,11 +190,21 @@ describe('PromptTable pagination', () => {
                   {
                     visibilityRate: 0,
                     ownedCitationRate: 0,
-                    change: null,
+                    change: { kind: 'not_compared', reason: 'changed_context' },
                     position: null,
+                    shareOfVoice: 0,
+                    sentiment: {
+                      mentions: 6,
+                      classified: 4,
+                      positive: 2,
+                      negative: 2,
+                      net_sentiment: 0,
+                    },
                     answer: ANSWER,
                     mentions: 0,
                     brands: [],
+                    named: [],
+                    sources: [],
                   },
                 ],
               ])
@@ -121,31 +222,47 @@ describe('PromptTable pagination', () => {
     const columns = within(header!)
       .getAllByRole('columnheader')
       .map((cell) => cell.textContent);
-    expect(columns.slice(0, 6)).toEqual([
+    expect(columns).toEqual([
       'Prompt',
+      'Topic',
       'Visibility',
+      'Change',
       expect.stringMatching(/^Mentions/),
       expect.stringMatching(/^Citations/),
+      expect.stringMatching(/^Sources/),
       expect.stringMatching(/^Position/),
-      'Change',
+      expect.stringMatching(/^Share of voice/),
+      expect.stringMatching(/^Sentiment/),
+      'Actions',
     ]);
     const cells = within(row!).getAllByRole('cell');
-    expect(cells[1]!.textContent).toBe('50%');
-    // Three marks, each named for a screen reader, then the fourth as overflow.
-    expect(cells[2]).toHaveTextContent('AcmeAGlobexGInitechI+1 more');
-    expect(cells[3]!.textContent).toBe('25%');
-    expect(cells[4]!.textContent).toBe('#2');
-    // Measured, and no brand named: zero, not the "not measured" mark.
-    expect(within(unnamedRow!).getAllByRole('cell')[2]!.textContent).toBe('None');
+    const unnamedCells = within(unnamedRow!).getAllByRole('cell');
+    expect([2, 8, 9].map((index) => cells[index]!.textContent)).toEqual(['50.0%', '40.0%', '+50']);
+    expect(unnamedCells.slice(7, 10).map((cell) => cell.textContent)).toEqual([
+      '—Not named',
+      '0.0%',
+      '—Too few',
+    ]);
+    expect(cells[7]!.textContent).toBe('2.0');
+    expect(cells[4]).toHaveTextContent('AcmeAGlobexGInitechI+1 more');
+    expect(cells[5]!.textContent).toBe('25.0%');
+    expect(unnamedCells[4]!.textContent).toBe('—None');
+    expect(cells[3]!.querySelector('[data-absence]')).toHaveAttribute(
+      'data-absence',
+      'not_applicable',
+    );
+    expect(unnamedCells[3]!.querySelector('[data-absence]')).toHaveAttribute(
+      'data-absence',
+      'unavailable',
+    );
   });
 
   it('pages through rows with the page indicator and ghost buttons', async () => {
     const user = userEvent.setup();
     const prompts = Array.from({ length: 12 }, (_, i) => makePrompt(i + 1));
-    renderTable(prompts);
+    const view = renderTable(prompts);
 
     const table = screen.getByRole('table');
-    // Page 1 shows the first 10 rows with the mono page indicator.
     expect(within(table).getByText('Prompt number 1')).toBeInTheDocument();
     expect(within(table).queryByText('Prompt number 11')).not.toBeInTheDocument();
     expect(
@@ -168,9 +285,15 @@ describe('PromptTable pagination', () => {
       ),
     ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Next page' })).toBeDisabled();
+    expect(window.location.search).toBe('?page=2');
+    view.unmount();
+    renderTable(prompts);
+    const reloaded = screen.getByRole('table');
+    expect(within(reloaded).getByText('Prompt number 11')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Previous page' }));
-    expect(within(table).getByText('Prompt number 1')).toBeInTheDocument();
+    expect(window.location.search).toBe('');
+    expect(within(reloaded).getByText('Prompt number 1')).toBeInTheDocument();
     expect(
       screen.getByText(
         (_, el) =>
@@ -200,7 +323,6 @@ describe('PromptTable pagination', () => {
       ),
     ).toBeInTheDocument();
 
-    // A refetch/filter shrinking the list clamps the page into range.
     rerender(
       <MemoryRouter>
         <TooltipProvider>
@@ -208,44 +330,91 @@ describe('PromptTable pagination', () => {
         </TooltipProvider>
       </MemoryRouter>,
     );
-    // Five prompts fit on one page, so the table shows them with no pager.
     expect(screen.getByText('Prompt number 1')).toBeInTheDocument();
     expect(screen.getByText('Prompt number 5')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Next page' })).toBeNull();
   });
 
-  it('states the enabled state without offering a control when the reader may not edit', () => {
-    render(
-      <MemoryRouter>
-        <TooltipProvider>
-          <PromptTable prompts={[makePrompt(1), makePrompt(2, { enabled: false })]} />
-        </TooltipProvider>
-      </MemoryRouter>,
-    );
-
-    const [, first, second] = screen.getAllByRole('row');
-    expect(
-      within(first!)
-        .getAllByRole('cell')
-        .map((cell) => cell.textContent),
-    ).toEqual(['Prompt number 1', 'Yes']);
-    expect(within(second!).getAllByRole('cell')[1]!.textContent).toBe('No');
-    expect(screen.queryByRole('switch')).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Prompt actions' })).toBeNull();
-  });
-
-  it('keeps row actions wired on paginated rows', async () => {
+  it('opens the prompt from a click on its row, but not from the row controls', async () => {
     const user = userEvent.setup();
     const onToggleEnabled = vi.fn();
+    const selection = {
+      ids: new Set<string>(),
+      selected: [],
+      toggle: vi.fn(),
+      togglePage: vi.fn(),
+      clear: vi.fn(),
+    };
+    const prompt = makePrompt(1);
     render(
-      <MemoryRouter>
+      <MemoryRouter initialEntries={['/prompts']}>
         <TooltipProvider>
-          <PromptTable prompts={[makePrompt(1)]} actions={{ ...NO_OP_ACTIONS, onToggleEnabled }} />
+          <PromptTable
+            prompts={[prompt]}
+            actions={{ ...NO_OP_ACTIONS, onToggleEnabled }}
+            selection={selection}
+          />
+          <Pathname />
         </TooltipProvider>
       </MemoryRouter>,
     );
+    const path = () => screen.getByTestId('pathname').textContent;
 
-    await user.click(screen.getByRole('switch', { name: 'Disable prompt' }));
-    expect(onToggleEnabled).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByRole('checkbox', { name: 'Select “Prompt number 1”' }));
+    await user.click(screen.getByRole('button', { name: 'Prompt actions' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Disable' }));
+    expect([path(), selection.toggle.mock.calls.length, onToggleEnabled.mock.calls.length]).toEqual(
+      ['/prompts', 1, 1],
+    );
+
+    await user.click(screen.getByText('No topic'));
+    expect(path()).toBe(`/prompts/${prompt.id}`);
+  });
+
+  it("opens a measured prompt's latest answer from its row or its question, and stays on the page", async () => {
+    const user = userEvent.setup();
+    const onOpenAnswer = vi.fn();
+    const measured = makePrompt(1);
+    const unmeasured = makePrompt(2);
+    const measurement = {
+      visibilityRate: 0.5,
+      ownedCitationRate: 0,
+      change: { kind: 'first' },
+      position: null,
+      shareOfVoice: null,
+      sentiment: null,
+      answer: ANSWER,
+      mentions: 0,
+      brands: [],
+      named: [],
+      sources: [],
+    } as const;
+    render(
+      <MemoryRouter initialEntries={['/prompts']}>
+        <TooltipProvider>
+          <PromptTable
+            prompts={[measured, unmeasured]}
+            onOpenAnswer={onOpenAnswer}
+            measurements={new Map([[measured.id, measurement]])}
+          />
+          <Pathname />
+        </TooltipProvider>
+      </MemoryRouter>,
+    );
+    const [, row] = screen.getAllByRole('row');
+
+    await user.click(within(row!).getByText('50.0%'));
+    const question = screen.getByRole('link', { name: 'Prompt number 1' });
+    expect(question).toHaveAttribute('href', `/prompts/${measured.id}`);
+    await user.click(question);
+    expect(onOpenAnswer.mock.calls).toEqual([
+      [measured, ANSWER],
+      [measured, ANSWER],
+    ]);
+    expect(screen.getByTestId('pathname').textContent).toBe('/prompts');
+    expect(screen.getByRole('link', { name: 'Prompt number 2' })).toHaveAttribute(
+      'href',
+      `/prompts/${unmeasured.id}`,
+    );
   });
 });

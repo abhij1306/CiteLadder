@@ -26,9 +26,6 @@ describe('Switch', () => {
     expect(onCheckedChange).toHaveBeenCalledWith(true);
   });
 
-  // A native <button> gives Space and Enter activation for free. These assert
-  // that it really is a button — a div with a click handler would pass the
-  // click test above and fail both of these.
   it('activates with Space', async () => {
     const onCheckedChange = vi.fn();
     render(<Switch checked={false} onCheckedChange={onCheckedChange} label="Toggle" />);

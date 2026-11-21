@@ -57,7 +57,7 @@
     },
     {
       "glob": "frontend/apps/app/src/globals.css",
-      "reason": "design tokens"
+      "reason": "design tokens and the shared rules, ordered by cascade tier: an area (tables, shell) spans several tiers, so an order-keeping split gives tier files, not area files, and the design-system checks read it as the one token owner"
     },
     {
       "glob": "frontend/services/api/src/mcp/tools.ts",

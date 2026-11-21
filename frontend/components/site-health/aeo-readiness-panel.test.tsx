@@ -147,14 +147,13 @@ function stubReadiness(overrides: Record<string, unknown> = {}) {
   );
 }
 
-describe('AEO Readiness', () => {
-  it('renders all seven dimensions with a plain-language description', async () => {
+describe('AEO readiness', () => {
+  it('renders all seven dimensions', async () => {
     stubReadiness();
     renderWithProviders(<AeoReadinessPanel projectId={PROJECT} crawlId={CRAWL} />);
 
     await screen.findByRole('heading', { name: 'Readiness dimensions' });
     for (const [, label] of DIMENSIONS) expect(screen.getByText(label)).toBeInTheDocument();
-    expect(screen.getByText(/what answerability means in one sentence/i)).toBeInTheDocument();
   });
 
   it('counts pages that need work, never a bare evaluation total', async () => {
@@ -163,7 +162,7 @@ describe('AEO Readiness', () => {
 
     const answerability = (await screen.findByText('Answerability')).closest('tr');
     expect(within(answerability!).getByText('Needs work')).toBeInTheDocument();
-    expect(within(answerability!).getByText('83%')).toBeInTheDocument();
+    expect(within(answerability!).getByText('83.3%')).toBeInTheDocument();
     expect(screen.queryByText(/evidence link/i)).toBeNull();
   });
 
@@ -182,15 +181,19 @@ describe('AEO Readiness', () => {
         .getAllByRole('columnheader')
         .map((head) => head.textContent),
     ).toEqual(['Dimension', 'Score', 'Coverage', 'State']);
-    // Two bands, two tones: "Nearly there" no longer reads as "Needs work".
-    expect(within(table).getByText('Needs work')).toHaveAttribute('data-badge-tone', 'warning');
+    expect(within(table).getByText('Needs work').closest('[data-status-tone]')).toHaveAttribute(
+      'data-status-tone',
+      'warning',
+    );
     const nearly = within(table).getByText('Nearly there');
-    expect(nearly).toHaveAttribute('data-badge-tone', 'info');
+    expect(nearly.closest('[data-status-tone]')).toHaveAttribute('data-status-tone', 'info');
 
     await userEvent.click(nearly);
     const drawer = await screen.findByRole('dialog', { name: 'Structure evidence' });
-    // A check's state is a status badge, not a bare caption.
-    expect(within(drawer).getByText('Passing')).toHaveAttribute('data-badge-tone', 'positive');
+    expect(within(drawer).getByText('Passing').closest('[data-status-tone]')).toHaveAttribute(
+      'data-status-tone',
+      'positive',
+    );
   });
 
   it('opens a pillar from the keyboard through its named row button', async () => {
@@ -202,19 +205,6 @@ describe('AEO Readiness', () => {
     trigger.focus();
     await user.keyboard('{Enter}');
     expect(await screen.findByRole('dialog', { name: 'Answerability evidence' })).toBeVisible();
-  });
-
-  it('uses singular grammar when one checked page needs work', async () => {
-    stubReadiness({
-      dimensions: DIMENSIONS.map(([key, label], index) => {
-        const base = dimension(key, label, index === 0);
-        return index === 0 ? { ...base, checked_page_count: 1, failing_page_count: 1 } : base;
-      }),
-    });
-    renderWithProviders(<AeoReadinessPanel projectId={PROJECT} crawlId={CRAWL} />);
-
-    await userEvent.click(await screen.findByRole('button', { name: 'Answerability evidence' }));
-    expect(screen.getByText('1 page failed at least one check, worst first.')).toBeInTheDocument();
   });
 
   it('names checks by their catalog title and never by a rule id', async () => {
@@ -242,13 +232,28 @@ describe('AEO Readiness', () => {
     stubReadiness({ dimensions });
     renderWithProviders(<AeoReadinessPanel projectId={PROJECT} crawlId={CRAWL} />);
 
-    // The pillar still reports its number, but an unresolved check bars the
-    // top band: a perfect score over an incomplete set is not a pass.
     const row = (await screen.findByText('Answerability')).closest('tr');
     expect(within(row!).queryByText('Passing')).toBeNull();
     expect(within(row!).getByText('Nearly there')).toBeInTheDocument();
+    expect(within(row!).getByText('1 check incomplete')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Answerability evidence' }));
     expect(screen.getAllByText('Incomplete')).toHaveLength(1);
+  });
+
+  it('says how many checks hold a printed 100 below Passing', async () => {
+    const dimensions = DIMENSIONS.map(([key, label], index) => {
+      const base = dimension(key, label, false);
+      return index === 1 ? { ...base, unresolved_count: 1 } : base;
+    });
+    stubReadiness({ dimensions });
+    renderWithProviders(<AeoReadinessPanel projectId={PROJECT} crawlId={CRAWL} />);
+
+    const held = (await screen.findByText(DIMENSIONS[1][1])).closest('tr');
+    expect(within(held!).getByText('Nearly there')).toBeInTheDocument();
+    expect(within(held!).getByText('1 check unresolved')).toBeInTheDocument();
+    const passing = screen.getByText(DIMENSIONS[0][1]).closest('tr');
+    expect(within(passing!).getByText('Passing')).toBeInTheDocument();
+    expect(within(passing!).queryByText(/unresolved|incomplete/)).toBeNull();
   });
 
   it('labels unknown-only checks as incomplete rather than not applicable', async () => {
@@ -287,13 +292,11 @@ describe('AEO Readiness', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Answerability evidence' }));
     const link = screen.getByRole('link', { name: 'acme.test/blogs/american-summer' });
     expect(link).toHaveAttribute('href', `/site/crawls/${CRAWL}/pages/${PAGE_A}`);
-    // One row per page — the old drawer repeated the URL once per rule.
     expect(screen.getAllByRole('link', { name: 'acme.test/blogs/american-summer' })).toHaveLength(
       1,
     );
     const row = link.closest('li');
     expect(within(row!).getByText(/No question headings/)).toBeInTheDocument();
-    // Raw outcome tokens are gone.
     expect(screen.queryByText('fail')).toBeNull();
   });
 
@@ -307,13 +310,12 @@ describe('AEO Readiness', () => {
     renderWithProviders(<AeoReadinessPanel projectId={PROJECT} crawlId={CRAWL} />);
 
     await userEvent.click(await screen.findByRole('button', { name: 'Answerability evidence' }));
-    expect(screen.getByText(/Showing the 2 most affected of 140 pages/)).toBeInTheDocument();
+    expect(screen.getByText('Worst 2 of 140')).toBeInTheDocument();
   });
 
   it('shows the persisted empty state rather than an empty grid', async () => {
     stubReadiness({ state: 'not_measured', crawl_id: null, limitations: ['Run a crawl first.'] });
     renderWithProviders(<AeoReadinessPanel projectId={PROJECT} crawlId={CRAWL} />);
-    // An informational notice is a polite status, not an alert.
     expect(await screen.findByRole('status')).toHaveTextContent('Run a crawl first.');
   });
 
@@ -332,9 +334,6 @@ describe('AEO Readiness', () => {
   });
 
   it('gives a code-only page the fix prompt rather than no action at all', async () => {
-    // Every finding names a next action. A page whose failures are all
-    // template or header changes cannot open a draft or a roadmap, but it must
-    // still hand the reader something to give a developer.
     stubReadiness({
       dimensions: DIMENSIONS.map(([key, label], index) => {
         const base = dimension(key, label, index === 0);

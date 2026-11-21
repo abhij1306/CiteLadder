@@ -1,4 +1,3 @@
-/** Project reads over the prompt, Action, demand, commerce and research owners. */
 import { sql } from 'kysely';
 import { policy } from '../config.ts';
 import { groundedSql } from '../prompts/observed-queries.ts';
@@ -50,10 +49,9 @@ export async function demandSnapshot({ db, scope }: ProjectRead): Promise<Eviden
   };
 }
 
-/** Active Actions in the owner's priority order, or one Action with its outcome. */
 export async function actionsRead(
   { db, scope, origin }: ProjectRead,
-  args: Page & { action_id?: string | null; status?: string | null },
+  args: Page & { action_id?: string | null; status?: string | null; query?: string | null },
 ): Promise<Evidence> {
   if (args.action_id) {
     const action = await getAction(db, scope.workspaceId, args.action_id);
@@ -61,19 +59,20 @@ export async function actionsRead(
       throw new McpInputError('Action was not found in this project');
     return {
       state: 'available',
-      action: { ...action, link: appLink(origin, `/agent/actions/${action.id}`, scope.projectId) },
+      action: { ...action, link: appLink(origin, `/actions/${action.id}`, scope.projectId) },
       artifact_refs: [reference('action', action.id)],
     };
   }
   const page = await listActions(db, scope, {
     status: args.status ?? null,
+    q: args.query ?? null,
     target_kind: null,
     cursor: args.cursor ?? null,
     limit: args.limit ?? policy.opportunity.actions.ACTION_LIST_DEFAULT_LIMIT,
   });
   const items = page.items.map((item) => ({
     ...item,
-    link: appLink(origin, `/agent/actions/${item.id}`, scope.projectId),
+    link: appLink(origin, `/actions/${item.id}`, scope.projectId),
   }));
   return {
     state: 'available',
@@ -93,11 +92,6 @@ export async function differentiationRead({ db, scope }: ProjectRead): Promise<E
   return { state: 'available', items };
 }
 
-/**
- * The Products table's per-product metrics, or one product's page, from the
- * same reads the app renders; no catalog and no catalog-selling business is
- * unavailable, not an empty shelf.
- */
 export async function shelfRead(
   { db, scope }: ProjectRead,
   args: Page & {
@@ -171,14 +165,12 @@ export async function promptPortfolio(
       'p.created_at',
     ])
     .select(utcText(sql.ref('p.created_at')).as('cursor_at'))
-    // Whether the project's own searches informed the wording; never the queries.
     .select(groundedSql(sql`p.generation_evidence->'evidence_refs'`).as('grounded'))
     .where('projects.id', '=', scope.projectId);
   if (args.prompt_set_id) query = query.where('s.id', '=', args.prompt_set_id);
   if (args.active_only)
     query = query.where('p.enabled', '=', true).where('p.status', '=', 'active');
   if (args.cohort) query = query.where('p.cohort', '=', args.cohort);
-  // A cursor continues only the selection that produced it.
   const filters = JSON.stringify([
     args.prompt_set_id ?? null,
     args.cohort ?? null,
@@ -203,7 +195,6 @@ export async function promptPortfolio(
     active: enabled && row.status === 'active',
     record_uri: `citeladder://prompt/${row.id}`,
   }));
-  // Every topic, including empty ones: a change may only name these IDs.
   const topics = await new WorkspaceScope(scope.workspaceId)
     .selectFrom(db, 'projects')
     .innerJoin('topics as t', 't.project_id', 'projects.id')
@@ -225,11 +216,6 @@ export async function promptPortfolio(
   };
 }
 
-/**
- * The searches a generation run could ground its wording on, per persisted
- * source, each named with its topic. Read through the Prompt Builder's owner,
- * so a listed query is one generation can use; never volume or impressions.
- */
 export async function seedQueriesRead({ db, scope }: ProjectRead): Promise<Evidence> {
   const { sources } = await readSeedQueries(db, scope.workspaceId, scope.projectId);
   if (!sources.length) return unavailable('no_search_data');
@@ -304,7 +290,6 @@ export async function searchDataset(
   };
 }
 
-/** Competitor names and domains for the overview; IDs stay internal. */
 export async function competitorsAndDomains({ db, scope }: ProjectRead) {
   const workspace = new WorkspaceScope(scope.workspaceId);
   // Neither table carries a workspace; the owning project scopes them.

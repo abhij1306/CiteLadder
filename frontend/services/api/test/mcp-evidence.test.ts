@@ -10,7 +10,8 @@ import { prompt, promptSet, topic } from './prompt-fixtures.ts';
 import { asOwner, testDatabase } from './support.ts';
 import { VisibilityFixtures, type Tenant } from './visibility-fixtures.ts';
 import { actionFixture, type ActionSeed } from './action-support.ts';
-import { attachOrCreateAction, updateActionStatus } from '../src/opportunities/actions.ts';
+import { attachOrCreateAction } from '../src/opportunities/actions.ts';
+import { updateActionStatus } from '../src/opportunities/action-decisions.ts';
 import { getVisibility } from '../src/visibility/dashboard.ts';
 import { bodyFacts, SiteFixtures, type SiteSeed } from './site-health-fixtures.ts';
 import { seedImport } from './referral-fixtures.ts';
@@ -72,7 +73,6 @@ afterAll(async () => {
 });
 const read = (name: string, args: Record<string, unknown> = {}) =>
   dispatchTool(db, principal, name, { project_id: tenant.projectId, ...args }, origin);
-/** A complete fetched document carries its record once, as the text. */
 const record = (document: Record<string, unknown>) => JSON.parse(String(document.text));
 
 it('retains the selected Site Health snapshot and partial/unknown coverage when newer snapshots arrive', async () => {
@@ -110,7 +110,6 @@ it('retains the selected Site Health snapshot and partial/unknown coverage when 
     },
   });
   await expect(render(randomUUID())).rejects.toThrow('unavailable');
-  // An issue's context carries only its crawl id; that selects the crawl's snapshot.
   expect(
     await dispatchTool(
       db,
@@ -145,7 +144,7 @@ it('pins the Visibility review to canonical measures and source-to-answer eviden
   const rendered = await read('render_visibility', { view: 'overview' });
   const handoff = new URL((rendered.links as { application: string }).application);
   expect([handoff.pathname, handoff.searchParams.get('project')]).toEqual([
-    '/visibility',
+    '/insights',
     tenant.projectId,
   ]);
   const canonical = await getVisibility(
@@ -271,21 +270,17 @@ it('reads the current crawl, never a running one, a page rerun or another worksp
     .set({ created_at: at(0), completed_at: at(30) })
     .where('id', '=', seed.crawlId)
     .execute();
-  // Created later, so current, though it completed before the first crawl.
   const current = await siteFixtures.sibling(seed, {
     status: 'partially_completed',
     created_at: at(10),
     completed_at: at(20),
   });
-  // A later one-page rerun re-reads one page; it is never the site crawl.
   await siteFixtures.sibling(seed, {
     configuration: JSON.stringify({ page_rerun: true }),
     created_at: at(35),
     completed_at: at(36),
   });
-  // Newest row, still running: a mid-turn read must not see it.
   await siteFixtures.sibling(seed, { status: 'running', created_at: at(40), completed_at: null });
-  // Another workspace's later crawl is never read through this project.
   await siteFixtures.crawl('completed');
   const member = {
     kind: 'member' as const,
@@ -311,7 +306,6 @@ it('reads the current crawl, never a running one, a page rerun or another worksp
 it('pages prompts stably while context includes only active prompts and foreign IDs cannot fetch', async () => {
   const set = await promptSet(db, tenant.projectId);
   const nets = await topic(db, tenant.projectId, 'Golf nets', 'Home practice');
-  // No prompt yet, yet a proposal may still file new questions under it.
   const kicking = await topic(db, tenant.projectId, 'Kicking nets');
   // Distinct instants: same-millisecond fixtures would page in random-UUID order.
   const at = (offset: number) => new Date(Date.UTC(2026, 0, 1) + offset);
@@ -321,7 +315,6 @@ it('pages prompts stably while context includes only active prompts and foreign 
     status: 'archived',
     createdAt: at(2),
   });
-  // Accepted from a grounded candidate: the portfolio says so without the query identity.
   await db
     .updateTable('prompts')
     .set({
@@ -338,7 +331,6 @@ it('pages prompts stably while context includes only active prompts and foreign 
   expect(page.items).toEqual([
     expect.objectContaining({ id: first, grounded: false, topic_id: nets, topic: 'Golf nets' }),
   ]);
-  // One prompt per page still lists every topic.
   expect([page.topics, page.topics_truncated]).toEqual([
     [
       { id: nets, name: 'Golf nets', description: 'Home practice' },
@@ -531,11 +523,9 @@ it('fetches a site page without the query string or fragment of any URL it carri
     const tokened = 'https://acme.example/pricing?token=s3cret#owner@acme.example';
     await db
       .updateTable('site_urls')
-      // A page titled by its own URL.
       .set({ display_url: tokened, latest_title: tokened })
       .where('id', '=', page.site_url_id)
       .execute();
-    // Fetch artifacts are append-only for the application role.
     await asOwner((owner) =>
       owner
         .updateTable('site_fetch_artifacts')
@@ -573,7 +563,6 @@ it('fetches a site page without the query string or fragment of any URL it carri
       },
     });
     expect(String(fetched.text)).not.toContain('s3cret');
-    // The issue URI the page hands out fetches the same evidence, stripped too.
     const [issue] = (record(fetched) as { issues: { record_uri: string; evidence: unknown }[] })
       .issues;
     if (!issue) throw new Error('The fixture page has no current issue');
@@ -690,6 +679,9 @@ it('exposes published dataset aggregates without treating them as backlink edges
   });
   const fetched = await fetchRecord(db, principal, `citeladder://search_row/${rowId}`, origin);
   expect(record(fetched)).toMatchObject({ id: rowId, project_id: tenant.projectId, backlinks: 0 });
+  expect(fetched.url).toBe(
+    `${origin}/search-intelligence?tab=overview&project=${tenant.projectId}`,
+  );
   await db
     .updateTable('search_intelligence_datasets')
     .set({ status: 'collecting' })
@@ -763,10 +755,6 @@ it('lists only active Actions as the current work and reads a dismissed one only
   ]);
   const one = await read('read_actions', { action_id: dismissed.id });
   expect(one.action).toMatchObject({ id: dismissed.id, status: 'dismissed' });
-  const searched = await dispatchTool(db, principal, 'search', { query: 'guide' }, origin);
-  expect((searched.results as { id: string }[]).map((r) => r.id)).toEqual([
-    `citeladder://action/${kept.id}`,
-  ]);
 });
 
 it('serves answer perception with the same numbers as the Perception read, and its quotes', async () => {
@@ -831,7 +819,7 @@ it('serves answer perception with the same numbers as the Perception read, and i
       low_confidence: false,
       passage_spans: JSON.stringify([]),
       aspects: JSON.stringify([
-        { theme: 'pricing', polarity: 'negative', quote: 'Acme is pricey', start: 0, end: 14 },
+        { theme_id: null, polarity: 'negative', quote: 'Acme is pricey', start: 0, end: 14 },
       ]),
     })
     .execute();
@@ -898,7 +886,6 @@ it('serves ads in ChatGPT answers with the same numbers as the Ads read', async 
   });
 });
 
-/** A finalized, measured page observed in the crawl. */
 async function sitePage(seed: SiteSeed, path: string, facts: Record<string, unknown> = {}) {
   const page = await siteFixtures.page(seed, path, facts, { observed: true });
   await db
@@ -913,7 +900,6 @@ async function sitePage(seed: SiteSeed, path: string, facts: Record<string, unkn
     .execute();
   return page;
 }
-/** A failing evaluation of `ruleId` on the page's current analysis, and its issue. */
 async function siteIssue(
   seed: SiteSeed,
   page: Awaited<ReturnType<typeof sitePage>>,
@@ -1013,7 +999,6 @@ it("lists exactly the pages a Site Health rule affects, with each page's failing
     titled.id,
   ]);
   expect((one.pagination as { next_cursor: string | null }).next_cursor).toBeNull();
-  // A cursor is bound to its filter, and an unknown rule or page kind is refused, not "no pages".
   const firstPage = await pages({ rule_id: 'technical.meta_description_present', limit: 1 });
   await expect(
     pages({
@@ -1026,7 +1011,6 @@ it("lists exactly the pages a Site Health rule affects, with each page's failing
   );
   await expect(pages({ page_kind: 'categories' })).rejects.toThrow('page_kind');
 
-  // Each page names its own failing links: query-string variants fold into one line.
   await siteIssue(seed, described, 'technical.internal_link_redirect', {
     failing_targets: [
       { url: 'https://example.test/old', final_url: 'https://example.test/docs', hops: 1 },
@@ -1050,7 +1034,6 @@ it("lists exactly the pages a Site Health rule affects, with each page's failing
 
 it("keeps one redacted reference snippet per issue family from the first affected page, never another workspace's", async () => {
   const seed = await siteFixtures.crawl();
-  // Created out of URL order: the snippet still comes from /a.
   const later = await sitePage(
     seed,
     '/b',
@@ -1092,7 +1075,6 @@ it("keeps one redacted reference snippet per issue family from the first affecte
     html: '<div class="field"><span>[text]</span><input type="email" name="email" value="[redacted]"></div>',
     truncated: false,
   });
-  // One snippet for the family in the crawl's catalog, not one per affected page.
   const catalogs = await db
     .selectFrom('site_issue_catalogs')
     .select('reference_snippets')
@@ -1107,7 +1089,6 @@ it("keeps one redacted reference snippet per issue family from the first affecte
       ]),
     ),
   ).toEqual([['web.accessibility_form_names', 'https://example.test/a']]);
-  // Each workspace reads only its own crawl's snippet.
   expect((await pages(other)).reference_snippet).toEqual({
     page_url: 'https://example.test/a',
     site_url_id: elsewhere.id,
@@ -1117,7 +1098,6 @@ it("keeps one redacted reference snippet per issue family from the first affecte
   await expect(pages(other, { crawl_id: seed.crawlId })).rejects.toThrow(
     'Crawl was not found in this project',
   );
-  // A rule without a kept snippet names none.
   expect(await pages(seed, { rule_id: 'technical.title_present' })).not.toHaveProperty(
     'reference_snippet',
   );
@@ -1180,7 +1160,6 @@ it('hands the model page URLs without their query string or fragment, pages diff
     }[],
   ).toMatchObject([{ rule_evidence: { canonical_url: 'https://example.test/p' } }]);
 
-  // A cursor names no URL, and still resumes on the next page.
   const first = await pages({ rule_id: 'web.accessibility_form_names', limit: 1 });
   const cursor = (first.pagination as { next_cursor: string }).next_cursor;
   expect(Buffer.from(cursor, 'base64url').toString('utf8')).not.toContain('token');
@@ -1191,7 +1170,6 @@ it('hands the model page URLs without their query string or fragment, pages diff
     ),
   ).toEqual([tokened.id, other.id]);
 
-  // The persisted evidence keeps the URL it observed.
   const stored = await db
     .selectFrom('site_urls')
     .select('normalized_url')
@@ -1217,7 +1195,6 @@ it("finds a crawled page by the address a person types and reads its copy, never
   const call = (tool: string, args: Record<string, unknown>) =>
     dispatchTool(db, siteMember(seed), tool, { project_id: seed.projectId, ...args }, origin);
 
-  // The scheme, www and a trailing slash a person types do not hide the page.
   const found = await call('read_site_pages', { url: 'https://www.example.test/pricing/' });
   expect((found.items as { url: string }[]).map((item) => item.url)).toEqual([
     'https://example.test/pricing',
@@ -1244,7 +1221,6 @@ it("finds a crawled page by the address a person types and reads its copy, never
     url: 'https://example.test/pricing',
     text: 'Starter costs $10 a month.',
   });
-  // A page the crawl never reached is unavailable with the crawled pages to try, not empty text.
   expect(await call('read_page_text', { url: 'https://example.test/pric' })).toEqual({
     state: 'unavailable',
     reason: 'page_not_crawled',
@@ -1254,8 +1230,6 @@ it("finds a crawled page by the address a person types and reads its copy, never
     artifact_refs: [{ kind: 'site_crawl', id: seed.crawlId, record_uri: expect.any(String) }],
   });
   await expect(call('read_page_text', {})).rejects.toThrow('Pass url');
-  // The cap counts copy as serialized: a quote escapes to two characters, so 36 000
-  // less the 77 the title and empty headings take holds 17 961 of 40 000 quotes.
   await siteFixtures.page(
     seed,
     '/quotes',
@@ -1264,7 +1238,6 @@ it("finds a crawled page by the address a person types and reads its copy, never
   );
   const quoted = await call('read_page_text', { url: 'example.test/quotes' });
   expect([(quoted.text as string).length, quoted.text_chars_omitted]).toEqual([17_961, 22_039]);
-  // Another project's crawl stays out of reach.
   const foreign = await siteFixtures.crawl();
   const hidden = await siteFixtures.page(
     foreign,
@@ -1349,7 +1322,6 @@ it('reads the internal links of several pages in one call, by page URL rather th
     ],
   ]);
   expect(links.missing_site_url_ids).toEqual([missing]);
-  // Named pages carry diagnostics as counts, and a paged read still names the missing page.
   expect((items[0] as Record<string, unknown>).anchor_diagnostic_counts).toEqual({});
   const firstOfTwo = await dispatchTool(
     db,
@@ -1487,7 +1459,6 @@ it('reads cited sources for the latest run when no audit_id is named', async () 
   });
   const latest = await fixtures.audit(tenant, { completedAt: new Date('2026-10-02T00:00:00Z') });
   await fixtures.execution(tenant, { auditId: latest, taskStatus: 'failed', analysis: null });
-  // Its source facts are not written yet: pending, never an empty read.
   expect(await read('read_visibility_sources')).toMatchObject({
     state: 'unavailable',
     reason: 'metrics_pending',

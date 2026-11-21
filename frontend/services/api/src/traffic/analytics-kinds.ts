@@ -1,4 +1,3 @@
-/** The Traffic and Performance analytics kinds. */
 import type { AnalyticsKinds } from '../queue/executor.ts';
 import { projectPerformanceRange, refreshTrafficSnapshot } from './snapshot.ts';
 

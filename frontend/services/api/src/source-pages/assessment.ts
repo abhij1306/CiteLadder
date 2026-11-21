@@ -1,4 +1,3 @@
-/** Exact quoted matches and explicit abstention when an extraction cannot establish absence. */
 import { policy } from '../config.ts';
 import { sourcePageVocabulary } from '../config/source-pages.ts';
 import { routePageKind } from '../site-health/routes.ts';
@@ -47,11 +46,6 @@ export function urlFormat(value: string): { format: string; method: string } {
     ? { format: 'article', method: 'url_pattern' }
     : { format: 'unresolved', method: 'none' };
 }
-/**
- * The page's own account of its shape. A specific schema type wins; a list or
- * comparison heading beats generic Article markup, because most CMSs mark
- * every post up as an Article whatever its shape.
- */
 function pageFormat(page: ExtractedPage) {
   if (!page.facts.parsed) return { format: 'unresolved', method: 'none' };
   const types = new Set(
@@ -69,7 +63,6 @@ function pageFormat(page: ExtractedPage) {
 }
 const escape = (value: string) => value.replaceAll(/[.*+?^${}()|[\]\\]/gu, String.raw`\$&`);
 const WORD = String.raw`[\p{L}\p{N}_]`;
-/** Word boundaries apply only to scripts written with spaces. */
 const bounded = (body: string, alias: string) =>
   DENSE_SCRIPT.test(alias)
     ? new RegExp(body, 'giu')
@@ -87,11 +80,6 @@ function spellings(alias: string): RegExp[] {
   const spaced = words.map(escape).join(String.raw`[^\p{L}\p{M}\p{N}_]{0,3}`);
   return [bounded(escape(alias), alias), ...(words.length ? [bounded(spaced, alias)] : [])];
 }
-/**
- * The raw matches the entity's mention rules accept (BE-902): each match is
- * placed on the page's normalized tokens and kept only when that occurrence
- * counts, so a quote never shows a mention the verdict rejected.
- */
 function counted(
   text: string,
   matches: readonly RegExpExecArray[],
@@ -110,7 +98,6 @@ function counted(
     return counts;
   });
 }
-/** Up to the per-entity quote allowance, so one entity never starves the others. */
 function quote(text: string, matches: RegExpExecArray[], ref: string, passages: Passage[]) {
   const refs: number[] = [];
   for (const match of matches.slice(0, p.passages_per_entity)) {
@@ -128,11 +115,6 @@ function quote(text: string, matches: RegExpExecArray[], ref: string, passages: 
   return refs;
 }
 type Entity = { kind: string; name: string; aliases: string[]; matching?: EntityPolicy };
-/**
- * Whether the page names the entity, decided by the same matcher and mention
- * rules that judge answers, so a name counts on a page exactly when it would
- * count in an answer. Every positive verdict carries a quoted passage.
- */
 function entity(page: PageText, item: Entity, passages: Passage[]): Presence {
   const { text } = page;
   const aliases = [...new Set([item.name, ...item.aliases].map((a) => a.trim()))].filter(
@@ -140,7 +122,6 @@ function entity(page: PageText, item: Entity, passages: Passage[]): Presence {
   );
   const named = { entity_kind: item.kind, entity_name: item.name };
   const unmatched = { match_method: 'none', match_count: 0, first_offset: null, passage_refs: [] };
-  // A name too short to tell from ordinary words is never judged absent (AR-6).
   if (!aliases.length)
     return { ...named, presence: sourcePageVocabulary.PRESENCE_NOT_ASSESSABLE, ...unmatched };
   const offset = entityOffset(page.normalized, aliases, item.matching);
@@ -163,7 +144,6 @@ function entity(page: PageText, item: Entity, passages: Passage[]): Presence {
       passage_refs: quote(text, matches, `${item.kind}:${normalizeAlias(item.name)}`, passages),
     };
   }
-  // Named, but in a spelling no raw window reproduces ("and" for "&"): nothing to quote.
   return {
     ...named,
     presence: 'ambiguous',
@@ -173,7 +153,6 @@ function entity(page: PageText, item: Entity, passages: Passage[]): Presence {
     passage_refs: [],
   };
 }
-/** The page's text, normalized once for every entity matched against it. */
 type PageText = { text: string; normalized: string; sufficient: boolean };
 export function assessPage(page: ExtractedPage, configuration: unknown) {
   const config = scoringConfig(configuration);

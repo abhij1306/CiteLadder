@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vite-plus/test';
 
 import {
   emptyIssueFilters,
-  findingClassChange,
   issueFilterParams,
   issueSeverityChange,
   issueSeverityChoice,
@@ -24,6 +23,17 @@ describe('toIssueParams', () => {
       finding_class: 'defect',
       page_kind: undefined,
     });
+  });
+
+  it('lists both classes unless the severity names a defect severity or the advisory level', () => {
+    const wire = (severity: string) => {
+      const params = toIssueParams({ ...emptyIssueFilters, severity });
+      return [params.severity, params.finding_class];
+    };
+    expect(wire('')).toEqual([undefined, undefined]);
+    expect(wire('high')).toEqual(['high', 'defect']);
+    expect(wire('advisory')).toEqual([undefined, 'advisory']);
+    expect(wire('critical')).toEqual([undefined, undefined]);
   });
 
   it('maps the rule_id filter onto the wire `rule` param', () => {
@@ -60,7 +70,6 @@ describe('issueFilterParams (the URL patch)', () => {
         category: 'metadata',
         rule_id: 'meta.title',
         site_url_id: 'u1',
-        finding_class: 'advisory',
         page_kind: 'product',
       }),
     ).toEqual({
@@ -71,7 +80,6 @@ describe('issueFilterParams (the URL patch)', () => {
       category: 'metadata',
       rule: 'meta.title',
       site_url_id: 'u1',
-      finding_class: 'advisory',
       page_kind: 'product',
     });
   });
@@ -84,17 +92,13 @@ describe('issueFilterParams (the URL patch)', () => {
 describe('the severity choice', () => {
   it('reads a known severity, and otherwise "all"', () => {
     expect(issueSeverityChoice({ ...emptyIssueFilters, severity: 'medium' })).toBe('medium');
+    expect(issueSeverityChoice({ ...emptyIssueFilters, severity: 'advisory' })).toBe('advisory');
     expect(issueSeverityChoice(emptyIssueFilters)).toBe('all');
-    // An unrecognized inbound value is not a choice.
     expect(issueSeverityChoice({ ...emptyIssueFilters, severity: 'critical' })).toBe('all');
   });
 
   it('sets the severity, and "all" clears it', () => {
     expect(issueSeverityChange('low')).toEqual({ severity: 'low' });
     expect(issueSeverityChange('all')).toEqual({ severity: '' });
-  });
-
-  it('resets the severity when the finding class switches', () => {
-    expect(findingClassChange('advisory')).toEqual({ finding_class: 'advisory', severity: '' });
   });
 });

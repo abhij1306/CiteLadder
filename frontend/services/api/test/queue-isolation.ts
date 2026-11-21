@@ -1,12 +1,3 @@
-/**
- * Files share the local database in sequence, and unscoped workers claim and
- * backstop whatever is active there. Settle earlier files' active work so each
- * file starts from a quiescent queue rather than inheriting claimable rows or
- * running crawls that a backstop would finalize into new successors.
- *
- * Only fixture workspaces are settled: the same database serves the local app,
- * whose crawls and tasks a test run must never end.
- */
 import { ACTIVE_CRAWL_STATUSES } from '@citeladder/contracts/site-health';
 import pg from 'pg';
 import { beforeAll } from 'vitest';
@@ -20,7 +11,6 @@ export async function quiesceFixtureQueues(client: pg.ClientBase) {
      where status = any($1::text[]) and ${FIXTURE_WORKSPACE_ROW}`,
     [ACTIVE_CRAWL_STATUSES],
   );
-  // One client runs these in order; there is nothing to gain from awaiting each.
   await Promise.all(
     ['site_crawl_tasks', 'analytics_tasks', 'brand_discovery_tasks'].map((table) =>
       client.query(

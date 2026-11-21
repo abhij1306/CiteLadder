@@ -1,12 +1,3 @@
-/**
- * The Shopping overview read against real PostgreSQL: brand and product
- * rankings over the latest match pass of each answer in the window, the
- * catalog's most and least visible products, merchants, fan-out queries of
- * answers that held a product, the category filter with its latest shelf
- * snapshot, and workspace isolation. Answers go through the real audit,
- * matching and persistence path; merchants, fan-out queries and the snapshot
- * are set on stored rows afterwards, since text answers carry none of them.
- */
 import { randomUUID } from 'node:crypto';
 import type { CommerceShoppingOverview } from '@citeladder/contracts/commerce-suite';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -34,7 +25,6 @@ const CATALOG = [
   'https://shop.example/products/sock,Acme Merino Sock,Acme,15,USD,Road',
 ].join('\n');
 
-/** One brand-run answer of `text`; its task id. */
 async function answer(t: Tenant, text: string): Promise<string> {
   const { taskId } = await recordAnswer(db, t, text, { runtime, worker: 'overview-worker' });
   tasks.push(taskId);
@@ -51,7 +41,6 @@ const merchant = (task: string, product: string, host: string) =>
       .execute(),
   );
 
-/** The fan-out the answer's analysis settled: its queries, or a search that exposed none. */
 const fanout = (task: string, queries: string[]) =>
   db
     .updateTable('response_analyses')
@@ -107,14 +96,12 @@ beforeAll(async () => {
     t,
     '1. Rival Pacer is the best value\n2. Acme Road Runner close behind',
   );
-  // An answer that holds no product: its fan-out queries are not counted.
   const third = await answer(t, 'Most runners should get a gait analysis first.');
   await answer(foreign, '1. Acme Road Runner for daily miles');
   await merchant(first, 'Acme Road Runner', 'runnerstore.com');
   await merchant(second, 'Acme Road Runner', 'runnerstore.com');
   await merchant(second, 'Rival Pacer', 'rival.example');
   await fanout(first, ['best road running shoes', 'best road running shoes', 'acme reviews']);
-  // It searched, but its provider exposed no query text.
   await fanout(second, []);
   await fanout(third, ['gait analysis near me']);
   roadCategory = await categoryId(t, 'Road');
@@ -136,7 +123,6 @@ describe('Shopping overview read', () => {
     const { status, body } = await read(t);
     expect(status).toBe(200);
     expect(body).toMatchObject({ window_days: 30, category: null, executions: 3, slots: 5 });
-    // Acme's best slot per answer: rank 1 then rank 2; three of five slots.
     expect(body.brands).toEqual([
       {
         brand: 'Acme',
@@ -167,20 +153,14 @@ describe('Shopping overview read', () => {
       ['Acme Road Runner', 'owned', 2, 0.5, 1.5],
       ['Rival Pacer', 'approved_competitor', 2, 0.5, 1.5],
       ['Acme Trail Climber', 'owned', 1, 0, 3],
-      // Never recommended: a real zero, with no rank to average.
       ['Acme Merino Sock', 'owned', 0, null, null],
     ]);
   });
 
   it('lists the catalog’s most and least visible products without overlap', async () => {
     const { body } = await read(t);
-    expect(names(body.most_visible)).toEqual([
-      'Acme Road Runner',
-      'Acme Trail Climber',
-      'Acme Merino Sock',
-    ]);
-    // Every catalog product is already among the most visible.
-    expect(body.least_visible).toEqual([]);
+    expect(names(body.most_visible)).toEqual(['Acme Road Runner', 'Acme Trail Climber']);
+    expect(names(body.least_visible)).toEqual(['Acme Merino Sock']);
   });
 
   it('reads merchants and the fan-out of answers that held a product', async () => {
@@ -189,8 +169,6 @@ describe('Shopping overview read', () => {
       { domain: 'runnerstore.com', answers: 2, products: 1 },
       { domain: 'rival.example', answers: 1, products: 1 },
     ]);
-    // The second answer searched without exposing its queries: neither with
-    // queries nor without a search.
     expect(body.fanout).toEqual({
       answers: 2,
       answers_with_queries: 1,
@@ -209,9 +187,12 @@ describe('Shopping overview read', () => {
       'Rival Pacer',
       'Acme Merino Sock',
     ]);
-    // Measured by no Commerce audit yet: unavailable, not zero.
     expect(before.body.category_shelf).toBeNull();
     expect(before.body.slots).toBe(4);
+    expect(before.body.brands.map((row) => [row.brand, row.appearances, row.slots])).toEqual([
+      ['Acme', 2, 2],
+      ['Rival', 2, 2],
+    ]);
 
     const [audit] = await db
       .selectFrom('audits')
@@ -244,7 +225,6 @@ describe('Shopping overview read', () => {
       .execute();
     const after = await read(t, `category=${roadCategory}`);
     expect(after.body.category_shelf).toEqual({
-      // Stored as 0 with no successful execution: unavailable.
       product_visibility: null,
       share_of_shelf: null,
       average_shelf_position: null,
@@ -290,14 +270,12 @@ describe('Shopping overview read', () => {
       ['Acme Trail Climber', 0],
     ]);
     expect(theirs.body.merchants).toEqual([]);
-    // Their answer ran no search.
     expect(theirs.body.fanout).toEqual({
       answers: 1,
       answers_with_queries: 0,
       answers_without_search: 1,
       queries: [],
     });
-    // Another project's category is not found here.
     expect((await read(foreign, `category=${roadCategory}`)).status).toBe(404);
     expect((await read(t, '', foreign.workspaceId)).status).toBe(404);
   });

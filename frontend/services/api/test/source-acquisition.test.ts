@@ -87,7 +87,6 @@ it.each(['https://first.test/private', 'https://second.test/private'])(
     expect(sent).not.toContain(destination);
   },
 );
-/** A site whose robots.txt answers `robots` and whose pages answer 200 HTML. */
 function robotsSite(robots: { status: number; body: string }, sent: string[]) {
   return createWebsiteFetcher(
     async () => [{ address: '93.184.216.34', family: 4 }],
@@ -119,7 +118,6 @@ it('fetches a disallowed page only when the caller ignores robots.txt; by defaul
 });
 it.each([
   ['access-blocked', 403, 'robots_disallowed', ['/robots.txt']],
-  // A transient failure is retried before the page is refused.
   ['unreachable', 503, 'robots_unavailable', ['/robots.txt', '/robots.txt', '/robots.txt']],
 ])(
   'never fetches past an %s robots.txt, even when ignoring robots.txt',
@@ -153,7 +151,6 @@ it('retries a transient robots.txt failure and never caches one', async () => {
   const acquirer = new PageAcquirer(async () => {}, fetcher, settings, 0);
   expect((await acquirer.fetch('https://shop.test/page', options)).status).toBe(200);
   expect(sent).toEqual(['/robots.txt', '/robots.txt', '/robots.txt', '/page']);
-  // A readable answer is cached for the TTL; a transient failure is asked again next time.
   const other = 'https://other.test';
   expect((await acquirer.robots(other)).unavailable).toBe(true);
   expect((await acquirer.robots(other)).unavailable).toBe(false);
@@ -197,7 +194,6 @@ it('names the robots group that applies to a crawler without reading parser inte
 it('keeps an unsupported crawl delay binding when the crawl ignores robots.txt', () => {
   const slow = robotsPolicy('https://example.test', 200, 'User-agent: *\nCrawl-delay: 2', settings);
   expect(slow.admits('https://example.test/', 'ignore')).toBe(false);
-  // A 3xx answer is not a readable robots.txt, whatever the crawl chose.
   const unread = robotsPolicy('https://example.test', 304, '', settings);
   expect([
     unread.admits('https://example.test/', 'ignore'),
@@ -375,7 +371,6 @@ it('matches names the way answers do, quoting spaced and joined spellings, and k
     match_method: 'normalized_alias',
     match_count: 1,
   });
-  // Separate words on the page never join to spell a one-word name (AR-6).
   const spaced = extractSourcePage(
     Buffer.from(`<p>Admissions open at Northwind Academy. ${'Other words '.repeat(100)}</p>`),
   );
@@ -387,10 +382,8 @@ it('matches names the way answers do, quoting spaced and joined spellings, and k
     presence: 'present',
     first_offset: 8,
   });
-  // Named, but only as "and" for "&": no raw window reproduces it, so it is not quoted.
   const spelled = extractSourcePage(Buffer.from('<p>A &amp; B uses a tool</p>'));
   expect(assessPage(spelled, { brand_name: 'A and B' }).presences[0]?.presence).toBe('ambiguous');
-  // A mention rule that excludes a phrase applies on the page as it does in answers.
   const excluded = extractSourcePage(
     Buffer.from(`<p>Shop at Target stores. ${'Other words '.repeat(100)}</p>`),
   );
@@ -450,7 +443,6 @@ it('never judges a name too short to find on a page absent, so it leaves no list
       { entity_kind: 'competitor', presence: 'present' },
     ]),
   ).toBe(false);
-  // A longer alias keeps the brand assessable.
   expect(presences(['Hewlett-Packard'])[0]).toEqual(['brand', 'not_detected']);
 });
 it('derives page formats from a page address and keeps redirect tokens unresolved', () => {
@@ -553,7 +545,6 @@ it('quotes every named entity even when one of them fills the page', () => {
   expect(
     result.passages.every((passage) => passage.text.length <= policy.source_pages.passage_chars),
   ).toBe(true);
-  // "AI" is too short to judge on a page, so it is never read as absent.
   expect(result.presences.map((presence) => presence.presence)).toEqual([
     'present',
     'present',

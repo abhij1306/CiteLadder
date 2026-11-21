@@ -26,7 +26,6 @@ const preset = z.strictObject({
   missing_tokens: z.array(z.string().min(1)).optional(),
   user_agent_decode: z.literal('url').optional(),
 });
-/** Google Cloud Pub/Sub pull cadence, coverage bounds and request bounds. */
 const gcpPull = z.strictObject({
   pull_interval_seconds: positive,
   pull_max_iterations: positive,
@@ -87,7 +86,6 @@ const schema = z.strictObject({
   /** A pull holds its received batch unacknowledged; its lease outlasts the analytics default. */
   pull_lease_ttl_seconds: positive,
   max_export_rows: positive,
-  /** Rows an export reads per keyset batch while it streams the download. */
   export_batch_rows: positive,
   worker_timeout_ms: positive,
   worker_flush_seconds: positive,

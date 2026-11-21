@@ -1,4 +1,3 @@
-/** Onboarding may assign a site archetype; crawl structure may only veto it. */
 import { policy } from '../config.ts';
 import { record } from '../db/json.ts';
 import type { ArchitecturePage } from './architecture-model.ts';

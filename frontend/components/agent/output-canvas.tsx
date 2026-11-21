@@ -1,9 +1,8 @@
 import { useMutation } from '@tanstack/react-query';
-import { Pencil, Sparkles } from 'lucide-react';
 import { useState, type FormEvent, type ReactNode } from 'react';
 
+import { JUMP_LINK } from '@/components/agent/jump-link';
 import { Button } from '@/components/ui/button';
-import { MutationNotice } from '@/components/ui/mutation-notice';
 import { Icon } from '@/components/ui/icon';
 import { Input } from '@/components/ui/input';
 import { Inline, Stack } from '@/components/ui/layout';
@@ -11,6 +10,7 @@ import { Pressable } from '@/components/ui/pressable';
 import { Textarea } from '@/components/ui/textarea';
 import { textRole } from '@/components/ui/typography';
 import { treeBranchClasses } from '@/components/ui/workspace';
+import { Pencil, Sparkles, X } from '@/lib/icons';
 import { agentWriteFailure } from '@/lib/agent/errors';
 import { replaceSection, splitSections, type OutputSection } from '@/lib/agent/sections';
 import {
@@ -22,18 +22,12 @@ import {
 import { agentMutations, type AgentDocumentRef, type AgentRevision } from '@/lib/api/agent';
 import { useAgentLinkHosts } from '@/lib/agent/link-hosts';
 import { ContentMarkdown } from '@/lib/markdown/markdown';
+import { Notice } from '@/components/ui/notice';
 
-/** Outputs with at least this many titled sections get a contents list. */
 const CONTENTS_MIN_SECTIONS = 3;
 
 type SectionMode = { index: number; mode: 'revise' | 'edit'; revisionId: string };
 
-/**
- * The output as a document the reader works on section by section. A section
- * can be edited in place (saved as a new user revision with every other
- * section unchanged) or sent to the agent with an instruction, which is an
- * ordinary follow-up turn. Both are refused while a turn is running.
- */
 export function OutputCanvas({
   workspaceId,
   target,
@@ -51,7 +45,6 @@ export function OutputCanvas({
 }>) {
   const sections = splitSections(revision.body);
   const [opened, setOpened] = useState<SectionMode | null>(null);
-  // An open editor or revise form belongs to the revision it was opened on.
   const active = opened?.revisionId === revision.id ? opened : null;
   const titled = sections.filter((section) => section.heading !== null);
   const knownHosts = useAgentLinkHosts(revision.web_sources);
@@ -59,13 +52,13 @@ export function OutputCanvas({
     <Stack gap="workspace">
       {titled.length >= CONTENTS_MIN_SECTIONS ? (
         <Stack as="nav" gap="tight" aria-label="Contents">
-          <span className={textRole('label')}>Contents</span>
+          <span className={textRole('body', 'text-ink-2')}>Contents</span>
           <Stack as="ol" gap="tight" className={treeBranchClasses()}>
             {sections.map((section, index) =>
               section.heading === null ? null : (
                 <li key={section.start}>
                   <Pressable
-                    className={textRole('caption', 'hover:text-accent-ink w-auto')}
+                    className={textRole('caption', `${JUMP_LINK} w-auto`)}
                     onClick={() =>
                       document.getElementById(sectionId(revision.id, index))?.scrollIntoView?.({
                         block: 'start',
@@ -103,7 +96,6 @@ export function OutputCanvas({
               revision={revision}
               index={index}
               initial={section.text}
-              // Closing one section's editor leaves another section's open form alone.
               onDone={() => setOpened((current) => (current?.index === index ? null : current))}
             />
           }
@@ -149,7 +141,6 @@ function SectionBlock({
   onRevise: (instruction: string) => void;
   editor: ReactNode;
 }>) {
-  // A kept draft reopens its editor when the reader returns to this revision.
   const mode = useSectionDraft(draftKey) === undefined ? requestedMode : 'edit';
   if (!section.text.trim()) return null;
   const name = sectionName(section);
@@ -161,10 +152,9 @@ function SectionBlock({
         <ContentMarkdown markdown={section.text} density="compact" knownHosts={knownHosts} />
       )}
       {locked || mode === 'edit' ? null : (
-        // Quiet until the section is hovered or focused; always shown on touch.
         <Inline className="flex-wrap transition-opacity [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-focus-within:opacity-100 [@media(hover:hover)]:group-hover:opacity-100">
           <Button
-            variant="ghost"
+            variant="quiet"
             disabled={!canSend}
             aria-expanded={mode === 'revise'}
             aria-label={`Ask the agent to revise ${name}`}
@@ -173,7 +163,7 @@ function SectionBlock({
             <Icon icon={Sparkles} />
             Revise
           </Button>
-          <Button variant="ghost" aria-label={`Edit ${name}`} onClick={() => onMode('edit')}>
+          <Button variant="quiet" aria-label={`Edit ${name}`} onClick={() => onMode('edit')}>
             <Icon icon={Pencil} />
             Edit
           </Button>
@@ -219,17 +209,14 @@ function ReviseForm({
       <Button type="submit" variant="primary" disabled={!instruction.trim()}>
         Ask agent
       </Button>
-      <Button type="button" variant="ghost" onClick={onCancel}>
+      <Button type="button" variant="quiet" onClick={onCancel}>
+        <Icon icon={X} />
         Cancel
       </Button>
     </Inline>
   );
 }
 
-/**
- * An edit of one section, saved on top of the revision it started from; the
- * server refuses it if the output moved on meanwhile, and the text stays.
- */
 function SectionEditor({
   workspaceId,
   target,
@@ -281,10 +268,11 @@ function SectionEditor({
         onChange={(event) => setText(event.target.value)}
       />
       {save.isError ? (
-        <MutationNotice notice={agentWriteFailure(save.error, 'save the section')} />
+        <Notice kind="mutation" notice={agentWriteFailure(save.error, 'save the section')} />
       ) : null}
       <Inline className="justify-end">
-        <Button type="button" variant="ghost" onClick={done} disabled={save.isPending}>
+        <Button type="button" variant="quiet" onClick={done} disabled={save.isPending}>
+          <Icon icon={X} />
           Cancel
         </Button>
         <Button

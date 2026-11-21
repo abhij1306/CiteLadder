@@ -1,27 +1,15 @@
-/**
- * Request bodies of runs: launch, estimate, repair and schedules. These own
- * the wire shape; the API `.extend`s each with its configured bounds
- * (repetitions, markets per launch, selectable engines, timezones), and the
- * browser types its arguments as `z.input` of them.
- */
 import { z } from 'zod';
 
-import { auditScheduleCadenceSchema } from './audits.ts';
+import { auditScheduleCadenceSchema, auditScopeSchema } from './audits.ts';
 import { benchmarkModeSchema } from './project.ts';
 import { logicalEngineSchema } from './providers.ts';
 
+const requestScopeSchema = auditScopeSchema.exclude(['probe']);
+
 const uuid = () => z.uuid();
 
-/** A launch's markets: `null` is the project's default market. */
 const marketIds = z.array(uuid().nullable()).min(1);
-const auditScopeSchema = z.enum(['brand', 'commerce']);
 
-/**
- * `POST /audits/estimate`: the prompts measured (a whole `prompt_set_id`, or
- * explicit `prompt_ids`) across one or more logical engines, one run per
- * market. The workspace comes from the `X-Workspace-Id` header and funding
- * from its plan, never the body.
- */
 export const auditEstimateRequestSchema = z.object({
   project_id: uuid(),
   prompt_set_id: uuid().nullish(),
@@ -32,16 +20,13 @@ export const auditEstimateRequestSchema = z.object({
 });
 export type AuditEstimateRequest = z.input<typeof auditEstimateRequestSchema>;
 
-/** `POST /audits`: an estimate's selection plus the run's scope and seed. */
 export const auditLaunchRequestSchema = auditEstimateRequestSchema.extend({
   benchmark_mode: benchmarkModeSchema.nullish(),
-  audit_scope: auditScopeSchema.default('brand'),
-  /** Optional 64-bit seed as a decimal string; generated and stored when omitted. */
+  audit_scope: requestScopeSchema.default('brand'),
   random_seed: z.string().nullish(),
 });
 export type AuditLaunchRequest = z.input<typeof auditLaunchRequestSchema>;
 
-/** A repair of selected failed slots of a finished run. */
 export const auditRepairRequestSchema = z.object({
   provider: z.string().nullish(),
   engine: z.string().nullish(),
@@ -50,10 +35,9 @@ export const auditRepairRequestSchema = z.object({
 });
 export type AuditRepairRequest = z.input<typeof auditRepairRequestSchema>;
 
-/** Every schedule field; a create defaults the optional ones, an update sends any subset. */
 export const auditScheduleUpdateRequestSchema = z.object({
   prompt_set_id: uuid(),
-  audit_scope: auditScopeSchema,
+  audit_scope: requestScopeSchema,
   cadence: auditScheduleCadenceSchema,
   interval_minutes: z.int().positive().nullable(),
   timezone: z.string().trim().min(1),

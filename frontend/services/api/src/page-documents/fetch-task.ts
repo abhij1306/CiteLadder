@@ -38,7 +38,6 @@ const BOT_BLOCKED = policy.site_health.page_analysis.acquisition.error_codes.bot
 
 type Outcome = (typeof p.outcomes)[number];
 type Document = Extract<PageReading, { kind: 'document' }>;
-/** How one fetch ended: only a fetched page carries a document and its checks. */
 export type FetchResult =
   | {
       outcome: 'fetched';
@@ -56,17 +55,14 @@ export type FetchResult =
     };
 type Failure = Extract<FetchResult, { outcome: Exclude<Outcome, 'fetched'> }>;
 
-/** The page's site with or without `www.`: a redirect off it is not this page. */
 const site = (url: URL) => normalizeDomain(url.hostname);
 
-/** A failed request's outcome from its Site Health acquisition code. */
 function failedFetch(code: string, fetchedAt: Date): Failure {
   if (BLOCKED.has(code)) return { outcome: 'blocked_robots', reason: code, page: null, fetchedAt };
   if (UNSUPPORTED.has(code)) return { outcome: 'unsupported', reason: code, page: null, fetchedAt };
   return { outcome: 'failed', reason: code, page: null, fetchedAt };
 }
 
-/** A response that is not a readable page, or null when it is one. */
 function refusedResponse(page: FetchedPage, fetchedAt: Date): Failure | null {
   if (isBotBlock(page)) return { outcome: 'failed', reason: BOT_BLOCKED, page, fetchedAt };
   if (page.status < 200 || page.status >= 300)
@@ -76,7 +72,6 @@ function refusedResponse(page: FetchedPage, fetchedAt: Date): Failure | null {
   return null;
 }
 
-/** One fetch of the page and what it reads as. Network I/O only; nothing is written here. */
 export async function fetchPage(
   db: Database,
   url: string,
@@ -135,7 +130,6 @@ function fetchNotice(url: string, result: Pick<Failure, 'outcome' | 'reason' | '
   }
 }
 
-/** The raw body kept on the snapshot, cut at the configured size. */
 function keptBody(page: FetchedPage | null) {
   if (!page) return { body: null, truncated: false };
   const truncated = page.body.length > p.snapshot_body_max_bytes;
@@ -145,7 +139,6 @@ function keptBody(page: FetchedPage | null) {
   };
 }
 
-/** Appends the fetch's one snapshot: insert-only evidence of what the site answered. */
 async function insertSnapshot(
   db: Database,
   task: { workspaceId: string; projectId: string; payload: PageFetchPayload },
@@ -183,7 +176,6 @@ async function insertSnapshot(
   return row.id;
 }
 
-/** The chat the fetch belongs to, locked; null once it was archived. */
 async function liveChat(db: Database, task: QueueTask, projectId: string, chatId: string) {
   const chat = await db
     .selectFrom('agent_chats')
@@ -196,7 +188,6 @@ async function liveChat(db: Database, task: QueueTask, projectId: string, chatId
   return chat && !chat.archived_at ? chat : null;
 }
 
-/** The fetch's failure as the chat's reply to its first message, with no turn. */
 async function postNotice(db: Database, chat: Chat, payload: PageFetchPayload, notice: string) {
   await appendMessage(db, await touchChat(db, chat.workspace_id, chat.id), {
     role: 'agent',
@@ -205,11 +196,6 @@ async function postNotice(db: Database, chat: Chat, payload: PageFetchPayload, n
   });
 }
 
-/**
- * Records one fetch in the caller's transaction: the snapshot, then either the
- * page document and its first turn, or the notice. A chat archived meanwhile
- * keeps only the snapshot.
- */
 async function recordFetch(db: Database, store: AgentStore, task: QueueTask, result: FetchResult) {
   const projectId = await taskProject(db, task);
   const payload = pageFetchPayloadSchema.parse(task.payload);
@@ -246,14 +232,6 @@ const FIELD_RULES: Readonly<Record<string, PageField>> = SUGGESTED.site_health_f
 const FAILING: ReadonlySet<string> = new Set(policy.site_health.reads.failing_outcomes);
 const RULES = new Map(policy.site_health.rule_catalog.map((rule) => [rule.rule_id, rule]));
 
-/**
- * The fetch's page-local Site Health findings that a field fixes (a missing
- * title or meta description) become `site_health` suggestions on revision 1,
- * in the same transaction as the checks that found them, so the first turn
- * already sees them and can write their text. They are advice until then:
- * Site Health judges, it does not write copy. Every other finding stays in the
- * SEO tab only (CO11).
- */
 async function siteHealthSuggestions(
   db: Database,
   chat: Chat,
@@ -268,7 +246,7 @@ async function siteHealthSuggestions(
     const field = FIELD_RULES[check.rule_id];
     if (!field || !check.display_applicability || !FAILING.has(check.outcome)) continue;
     const rule = RULES.get(check.rule_id);
-    await insertSuggestion(
+    await /* NOSONAR -- One transaction connection: suggestions insert in order. */ insertSuggestion(
       db,
       {
         workspaceId: chat.workspace_id,
@@ -295,12 +273,10 @@ async function siteHealthSuggestions(
 
 type Dependencies = {
   fetcher?: WebsiteFetcher;
-  /** The Agent store that queues the turn; the process's own bindings by default. */
   store?: (db: Database) => Promise<AgentStore>;
 };
 const processStore = async (db: Database) => (await agentBindings(db)).store;
 
-/** The executor: fetch and read outside any transaction, record in the worker's terminal one. */
 export function pageFetchTask({ fetcher, store = processStore }: Dependencies = {}): Executor {
   return async (task, { db, checkCancelled }) => {
     await taskProject(db, task);
@@ -313,10 +289,6 @@ export function pageFetchTask({ fetcher, store = processStore }: Dependencies = 
   };
 }
 
-/**
- * A task that failed to record its fetch still answers the chat: a `failed`
- * snapshot and its notice, unless a snapshot was recorded after all.
- */
 export function compensatePageFetch(store = processStore) {
   return async (db: Database, task: QueueTask) => {
     const projectId = await taskProject(db, task);

@@ -7,33 +7,37 @@ import {
   type ReactNode,
 } from 'react';
 
+import { ActionStatusBadge } from '@/components/agent/action-status-badge';
 import { SuggestionList } from '@/components/ui/chat-dock';
 import { Textarea } from '@/components/ui/textarea';
+import { isImeComposing } from '@/lib/accessibility/ime';
 import {
   applyOption,
   tokenAt,
   type CommandOption,
   type CommandToken,
+  type Mention,
 } from '@/lib/agent/composer-commands';
+import type { AgentAttachment } from '@citeladder/contracts/agent';
 
-/** Inline `/` and `@` commands: the options for a token, and what a pick does. */
 export type ComposerCommands = {
   options: (token: CommandToken) => CommandOption[];
-  /**
-   * A trigger's token became active under the caret. Options are asked for
-   * during render, so a pool loaded only once someone reaches for it starts
-   * here instead.
-   */
-  onTrigger?: (trigger: CommandToken['trigger']) => void;
+  onTrigger?: (trigger: CommandToken['trigger'], query: string) => void;
   onPick: (option: CommandOption, token: CommandToken) => void;
-  /** Actions this message mentions, shown as removable chips. */
+  onPaste?: (pasted: string, edit: (change: (current: string) => string) => void) => void;
   mentions: readonly Mention[];
   onRemoveMention: (id: string) => void;
   openSkillPicker?: (removeCommand: () => void, restoreFocus: () => void) => void;
   closeSkillPicker?: () => boolean;
+  pastes?: ComposerPastes;
 };
 
-export type Mention = { id: string; label: string };
+export type ComposerPastes = {
+  items: readonly { key: string; text: string }[];
+  add: (text: string) => boolean;
+  remove: (key: string) => void;
+};
+export type PastedText = Extract<AgentAttachment, { kind: 'pasted_text' }>;
 
 const MENU_LABEL = { '/': 'Skills', '@': 'Actions to mention' } as const;
 const MOVES: Record<string, number> = { ArrowDown: 1, ArrowUp: -1 };
@@ -44,12 +48,6 @@ type MenuState = {
   selected: number;
 };
 
-/**
- * The composer's message field. With `commands` it is an ARIA combobox with a
- * listbox above it: focus stays in the field, arrows move, Enter or Tab
- * picks, Escape closes until the text changes. Otherwise Enter submits and
- * Shift+Enter adds a line.
- */
 export function CommandField({
   id,
   value,
@@ -58,7 +56,7 @@ export function CommandField({
   commands,
   disabled,
   placeholder,
-  rows,
+  maxRows,
 }: Readonly<{
   id: string;
   value: string;
@@ -67,7 +65,7 @@ export function CommandField({
   commands?: ComposerCommands;
   disabled: boolean;
   placeholder: string;
-  rows: number;
+  maxRows: number;
 }>) {
   const field = useRef<HTMLTextAreaElement>(null);
   const pendingCaret = useRef<number | null>(null);
@@ -78,11 +76,17 @@ export function CommandField({
   const state = menuState(commands, disabled ? null : tokenAt(value, caret), dismissed, active);
   const open = state.options.length > 0;
   const trigger = state.token?.trigger ?? null;
+  const query = state.token?.query ?? '';
   const onTrigger = commands?.onTrigger;
+  const latest = useRef(value);
 
   useEffect(() => {
-    if (trigger) onTrigger?.(trigger);
-  }, [trigger, onTrigger]);
+    latest.current = value;
+  }, [value]);
+
+  useEffect(() => {
+    if (trigger) onTrigger?.(trigger, query);
+  }, [trigger, query, onTrigger]);
 
   useLayoutEffect(() => {
     if (pendingCaret.current === null) return;
@@ -101,7 +105,6 @@ export function CommandField({
     setActive(0);
   };
 
-  /** Handles a key the open menu owns; false lets the field handle it. */
   const menuKey = (event: KeyboardEvent<HTMLTextAreaElement>): boolean => {
     if (!open) return false;
     const count = state.options.length;
@@ -131,8 +134,7 @@ export function CommandField({
       <Textarea
         ref={field}
         id={id}
-        rows={rows}
-        // The text field owns focus; the surrounding form keeps its resting edge.
+        maxRows={maxRows}
         placement="composer"
         value={value}
         disabled={disabled}
@@ -171,12 +173,17 @@ export function CommandField({
           setDismissed(null);
         }}
         onSelect={(event) => setCaret(event.currentTarget.selectionStart)}
+        onPaste={(event) => {
+          const pasted = event.clipboardData.getData('text/plain');
+          if (commands?.pastes?.add(pasted)) event.preventDefault();
+          else commands?.onPaste?.(pasted, (change) => onChange(change(latest.current)));
+        }}
         onKeyDown={(event) => {
           if (event.key === 'Escape' && commands?.closeSkillPicker?.()) {
             event.preventDefault();
             return;
           }
-          if (event.nativeEvent.isComposing || menuKey(event)) return;
+          if (isImeComposing(event) || menuKey(event)) return;
           if (event.key !== 'Enter' || event.shiftKey) return;
           event.preventDefault();
           onEnter();
@@ -219,7 +226,10 @@ function CommandList({
       id={listId}
       label={state.token ? MENU_LABEL[state.token.trigger] : 'Commands'}
       open={open}
-      options={state.options}
+      options={state.options.map((option) => ({
+        ...option,
+        aside: option.status ? <ActionStatusBadge status={option.status} /> : undefined,
+      }))}
       selected={state.selected}
       onPick={(index) => {
         const option = state.options[index];

@@ -8,9 +8,22 @@ import { auditPolicy, type AuditRuntime } from './config.ts';
 import { lockAuditEnqueue, reserveAuditCapacity } from './admission.ts';
 import { auditEvent, transitionAudit } from './state.ts';
 import { compareText } from '../text-order.ts';
+import { policy } from '../config.ts';
 
 export const repairInput = auditRepairRequestSchema;
 const denied = (message: string) => new ApiError(409, message);
+
+function repairable<Audit extends { audit_scope: string; status: string }>(
+  parent: Audit | undefined,
+) {
+  if (!parent) throw notFound('Audit');
+  if (parent.audit_scope === policy.probes.audit_scope)
+    throw denied('Run a new probe instead of repairing one');
+  if (!auditPolicy.constants.audit_terminal_statuses.includes(parent.status))
+    throw denied('Only a terminal audit can be repaired');
+  return parent;
+}
+
 /** A repair is an immutable child audit of selected failed frozen slots. */
 export function createRepairAudit(
   db: Database,
@@ -23,16 +36,15 @@ export function createRepairAudit(
   return db.transaction().execute(async (trx) => {
     // The same enqueue lock as a launch, taken before any audit row lock.
     await lockAuditEnqueue(trx, workspaceId);
-    const parent = await trx
-      .selectFrom('audits')
-      .selectAll()
-      .where('workspace_id', '=', workspaceId)
-      .where('id', '=', auditId)
-      .forUpdate()
-      .executeTakeFirst();
-    if (!parent) throw notFound('Audit');
-    if (!auditPolicy.constants.audit_terminal_statuses.includes(parent.status))
-      throw denied('Only a terminal audit can be repaired');
+    const parent = repairable(
+      await trx
+        .selectFrom('audits')
+        .selectAll()
+        .where('workspace_id', '=', workspaceId)
+        .where('id', '=', auditId)
+        .forUpdate()
+        .executeTakeFirst(),
+    );
     const prompts = await trx
       .selectFrom('audit_prompt_snapshots')
       .selectAll()

@@ -26,6 +26,7 @@
 @source '../../../components/mcp';
 @source '../../../components/onboarding';
 @source '../../../components/opportunities';
+@source '../../../components/perception';
 @source '../../../components/performance';
 @source '../../../components/products';
 @source '../../../components/providers';
@@ -35,6 +36,7 @@
 @source '../../../components/settings';
 @source '../../../components/search-intelligence';
 @source '../../../components/site-health';
+@source '../../../components/templates';
 @source '../../../components/ui';
 @source '../../../components/visibility';
 @source '../../../lib';

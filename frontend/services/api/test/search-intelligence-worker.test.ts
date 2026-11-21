@@ -65,7 +65,6 @@ async function run() {
   await confirmRun(db, scope, review.id);
   return { ...t, runId: review.id };
 }
-/** Held to the run's acquisition task. */
 async function worker(t: { workspaceId: string }, send: typeof fetch) {
   const taskIds = await workspaceTaskIds(db, t.workspaceId, 'search_intelligence_acquisition');
   return new AnalyticsWorker(db, loadWorkerSettings(), {
@@ -107,7 +106,6 @@ describe('native research acquisition worker', () => {
         .where('run_id', '=', t.runId)
         .executeTakeFirst(),
     ).toEqual({ status: 'published', coverage: 'empty' });
-    // A published keyword dataset can open or close keyword-gap Actions.
     const refresh = await db
       .selectFrom('analytics_tasks')
       .select('payload')
@@ -134,11 +132,9 @@ describe('native research acquisition worker', () => {
       .where('task_kind', '=', 'search_intelligence_acquisition')
       .executeTakeFirstOrThrow();
     expect(parked).toMatchObject({ status: 'retry_wait', attempt_count: 0, lease_owner: null });
-    // The task waits the provider's two minutes, not the default backoff.
     const waitSeconds = (parked.available_at.getTime() - before) / 1000;
     expect(waitSeconds).toBeGreaterThanOrEqual(119);
     expect(waitSeconds).toBeLessThan(130);
-    // Advance the parked task to its due time.
     await db
       .updateTable('analytics_tasks')
       .set({ available_at: new Date() })
@@ -149,13 +145,11 @@ describe('native research acquisition worker', () => {
       .select('account_identity')
       .where('id', '=', t.runId)
       .executeTakeFirstOrThrow();
-    // Advance only this disposable account's capacity to its next available tick.
     await db
       .updateTable('provider_capacity_buckets')
       .set(({ ref }) => ({ tokens: ref('capacity'), blocked_until: null }))
       .where('account_pool_identity', '=', account.account_identity)
       .execute();
-    // A published keyword dataset queues Opportunity work too; drain, don't take one task.
     await w.runUntilIdle();
     expect(sent).toBe(2);
     expect(

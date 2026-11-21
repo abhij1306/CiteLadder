@@ -14,7 +14,6 @@ import type { Users, Workspaces } from '../generated/db-schema.ts';
 export type User = Selectable<Users>;
 type Role = keyof typeof policy.workspaces.roles;
 const isRole = (key: string): key is Role => Object.hasOwn(policy.workspaces.roles, key);
-// Workspace policy names the roles used by the wire enum.
 const [firstRole, ...otherRoles] = Object.keys(policy.workspaces.roles).filter(isRole);
 if (!firstRole) throw new Error('Workspace policy names no roles.');
 const roleSchema = z.enum([firstRole, ...otherRoles]);

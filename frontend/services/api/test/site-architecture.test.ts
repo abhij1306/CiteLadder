@@ -109,7 +109,7 @@ it('counts in-content links apart from the links that menus repeat on every page
   const { internal_linking } = buildArchitecture(pages, 'complete', context);
   expect(internal_linking).toMatchObject({ internal_link_count: 22, content_link_count: 5 });
 });
-it('keeps observed orphan and duplicate counts under partial coverage but gates absence and depth findings', () => {
+it('keeps observed orphan counts under partial coverage but gates absence and depth findings', () => {
   const pages = [
     page('home', '/', 'homepage', { depth: 0, inbound: 1 }),
     ...['a', 'b', 'c'].map((id) =>
@@ -122,40 +122,120 @@ it('keeps observed orphan and duplicate counts under partial coverage but gates 
   ];
   const model = buildArchitecture(pages, 'partial', context);
   expect(model.internal_linking.orphan_page_count).toBe(3);
-  expect(
-    model.page_kinds.find((row) => row.page_kind === 'product')!.duplicate_metadata_count,
-  ).toBe(3);
   const partial = architectureRules(model, pages, 'partial');
-  // Depth over a partly observed graph is an upper bound, not a finding.
   expect(partial.find((row) => row.rule.rule_id.endsWith('excessive_depth'))).toMatchObject({
     outcome: 'unknown',
     reason: 'coverage_not_complete',
   });
-  expect(
-    partial.find((row) => row.rule.rule_id.endsWith('duplicate_metadata_in_page_kind'))!.outcome,
-  ).toBe('missing');
+  expect(partial.find((row) => row.rule.rule_id.endsWith('duplicate_titles'))!.outcome).toBe(
+    'missing',
+  );
   expect(partial.filter((row) => row.reason === 'coverage_not_complete')).toHaveLength(5);
   const complete = architectureRules(
     buildArchitecture(pages, 'complete', context),
     pages,
     'complete',
   );
-  expect(complete.filter((row) => row.outcome === 'missing')).toHaveLength(5);
+  expect(complete.filter((row) => row.outcome === 'missing')).toHaveLength(6);
   expect(model.structure_depth.buckets.find((row) => row.key === 'depth_3_plus')!.percentage).toBe(
     0.75,
   );
+});
+it('records site-wide duplicate sets, dead ends and the pages of an unhubbed kind', () => {
+  const contact = { title: 'Contact us | Acme', description: 'Get in touch' };
+  const read = { extraction: { state: 'available' } };
+  const pages = [
+    page('home', '/', 'homepage', { depth: 0 }),
+    page('c1', '/contact', 'about_contact', contact),
+    page('c2', '/pages/contact', 'about_contact', { ...contact, title: ' contact US | acme ' }),
+    page('c3', '/support/contact', 'about_contact', contact),
+    page('n1', '/contact-noindex', 'about_contact', { ...contact, indexable: false }),
+    page('p2', '/contact-2', 'about_contact', {
+      ...contact,
+      facts: { canonical_url: 'https://example.test/contact' },
+    }),
+    page('a1', '/about', 'about_contact', { title: 'About', description: '' }),
+    page('a2', '/pages/about', 'about_contact', { title: 'About', description: '' }),
+    page('team', '/team', 'about_contact', { title: 'Team', description: '' }),
+    page('g1', '/guides/about', 'article', { title: 'About', facts: read }),
+    page('g2', '/guides/linked', 'article', { title: 'Linked', facts: read, contentOutbound: 2 }),
+    page('s1', '/services/install', 'service'),
+    page('s2', '/services/repair', 'service'),
+    page('s3', '/services/supply', 'service'),
+  ];
+  const evaluations = architectureRules(
+    buildArchitecture(pages, 'complete', context),
+    pages,
+    'complete',
+  );
+  const evidence = (id: string) =>
+    record(evaluations.find((row) => row.rule.rule_id === id)!.evidence);
+  const sample = (id: string, kind: string) => ({
+    site_url_id: id,
+    url: pages.find((item) => item.id === id)!.url,
+    title: pages.find((item) => item.id === id)!.title,
+    page_kind: kind,
+  });
+  const contacts = [
+    sample('c1', 'about_contact'),
+    sample('c2', 'about_contact'),
+    sample('c3', 'about_contact'),
+  ];
+  expect(evidence('architecture.duplicate_titles')).toEqual({
+    count: 6,
+    duplicate_set_count: 2,
+    duplicate_sets: [
+      {
+        text: 'About',
+        page_count: 3,
+        pages: [
+          sample('a1', 'about_contact'),
+          sample('a2', 'about_contact'),
+          sample('g1', 'article'),
+        ],
+      },
+      { text: 'Contact us | Acme', page_count: 3, pages: contacts },
+    ],
+    page_kind_counts: { about_contact: 5, article: 1 },
+    coverage_state: 'complete',
+  });
+  expect(evidence('architecture.duplicate_meta_descriptions')).toMatchObject({
+    count: 3,
+    duplicate_sets: [{ text: 'Get in touch', page_count: 3, pages: contacts }],
+  });
+  expect(evidence('architecture.dead_end_pages')).toMatchObject({
+    count: 1,
+    pages: [{ site_url_id: 'g1', page_kind: 'article' }],
+  });
+  const unread = [page('home', '/', 'homepage', { depth: 0 }), page('u1', '/guides/u', 'article')];
+  const unreadRules = architectureRules(
+    buildArchitecture(unread, 'complete', context),
+    unread,
+    'complete',
+  );
+  expect(
+    unreadRules.find((row) => row.rule.rule_id === 'architecture.dead_end_pages'),
+  ).toMatchObject({ outcome: 'unknown', reason: 'content_not_observed' });
+  expect(evidence('architecture.unhubbed_page_kind')).toMatchObject({
+    page_kind_counts: { service: 3 },
+    page_kinds: [
+      {
+        page_kind: 'service',
+        page_count: 3,
+        pages: [sample('s1', 'service'), sample('s2', 'service'), sample('s3', 'service')],
+      },
+    ],
+  });
 });
 it('groups pages no link path from the homepage reaches by section, apart from orphans', () => {
   const pages = [
     page('home', '/', 'homepage', { depth: 0, inbound: 1 }),
     page('shop', '/collections/nets', 'category', { depth: 1, inbound: 3 }),
-    // A testimonials section that only links to itself.
     page('hub', '/blogs/testimonials', 'editorial_index', { inbound: 3 }),
     page('one', '/blogs/testimonials/one', 'article', { inbound: 1 }),
     page('two', '/blogs/testimonials/two', 'article', { inbound: 1 }),
     page('tag', '/blogs/testimonials/tagged/golf', 'editorial_index', { inbound: 2 }),
     page('stray', '/products/old-cover', 'product', { inbound: 1 }),
-    // No inbound link at all: the orphan rule's finding, never repeated here.
     page('orphan', '/pages/landing', 'other'),
   ];
   const rule = (coverage: string) =>
@@ -181,9 +261,7 @@ it('groups pages no link path from the homepage reaches by section, apart from o
       example_url: 'https://example.test/products/old-cover',
     },
   ]);
-  // A link the crawl did not see could make a page reachable.
   expect(rule('partial')).toMatchObject({ outcome: 'unknown', reason: 'coverage_not_complete' });
-  // Without the homepage in the graph no page has a depth, and none is unreachable.
   const homeless = pages.slice(1);
   expect(
     architectureRules(buildArchitecture(homeless, 'complete', context), homeless, 'complete').find(
@@ -274,8 +352,6 @@ it('downgrades complete coverage when architecture evidence reaches its source c
       .select(['outcome', 'reason_code'])
       .where('source_architecture_id', '=', architecture.id)
       .execute();
-    // Orphans, unreachable pages, parentless details, unhubbed kinds and depth
-    // all need complete coverage.
     expect(evaluations.filter((row) => row.reason_code === 'coverage_not_complete')).toHaveLength(
       5,
     );
@@ -283,7 +359,7 @@ it('downgrades complete coverage when architecture evidence reaches its source c
     policy.site_health.architecture.max_pages = previous;
   }
 });
-it('persists exact source IDs, seven root evaluations and replay-safe architecture from current metrics', async () => {
+it('persists exact source IDs, nine root evaluations and replay-safe architecture from current metrics', async () => {
   const seed = await fixtures.crawl();
   const snapshot = await fixtures.snapshot(seed);
   const profile = await fixtures.businessProfile(seed, context);
@@ -332,7 +408,7 @@ it('persists exact source IDs, seven root evaluations and replay-safe architectu
     .selectAll()
     .where('source_architecture_id', '=', architecture.id)
     .execute();
-  expect(evaluations).toHaveLength(7);
+  expect(evaluations).toHaveLength(9);
   expect(evaluations.every((row) => row.analysis_id === home.analysisId)).toBe(true);
   expect(evaluations.filter((row) => row.outcome === 'unknown')).toHaveLength(5);
   expect(record(architecture.archetype).archetype).toBe('commerce');
@@ -351,7 +427,7 @@ it('persists exact source IDs, seven root evaluations and replay-safe architectu
       .select('id')
       .where('source_architecture_id', '=', architecture.id)
       .execute(),
-  ).toHaveLength(7);
+  ).toHaveLength(9);
 });
 it('complete coverage creates actionable root findings without borrowing foreign evidence', async () => {
   const seed = await fixtures.crawl();
@@ -370,7 +446,6 @@ it('complete coverage creates actionable root findings without borrowing foreign
     .execute();
   expect(issues.some((row) => row.rule_id === 'architecture.orphan_pages')).toBe(true);
   expect(issues.every((row) => row.site_url_id === home.id)).toBe(true);
-  // Filed once against the homepage, the finding still counts the pages it names.
   const catalog = await readIssues(
     db,
     seed.workspaceId,
@@ -395,7 +470,6 @@ it('complete coverage creates actionable root findings without borrowing foreign
     cursor: null,
   });
   expect(detail.affected_url_count).toBe(2);
-  // The page-kind filter files it under the kinds of the pages it names, not the homepage's.
   const ofKind = async (pageKind: string) =>
     (
       await readIssues(

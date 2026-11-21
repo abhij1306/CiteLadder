@@ -1,9 +1,3 @@
-/**
- * Search Intelligence: readiness, run confirmation and cancellation, saved
- * preferences, published dataset rows and citation matches.
- * Authorized by the project in the path; review creation resolves
- * competitor websites before freezing the bounded acquisition plan.
- */
 import {
   searchDatasetPageSchema,
   searchDatasetSchema,
@@ -34,7 +28,6 @@ import { preferencesBody, reviewBody } from './search-intelligence-contracts.ts'
 import { searchCitationMatchRequestSchema } from '@citeladder/contracts/search-intelligence-requests';
 
 const family = 'search-intelligence';
-/** Reads open through the path project; writes resolve it in the active workspace. */
 const authorize = 'project';
 const root = '/api/v1/projects/{project_id}/search-intelligence';
 const uuid = { scalar: { kind: 'uuid' }, required: true } as const;

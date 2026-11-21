@@ -1,9 +1,3 @@
-/**
- * Two-step MCP changes. A prepare tool rehearses its kind's `execute`
- * (`confirmed-changes.ts`) and stores the exact payload behind a single-use
- * token; `confirm_change` runs that payload through the same `execute` once,
- * after the user agreed, in the same transaction that consumes the token.
- */
 import type { Actor } from '../auth/actor.ts';
 import { recordSecurityEvent } from '../auth/security-events.ts';
 import type { ServiceConfig } from '../config.ts';
@@ -23,7 +17,6 @@ import { McpInputError, type McpPrincipal } from './types.ts';
 const tokenHmac = (config: ServiceConfig, token: string) =>
   tokenHash(config, `mcp-confirmation:${token}`);
 
-/** Store a validated change for this connection; the token is shown once. */
 export async function issueConfirmation(
   db: Database,
   config: ServiceConfig,
@@ -35,7 +28,6 @@ export async function issueConfirmation(
     payload: Record<string, unknown>;
   }>,
 ) {
-  // 256 random bits, without punctuation for a model to mangle.
   const token = base62(base62Length(256));
   const now = new Date();
   const expiresAt = new Date(now.getTime() + mcpPolicy.confirmation_ttl_seconds * 1000);
@@ -59,12 +51,6 @@ export async function issueConfirmation(
   return { confirmation_token: token, expires_at: expiresAt.toISOString() };
 }
 
-/**
- * Run a prepared change once. The token must belong to this connection and be
- * unexpired and unused; the grant must still hold write and the member's live
- * role decides. The change and the token's consumption commit together, so a
- * refused or failed change leaves the token usable until it expires.
- */
 export function confirmChange(
   db: Database,
   config: ServiceConfig,

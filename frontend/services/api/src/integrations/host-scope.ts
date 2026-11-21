@@ -4,21 +4,12 @@ import { normalizeDomain } from '../analysis/domains.ts';
 
 const DOMAIN_PROPERTY_PREFIX = policy.integrations.transport.GSC_DOMAIN_PROPERTY_PREFIX;
 
-/**
- * The registrable site of a URL, property or bare host: lower-cased, with the
- * Search Console domain-property prefix and a leading `www.` removed. Empty
- * when unparseable.
- */
 function siteDomain(value: string): string {
   const text = value.trim();
   const prefixed = text.toLowerCase().startsWith(DOMAIN_PROPERTY_PREFIX);
   return normalizeDomain(prefixed ? text.slice(DOMAIN_PROPERTY_PREFIX.length) : text);
 }
 
-/**
- * The project's sites (website plus owned domains), as `siteDomain` values;
- * null when the workspace has no such project. A failed read still throws.
- */
 export async function projectSiteDomains(
   db: Database,
   workspaceId: string,
@@ -39,7 +30,6 @@ export async function projectSiteDomains(
     : null;
 }
 
-/** The sites of a project the caller already read inside its workspace. */
 export async function siteDomainsOf(
   db: Database,
   project: { id: string; workspace_id: string; website_url: string },
@@ -55,16 +45,13 @@ export async function siteDomainsOf(
   );
 }
 
-/** Whether a Search Console or Bing property belongs to one of the project's sites. */
 export function propertyMatchesSite(propertyRef: string, sites: ReadonlySet<string>): boolean {
   const site = siteDomain(propertyRef);
   return site !== '' && sites.has(site);
 }
 
-/** Hostnames that count as the project's own: each site with and without `www.`. */
 export async function projectHosts(db: Database, workspaceId: string, projectId: string) {
   const sites = await projectSiteDomains(db, workspaceId, projectId);
-  // Callers hold a run or task for this project; its loss fails that work.
   if (!sites) throw new Error('The project no longer exists in this workspace');
   return new Set([...sites].flatMap((site) => [site, `www.${site}`]));
 }

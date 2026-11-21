@@ -7,7 +7,6 @@ const db = testDatabase();
 const before = new Date('2026-01-01T12:59:59.950Z'),
   after = new Date('2026-01-01T13:00:00.050Z');
 afterAll(async () => {
-  // The fixture windows sit in the past, apart from any live window.
   await db
     .deleteFrom('usage_windows')
     .where('operation', '=', 'bulk_import')

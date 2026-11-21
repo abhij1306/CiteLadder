@@ -11,21 +11,16 @@ import {
   type GrantFamily,
   type GrantModel,
 } from '@/components/settings/grant-model';
-import { Badge } from '@/components/ui/badge';
+import { StatusMark } from '@/components/ui/status-mark';
+import { ActionButton } from '@/components/ui/actions';
 import { Button } from '@/components/ui/button';
-import { Callout } from '@/components/ui/callout';
-import { MutationNotice } from '@/components/ui/mutation-notice';
+import { GoogleMark } from '@/components/ui/google-glyph';
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardEyebrow,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
-import { Inline, Stack } from '@/components/ui/layout';
-import { ClampText } from '@/components/ui/table';
-import { ledgerClasses, MetaFooter } from '@/components/ui/workspace';
+  SettingRow,
+  SettingRows,
+  SettingsGroup,
+  settingRowsClasses,
+} from '@/components/ui/setting-row';
 import {
   integrationsApi,
   integrationsMutations,
@@ -33,7 +28,7 @@ import {
 } from '@/lib/api/integrations';
 import { hardNavigate } from '@/lib/navigation/hard-navigate';
 import { useWorkspaceCapability } from '@/lib/project/project-context';
-import { textRole } from '@/components/ui/typography';
+import { Notice } from '@/components/ui/notice';
 
 type GrantStatus = IntegrationConnection['grant_status'];
 type GrantBadge =
@@ -60,67 +55,50 @@ function GrantAlert({ family, status }: Readonly<{ family: GrantFamily; status: 
   const title = FAMILY_META[family].title;
 
   if (status === 'needs_reauth') {
-    return (
-      <Callout tone="warning">
-        {title} needs you to sign in again. Reconnect to resume syncing — previously imported data
-        is unaffected.
-      </Callout>
-    );
+    return <Notice tone="warning">{title} needs you to sign in again.</Notice>;
   }
   if (status === 'error') {
-    return (
-      <Callout tone="negative">
-        The last connection test failed — {title}&nbsp;rejected CiteLadder&rsquo;s access. Reconnect
-        to resume syncing.
-      </Callout>
-    );
+    return <Notice tone="negative">{title} rejected CiteLadder&rsquo;s access.</Notice>;
   }
-  if (status === 'pending_revocation') {
-    return (
-      <Callout tone="warning">
-        Disconnect is finishing — CiteLadder is retrying the {title} revocation in the background.
-        Previously imported data is kept.
-      </Callout>
-    );
-  }
-  if (status === 'revoked') {
-    return (
-      <Callout tone="neutral">
-        {title} is disconnected. Imported data is kept; reconnect to resume syncing.
-      </Callout>
-    );
-  }
-
   return null;
 }
 
-function GrantHeader({
+function GrantStatus({
   family,
   grant,
 }: Readonly<{ family: GrantFamily; grant: GrantModel | null }>) {
-  const meta = FAMILY_META[family];
   const badge = grant ? GRANT_STATUS_BADGE[grant.status] : { variant: 'neutral' as const };
   const label = grant ? GRANT_STATUS_LABEL[grant.status] : 'Not connected';
+  return badge.variant === 'status' ? (
+    <StatusMark variant="status" value={badge.value} data-testid={`grant-status-${family}`}>
+      {label}
+    </StatusMark>
+  ) : (
+    <StatusMark data-testid={`grant-status-${family}`}>{label}</StatusMark>
+  );
+}
 
+function GrantTitle({ family }: Readonly<{ family: GrantFamily }>) {
   return (
-    <CardHeader
-      actions={
-        badge.variant === 'status' ? (
-          <Badge variant="status" value={badge.value} data-testid={`grant-status-${family}`}>
-            {label}
-          </Badge>
-        ) : (
-          <Badge data-testid={`grant-status-${family}`}>{label}</Badge>
-        )
-      }
-    >
-      <CardEyebrow>Connection</CardEyebrow>
-      <CardTitle>{meta.title}</CardTitle>
-      {/* Cut at one line, with the whole description in a tooltip when cut. */}
-      <CardDescription>
-        <ClampText lines={1}>{meta.blurb}</ClampText>
-      </CardDescription>
-    </CardHeader>
+    <>
+      {family === 'google' ? <GoogleMark /> : null}
+      {FAMILY_META[family].title}
+    </>
+  );
+}
+
+function ConnectButton({
+  workspaceId,
+  family,
+}: Readonly<{ workspaceId: string; family: GrantFamily }>) {
+  const meta = FAMILY_META[family];
+  const start = () =>
+    hardNavigate(integrationsApi.oauthStartUrl(meta.connectProvider, workspaceId));
+  if (family === 'google') return <ActionButton action="connectGoogle" onClick={start} />;
+  return (
+    <Button variant="secondary" onClick={start}>
+      Connect {meta.title}
+    </Button>
   );
 }
 
@@ -128,47 +106,43 @@ function ConnectCard({
   workspaceId,
   family,
 }: Readonly<{ workspaceId: string; family: GrantFamily }>) {
-  const meta = FAMILY_META[family];
   const canManage = useWorkspaceCapability('manage_credentials');
 
   return (
-    <Stack as={Card} gap="compact" data-testid={`grant-card-${family}`} className="content-between">
-      <div>
-        <GrantHeader family={family} grant={null} />
-        <CardContent>
-          <p className={textRole('body')}>
-            {canManage
-              ? `Connect your ${meta.title} account to automatically import traffic and search visibility metrics.`
-              : `A workspace Owner or Admin can connect ${meta.title} to import traffic and search visibility metrics.`}
-          </p>
-        </CardContent>
-      </div>
-      {canManage ? (
-        <CardContent>
-          <Button
-            variant="secondary"
-            onClick={() =>
-              hardNavigate(integrationsApi.oauthStartUrl(meta.connectProvider, workspaceId))
-            }
-          >
-            Connect {meta.title}
-          </Button>
-        </CardContent>
-      ) : null}
-    </Stack>
+    <div data-testid={`grant-card-${family}`}>
+      <SettingsGroup
+        title={<GrantTitle family={family} />}
+        status={<GrantStatus family={family} grant={null} />}
+        action={canManage ? <ConnectButton workspaceId={workspaceId} family={family} /> : null}
+      >
+        {canManage ? null : (
+          <SettingRows>
+            <SettingRow label="Owner or Admin only." />
+          </SettingRows>
+        )}
+      </SettingsGroup>
+    </div>
   );
 }
 
-/**
- * Disconnect the whole grant: access is revoked at the provider and every
- * property it serves stops importing. Imported data is kept, so reconnecting
- * resumes the same history.
- */
+function ReconnectButton({
+  workspaceId,
+  family,
+}: Readonly<{ workspaceId: string; family: GrantFamily }>) {
+  const meta = FAMILY_META[family];
+  return (
+    <Button
+      onClick={() => hardNavigate(integrationsApi.oauthStartUrl(meta.connectProvider, workspaceId))}
+    >
+      Reconnect
+    </Button>
+  );
+}
+
 function DisconnectGrant({ grant }: Readonly<{ grant: GrantModel }>) {
   const [open, setOpen] = useState(false);
   const title = FAMILY_META[grant.family].title;
   const [connection] = grant.connections;
-  // Disconnecting stops imports into the same projections a new property feeds.
   const disconnect = useMutation(integrationsMutations.disconnect(connection.workspace_id));
   const sources = joinProviderLabels(grant.connections.map((item) => item.provider));
   return (
@@ -203,19 +177,14 @@ function DisconnectGrant({ grant }: Readonly<{ grant: GrantModel }>) {
           </>
         }
       >
-        <Stack gap="compact">
-          <p className={textRole('body')}>
-            Previously imported data is kept. Reconnecting resumes from it; to stop importing just
-            one property, use Remove on its row instead.
-          </p>
-          {disconnect.isError ? (
-            <MutationNotice
-              notice={mutationNoticeForError(disconnect.error, {
-                action: 'disconnect the integration',
-              })}
-            />
-          ) : null}
-        </Stack>
+        {disconnect.isError ? (
+          <Notice
+            kind="mutation"
+            notice={mutationNoticeForError(disconnect.error, {
+              action: 'disconnect the integration',
+            })}
+          />
+        ) : null}
       </Dialog>
     </>
   );
@@ -226,47 +195,33 @@ function ConnectedCard({
   family,
   grant,
 }: Readonly<{ workspaceId: string; family: GrantFamily; grant: GrantModel }>) {
-  const meta = FAMILY_META[family];
-  // Connecting and disconnecting are credential actions.
   const canManage = useWorkspaceCapability('manage_credentials');
+  const actions = canManage ? (
+    <>
+      {grant.status === 'revoked' ? (
+        <ConnectButton workspaceId={workspaceId} family={family} />
+      ) : (
+        <ReconnectButton workspaceId={workspaceId} family={family} />
+      )}
+      {isGrantGone(grant.status) ? null : <DisconnectGrant grant={grant} />}
+    </>
+  ) : null;
 
   return (
-    <Stack as={Card} gap="compact" data-testid={`grant-card-${family}`} className="content-between">
-      <div>
-        <GrantHeader family={family} grant={grant} />
-        <Stack as={CardContent} gap="compact">
-          <GrantAlert family={family} status={grant.status} />
-          <ul className={ledgerClasses()}>
-            {grant.connections.map((connection) => (
-              <ConnectionRow key={connection.id} connection={connection} grant={grant} />
-            ))}
-          </ul>
-        </Stack>
-      </div>
-      {canManage ? (
-        <CardContent>
-          <MetaFooter
-            trailing={
-              <span className="text-right">
-                Reconnecting renews access for every property in this connection.
-              </span>
-            }
-          >
-            <Inline className="flex-wrap">
-              <Button
-                variant={grant.status === 'connected' ? 'secondary' : 'primary'}
-                onClick={() =>
-                  hardNavigate(integrationsApi.oauthStartUrl(meta.connectProvider, workspaceId))
-                }
-              >
-                {grant.status === 'revoked' ? `Connect ${meta.title}` : 'Reconnect'}
-              </Button>
-              {isGrantGone(grant.status) ? null : <DisconnectGrant grant={grant} />}
-            </Inline>
-          </MetaFooter>
-        </CardContent>
-      ) : null}
-    </Stack>
+    <div data-testid={`grant-card-${family}`}>
+      <SettingsGroup
+        title={<GrantTitle family={family} />}
+        status={<GrantStatus family={family} grant={grant} />}
+        action={actions}
+      >
+        <GrantAlert family={family} status={grant.status} />
+        <ul className={settingRowsClasses('@container')}>
+          {grant.connections.map((connection) => (
+            <ConnectionRow key={connection.id} connection={connection} grant={grant} />
+          ))}
+        </ul>
+      </SettingsGroup>
+    </div>
   );
 }
 

@@ -104,7 +104,6 @@ export function insightPatterns(
   }
   return patterns;
 }
-/** Each preset ends on the last closed reporting day that crawl logs and GA4 can both cover. */
 async function insightWindows(db: Database, scope: CrawlScope, now = new Date()) {
   const options = await withReportingTimezone(db, scope, {});
   const closed = addDays(currentReportingDay(options, now), -1);
@@ -128,7 +127,6 @@ export const refreshTrafficInsights: Executor = async (task, { db, checkCancelle
     }
   });
 };
-/** The worker's persisted derivation for one resolved window; called in its publication transaction. */
 export async function refreshInsightWindow(
   db: Database,
   scope: CrawlScope,
@@ -186,7 +184,6 @@ export async function refreshInsightWindow(
     })
     .onConflict((c) => c.constraint('uq_ai_traffic_insights_window').doUpdateSet(content))
     .execute();
-  // A newer window of the same length replaces the older snapshot.
   await db
     .deleteFrom('ai_traffic_insights')
     .where('workspace_id', '=', scope.workspaceId)

@@ -6,7 +6,6 @@ import type pg from 'pg';
 import { OperatorRefusal, operatorDiagnostic } from './operator.ts';
 import { applyMigrations, baselineClient, describeMigrations } from './schema-baseline.ts';
 
-/** A fresh or replaced database VM may still be starting; retry the connection until the deadline. */
 async function connect(databaseUrl: string, deadline: number): Promise<pg.Client> {
   const client = baselineClient(databaseUrl);
   try {
@@ -39,7 +38,6 @@ async function main() {
 try {
   await main();
 } catch (error) {
-  // The shared operator redaction already names a failed statement's SQLSTATE.
   console.error(operatorDiagnostic(error));
   process.exitCode = 1;
 }

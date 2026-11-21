@@ -6,7 +6,6 @@ import type { CommerceProductDetail } from '@citeladder/contracts/commerce-suite
 
 type Catalog = NonNullable<CommerceProductDetail['product']['catalog']>;
 
-/** The edit form's values: every field as typed, categories as a list. */
 export type ProductEditForm = Readonly<{
   name: string;
   brand: string;
@@ -21,7 +20,6 @@ export type ProductEditForm = Readonly<{
   categories: readonly string[];
 }>;
 
-/** The form a catalog product's edit starts from: its record as stored. */
 export function productEditForm(
   product: Pick<CommerceProductDetail['product'], 'name' | 'brand' | 'description' | 'url'>,
   catalog: Catalog,
@@ -53,11 +51,9 @@ const TEXT_FIELDS = [
   'mpn',
 ] as const;
 
-/** A text field as the server stores it: trimmed, a currency upper-cased. */
 const stored = (field: (typeof TEXT_FIELDS)[number], value: string) =>
   field === 'currency' ? value.trim().toUpperCase() : value.trim();
 
-/** Category names as the catalog keys them: case and inner whitespace do not count. */
 const sameSet = (a: readonly string[], b: readonly string[]) => {
   const key = (values: readonly string[]) =>
     [...new Set(values.map((value) => value.trim().replaceAll(/\s+/gu, ' ').toLowerCase()))]
@@ -71,11 +67,6 @@ export type ProductEditResult =
   | { kind: 'invalid'; message: string }
   | { kind: 'edit'; edit: ProductEditRequest };
 
-/**
- * The edit to send: only the fields that changed, so an untouched field keeps
- * whatever owns it (CSV, crawl or an earlier edit). Validated against the
- * request contract before it leaves the browser.
- */
 export function productEditChanges(
   initial: ProductEditForm,
   values: ProductEditForm,

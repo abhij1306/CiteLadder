@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { Plus } from 'lucide-react';
 
 import { BrandMark } from '@/components/ui/brand-mark';
 import { Button } from '@/components/ui/button';
@@ -9,6 +8,7 @@ import {
   type ChecklistItem,
 } from '@/components/ui/checklist-field';
 import { Icon } from '@/components/ui/icon';
+import { Plus } from '@/lib/icons';
 import type { ReviewCompetitor, ReviewDomain } from '@/lib/onboarding/forms';
 
 function competitorUrl(competitor: ReviewCompetitor): string {
@@ -17,7 +17,6 @@ function competitorUrl(competitor: ReviewCompetitor): string {
   return /^https?:\/\//i.test(domain) ? domain : `https://${domain}`;
 }
 
-/** A manual choice, not yet named: it opens in the identity editor immediately. */
 function isBlank(competitor: ReviewCompetitor): boolean {
   return competitor.name === '' && competitor.domains.length === 0;
 }
@@ -34,8 +33,6 @@ function competitorItem(competitor: ReviewCompetitor, limitReached: boolean): Ch
     checked: competitor.selected,
     disabled: limitReached,
     editable: true,
-    // Kept for assistive tech and tests: the visible row is a control, so it
-    // cannot also be the link to the competitor's site.
     extra: url ? (
       <a href={url} target="_blank" rel="noreferrer" className="sr-only">
         {url}
@@ -64,9 +61,7 @@ export function ReviewStep({
   onRemoveCompetitor: (index: number) => void;
   onAddCompetitor: () => void;
   maximumCompetitors: number | undefined;
-  /** Why Create project waits on the websites. */
   domainNote?: string;
-  /** Why Create project waits on the competitors. */
   competitorNote?: string;
 }>) {
   const [editing, setEditing] = useState<string | null>(null);
@@ -90,7 +85,6 @@ export function ReviewStep({
       };
     },
     onSave: (id, values) => onEditCompetitor(indexOf(id), values.name, values.domain),
-    // Cancelling a choice that was never named removes it, freeing its slot.
     onCancel: (id) => {
       const competitor = competitors[indexOf(id)];
       if (competitor && isBlank(competitor)) onRemoveCompetitor(indexOf(id));
@@ -102,7 +96,6 @@ export function ReviewStep({
     <>
       <ChecklistField
         label="Your websites"
-        help="Auto-verified from your domain."
         count={domains.length > 0 ? `${selectedDomains} of ${domains.length}` : undefined}
         note={domainNote}
         empty="No websites were found."
@@ -116,17 +109,16 @@ export function ReviewStep({
 
       <ChecklistField
         label="Competitors"
-        help="Pick the brands to compare against in every answer."
         count={`${selectedCompetitors} of ${maximumCompetitors ?? '…'}`}
         note={competitorNote}
-        empty="No competitors were confirmed. Add the companies you lose deals to."
+        empty="No competitors were confirmed."
         items={competitors.map((competitor) => competitorItem(competitor, competitorLimitReached))}
         onToggle={(id) => onToggleCompetitor(indexOf(id))}
         editor={editor}
         editingId={editingId}
         onEditingChange={setEditing}
         footer={
-          <Button variant="ghost" onClick={onAddCompetitor} disabled={competitorLimitReached}>
+          <Button variant="quiet" onClick={onAddCompetitor} disabled={competitorLimitReached}>
             <Icon icon={Plus} />
             Add
           </Button>

@@ -1,14 +1,3 @@
-/**
- * Path and query parameters, validated into the published 422 contract.
- *
- * Every parameter failure is
- * collected, path parameters first, and answered with the envelope the
- * API publishes: `code: validation_error`,
- * `details.errors[{loc, message, type}]` and the first error as the message.
- * `loc` and `type` are the contract; messages are human-readable and not
- * a stable text. Repeated keys take the last value (every value
- * for a list), and an empty value is validated, never treated as absent.
- */
 import { ApiError } from '../errors.ts';
 import { parseRequestDate, parseDatetime, type ParsedDatetime } from './datetimes.ts';
 import { parseUuid } from './uuid.ts';
@@ -36,11 +25,11 @@ type ScalarValue<S extends Scalar> = S extends { kind: 'datetime' }
 
 export type ParamSpec = {
   scalar: Scalar;
-  /** The wire name, when it differs from the parameter name. */
   alias?: string;
   list?: boolean;
   required?: boolean;
   default?: unknown;
+  description?: string;
 };
 
 type SpecValue<P extends ParamSpec> = P extends { list: true }
@@ -89,7 +78,6 @@ function validateFloat(raw: string): Outcome {
     : failure('float_parsing', 'Expected a finite number');
 }
 
-// Accepted boolean query spellings.
 const TRUE_WORDS = new Set(['1', 'on', 't', 'true', 'y', 'yes']);
 const FALSE_WORDS = new Set(['0', 'off', 'f', 'false', 'n', 'no']);
 
@@ -145,7 +133,6 @@ function validateScalar(scalar: Scalar, raw: string): Outcome {
   }
 }
 
-/** Read one declared parameter from the raw request values. */
 function readParam(
   name: string,
   spec: ParamSpec,
@@ -198,10 +185,6 @@ export type RequestParams<Path extends ParamSpecs, Query extends ParamSpecs> = {
   query: ParamValues<Query>;
 };
 
-/**
- * Validate one request's path and query parameters, or throw the 422.
- * `search` is the raw query string, decoded by URLSearchParams.
- */
 export function validateParams<Path extends ParamSpecs, Query extends ParamSpecs>(
   specs: { path: Path; query: Query },
   input: { path: Readonly<Record<string, string>>; search: string },

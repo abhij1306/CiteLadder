@@ -2,7 +2,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, type FieldErrors } from 'react-hook-form';
 
 import {
   brandDiscoveriesApi,
@@ -45,12 +45,6 @@ function selectedCompetitors(competitors: ReviewCompetitor[]) {
   );
 }
 
-/**
- * Where a resumed onboarding picks up.
- *
- * Without a discovery to resume there is nothing to return to, so the flow
- * starts at the brand step whatever the URL claims.
- */
 function resumedStep(discoveryId: string | null, stepParameter: string | null): OnboardingStep {
   if (!discoveryId) return 0;
   return stepParameter === 'review' ? 2 : 1;
@@ -150,20 +144,12 @@ export function useOnboardingFlow(transactionKey: string) {
     setProfile(null);
     form.reset(emptyBrandStep);
     setStep(0);
-    // Keep the workspace: a discarded draft still belongs to the workspace the
-    // reader was creating in, and dropping it here would silently re-target
-    // the retry at whichever workspace resolves by default.
     const reset = new URLSearchParams({ new: '1' });
-    // The URL is the first authority, but an orphaned completion link
-    // may carry no workspace at all — and the resolved one is still the
-    // workspace this draft belonged to.
     const workspace = searchParams?.get('workspace') ?? activeWorkspaceId;
     if (workspace) reset.set('workspace', workspace);
     router(`/onboarding?${reset.toString()}`, { replace: true, preventScrollReset: true });
   }, [activeWorkspaceId, form, initialDiscoveryId, orphanedCompletion, router, searchParams]);
 
-  // Edits saved before a reload win over the discovery's suggestions. Read
-  // once per discovery; the save effect below keeps it current.
   const readyDiscoveryId = discoveryState?.status === 'ready' ? discoveryState.id : null;
   const savedDraft = useMemo(
     () => (readyDiscoveryId ? readReviewDraft(readyDiscoveryId) : null),
@@ -187,8 +173,6 @@ export function useOnboardingFlow(transactionKey: string) {
 
   useEffect(() => {
     if (discoveryState?.status !== 'ready' || maximumCompetitors === undefined) return;
-    // Suggestions arrive ranked; the first ones up to the cap start selected
-    // and the reader deselects any that are wrong before creation.
     // oxlint-disable-next-line react-hooks/set-state-in-effect -- seed an editable persisted draft.
     setCompetitors((current) =>
       current.length
@@ -202,18 +186,12 @@ export function useOnboardingFlow(transactionKey: string) {
     );
   }, [discoveryState, maximumCompetitors, savedDraft]);
 
-  // Keep the reader's review edits for this tab, so a reload returns to them.
   useEffect(() => {
-    // Competitors seed once the catalog's cap is known; saving before then
-    // would store an empty list over the suggestions.
     if (step !== 2 || !readyDiscoveryId || profile === null || maximumCompetitors === undefined)
       return;
     saveReviewDraft(readyDiscoveryId, { domains, competitors, profile });
   }, [competitors, domains, maximumCompetitors, profile, readyDiscoveryId, step]);
 
-  // The completion response is the committed write receipt. Do not hold the
-  // user here for another detail request: the destination owns that bounded
-  // read and its retry UI, including when the project list predates creation.
   const openProject = useCallback(
     async (projectId: string) => {
       if (!mounted.current || openingProject.current === projectId) return;
@@ -248,16 +226,13 @@ export function useOnboardingFlow(transactionKey: string) {
           { workspaceId: activeWorkspaceId, timeoutMs: ONBOARDING_COMPLETION_REQUEST_TIMEOUT_MS },
         );
         if (!result.project_id) {
-          throw new Error(
-            'Project creation did not return a project. Try Create project again; your reviewed details are preserved.',
-          );
+          throw new Error('Project creation did not return a project.');
         }
         return result;
       } finally {
         finishOnboardingCompletionRequest(timingStarted);
       }
     },
-    // Completion creates the project, with no prompts yet, in the request.
     onSuccess: async (result) => {
       if (!result.project_id) return;
       if (discoveryState) clearReviewDraft(discoveryState.id);
@@ -277,7 +252,6 @@ export function useOnboardingFlow(transactionKey: string) {
   const completionFailed = discoveryState?.status === 'failed';
   const isCompleting = !completionFailed && (complete.isPending || complete.isSuccess);
   useEffect(() => {
-    // Completion owns navigation from acceptance through the project handoff.
     if (orphanedCompletion || openingProject.current || isCompleting || completedProjectId) return;
     const discoveryId = discoveryState?.id ?? resumeDiscoveryId;
     if (!discoveryId) return;
@@ -325,11 +299,8 @@ export function useOnboardingFlow(transactionKey: string) {
     }
     setBrand(values);
     setStep(1);
-  });
+  }, revealFirstInvalid);
 
-  // A failed or degraded discovery runs again as a new discovery from the same
-  // input; the URL follows its id. Once the new run exists, the old review
-  // seeds nothing; a failed request leaves it as it was.
   const rerunDiscovery = () => {
     const previous = discoveryState?.id;
     discovery.rerun(() => {
@@ -358,8 +329,6 @@ export function useOnboardingFlow(transactionKey: string) {
     complete,
     completedProjectId,
     completionFailed,
-    // Hold the action through navigation to the created project so a second
-    // click cannot race the handoff.
     isCompleting,
     discovery,
     domains,
@@ -382,4 +351,14 @@ export function useOnboardingFlow(transactionKey: string) {
     submitBrand,
     toggle,
   };
+}
+
+function revealFirstInvalid(errors: FieldErrors<BrandStepValues>) {
+  const fields = Object.values(errors).flatMap((error): HTMLElement[] => {
+    const ref = error && 'ref' in error ? error.ref : undefined;
+    return ref instanceof HTMLElement ? [ref] : [];
+  });
+  fields.sort((a, b) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1));
+  const [first] = fields;
+  first?.scrollIntoView?.({ block: 'center' });
 }

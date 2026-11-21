@@ -1,4 +1,3 @@
-/** The Action's recorded deployment step at the real routes and PostgreSQL. */
 import { afterAll, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.ts';
 import { actionDeclarationSchema, actionDetailSchema } from '@citeladder/contracts/actions';
@@ -11,7 +10,7 @@ const db = testDatabase(config);
 const app = createApp(config, db);
 const seeds: ActionSeed[] = [];
 const goLive = `${new Date(Date.now() - 2 * 86_400_000).toISOString().slice(0, 10)}T15:00:00Z`;
-const rule = 'missing_structured_data';
+const rule = 'site_link_near_orphan';
 
 async function seed() {
   const s = await actionFixture<ActionSeed>('seed');
@@ -51,7 +50,6 @@ describe('recording a deployment', () => {
     const body = {
       declared_implemented_at: goLive,
       deployment_reference: '  https://git.example.test/acme/site/pull/42  ',
-      // The recorder is the session's user; a body field naming another is refused.
     };
     expect(
       (
@@ -61,7 +59,6 @@ describe('recording a deployment', () => {
         })
       ).status,
     ).toBe(422);
-    // Another workspace can neither record nor read this Action's deployment.
     expect(
       (await request(foreign, `${actionPath(s)}/declaration`, { body, key: 'foreign' })).status,
     ).toBe(404);
@@ -79,7 +76,6 @@ describe('recording a deployment', () => {
       reference: 'https://git.example.test/acme/site/pull/42',
     });
 
-    // The same key with another reference is a different request.
     expect(
       (
         await request(s, `${actionPath(s)}/declaration`, {
@@ -88,7 +84,6 @@ describe('recording a deployment', () => {
         })
       ).status,
     ).toBe(409);
-    // A replay returns the recorded deployment unchanged.
     const replay = await request(s, `${actionPath(s)}/declaration`, { body, key: 'deploy-1' });
     expect(replay.status).toBe(200);
     expect(actionDeclarationSchema.parse(await replay.json()).deployment_reference).toBe(
@@ -102,7 +97,6 @@ describe('recording a deployment', () => {
     ]);
     expect((await request(foreign, actionPath(s))).status).toBe(404);
 
-    // A recorder who left the workspace is no longer named.
     await db.deleteFrom('workspace_members').where('workspace_id', '=', s.workspace_id).execute();
     const stored = await db
       .selectFrom('opportunity_implementation_events')

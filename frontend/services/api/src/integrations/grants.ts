@@ -1,9 +1,3 @@
-/**
- * The OAuth grant lifecycle: `connected` → `pending_revocation` (disconnect) →
- * `revoked`, and `connected` → `needs_reauth` when a sync's credentials fail.
- * Routes and workers call these transitions; provider I/O stays with them and
- * runs outside any transaction here.
- */
 import { insightsRefresh } from '../config/ai-traffic.ts';
 import type { Database } from '../db/database.ts';
 import { notFound } from '../errors.ts';
@@ -11,11 +5,6 @@ import { enqueueCoalesced } from '../queue/enqueue.ts';
 import { integrationSettings } from './config.ts';
 import { recordIntegrationEvents } from './events.ts';
 
-/**
- * Disconnect a connection's grant: request its revocation and retire every
- * property mapping it serves. Connections and their imported evidence stay
- * (raw evidence is append-only), so a reconnect resumes the same history.
- */
 export async function disconnectConnection(
   db: Database,
   input: { workspaceId: string; connectionId: string },
@@ -83,7 +72,6 @@ export async function disconnectConnection(
   });
 }
 
-/** Grants awaiting provider revocation whose claim is free or expired. */
 export function pendingRevocations(db: Database, limit: number) {
   return db
     .selectFrom('integration_oauth_grants')
@@ -96,10 +84,6 @@ export function pendingRevocations(db: Database, limit: number) {
     .execute();
 }
 
-/**
- * Claim one pending revocation for `claimId`, returning the grant row, or null
- * when it is no longer pending or another claim still holds it.
- */
 export function claimRevocation(
   db: Database,
   input: { workspaceId: string; grantId: string; claimId: string },
@@ -133,7 +117,6 @@ export function claimRevocation(
   });
 }
 
-/** The provider revoked the grant: clear its credentials under the held claim. */
 export function markGrantRevoked(
   db: Database,
   input: { workspaceId: string; grantId: string; claimId: string; tokenRevision: number },
@@ -170,7 +153,6 @@ export function markGrantRevoked(
   });
 }
 
-/** Revocation failed: free the claim so a later pass retries, and record why. */
 export function releaseRevocationClaim(
   db: Database,
   input: { workspaceId: string; grantId: string; claimId: string; errorCode: string },

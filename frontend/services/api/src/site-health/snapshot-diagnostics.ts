@@ -1,218 +1,285 @@
-/** Persist diagnostic panels with the same frozen evaluation and page sources as scores. */
 import { policy } from '../config.ts';
 import { record } from '../db/json.ts';
-import type { MeasurementProjection } from './score-summary.ts';
+import type { ProjectionEvaluation } from './score-summary.ts';
 import type { Crawl } from './site-task.ts';
 import { compareText } from '../text-order.ts';
-import { firstOf } from '../lists.ts';
 
 const reads = policy.site_health.reads;
 const catalog = new Map(policy.site_health.rule_catalog.map((row) => [row.rule_id, row]));
-type Evaluation = MeasurementProjection['evaluations'][number];
+type Evaluation = ProjectionEvaluation;
+const OUTCOMES = ['satisfied', 'partial', 'missing', 'unknown', 'not_applicable', 'error'];
 const failing = (row: Evaluation) => reads.failing_outcomes.includes(row.outcome);
-/** An entity check's own failure count: a finite number or a digit string, otherwise none. */
 function reportedFailures(value: unknown): number {
   if (typeof value === 'number' && Number.isFinite(value)) return Math.trunc(value);
   return typeof value === 'string' && /^\d+$/.test(value.trim()) ? Number(value.trim()) : 0;
-}
-/** Failing pages, the site once, or each entity check's own reported failures. */
-function failingEntities(scope: string, failures: Evaluation[]) {
-  if (scope === 'page') return new Set(failures.map((row) => row.analysis_id)).size;
-  if (scope === 'site') return Number(failures.length > 0);
-  return failures.reduce(
-    (sum, row) => sum + Math.max(1, reportedFailures(record(row.evidence).failure_count)),
-    0,
-  );
 }
 function measurementState(determinate: number, applicable: number) {
   if (!applicable) return 'not_measured';
   return determinate === applicable ? 'measured' : 'limited_evidence';
 }
-const counts = (rows: Evaluation[]) =>
-  Object.fromEntries(
-    ['satisfied', 'partial', 'missing', 'unknown', 'not_applicable', 'error'].map((outcome) => [
-      `${outcome}_count`,
-      rows.filter((row) => row.outcome === outcome).length,
-    ]),
-  );
-
-export function readinessDiagnostic(crawl: Crawl, projection: MeasurementProjection) {
-  const logical = new Map(
-    projection.rows.flatMap((row) =>
-      (row.source_evaluation_ids ?? []).map((id) => [id, row.id] as const),
-    ),
-  );
-  const all = projection.evaluations
-    .filter(
-      (row) =>
-        catalog.has(row.rule_id) &&
-        row.readiness_dimension &&
-        row.score_roles?.includes('aeo_readiness'),
-    )
-    .map((row) => ({ ...row, analysis_id: logical.get(row.id) ?? row.analysis_id }));
-  const rows = all.slice(0, reads.aeo_max_evaluations);
-  const pages = new Map(projection.rows.map((row) => [row.id, row]));
-  const dimensions = projection.aggregate.readiness_dimensions.map((dimension) => {
-    const relevant = rows.filter((row) => row.readiness_dimension === dimension.key);
-    const pageRows = relevant.filter((row) => row.scope === 'page');
-    const byPage = new Map<string, Evaluation[]>();
-    for (const row of pageRows.filter(failing)) {
-      if (!pages.has(row.analysis_id)) continue;
-      const group = byPage.get(row.analysis_id) ?? [];
-      group.push(row);
-      byPage.set(row.analysis_id, group);
-    }
-    const evidencePages = [...byPage]
-      .sort(
-        (a, b) =>
-          b[1].length - a[1].length ||
-          compareText(pages.get(a[0])!.normalized_url, pages.get(b[0])!.normalized_url) ||
-          compareText(a[0], b[0]),
-      )
-      .slice(0, reads.aeo_max_evidence_pages)
-      .map(([id, failures]) => ({
-        site_url_id: pages.get(id)!.site_url_id,
-        source_analysis_id: id,
-        normalized_url: pages.get(id)!.normalized_url,
-        failed_checks: failures
-          .toSorted((a, b) => compareText(a.rule_id, b.rule_id))
-          .map((row) => {
-            const rule = catalog.get(row.rule_id)!;
-            return {
-              rule_id: row.rule_id,
-              title: rule.display_label,
-              observed_evidence: record(row.evidence),
-              expected_capability: rule.description,
-              remediation: rule.remediation,
-              content_addressable: rule.content_addressable,
-              remediation_route: rule.remediation_route,
-            };
-          }),
-      }));
-    const checkpointIds = [...new Set(relevant.map((row) => row.rule_id))].toSorted(compareText);
-    const failurePages = new Set(pageRows.filter(failing).map((row) => row.analysis_id)).size;
-    return {
-      ...dimension,
-      ...counts(relevant),
-      checkpoint_ids: checkpointIds,
-      checked_page_count: new Set(
-        pageRows
-          .filter((row) => ['satisfied', 'partial', 'missing'].includes(row.outcome))
-          .map((row) => row.analysis_id),
-      ).size,
-      failing_page_count: failurePages,
-      evidence_pages: evidencePages,
-      evidence_truncated: failurePages > evidencePages.length,
-      checks: checkpointIds.map((id) => {
-        const group = relevant.filter((row) => row.rule_id === id);
-        const first = firstOf(group, `an evaluation of checkpoint ${id}`);
-        const scope = first.scope;
-        const failures = group.filter(failing);
-        const rule = catalog.get(id)!;
-        const failureCount = failingEntities(scope, failures);
-        return {
-          rule_id: id,
-          scope,
-          title: rule.display_label,
-          remediation: rule.remediation,
-          ...counts(group),
-          failing_entity_count: failureCount,
-          aeo_pillar: first.readiness_dimension,
-          content_addressable: rule.content_addressable,
-          remediation_route: rule.remediation_route,
-        };
-      }),
-    };
-  });
-  const aggregate = projection.aggregate;
-  const limitations: string[] = [];
-  if (all.length > rows.length)
-    limitations.push(
-      `Readiness diagnostic counts and evidence are truncated at ${reads.aeo_max_evaluations} evaluations.`,
-    );
-  return {
-    state: aggregate.aeo_measurement_state,
-    crawl_id: crawl.id,
-    score: aggregate.aeo_readiness_score,
-    coverage: aggregate.aeo_measurement_coverage,
-    profile_version: reads.measurement_versions.profile,
-    schema_contract_version: reads.measurement_versions.schema_contract,
-    scoring_version: crawl.scoring_version || reads.scoring_version,
-    presentation_version: reads.measurement_versions.presentation,
-    analyzer_version: crawl.analyzer_version || policy.site_health.versions.analyzer,
-    source_analysis_ids: [...pages.keys()],
-    analysis_count: pages.size,
-    affected_page_count: new Set(
-      rows.filter((row) => row.scope === 'page' && failing(row)).map((row) => row.analysis_id),
-    ).size,
-    dimensions,
-    limitations,
-  };
+const emptyCounts = () => Object.fromEntries(OUTCOMES.map((outcome) => [`${outcome}_count`, 0]));
+function count(counts: Record<string, number>, outcome: string) {
+  const key = `${outcome}_count`;
+  if (key in counts) counts[key]! += 1;
 }
 
-export function webDiagnostic(projection: MeasurementProjection) {
-  const sources: string[] = [];
-  const areas = reads.web_fundamentals_areas.map((area) => {
-    const rows = projection.evaluations.filter(
-      (row) => catalog.get(row.rule_id)?.web_fundamentals_area === area,
+export type DiagnosticPage = {
+  id: string;
+  site_url_id: string;
+  normalized_url: string;
+  evaluations: Evaluation[];
+};
+
+type EvidencePage = { page: DiagnosticPage; failures: Evaluation[] };
+type Check = {
+  scope: string;
+  pillar: string;
+  counts: Record<string, number>;
+  failures: number;
+  failingPages: number;
+  failed: boolean;
+};
+
+class DimensionFold {
+  counts = emptyCounts();
+  checks = new Map<string, Check>();
+  checkedPages = 0;
+  failingPages = 0;
+  evidence: EvidencePage[] = [];
+  private countCheck(row: Evaluation) {
+    const check = this.checks.get(row.rule_id) ?? {
+      scope: row.scope,
+      pillar: row.readiness_dimension ?? '',
+      counts: emptyCounts(),
+      failures: 0,
+      failingPages: 0,
+      failed: false,
+    };
+    this.checks.set(row.rule_id, check);
+    count(check.counts, row.outcome);
+    if (!failing(row)) return false;
+    check.failed = true;
+    if (check.scope === 'page') return true;
+    if (check.scope !== 'site')
+      check.failures += Math.max(1, reportedFailures(record(row.evidence).failure_count));
+    return false;
+  }
+  addPage(page: DiagnosticPage, rows: Evaluation[]) {
+    const failures: Evaluation[] = [];
+    let checked = false;
+    const failedRules = new Set<string>();
+    for (const row of rows) {
+      count(this.counts, row.outcome);
+      if (this.countCheck(row)) failedRules.add(row.rule_id);
+      if (row.scope !== 'page') continue;
+      if (['satisfied', 'partial', 'missing'].includes(row.outcome)) checked = true;
+      if (failing(row)) failures.push(row);
+    }
+    for (const rule of failedRules) this.checks.get(rule)!.failingPages++;
+    if (checked) this.checkedPages++;
+    if (!failures.length) return;
+    this.failingPages++;
+    this.evidence.push({ page, failures });
+    this.evidence.sort(
+      (a, b) =>
+        b.failures.length - a.failures.length ||
+        compareText(a.page.normalized_url, b.page.normalized_url) ||
+        compareText(a.page.id, b.page.id),
     );
-    sources.push(...rows.map((row) => row.id));
-    const applicable = rows.filter((row) => row.outcome !== 'not_applicable');
-    const determinate = applicable.filter((row) => ['satisfied', 'missing'].includes(row.outcome));
-    const findings = new Map<
-      string,
+    this.evidence.length = Math.min(this.evidence.length, reads.aeo_max_evidence_pages);
+  }
+}
+
+export class ReadinessDiagnosticFold {
+  private readonly dimensions = new Map<string, DimensionFold>();
+  private total = 0;
+  private taken = 0;
+  private affected = 0;
+  private analyses = 0;
+  addPage(page: DiagnosticPage) {
+    this.analyses++;
+    const byDimension = new Map<string, Evaluation[]>();
+    let affected = false;
+    for (const row of page.evaluations) {
+      if (!catalog.has(row.rule_id) || !row.readiness_dimension) continue;
+      if (!row.score_roles?.includes('aeo_readiness')) continue;
+      this.total++;
+      if (this.taken >= reads.aeo_max_evaluations) continue;
+      this.taken++;
+      const group = byDimension.get(row.readiness_dimension) ?? [];
+      group.push(row);
+      byDimension.set(row.readiness_dimension, group);
+      if (row.scope === 'page' && failing(row)) affected = true;
+    }
+    if (affected) this.affected++;
+    for (const [key, rows] of byDimension) {
+      const fold = this.dimensions.get(key) ?? new DimensionFold();
+      fold.addPage(page, rows);
+      this.dimensions.set(key, fold);
+    }
+  }
+  result(
+    crawl: Crawl,
+    aggregate: {
+      aeo_measurement_state: string;
+      aeo_readiness_score: number | null;
+      aeo_measurement_coverage: number | null;
+      readiness_dimensions: { key: string }[];
+    },
+  ) {
+    const dimensions = aggregate.readiness_dimensions.map((dimension) => {
+      const fold = this.dimensions.get(dimension.key) ?? new DimensionFold();
+      const checkpointIds = [...fold.checks.keys()].toSorted(compareText);
+      return {
+        ...dimension,
+        ...fold.counts,
+        checkpoint_ids: checkpointIds,
+        checked_page_count: fold.checkedPages,
+        failing_page_count: fold.failingPages,
+        evidence_pages: fold.evidence.map(({ page, failures }) => ({
+          site_url_id: page.site_url_id,
+          source_analysis_id: page.id,
+          normalized_url: page.normalized_url,
+          failed_checks: failures
+            .toSorted((a, b) => compareText(a.rule_id, b.rule_id))
+            .map((row) => {
+              const rule = catalog.get(row.rule_id)!;
+              return {
+                rule_id: row.rule_id,
+                title: rule.display_label,
+                observed_evidence: record(row.evidence),
+                expected_capability: rule.description,
+                remediation: rule.remediation,
+                content_addressable: rule.content_addressable,
+                remediation_route: rule.remediation_route,
+              };
+            }),
+        })),
+        evidence_truncated: fold.failingPages > fold.evidence.length,
+        checks: checkpointIds.map((id) => {
+          const check = fold.checks.get(id)!;
+          const rule = catalog.get(id)!;
+          let failureCount = check.failures;
+          if (check.scope === 'page') failureCount = check.failingPages;
+          if (check.scope === 'site') failureCount = Number(check.failed);
+          return {
+            rule_id: id,
+            scope: check.scope,
+            title: rule.display_label,
+            remediation: rule.remediation,
+            ...check.counts,
+            failing_entity_count: failureCount,
+            aeo_pillar: check.pillar,
+            content_addressable: rule.content_addressable,
+            remediation_route: rule.remediation_route,
+          };
+        }),
+      };
+    });
+    const limitations: string[] = [];
+    if (this.total > this.taken)
+      limitations.push(
+        `Readiness diagnostic counts and evidence are truncated at ${reads.aeo_max_evaluations} evaluations.`,
+      );
+    return {
+      state: aggregate.aeo_measurement_state,
+      crawl_id: crawl.id,
+      score: aggregate.aeo_readiness_score,
+      coverage: aggregate.aeo_measurement_coverage,
+      profile_version: reads.measurement_versions.profile,
+      schema_contract_version: reads.measurement_versions.schema_contract,
+      scoring_version: crawl.scoring_version || reads.scoring_version,
+      presentation_version: reads.measurement_versions.presentation,
+      analyzer_version: crawl.analyzer_version || policy.site_health.versions.analyzer,
+      analysis_count: this.analyses,
+      affected_page_count: this.affected,
+      dimensions,
+      limitations,
+    };
+  }
+}
+
+type Finding = { rule_id: string; title: string; remediation: string; affected_pages: number };
+type Area = {
+  rows: number;
+  applicable: number;
+  determinate: number;
+  passed: number;
+  missing: number;
+  unknown: number;
+  unavailable: number;
+  findings: Map<string, Finding>;
+};
+
+export class WebDiagnosticFold {
+  private readonly areas = new Map<string, Area>(
+    reads.web_fundamentals_areas.map((area) => [
+      area,
       {
-        rule_id: string;
-        title: string;
-        remediation: string;
-        affected_pages: number;
-        source_evaluation_ids: string[];
-      }
-    >();
-    for (const row of rows.filter((row) => row.outcome === 'missing')) {
+        rows: 0,
+        applicable: 0,
+        determinate: 0,
+        passed: 0,
+        missing: 0,
+        unknown: 0,
+        unavailable: 0,
+        findings: new Map(),
+      },
+    ]),
+  );
+  addEvaluations(rows: Evaluation[]) {
+    for (const row of rows) {
+      const area = this.areas.get(catalog.get(row.rule_id)?.web_fundamentals_area ?? '');
+      if (!area) continue;
+      area.rows++;
+      if (row.outcome !== 'not_applicable') area.applicable++;
+      if (row.outcome === 'satisfied' || row.outcome === 'missing') area.determinate++;
+      if (row.outcome === 'satisfied') area.passed++;
+      if (row.outcome === 'unknown') area.unknown++;
+      if (row.outcome === 'unavailable') area.unavailable++;
+      if (row.outcome !== 'missing') continue;
+      area.missing++;
       const rule = catalog.get(row.rule_id)!;
-      const finding = findings.get(row.rule_id) ?? {
+      const finding = area.findings.get(row.rule_id) ?? {
         rule_id: row.rule_id,
         title: rule.display_label,
         remediation: rule.remediation,
         affected_pages: 0,
-        source_evaluation_ids: [],
       };
       finding.affected_pages++;
-      finding.source_evaluation_ids.push(row.id);
-      findings.set(row.rule_id, finding);
+      area.findings.set(row.rule_id, finding);
     }
-    return {
-      key: area,
-      state: measurementState(determinate.length, applicable.length),
-      coverage: applicable.length
-        ? Math.round((determinate.length / applicable.length) * 10000) / 10000
+  }
+  result(sourceArtifactIds: string[]) {
+    const areas = [...this.areas].map(([key, area]) => ({
+      key,
+      state: measurementState(area.determinate, area.applicable),
+      coverage: area.applicable
+        ? Math.round((area.determinate / area.applicable) * 10000) / 10000
         : null,
-      passed_count: rows.filter((row) => row.outcome === 'satisfied').length,
-      missing_count: rows.filter((row) => row.outcome === 'missing').length,
-      unknown_count: rows.filter((row) => row.outcome === 'unknown').length,
-      unavailable_count: rows.filter((row) => row.outcome === 'unavailable').length,
+      passed_count: area.passed,
+      missing_count: area.missing,
+      unknown_count: area.unknown,
+      unavailable_count: area.unavailable,
       unavailable_checks: [],
-      top_findings: [...findings.values()].slice(0, 5),
+      top_findings: [...area.findings.values()].slice(0, 5),
+    }));
+    const measured = areas.filter((area) => area.state !== 'not_measured');
+    return {
+      state: measurementState(
+        measured.filter((area) => area.state === 'measured').length,
+        measured.length,
+      ),
+      areas,
+      field_data: {
+        state: 'unavailable',
+        reason: 'provider_not_configured',
+        lcp: null,
+        inp: null,
+        cls: null,
+      },
+      source_artifact_ids: sourceArtifactIds,
+      limitations: [],
     };
-  });
-  const measured = areas.filter((area) => area.state !== 'not_measured');
-  return {
-    state: measurementState(
-      measured.filter((area) => area.state === 'measured').length,
-      measured.length,
-    ),
-    areas,
-    field_data: {
-      state: 'unavailable',
-      reason: 'provider_not_configured',
-      lcp: null,
-      inp: null,
-      cls: null,
-    },
-    source_analysis_ids: projection.rows.map((row) => row.id),
-    source_artifact_ids: projection.rows.map((row) => row.artifact_id),
-    source_evaluation_ids: sources,
-    limitations: [],
-  };
+  }
 }

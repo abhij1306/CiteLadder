@@ -1,11 +1,3 @@
-/**
- * What the engines read, beside what they cited.
- *
- * Only an answer whose surface exposes its reads (`retrieval_observed`) says
- * anything about retrieval: an engine that exposes none is unknown, never a
- * read of zero. A page counts as cited in an answer when the same answer
- * cites the same page identity.
- */
 import type { visibilitySourceNearMissesSchema } from '@citeladder/contracts/visibility-evidence';
 import { sql } from 'kysely';
 import type { z } from 'zod';
@@ -18,7 +10,6 @@ import { authorizedSelection, evidenceScope, observedAt, type RunSelection } fro
 export type RetrievalCoverage = { responses: number; unavailable_engines: string[] };
 type NearMisses = z.input<typeof visibilitySourceNearMissesSchema>;
 
-/** The selection's answers up to `as_of` that exposed their reads. */
 function observedScope(db: Database, selection: RunSelection, asOf: string) {
   return evidenceScope(db, selection)
     .where('ra.created_at', '<=', sql<Date>`${asOf}::timestamptz`)
@@ -51,11 +42,6 @@ export async function retrievalCoverage(
 
 type RetrievedRow = { key: string; url_hash: string | null; retrieved: number | null };
 
-/**
- * Each loaded row's count of answers that read it, in place. A domain row
- * matches by domain, a page row by page identity; a page without one, or a
- * selection with no exposed reads, stays unknown.
- */
 export async function attachRetrieved(
   db: Database,
   selection: RunSelection,
@@ -95,10 +81,6 @@ export async function attachRetrieved(
   }
 }
 
-/**
- * The project's own pages read in more answers than cited them, most missed
- * first: where the page reached the engine and still lost the citation.
- */
 export async function getSourceNearMisses(
   db: Database,
   requested: RunSelection,

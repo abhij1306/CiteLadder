@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, describe, expect, it } from 'vitest';
 import { policy } from '../src/config.ts';
-import { publishFinalPageAnalyses } from '../src/site-health/terminal-analysis.ts';
 import { testDatabase } from './support.ts';
+import { landFinalRevisions } from './site-health-finalize-fixtures.ts';
 import { SiteFixtures, type SiteSeed } from './site-health-fixtures.ts';
 
 const db = testDatabase();
@@ -16,7 +16,6 @@ const SITEMAP = 'technical.sitemap_redirect';
 const CLIENT = 'technical.client_side_redirect';
 const minutes = (count: number) => new Date(Date.UTC(2026, 10, 1, 9, count));
 
-/** Land the crawl's audit the way terminal publication does: under its lock. */
 async function land(seed: SiteSeed) {
   await db.transaction().execute(async (trx) => {
     const crawl = await trx
@@ -26,11 +25,10 @@ async function land(seed: SiteSeed) {
       .where('workspace_id', '=', seed.workspaceId)
       .forUpdate()
       .executeTakeFirstOrThrow();
-    await publishFinalPageAnalyses(trx, crawl);
+    await landFinalRevisions(trx, crawl);
   });
 }
 
-/** Another crawl of the seed's project, audited at `at`; a rerun when `rerun`. */
 async function crawlAt(seed: SiteSeed, at: Date, rerun = false): Promise<SiteSeed> {
   const crawlId = await fixtures.sibling(seed, {
     created_at: at,
@@ -40,7 +38,6 @@ async function crawlAt(seed: SiteSeed, at: Date, rerun = false): Promise<SiteSee
   return { ...seed, crawlId };
 }
 
-/** The page analyzed in `seed`'s crawl with one evaluation per rule; a failing one is an issue. */
 async function audit(
   seed: SiteSeed,
   path: string,
@@ -80,7 +77,6 @@ async function audit(
   return page;
 }
 
-/** The page's analyze task in `seed`'s crawl failed on a 404. */
 async function notFound(seed: SiteSeed, siteUrlId: string) {
   const taskId = await fixtures.task(seed, 'analyze');
   await db
@@ -156,7 +152,6 @@ describe('issue state and trend', () => {
       site_url_id: page.id,
     });
 
-    // A single-page re-audit passes one rule and cannot judge the other.
     const rerun = await crawlAt(seed, minutes(10), true);
     await audit(rerun, '/a', { [SITEMAP]: 'satisfied', [CLIENT]: 'unknown' }, page.id);
     await land(rerun);
@@ -174,7 +169,6 @@ describe('issue state and trend', () => {
       [SITEMAP]: 'regressed',
     });
 
-    // An older audit landing late, or a replayed landing, changes nothing.
     const late = await crawlAt(seed, minutes(5));
     await audit(late, '/a', { [SITEMAP]: 'satisfied', [CLIENT]: 'missing' }, page.id);
     await land(late);
@@ -228,7 +222,6 @@ describe('issue state and trend', () => {
     await land(full);
 
     const next = await crawlAt(seed, minutes(10));
-    // The tracked /old page's fetch ended at /new.
     await audit(next, '/new', { [SITEMAP]: 'satisfied' }, page.id);
     await land(next);
     expect(await states(seed)).toEqual({
@@ -246,7 +239,6 @@ describe('issue state and trend', () => {
     await land(full);
     expect((await trend(seed))[0]!.open_count).toBe(2);
 
-    // A downgrade keeps the first page; the next crawl audits only it.
     await fixtures.monitor(seed, [kept.id]);
     const next = await crawlAt(seed, minutes(10));
     await audit(next, '/kept', { [CLIENT]: 'missing' }, kept.id);
@@ -254,7 +246,6 @@ describe('issue state and trend', () => {
     expect(await states(seed)).toEqual({ [CLIENT]: 'open', [SITEMAP]: 'no_longer_tracked' });
     expect(await trend(seed)).toEqual([{ open_count: 1, source_crawl_id: next.crawlId }]);
 
-    // An upgrade tracks it again: an audit that cannot judge the rule reopens it.
     await fixtures.monitor(seed, [kept.id, dropped.id]);
     const back = await crawlAt(seed, minutes(20), true);
     await audit(back, '/dropped', { [SITEMAP]: 'unknown' }, dropped.id);
@@ -278,7 +269,6 @@ describe('issue state and trend', () => {
     expect(await trend(first)).toEqual([{ open_count: 1, source_crawl_id: one.crawlId }]);
     expect(await trend(second)).toEqual([{ open_count: 1, source_crawl_id: two.crawlId }]);
 
-    // PostgreSQL refuses a state that names another project's page.
     const own = await db
       .selectFrom('site_issue_states')
       .selectAll()

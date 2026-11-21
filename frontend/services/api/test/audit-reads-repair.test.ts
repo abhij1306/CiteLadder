@@ -72,8 +72,6 @@ describe('persisted audit reads and immutable repair', () => {
       .where('id', '=', task.id)
       .execute();
     const executions = await listExecutions(db, t.workspaceId, t.auditId);
-    // The list carries the table's columns only: the answer, snapshots and
-    // provider metadata stay on the single-execution read.
     expect(executions[0]).toEqual({
       id: task.id,
       prompt_index: task.prompt_index,

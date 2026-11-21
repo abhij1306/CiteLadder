@@ -36,7 +36,6 @@ describe('useTheme', () => {
     act(() => setDeviceDark(true));
     expect(result.current).toBe('light');
 
-    // Back to system: the device scheme decides again.
     act(() => setThemePreference('system'));
     expect(result.current).toBe('dark');
     expect(document.cookie).not.toContain(`${THEME_COOKIE}=`);

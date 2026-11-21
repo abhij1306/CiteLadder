@@ -1,11 +1,3 @@
-/**
- * Per-answer evidence for a selection: mentions, citations and query fanout.
- *
- * Shared API/MCP reader of persisted rows: stored search events are
- * normalized, never invented, and an answer's fanout state distinguishes
- * query text, a count alone, no search, and an engine that exposes nothing.
- * Pages are keyset cursors bound to the selection, its filters and `as_of`.
- */
 import { citationClassificationSchema } from '@citeladder/contracts/audits';
 import type { visibilityEvidenceResponseSchema } from '@citeladder/contracts/visibility-evidence';
 import { sql } from 'kysely';
@@ -23,6 +15,7 @@ import {
 } from '../http/keyset-cursor.ts';
 import { parseUuid } from '../http/uuid.ts';
 import { compareText } from '../text-order.ts';
+import { brandIdentities, markOf, type BrandIdentity } from './brand-identities.ts';
 import {
   authorizedSelection,
   evidenceScope,
@@ -35,8 +28,6 @@ import {
 export type VisibilityEvidenceResponse = z.input<typeof visibilityEvidenceResponseSchema>;
 type EvidenceItem = VisibilityEvidenceResponse['items'][number];
 
-// --- The paged evidence read -----------------------------------------------
-
 export type EvidenceFilters = {
   promptId: string | null;
   outcome: 'brand_absent' | 'uncited' | 'competitor_gap' | null;
@@ -47,7 +38,7 @@ export type EvidenceFilters = {
 
 type Scope = ReturnType<typeof evidenceScope>;
 
-function applyFilters(base: Scope, filters: EvidenceFilters): Scope {
+export function applyFilters(base: Scope, filters: EvidenceFilters): Scope {
   let statement = base;
   if (filters.outcome === 'competitor_gap' && !filters.competitor) {
     throw new TrendQueryError('A competitor is required for a competitor gap');
@@ -83,7 +74,6 @@ function applyFilters(base: Scope, filters: EvidenceFilters): Scope {
   }
   if (filters.promptId) {
     const promptId = filters.promptId;
-    // A deleted prompt's answers are found by the frozen text its snapshot kept.
     const frozenText = base
       .clearSelect()
       .select('snapshot.text')
@@ -122,6 +112,21 @@ function cursorPosition(
   }
 }
 
+function promptOptions(db: Database, selection: RunSelection, asOf: string) {
+  let query = selectedRuns(db, selection)
+    .innerJoin('audit_prompt_snapshots as snapshot', 'snapshot.audit_id', 'audit.id')
+    .where('snapshot.cohort', 'in', [...selectedCohorts(selection.cohort)])
+    .where('snapshot.created_at', '<=', sql<Date>`${asOf}::timestamptz`);
+  if (selection.topicId) query = query.where('snapshot.topic_id', '=', selection.topicId);
+  return query
+    .select([
+      sql<string>`coalesce(snapshot.prompt_id, snapshot.id)`.as('identity'),
+      'snapshot.text',
+    ])
+    .distinct()
+    .execute();
+}
+
 export async function getVisibilityEvidence(
   db: Database,
   requested: RunSelection,
@@ -137,17 +142,7 @@ export async function getVisibilityEvidence(
     '<=',
     sql<Date>`${asOf}::timestamptz`,
   );
-  // The filter offers the prompts of the runs the evidence reads: brand runs only.
-  const promptChoices = await selectedRuns(db, selection)
-    .innerJoin('audit_prompt_snapshots as snapshot', 'snapshot.audit_id', 'audit.id')
-    .where('snapshot.cohort', 'in', [...selectedCohorts(selection.cohort)])
-    .where('snapshot.created_at', '<=', sql<Date>`${asOf}::timestamptz`)
-    .select([
-      sql<string>`coalesce(snapshot.prompt_id, snapshot.id)`.as('identity'),
-      'snapshot.text',
-    ])
-    .distinct()
-    .execute();
+  const promptChoices = await promptOptions(db, selection, asOf);
   const statement = applyFilters(base, options);
   const fingerprint = {
     workspace: selection.workspaceId,
@@ -156,6 +151,7 @@ export async function getVisibilityEvidence(
     audit_ids: [...(selection.auditIds ?? [])].sort(compareText),
     prompt: options.promptId,
     engine: selection.logicalEngine,
+    topic: selection.topicId,
     from: selection.fromAt && wireUtcOf(selection.fromAt),
     to: selection.toAt && wireUtcOf(selection.toAt),
     cohort: selection.cohort,
@@ -208,9 +204,14 @@ export async function getVisibilityEvidence(
   const truncated = rows.length > options.limit;
   const shown = rows.slice(0, options.limit);
   const ids = shown.map((row) => row.analysis_id);
-  const mentions = await mentionsByAnalysis(db, selection.workspaceId, ids);
-  const citations = await citationsByAnalysis(db, selection.workspaceId, ids);
-  // One label per prompt; a prompt renamed within the selection shows one text.
+  const [mentions, citations] = await Promise.all([
+    mentionsByAnalysis(db, {
+      workspaceId: selection.workspaceId,
+      analysisIds: ids,
+      identities: await brandIdentities(db, selection),
+    }),
+    citationsByAnalysis(db, selection.workspaceId, ids),
+  ]);
   const prompts = new Map<string, string>();
   for (const option of promptChoices) prompts.set(option.identity, option.text);
   const last = shown.at(-1);
@@ -268,42 +269,50 @@ export async function getVisibilityEvidence(
 
 type Mention = EvidenceItem['mentions'][number];
 
-/** Brand then competitor mentions per answer, each in recorded order. */
 async function mentionsByAnalysis(
   db: Database,
-  workspaceId: string,
-  analysisIds: readonly string[],
+  {
+    workspaceId,
+    analysisIds,
+    identities,
+  }: {
+    workspaceId: string;
+    analysisIds: readonly string[];
+    identities: ReadonlyMap<string, BrandIdentity>;
+  },
 ): Promise<Map<string, Mention[]>> {
   const grouped = new Map<string, Mention[]>();
   if (analysisIds.length === 0) return grouped;
-  const brand = await db
-    .selectFrom('brand_mentions')
-    .select([
-      'analysis_id',
-      'brand_name as name',
-      'first_offset',
-      'artifact_id',
-      'analyzer_version',
-    ])
-    .where('workspace_id', '=', workspaceId)
-    .where('analysis_id', 'in', [...analysisIds])
-    .orderBy('created_at')
-    .orderBy('id')
-    .execute();
-  const competitor = await db
-    .selectFrom('competitor_mentions')
-    .select([
-      'analysis_id',
-      'competitor_name as name',
-      'first_offset',
-      'artifact_id',
-      'analyzer_version',
-    ])
-    .where('workspace_id', '=', workspaceId)
-    .where('analysis_id', 'in', [...analysisIds])
-    .orderBy('created_at')
-    .orderBy('id')
-    .execute();
+  const [brand, competitor] = await Promise.all([
+    db
+      .selectFrom('brand_mentions')
+      .select([
+        'analysis_id',
+        'brand_name as name',
+        'first_offset',
+        'artifact_id',
+        'analyzer_version',
+      ])
+      .where('workspace_id', '=', workspaceId)
+      .where('analysis_id', 'in', [...analysisIds])
+      .orderBy('created_at')
+      .orderBy('id')
+      .execute(),
+    db
+      .selectFrom('competitor_mentions')
+      .select([
+        'analysis_id',
+        'competitor_name as name',
+        'first_offset',
+        'artifact_id',
+        'analyzer_version',
+      ])
+      .where('workspace_id', '=', workspaceId)
+      .where('analysis_id', 'in', [...analysisIds])
+      .orderBy('created_at')
+      .orderBy('id')
+      .execute(),
+  ]);
   for (const [kind, rows] of [
     ['brand', brand],
     ['competitor', competitor],
@@ -313,6 +322,7 @@ async function mentionsByAnalysis(
       list.push({
         kind,
         name: row.name || '',
+        ...markOf(identities, row.name || ''),
         first_offset: row.first_offset,
         artifact_id: row.artifact_id,
         analyzer_version: row.analyzer_version || '',

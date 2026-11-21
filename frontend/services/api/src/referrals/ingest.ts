@@ -1,12 +1,3 @@
-/**
- * `ingest_referrals`: one import artifact's GA4 referral rows as immutable,
- * sanitized `referral_events`, then the chain's `classify_referrals` link.
- *
- * One transaction reads the artifact's latest-revision rows, inserts the
- * events `ON CONFLICT (import_id, content_hash) DO NOTHING` (a re-run is a
- * no-op, never an overwrite) and enqueues classification. This executor is
- * the single writer of `referral_events`.
- */
 import { randomUUID } from 'node:crypto';
 
 import { sql } from 'kysely';
@@ -25,7 +16,6 @@ const REFERRAL_DATASETS = Object.values(referrals.datasets).sort(compareText);
 // Rows per INSERT, well inside PostgreSQL's bind-parameter limit.
 const INSERT_CHUNK = 1000;
 
-/** The workspace's import artifact, or an error that fails the attempt. */
 export async function ownedArtifact(
   db: Database,
   workspaceId: string,
@@ -44,16 +34,12 @@ export async function ownedArtifact(
     .where('artifact.id', '=', artifactId)
     .where('run.project_id', '=', projectId)
     .executeTakeFirst();
-  // Never project rows for an artifact outside the claimed task's workspace.
   if (artifact === undefined) {
     throw new Error(`unknown import artifact: ${artifactId}`);
   }
   return artifact;
 }
 
-/**
- * The artifact's rows in the selected complete partition revision.
- */
 function latestReferralRows(
   db: Database,
   artifactId: string,
@@ -98,7 +84,6 @@ export const ingestReferrals: Executor = async (task, { db, maxAttempts }) => {
           source: artifact.provider,
           import_id: artifact.id,
           source_metric_row_id: row.id,
-          // Provider data is date-grained: the UTC instant of the row's date.
           occurred_at: `${row.date}T00:00:00Z`,
           raw: JSON.stringify(fields.raw),
           sanitize_version: referrals.sanitize_version,

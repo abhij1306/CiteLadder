@@ -1,25 +1,20 @@
-/**
- * The TypeScript service's OpenAPI document, generated from its route
- * contracts with zod's JSON Schema output. Request schemas use zod's input
- * view and responses its output view.
- */
 import { z } from 'zod';
 
 import type { RouteContract } from './routes.ts';
 
 export type JsonSchema = { [key: string]: unknown };
 
-/** Emits a request (`input`) or response (`output`) schema for the document. */
 export type SchemaEmitter = (schema: z.ZodType, io: 'input' | 'output') => JsonSchema;
 
 type OpenApiParameter = {
   name: string;
   in: 'path' | 'query' | 'header' | 'cookie';
   required: boolean;
+  description?: string;
   schema: JsonSchema;
 };
 
-type OpenApiContent = Record<string, { schema: JsonSchema }>;
+type OpenApiContent = Record<string, { schema: JsonSchema; example?: unknown }>;
 
 type OpenApiOperation = {
   tags?: string[];
@@ -51,11 +46,12 @@ function parameters(location: OpenApiParameter['in'], object?: z.ZodObject): Ope
   const generated = jsonSchema(object, 'input');
   const properties = (generated.properties ?? {}) as Record<string, JsonSchema>;
   const required = new Set((generated.required ?? []) as string[]);
-  return Object.entries(properties).map(([name, schema]) => ({
+  return Object.entries(properties).map(([name, { description, ...schema }]) => ({
     name,
     in: location,
     // OpenAPI requires every path parameter.
     required: location === 'path' || required.has(name),
+    ...(typeof description === 'string' ? { description } : {}),
     schema,
   }));
 }
@@ -87,7 +83,6 @@ function operation(route: RouteContract<string>, emit: SchemaEmitter): OpenApiOp
   return result;
 }
 
-/** Bodies and responses are inlined unless `emit` references shared components. */
 export function openApiDocument(
   routes: readonly RouteContract<string>[],
   emit: SchemaEmitter = jsonSchema,

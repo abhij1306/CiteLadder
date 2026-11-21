@@ -15,13 +15,6 @@ function errorJson(body: unknown, status: number, statusText = 'Error') {
   });
 }
 
-/**
- * The `RequestInit` of a recorded fetch call, or a failure naming the missing
- * call. Written this way because `calls[i]?.[1] as RequestInit` promised a
- * safety the cast then threw away: a missing call short-circuited to
- * `undefined` and the next property read raised an opaque TypeError instead of
- * an assertion (oxlint `no-unsafe-optional-chaining`).
- */
 function requestInitAt(mock: { mock: { calls: unknown[][] } }, index: number): RequestInit {
   const call = mock.mock.calls[index];
   if (!call) throw new Error(`expected a fetch call at index ${index}`);
@@ -60,9 +53,6 @@ describe('apiClient', () => {
   });
 
   it('replaces a workspace header the caller copied in', async () => {
-    // A reused header object must not decide the tenancy of a request that
-    // named its own workspace — that is the failure this option exists to
-    // remove, so the explicit value wins rather than deferring.
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({}));
     vi.stubGlobal('fetch', fetchMock);
 
@@ -101,8 +91,6 @@ describe('apiClient', () => {
   });
 
   it('removes the workspace header entirely for an explicit null', async () => {
-    // How a path-authorized read (`GET /projects/{id}`) asks the backend to
-    // resolve access from the path instead of a header that may be wrong.
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({}));
     vi.stubGlobal('fetch', fetchMock);
 
@@ -131,7 +119,6 @@ describe('apiClient', () => {
       status: 400,
       requestId: 'req-abc',
     });
-    // 4xx is not retried.
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(ApiError).toBeDefined();
   });
@@ -216,8 +203,6 @@ describe('apiClient', () => {
     await apiClient.get('/ping', { signal: controller.signal, requestId: 'req-test' });
 
     const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
-    // The caller's signal is composed with the bounded default timeout (A3) —
-    // aborting the controller must still abort the request signal.
     expect(init.signal).toBeInstanceOf(AbortSignal);
     controller.abort();
     expect(init.signal?.aborted).toBe(true);
@@ -338,7 +323,6 @@ describe('readErrorBody extraction (A2)', () => {
       status: 422,
       code: 'precondition_failed',
       retryable: false,
-      // No x-request-id header → the envelope's request_id backstops it.
       requestId: 'srv-req-1',
     });
   });
@@ -398,7 +382,6 @@ describe('request timeout (A3)', () => {
   });
 
   it('surfaces a hung request as a retryable network-class ApiError', async () => {
-    // A fetch that never settles; the client's AbortSignal.timeout ends it.
     vi.stubEnv('NEXT_PUBLIC_API_REQUEST_TIMEOUT_MS', '20');
     const fetchMock = vi.fn().mockImplementation(
       (_url: string, init: RequestInit) =>
@@ -418,7 +401,6 @@ describe('request timeout (A3)', () => {
       code: 'request_timeout',
       retryable: true,
     });
-    // No in-transport retry without the opt-in.
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 

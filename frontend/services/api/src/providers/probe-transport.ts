@@ -1,4 +1,3 @@
-/** Credentialed JSON boundary to approved provider endpoints: no redirects, one pinned address. */
 import { lookup } from 'node:dns/promises';
 import { request as httpsRequest } from 'node:https';
 import { request as httpRequest } from 'node:http';

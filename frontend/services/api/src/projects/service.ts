@@ -8,6 +8,7 @@ import {
 import type { Insertable, Selectable } from 'kysely';
 import type { z } from 'zod';
 
+import { aliasSuggestions } from '../analysis/aliases.ts';
 import {
   entityKey,
   matchingBlock,
@@ -46,10 +47,6 @@ async function projectRow(db: Database, scope: ProjectScope) {
   return row;
 }
 
-/**
- * Batch the embedded identity and prompt library for the entire project list:
- * independent reads, run together on the pool (callers never hold a transaction).
- */
 async function views(
   db: Database,
   workspaceId: string,
@@ -127,6 +124,9 @@ async function views(
       .filter((item) => item.project_id === row.id)
       .map((item) => ({ ...item, aliases: stringArray.parse(item.aliases) }));
     const profile = profiles.find((item) => item.project_id === row.id);
+    const ownedDomains = owned
+      .filter((item) => item.project_id === row.id)
+      .map((item) => item.domain);
     const matching = projectEntityMatching(
       profile?.business_context,
       strings(profile?.products_services),
@@ -147,10 +147,15 @@ async function views(
       brand_name: brandName,
       brand: {
         aliases: brandAliases,
+        alias_suggestions: aliasSuggestions({
+          brandName,
+          aliases: brandAliases,
+          domains: [row.website_url, ...ownedDomains],
+        }),
         logo_url: brand?.logo_asset_id ? brandLogoUrl(row.id) : null,
         matching: matching[entityKey(brandName)],
       },
-      owned_domains: owned.filter((item) => item.project_id === row.id).map((item) => item.domain),
+      owned_domains: ownedDomains,
       unintended_domains: unintended
         .filter((item) => item.project_id === row.id)
         .map((item) => item.domain),
@@ -182,10 +187,6 @@ export async function readProject(db: Database, scope: ProjectScope): Promise<Pr
 }
 type ProjectSummaryView = z.input<typeof projectSummarySchema>;
 
-/**
- * The workspace's projects as the switcher shows them: one read, newest
- * first, with the brand entity's name and logo where it has them.
- */
 export async function listProjectSummaries(
   db: Database,
   workspaceId: string,
@@ -226,7 +227,6 @@ export async function listProjectSummaries(
   }));
 }
 
-/** Full views of every project: the public API's list. */
 export async function listProjects(db: Database, workspaceId: string): Promise<ProjectView[]> {
   const rows = await db
     .selectFrom('projects')
@@ -238,7 +238,6 @@ export async function listProjects(db: Database, workspaceId: string): Promise<P
   return views(db, workspaceId, rows);
 }
 
-/** Caller owns the transaction, including onboarding's atomic completion. */
 export async function insertProject(
   db: Database,
   workspaceId: string,
@@ -338,7 +337,6 @@ export async function insertProject(
   return id;
 }
 
-/** The brand aliases and the owned and unintended domains; competitors have their own owner. */
 async function saveCollections(
   db: Database,
   { workspaceId, projectId }: ProjectScope,
@@ -361,7 +359,6 @@ async function saveCollections(
     }));
     if (values.length) await db.insertInto('brand_aliases').values(values).execute();
   }
-  // One transaction connection: each list's statements run in order.
   for (const [table, values] of [
     ['owned_domains', input.owned_domains],
     ['unintended_domains', input.unintended_domains],
@@ -371,11 +368,6 @@ async function saveCollections(
   }
 }
 
-/**
- * Save a domain list as a diff: a submitted domain matching a stored one
- * (case-insensitively) keeps its row and ID, new ones are added and the rest
- * removed.
- */
 async function saveDomainList(
   db: Database,
   table: 'owned_domains' | 'unintended_domains',
@@ -433,11 +425,6 @@ export async function createProject(
     .execute((trx) => insertProject(trx, workspaceId, userId, input));
   return readProject(db, { workspaceId, projectId });
 }
-/**
- * Save the submitted matching policies over the stored ones and drop names the
- * project no longer tracks; an untouched name keeps following its default.
- * Only the `entity_matching` key of the business context changes.
- */
 async function replaceEntityMatching(
   db: Database,
   scope: ProjectScope,
@@ -490,10 +477,6 @@ async function replaceEntityMatching(
     .execute();
 }
 
-/**
- * The project editor's save. The competitor list goes through the competitor
- * command as a diff, so the actor is checked against its permission.
- */
 export async function updateProject(
   db: Database,
   actor: CompetitorWriter,

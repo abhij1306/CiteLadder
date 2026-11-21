@@ -1,14 +1,3 @@
-/**
- * Conditional reads of persisted snapshots.
- *
- * A route whose payload is a projection of a persisted snapshot or a terminal
- * crawl marks it `revalidatable`. The browser may then keep the response, but
- * must revalidate it on every use (`private, no-cache`): the response carries
- * a weak ETag over its exact body, and a matching `If-None-Match` is answered
- * with `304 Not Modified` and no body. The tag hashes the serialized body, so
- * it changes whenever the payload does, whatever the snapshot's shape; the
- * read and its authorization still run on every request.
- */
 import { createHash } from 'node:crypto';
 
 import type { Context, MiddlewareHandler } from 'hono';
@@ -25,7 +14,6 @@ const ENTITY_HEADERS = [
   'content-disposition',
 ];
 
-/** Mark this response a revalidatable snapshot read and return its payload unchanged. */
 export function revalidatable<T>(c: Context<AppEnv>, payload: T): T {
   c.header('cache-control', REVALIDATE_CACHE_CONTROL);
   return payload;
@@ -46,13 +34,11 @@ function matches(ifNoneMatch: string | undefined, tag: string): boolean {
     );
 }
 
-/** Tags revalidatable `GET` responses and answers a matching `If-None-Match` with 304. */
 export function conditionalReads(): MiddlewareHandler<AppEnv> {
   return async (c, next) => {
     await next();
     if (c.req.method !== 'GET' || c.res.status !== 200) return;
     if (c.res.headers.get('cache-control') !== REVALIDATE_CACHE_CONTROL) return;
-    // A route's own validator (a logo's content hash) stands; otherwise hash the body.
     const tag = c.res.headers.get('etag') ?? bodyTag(await c.res.clone().arrayBuffer());
     if (!matches(c.req.header('if-none-match'), tag)) {
       c.res.headers.set('etag', tag);

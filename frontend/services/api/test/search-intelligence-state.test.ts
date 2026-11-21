@@ -147,7 +147,6 @@ describe('durable paid acquisition boundaries', () => {
       completed_calls: 1,
       received_rows: 1000,
     });
-    // The saved count is the unique rows the page added, not the 1000 it carried.
     expect(
       await db
         .selectFrom('search_intelligence_datasets')
@@ -166,7 +165,6 @@ describe('durable paid acquisition boundaries', () => {
       await t.state.saveResponse(prep.call.id, response);
       await t.state.publish(plan, prep.call.id, []);
       await t.state.park(new Date(Date.now() + 60_000));
-      // The worker claims the parked task again once its wait is over.
       await db
         .updateTable('analytics_tasks')
         .set({
@@ -292,7 +290,6 @@ describe('durable paid acquisition boundaries', () => {
       .where('id', '=', t.task.id)
       .execute();
     await reconcileResearch(db);
-    // The project is free for a new acquisition; the paid receipt and its cost remain.
     expect(await t.state.run().executeTakeFirst()).toMatchObject({
       status: 'failed',
       provider_reported_cost_usd: '0.01200000',
@@ -319,7 +316,6 @@ describe('durable paid acquisition boundaries', () => {
   });
   it('sends a short last page after a full first page charged its own price', async () => {
     const t = await run(1001);
-    // A full page costs more than the dataset's average per page; that is not overspend.
     const fullPage = (
       pageEstimateMicrousd('ranking_keywords', policy.search_intelligence.page_size) / 1e6
     ).toFixed(6);
@@ -339,7 +335,6 @@ describe('durable paid acquisition boundaries', () => {
       error_code: 'auth_failure',
       uncertain_calls: 0,
     });
-    // Nothing was sent, so there is no dispatch evidence to read as possible spend.
     expect(
       await db
         .selectFrom('search_intelligence_dispatch_attempts')

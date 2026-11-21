@@ -1,16 +1,10 @@
-/**
- * Opportunity decisions the seeded PostgreSQL scenario never reaches: earned
- * page selection and scoring, the Actions list's groups and priority bands,
- * which site changes promote to a rule, how a
- * confirmed decline ranks, and how verification folds per-check readings.
- */
 import { describe, expect, it } from 'vitest';
 
 import { policy } from '../src/config.ts';
 import { siteHealth } from '../src/config/site-health.ts';
 import type { SourcePageEvidence } from '../src/analysis/opportunities/evidence.ts';
 import { detectEarnedPageOpportunities } from '../src/analysis/opportunities/earned-pages.ts';
-import { actionGroup, priorityBand } from '../src/analysis/opportunities/actions.ts';
+import { priorityBand } from '../src/analysis/opportunities/actions.ts';
 import { changeRule } from '../src/opportunities/refresh-hits.ts';
 import { declineGap, declineValue } from '../src/opportunities/refresh-evidence.ts';
 import { priorityScore } from '../src/analysis/opportunities/scoring.ts';
@@ -86,7 +80,6 @@ describe('earned page opportunities', () => {
   });
 
   it('acts on every Gap page, whatever its format and however rarely it is cited', () => {
-    // An article cited by one answer, read thinly: still a Gap, so still an Action.
     const once = page({
       page_format: 'article',
       recurrence_count: 1,
@@ -100,7 +93,6 @@ describe('earned page opportunities', () => {
       value_factor: 7 / 6,
       gap_factor: 1.4,
     });
-    // It ranks below the same page cited by three answers.
     expect(hit!.value_factor).toBeLessThan(detect([page()])[0]!.value_factor);
   });
 
@@ -123,38 +115,7 @@ describe('earned page opportunities', () => {
   });
 });
 
-describe('Actions list groups', () => {
-  const a = policy.opportunity.actions;
-  // Off product and category targets, the approach decides the group.
-  const BY_APPROACH: Record<string, string> = {
-    earned_placement: 'earned',
-    fix_technical: 'fix_site',
-    improve_links: 'fix_site',
-    create_new: 'own_pages',
-    improve_existing: 'own_pages',
-    consolidate: 'own_pages',
-    // An Agent-origin Action before any diagnosis.
-    '': 'own_pages',
-  };
-
-  it('names a group for every approach the tree can store', () => {
-    const stored = new Set([
-      ...a.APPROACH_TREE.map((b) => b.approach),
-      a.DEFAULT_APPROACH.approach,
-    ]);
-    expect([...stored].sort()).toEqual(Object.keys(BY_APPROACH).filter(Boolean).sort());
-  });
-
-  it('puts every Action in exactly one group: products by target, the rest by approach', () => {
-    for (const approach of Object.keys(BY_APPROACH))
-      for (const target_kind of a.ACTION_TARGET_KINDS)
-        expect([approach, target_kind, actionGroup({ approach, target_kind })]).toEqual([
-          approach,
-          target_kind,
-          ['product', 'category'].includes(target_kind) ? 'products' : BY_APPROACH[approach],
-        ]);
-  });
-
+describe('Action priority bands', () => {
   it('bands a priority score at 30 and 20; an unscored Action has no band', () => {
     expect([40, 30, 29.9, 20, 19.9, 0, null].map(priorityBand)).toEqual([
       'high',
@@ -186,7 +147,6 @@ describe('site change promotion', () => {
     expect(content({ ...complete, content_change_classification: 'minor_change' })).toBe(
       'site_change_metadata_inconsistency',
     );
-    // A substantial rewrite stays in change history instead of becoming an action.
     expect(
       content({ ...complete, content_change_classification: 'substantial_change' }),
     ).toBeNull();

@@ -9,15 +9,6 @@ import {
 } from '@/lib/api/integrations';
 import { isGrantGone } from '@/components/settings/grant-model';
 
-/**
- * Where one data source stands for the active project, and so what the user
- * does next. Distinct states, never a percentage:
- *
- * - `connect`: no usable grant (none yet, or one that was disconnected).
- * - `reconnect`: a grant exists but the provider refused it.
- * - `choose`: connected, but no property imports into this project.
- * - `ready`: a property imports into this project.
- */
 export type SourceStep =
   | { kind: 'connect' }
   | { kind: 'reconnect'; connection: IntegrationConnection }
@@ -37,7 +28,6 @@ function sourceStep(
   return mapping ? { kind: 'ready', connection, mapping } : { kind: 'choose', connection };
 }
 
-/** A connection can serve several projects; only this project's active mapping counts. */
 export function activeMappingFor(
   mappings: readonly IntegrationPropertyMapping[] | undefined,
   projectId: string | null,
@@ -47,14 +37,12 @@ export function activeMappingFor(
   );
 }
 
-/** The project's own properties first, otherwise in the provider's order. */
 export function ownPropertiesFirst(properties: readonly IntegrationProperty[]) {
   return [...properties].sort(
     (a, b) => Number(b.matches_project === true) - Number(a.matches_project === true),
   );
 }
 
-/** The steps for `providers` in the active project, from the connection and mapping reads. */
 export function useDataSources(
   workspaceId: string | null,
   projectId: string | null,
@@ -64,7 +52,6 @@ export function useDataSources(
     ...integrationsQueries.connections(workspaceId),
     enabled: Boolean(workspaceId),
   });
-  // Only the connection each step reads, and only while its grant is connected.
   const relevant = providers.flatMap((provider) => {
     const connection = connections.data?.find((item) => item.provider === provider);
     return connection?.grant_status === 'connected' ? [connection] : [];
@@ -85,15 +72,28 @@ export function useDataSources(
         : ({ kind: 'connect' } as SourceStep),
     ]),
   );
+  const failedMappings = mappingQueries.filter((query) => query.isError);
   return {
     loading,
-    error: connections.isError ? connections.error : null,
-    retry: () => void connections.refetch(),
+    error: connections.isError ? connections.error : (failedMappings[0]?.error ?? null),
+    retry: () => {
+      if (connections.isError) void connections.refetch();
+      for (const query of failedMappings) void query.refetch();
+    },
     steps,
   };
 }
 
-/** Messages for the OAuth callback's `error=` codes; never the raw code. */
+export function useSourceStep(
+  workspaceId: string,
+  projectId: string,
+  provider: IntegrationProvider,
+): SourceStep | null {
+  const sources = useDataSources(workspaceId, projectId, [provider]);
+  if (sources.loading || sources.error) return null;
+  return sources.steps.get(provider) ?? null;
+}
+
 const OAUTH_ERRORS: Record<string, string> = {
   oauth_exchange_failed: 'The consent screen was cancelled or did not finish. Try again.',
   oauth_state_invalid:

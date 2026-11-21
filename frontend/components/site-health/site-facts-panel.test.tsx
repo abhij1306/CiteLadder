@@ -15,7 +15,6 @@ it('renders all policies and Not specified with accessible purpose tables and an
       <SiteFactsPanel crawl={crawl} dashboard={undefined} />
     </MemoryRouter>,
   );
-  // Closed by default: one summary line instead of the crawler rows.
   expect(screen.getByRole('table', { hidden: true })).not.toBeVisible();
   await user.click(
     screen.getByText('4 crawlers: 1 all allowed, 1 restricted, 1 all disallowed, 1 unknown'),

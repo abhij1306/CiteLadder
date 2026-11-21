@@ -53,7 +53,6 @@ function windowFor(
   if (start === undefined || end === undefined) {
     return [addDays(yesterday, -(settings.sync_default_window_days - 1)), yesterday];
   }
-  // An explicit window also stops at the property's last finished day.
   const finished = end > yesterday ? yesterday : end;
   if (!Number.isFinite(day(start)) || !Number.isFinite(day(end)) || start > finished) {
     throw new ApiError(422, 'The requested sync window is invalid', {
@@ -79,10 +78,6 @@ export function enqueueSyncRun(db: Database, input: SyncInput) {
     const target = await resolveSyncTarget(trx, input);
     const [windowStart, windowEnd] = await syncWindow(trx, input, target);
     const kind = input.syncKind ?? 'on_demand';
-    // A plain sync re-reads the late-data days, which an active on-demand or
-    // scheduled run for the property already covers; refusing it under the
-    // workspace lock keeps one in flight. Explicit windows and history backfill
-    // are separate ranges.
     if (input.windowStart === undefined && kind !== codes.SYNC_KIND_BACKFILL)
       await refuseWhilePropertySyncs(trx, input.workspaceId, target.id);
     if (kind === 'on_demand')
@@ -138,7 +133,6 @@ export function enqueueSyncRun(db: Database, input: SyncInput) {
 
 const ACTIVE_SYNC = ['queued', 'leased', 'running', 'retry_wait'] as const;
 
-/** The property's active on-demand or scheduled run, which a plain sync waits on. */
 export async function activePropertySync(db: Database, workspaceId: string, mappingId: string) {
   const run = await db
     .selectFrom('integration_sync_runs')
@@ -187,7 +181,6 @@ async function admitOnDemandSync(
     .executeTakeFirstOrThrow();
   if (Number(count.count) >= settings.sync_on_demand_active_limit)
     throw new ApiError(429, 'Workspace sync capacity exceeded');
-  // The module resolves its integration settings from the process environment.
   await spendBudget(trx, budget('integration_sync', process.env), workspaceId);
 }
 
@@ -226,19 +219,12 @@ async function resolveSyncTarget(trx: Database, input: SyncInput) {
   return target;
 }
 
-/**
- * An unwindowed on-demand or scheduled sync re-reads only the late-data days
- * after the newest succeeded window; the default window applies only before
- * anything has succeeded. Older gaps belong to history retry, so one failed
- * history chunk never turns every sync into a full re-import.
- */
 async function syncWindow(
   trx: Database,
   input: SyncInput,
   target: Awaited<ReturnType<typeof resolveSyncTarget>>,
 ): Promise<[string, string]> {
   const yesterday = propertyYesterday(target);
-  // windowFor refuses a half-open window, so the start alone tells an explicit one.
   const window = windowFor(input.windowStart, input.windowEnd, yesterday);
   if (input.windowStart !== undefined || input.syncKind === 'backfill') return window;
   const latest = await trx
@@ -256,11 +242,6 @@ async function syncWindow(
 const earlierDay = (a: string, b: string) => (a < b ? a : b);
 const laterDay = (a: string, b: string) => (a > b ? a : b);
 
-/**
- * The first day a routine sync re-reads: the late-data days after `covered`,
- * and any Search Console day still pending within its finality bound, kept
- * within the backfill bound and yesterday.
- */
 async function rereadStart(
   trx: Database,
   workspaceId: string,
@@ -271,7 +252,6 @@ async function rereadStart(
   let start = addDays(covered, 1 - settings.sync_late_data_revision_days);
   if (target.provider === 'gsc') {
     const bound = addDays(yesterday, 1 - settings.sync_search_console_finality_days);
-    // A property with no selected row yet may still be pending on every day.
     const unreported = (await firstUnreportedSearchConsoleDay(trx, workspaceId, target)) ?? bound;
     start = earlierDay(start, laterDay(unreported, bound));
   }
@@ -279,13 +259,6 @@ async function rereadStart(
   return earlierDay(laterDay(start, earliest), yesterday);
 }
 
-/**
- * Search Console returns final days only, so a day after the property's latest
- * selected row may still be pending. A sync re-reads from that day, within
- * `sync_search_console_finality_days`, until Search Console reports it. Rows of
- * a failed or superseded extract do not count: they never replaced the
- * revision that read the earlier days.
- */
 async function firstUnreportedSearchConsoleDay(
   trx: Database,
   workspaceId: string,
@@ -339,7 +312,6 @@ type SyncInput = {
 /** Enqueue the configured history's missing or failed immutable windows. */
 export async function enqueueHistoryBackfill(db: Database, input: BackfillInput): Promise<void> {
   const candidates = await backfillWindows(db, input, settings.sync_backfill_max_days);
-  // Preserve per-window conflict handling and commit order during backfill.
   for (const [windowStart, windowEnd] of candidates) {
     try {
       await enqueueSyncRun(db, {
@@ -422,7 +394,6 @@ function backfillState(total: number, pending: number, failed: number): string {
   return 'complete';
 }
 
-/** One sync run of the connection, with its imported row count; undefined when absent. */
 export async function getSyncRun(
   db: Database,
   workspaceId: string,
@@ -462,8 +433,6 @@ export async function getSyncRun(
     .select((eb) =>
       eb.fn.coalesce(eb.fn.sum<number>('artifacts.row_count'), eb.val(0)).as('row_count'),
     )
-    // The pages read projections, not imports: work after the import is still
-    // building them while any post-sync task for the project is active.
     .select((eb) =>
       eb
         .exists(

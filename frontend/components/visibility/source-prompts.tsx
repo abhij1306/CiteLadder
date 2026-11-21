@@ -1,24 +1,23 @@
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
-import { MessageSquare } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 
 import { BrandMark } from '@/components/ui/brand-mark';
 import { Button } from '@/components/ui/button';
-import {
-  ExecutionEvidenceDrawer,
-  type EvidenceSubject,
-} from '@/components/runs/execution-evidence-drawer';
+import { Icon } from '@/components/ui/icon';
+import { AnswerDialog, type EvidenceSubject } from '@/components/runs/answer-dialog';
 import { DataTable, type DataTableColumn, type DataTableState } from '@/components/ui/data-table';
+import { readErrorProps } from '@/components/ui/notice';
+import { TitledSection } from '@/components/ui/section';
 import { Inline } from '@/components/ui/layout';
-import { ClampText, TableCell, TableRow } from '@/components/ui/table';
+import { TableCell, TableCellLines, TableRow } from '@/components/ui/table';
 import { Tooltip } from '@/components/ui/tooltip';
 import { textRole } from '@/components/ui/typography';
-import { MissingValue } from '@/components/ui/unavailable-value';
-import { TruncationNotice } from '@/components/visibility/evidence-states';
+import { Absence } from '@/components/ui/absence';
 import type {
   VisibilityEvidenceResponse,
   VisibilityExecutionEvidence,
 } from '@citeladder/contracts';
+import { MessageSquare, MessageSquareText } from '@/lib/icons';
 import { visibilityQueries } from '@/lib/api/visibility-queries';
 import { useEngineCatalog } from '@/lib/providers/engines';
 import type { SourceFilters } from '@/components/visibility/source-rows';
@@ -26,27 +25,12 @@ import { count, hostOf, sinceLabel } from '@/lib/visibility/sources';
 import type { SourceQueries } from '@/lib/visibility/use-source-analysis';
 import { EVIDENCE_LIMIT } from '@/lib/visibility/use-visibility-dashboard';
 
-/** A counted nought in a column of chips, kept apart from an absent one. */
 function ObservedNone() {
-  return <span className={textRole('caption', 'text-ink-secondary tabular-nums')}>0</span>;
+  return <span className={textRole('caption', 'tabular-nums')}>0</span>;
 }
 
-/** Chips a cell carries before it stops being a cell; the rest become "+N". */
 const MAX_CHIPS = 3;
 
-/**
- * The tracked answers that used this source, one row each.
- *
- * A TABLE, not an evidence feed. A reader on a domain's page is scanning for
- * which prompts reached it and how heavily — a question answered by rows they
- * can compare down a column. The full answer text, its mentions and its
- * citation list belong to the answer itself, which is one click away on Query
- * fanouts; reproducing them here made every row tall enough that comparing two
- * meant scrolling between them.
- *
- * Reads `/visibility/evidence` narrowed by domain or URL rather than adding a
- * third place that assembles an answer list.
- */
 export function SourcePrompts({
   filters,
   queries,
@@ -62,6 +46,7 @@ export function SourcePrompts({
     audit_id: queries.selectedRunIds ? undefined : (queries.activeRunId ?? undefined),
     audit_ids: queries.selectedRunIds,
     engine: filters.engine === 'all' ? undefined : filters.engine,
+    topic: queries.topic,
     cohort: filters.cohort,
     domain: domain ?? undefined,
     url: url ?? undefined,
@@ -74,28 +59,24 @@ export function SourcePrompts({
     enabled: Boolean(queries.activeRunId && (domain || url)),
   });
 
-  // The answer opens over this screen rather than routing to the run that
-  // produced it. A reader here is comparing which prompts reached this source;
-  // being dropped on Query fanouts with the source selection gone meant the
-  // only way back to the comparison was the browser's back button.
   const [opened, setOpened] = useState<EvidenceSubject | null>(null);
 
   return (
     <>
-      <DataTable
-        title="Prompts"
-        columns={COLUMNS}
-        state={promptsState(query)}
-        busy={{ active: query.isFetching, label: 'Updating prompts' }}
-        // The endpoint returns a bounded newest-first window. Without this a
-        // source cited by more answers than fit simply looked like it had fewer.
-        footer={query.data?.truncated ? <TruncationNotice limit={EVIDENCE_LIMIT} /> : null}
-      >
-        {(query.data?.items ?? []).map((item) => (
-          <PromptRow key={item.analysis_id} item={item} onOpenAnswer={setOpened} />
-        ))}
-      </DataTable>
-      <ExecutionEvidenceDrawer
+      <TitledSection title="Prompts">
+        <DataTable
+          label="Prompts"
+          columns={COLUMNS}
+          state={promptsState(query)}
+          busy={{ active: query.isFetching, label: 'Updating prompts' }}
+          footer={query.data?.truncated ? `Newest ${EVIDENCE_LIMIT} shown` : null}
+        >
+          {(query.data?.items ?? []).map((item) => (
+            <PromptRow key={item.analysis_id} item={item} onOpenAnswer={setOpened} />
+          ))}
+        </DataTable>
+      </TitledSection>
+      <AnswerDialog
         execution={opened}
         open={opened !== null}
         onOpenChange={(next) => {
@@ -108,10 +89,10 @@ export function SourcePrompts({
 
 const COLUMNS: readonly DataTableColumn[] = [
   { key: 'prompt', label: 'Prompt' },
-  { key: 'citations', label: 'Citations', width: 'figure', numeric: true },
+  { key: 'citations', label: 'Citations', width: 'figure', kind: 'number' },
   { key: 'mentioned', label: 'Mentioned', width: 'status', desktopOnly: true },
   { key: 'sources', label: 'Sources', width: 'status', desktopOnly: true },
-  { key: 'created', label: 'Created', width: 'figure', numeric: true, desktopOnly: true },
+  { key: 'created', label: 'Created', width: 'figure', kind: 'date', desktopOnly: true },
   { key: 'open', label: 'Open', width: 'status', hideLabel: true },
 ];
 
@@ -121,14 +102,11 @@ function promptsState(
   if (query.isError) {
     return {
       kind: 'error',
-      error: query.error,
-      fallback: 'Could not load the tracked answers.',
-      onRetry: () => void query.refetch(),
-      pending: query.isFetching,
+      ...readErrorProps(query),
+      title: "Couldn't load the tracked answers",
+      fallback: 'The request failed or timed out.',
     };
   }
-  // The selection has settled on a measured run (`SelectionGate`), so no data
-  // yet is this read on its way, never an empty finding.
   if (!query.data) return { kind: 'loading', label: 'Loading prompts…' };
   if (query.data.items.length) return undefined;
   return {
@@ -139,13 +117,6 @@ function promptsState(
   };
 }
 
-/**
- * One answer as a row: which engine produced it, what it said, what it cited.
- *
- * The engine's mark leads the row rather than sitting in a column of its own —
- * it is an identity, and a reader scanning for "what did Gemini say" finds a
- * logo faster than a word.
- */
 function PromptRow({
   item,
   onOpenAnswer,
@@ -157,15 +128,15 @@ function PromptRow({
   return (
     <TableRow>
       <TableCell>
-        <Inline as="span" className="items-start">
+        <Inline as="span">
           <BrandMark name={engines.label(item.logical_engine)} />
-          <span className="grid min-w-0">
-            <ClampText lines={1}>{item.prompt_text || 'Untitled prompt'}</ClampText>
-            <ClampText lines={1} className={textRole('caption', 'text-ink-secondary')}>
-              {engines.modelLabel(item.logical_engine, item.transport_model) ||
-                engines.label(item.logical_engine)}
-            </ClampText>
-          </span>
+          <TableCellLines
+            primary={item.prompt_text || 'Untitled prompt'}
+            secondary={
+              engines.modelLabel(item.logical_engine, item.transport_model) ||
+              engines.label(item.logical_engine)
+            }
+          />
         </Inline>
       </TableCell>
       <TableCell numeric>{count(item.citations.length) ?? '0'}</TableCell>
@@ -176,25 +147,21 @@ function PromptRow({
         <SourceChips item={item} />
       </TableCell>
       <TableCell numeric desktopOnly>
-        {sinceLabel(item.completed_at) ?? <MissingValue />}
+        {sinceLabel(item.completed_at) ?? <Absence />}
       </TableCell>
       <TableCell>
-        {/* The row summarises the answer; this reaches the answer itself. It
-            is the one thing the old evidence feed carried that a compact row
-            cannot replace with a number. */}
         <Button
-          variant="ghost"
+          variant="quiet"
           onClick={() =>
             onOpenAnswer({
-              // The visibility row names the execution as `task_id`; the drawer
-              // reads the answer and its evidence from that one execution — a
-              // source row summarises an answer without carrying one.
               id: item.task_id,
               prompt_text: item.prompt_text,
               prompt_index: item.prompt_index,
+              prompt_id: item.prompt_id,
             })
           }
         >
+          <Icon icon={MessageSquareText} />
           Open answer
         </Button>
       </TableCell>
@@ -202,13 +169,6 @@ function PromptRow({
   );
 }
 
-/**
- * The brands this answer named, as marks.
- *
- * An empty list is an OBSERVED zero, not an absent measurement: the answer was
- * read and it named nobody. `MissingValue` would report that as "not measured",
- * which is the opposite finding -- so the cell says nought and means it.
- */
 function MentionChips({ item }: Readonly<{ item: VisibilityExecutionEvidence }>) {
   const named = [...new Map(item.mentions.map((one) => [one.name, one])).values()];
   if (!named.length) return <ObservedNone />;
@@ -217,7 +177,12 @@ function MentionChips({ item }: Readonly<{ item: VisibilityExecutionEvidence }>)
       {named.slice(0, MAX_CHIPS).map((mention) => (
         <Tooltip key={`${mention.kind}:${mention.name}`} content={mention.name}>
           <span className="inline-flex">
-            <BrandMark name={mention.name || 'Brand'} placement="inline" />
+            <BrandMark
+              name={mention.name || 'Brand'}
+              logoUrl={mention.logo_url}
+              websiteUrl={mention.website_url}
+              placement="inline"
+            />
           </span>
         </Tooltip>
       ))}
@@ -225,7 +190,6 @@ function MentionChips({ item }: Readonly<{ item: VisibilityExecutionEvidence }>)
   );
 }
 
-/** The sites this answer drew on, as their favicons. An empty list is zero. */
 function SourceChips({ item }: Readonly<{ item: VisibilityExecutionEvidence }>) {
   const hosts = [
     ...new Set(item.citations.map((citation) => hostOf(citation.url)).filter(Boolean)),
@@ -249,7 +213,7 @@ function ChipRow({ children, overflow }: Readonly<{ children: ReactNode; overflo
     <Inline as="span" gap="tight">
       {children}
       {overflow > 0 ? (
-        <span className={textRole('caption', 'text-ink-secondary tabular-nums')}>+{overflow}</span>
+        <span className={textRole('caption', 'text-ink-2 tabular-nums')}>+{overflow}</span>
       ) : null}
     </Inline>
   );

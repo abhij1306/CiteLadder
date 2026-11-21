@@ -1,18 +1,3 @@
-/**
- * The Opportunity refresh: read persisted evidence, detect,
- * score, and supersede the project's live set with one immutable snapshot.
- *
- * A missing source is not an error. With a prior snapshot and no resolvable
- * audit, crawl or demand snapshot, the prior snapshot is returned unchanged,
- * so an in-flight crawl never empties the live set; zero hits WITH a source
- * still supersedes, and so does a snapshot whose aging sources (keyword or
- * content gaps) have aged out. A refresh whose source identity the latest snapshot
- * already describes loads no evidence. Evidence loads outside the project
- * lock; under it the identity is resolved again, and a refresh whose sources
- * moved meanwhile writes nothing and fails for a retry over the newer state.
- * No provider or network I/O happens anywhere in the refresh. Each evidence
- * family is one entry in `refresh-families.ts`.
- */
 import { randomUUID } from 'node:crypto';
 
 import { sql } from 'kysely';
@@ -49,7 +34,6 @@ type Resolved = Sources & { identity: SourceIdentity };
 
 const INSERT_BATCH = 500;
 
-/** The shared sources and every family's identity over them. */
 async function resolve(db: Database, scope: Scope, at: Date): Promise<Resolved> {
   const sources = await resolveSources(db, scope, at);
   return { ...sources, identity: await sourceIdentity(db, scope, sources) };
@@ -85,7 +69,6 @@ async function insertOpportunities(
   }
 }
 
-/** Supersede the live set with `scored` and one snapshot; the projected snapshot. */
 async function writeRefresh(
   trx: Database,
   scope: Scope,
@@ -181,12 +164,6 @@ async function writeRefresh(
   return projectSnapshot(written!);
 }
 
-/**
- * Recompute a project's Opportunities from its latest usable sources and
- * return the snapshot that describes them. `skipIfCurrent` returns the latest
- * snapshot, without loading evidence, when it already describes these exact
- * sources and versions.
- */
 export async function recomputeOpportunities(
   db: Database,
   scope: Scope,
@@ -209,12 +186,8 @@ export async function recomputeOpportunities(
     await acquireProjectLock(trx, scope.projectId);
     const current = await latestSnapshot(trx, scope);
     const latest = await resolve(trx, scope, at);
-    // Writing a reading older than a source committed during the load would
-    // supersede what that source says; the retry reads the newer state.
     if (!sameIdentity(latest.identity, sources.identity))
       throw new Error('Opportunity sources changed during the refresh; retry');
-    // Some sources age out by design, so a snapshot that read one is superseded
-    // when it does; an in-flight crawl alone never empties the live set.
     const empty =
       !collected.present && !readAgingSource(record(record(current?.coverage).source_identity));
     if (current !== null && empty) return projectSnapshot(current);
@@ -224,7 +197,6 @@ export async function recomputeOpportunities(
   });
 }
 
-/** `opportunity_refresh`: an automatic refresh that skips when already current. */
 export const refreshOpportunities: Executor = async (task, { db, checkCancelled }) => {
   const scope = { workspaceId: task.workspace_id, projectId: await taskProject(db, task) };
   await checkCancelled('opportunity refresh');

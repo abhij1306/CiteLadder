@@ -1,4 +1,3 @@
-/** Append link metrics and admit architecture from the same persisted crawl. */
 import { createHash, randomUUID } from 'node:crypto';
 import type { Database } from '../db/database.ts';
 import { record } from '../db/json.ts';

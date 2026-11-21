@@ -7,7 +7,6 @@ import {
   timingSafeEqual,
 } from 'node:crypto';
 
-/** Fernet wire format with the existing configured-secret SHA-256 derivation. */
 export function createSecretCipher(secret: string) {
   const key = createHash('sha256').update(secret, 'utf8').digest();
   const signing = key.subarray(0, 16);

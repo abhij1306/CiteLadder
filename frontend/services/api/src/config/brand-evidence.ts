@@ -1,4 +1,3 @@
-/** Brand acquisition bounds and vocabulary, owned by the TypeScript runtime. */
 export const brandEvidence = {
   request_timeout_seconds: 5,
   total_timeout_seconds: 12,
@@ -80,6 +79,21 @@ export const brandEvidence = {
     'sustainability',
     'terms',
     'wishlist',
+  ],
+  utility_link_phrases: [
+    'buy now pay later',
+    'click and collect',
+    'click collect',
+    'find a store',
+    'gift card',
+    'gift cards',
+    'gift voucher',
+    'gift vouchers',
+    'giftcard',
+    'giftcards',
+    'store finder',
+    'store locator',
+    'stores near me',
   ],
   junk_label_terms: ['banner', 'icon', 'image', 'img', 'logo', 'thumbnail'],
   locale_labels: [

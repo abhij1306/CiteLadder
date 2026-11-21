@@ -9,10 +9,8 @@ import { matchesCompetitor } from './search-intelligence-competitors';
 
 type View = { value: string; label: string };
 
-/** A Keyword Research tab that shows saved collections (every tab but Overview). */
 export type CollectionTab = 'keywords' | 'backlinks' | 'competitors';
 
-// Each tab opens on its first view, so every tab has one.
 const VIEWS: Record<CollectionTab, readonly [View, ...View[]]> = {
   keywords: [
     { value: 'ranking_keywords', label: 'Ranking keywords' },
@@ -31,17 +29,14 @@ const VIEWS: Record<CollectionTab, readonly [View, ...View[]]> = {
   ],
 };
 
-/** The table filters only keyword datasets take; a new dataset starts unfiltered. */
 export type KeywordFilterValues = Readonly<{ minVolume: string; intent: string }>;
 
 const NO_KEYWORD_FILTERS: KeywordFilterValues = { minVolume: '', intent: '' };
 
-/** What one tab remembers: its view, website, saved result and filters. */
 type TabState = Readonly<{
   kind: string;
   selectedId: string;
   targetOrigin: string;
-  /** A view chosen for a competitor that has no saved dataset of that kind. */
   pendingKind: { kind: string; selection: string } | null;
   filters: KeywordFilterValues & { datasetId: string | undefined };
 }>;
@@ -85,7 +80,6 @@ function selectCollectionDataset(
   return candidates.find((item) => item.id === selectedId) ?? candidates[0];
 }
 
-/** A saved dataset's name in a picker: its keyword seed, its competitor, or its website. */
 function datasetLabel(
   item: SearchIntelligenceDataset,
   competitors: SearchIntelligenceReadiness['competitors'],
@@ -103,18 +97,11 @@ function datasetLabel(
   return competitor?.label ?? item.target_hostname;
 }
 
-/**
- * The state of the collection a tab shows — its view, website, saved result
- * and keyword filters — held by the page, because its controls ride the
- * page's one control strip while the result renders in the tab's panel.
- * Each tab keeps its own, so returning to a tab finds it as it was left.
- */
 export function useSearchCollection({
   tab,
   ...input
 }: Readonly<
   Omit<CollectionInput, 'tab' | 'state' | 'patch'> & {
-    /** The open tab, or null on the overview, which shows no collection. */
     tab: CollectionTab | null;
   }
 >) {
@@ -136,7 +123,6 @@ type CollectionInput = Readonly<{
   patch: (next: Partial<TabState>) => void;
   datasets: readonly SearchIntelligenceDataset[];
   competitors: SearchIntelligenceReadiness['competitors'];
-  /** The competitor comparison open on the Competitors tab. */
   selected: SearchIntelligenceDataset | null;
   onSelect: (dataset: SearchIntelligenceDataset | null) => void;
 }>;
@@ -189,7 +175,6 @@ function collectionView({
 
   return {
     tab,
-    /** The Competitors tab with no comparison open lists the competitors instead. */
     listingCompetitors: tab === 'competitors' && !comparison,
     views: VIEWS[tab].filter(
       (item) =>

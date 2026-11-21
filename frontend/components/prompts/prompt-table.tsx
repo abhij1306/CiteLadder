@@ -1,266 +1,384 @@
-import { Archive, Check, FileSearch, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 import type { PromptAnswerRef } from '@/components/prompts/prompt-evidence';
-import { ProjectLink } from '@/components/ui/project-link';
+import { TextLink } from '@/components/ui/text-link';
 import { IconButton } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { Delta } from '@/components/ui/delta';
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '@/components/ui/menu';
-import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
-import { TableActionsCell, TableCell, TableCellLines, TableRow } from '@/components/ui/table';
+import { DataTable, type DataTableColumn, type DataTableState } from '@/components/ui/data-table';
+import {
+  isRowSurfaceClick,
+  TableActionsCell,
+  TableCell,
+  TableCellLines,
+  TableRow,
+  TableSelectCell,
+} from '@/components/ui/table';
 import { pageNumberControls, useTablePage } from '@/components/ui/pager';
-import { Switch } from '@/components/ui/switch';
-import { UnavailableValue } from '@/components/ui/unavailable-value';
+import { Absence } from '@/components/ui/absence';
+import { ClampText } from '@/components/ui/clamp-text';
 import { NamedBrandMarks } from '@/components/visibility/named-brand-marks';
-import type { NamedBrand, Prompt, PromptStatus } from '@citeladder/contracts';
-import { ICONS } from '@/lib/icons';
+import { SentimentValue } from '@/components/visibility/sentiment-value';
+import type { NamedBrand, NetSentiment, Prompt, PromptStatus } from '@citeladder/contracts';
+import { Archive, Check, ICONS, MoreHorizontal, Pencil, Power, Trash2 } from '@/lib/icons';
+import { SHARE_OF_VOICE_HINT } from '@/lib/config/visibility';
+import { useProjectHref } from '@/lib/navigation/project-destination';
+import type { PromptMentions } from '@/lib/prompts/filter';
 import { promptHistoryHref } from '@/lib/prompts/history';
-import { formatPosition, formatPositionExact, formatRate } from '@/lib/visibility/dashboard';
+import type { RowSelectionState } from '@/lib/prompts/selection';
 
-/** What the latest run measured for one prompt, keyed by prompt id. */
-export type PromptMeasurement = {
+import { CitedDomainMarks } from './cited-domain-marks';
+import { NO_ANSWERS, NOT_MEASURED, positionAbsence } from './prompt-figures';
+import { formatMean, percentText } from '@/lib/format';
+
+export type PromptChange =
+  | { kind: 'delta'; points: number }
+  | { kind: 'first' }
+  | { kind: 'not_compared'; reason: 'changed_context' | 'no_observations' };
+
+export type PromptMeasurement = PromptMentions & {
   visibilityRate: number | null;
-  /** Answers citing an owned page, over the prompt's successful answers. */
   ownedCitationRate: number | null;
-  change: number | null;
+  change: PromptChange;
   position: number | null;
-  /** Distinct brands named in the answers; `brands` is the leading few. */
+  shareOfVoice: number | null;
+  sentiment: NetSentiment | null;
   mentions: number;
   brands: readonly NamedBrand[];
-  /** Where that run asked the prompt, for the row's Evidence. */
   answer: PromptAnswerRef;
 };
 
-/** What a prompt row's controls do. */
 export type PromptRowActions = Readonly<{
   onEdit: (prompt: Prompt) => void;
   onDelete: (prompt: Prompt) => void;
   onToggleEnabled: (prompt: Prompt) => void;
-  onSetStatus?: (prompt: Prompt, status: PromptStatus) => void;
-  /** Opens the answers the latest run got for a measured prompt. */
-  onEvidence?: (prompt: Prompt, answer: PromptAnswerRef) => void;
-  busyId?: string | null;
+  onSetStatus: (prompt: Prompt, status: PromptStatus) => void;
 }>;
 
-/** Rows per page on the prompt table (client-side; the list arrives whole). */
 const PAGE_SIZE = 10;
 
-/**
- * Prompt table (F7). Questions, measured visibility and enabled state, with
- * per-row actions (edit, delete,
- * enable/disable toggle, and — when `onSetStatus` is wired — archive or restore
- * transitions).
- *
- * The measured columns arrive as a map rather than being fetched here: the
- * prompt IS the object a reader is looking at, so its result belongs on this
- * row. It previously lived in a "Prompt analysis" card on the Visibility
- * dashboard, where the prompt was a detail of a measurement instead.
- * Client-side pagination footer
- * (tabular page indicator + ghost buttons) per the prompts frame. Purely
- * presentational — CRUD is delegated to callbacks owned by the page.
- */
+function emptyState(rows: number, onClearFilters?: () => void): DataTableState | undefined {
+  if (rows > 0) return undefined;
+  const heading = 'No prompts match your search or filters';
+  return onClearFilters
+    ? { kind: 'filtered', headingLevel: 3, heading, onClear: onClearFilters }
+    : { kind: 'empty', icon: ICONS.prompts, headingLevel: 3, heading };
+}
+
 export function PromptTable({
   prompts,
   actions,
   measurements,
+  setNames,
+  topicNames,
+  commerceSetIds,
+  selection,
+  onClearFilters,
+  onOpenAnswer,
+  resetKey,
 }: Readonly<{
   prompts: Prompt[];
-  /**
-   * The row controls, for a role that may edit prompts. Without them the
-   * table states each prompt's enabled state and offers no control.
-   */
+  resetKey?: string;
+  onClearFilters?: () => void;
+  onOpenAnswer?: (prompt: Prompt, answer: PromptAnswerRef) => void;
+  topicNames?: ReadonlyMap<string, string>;
+  selection?: RowSelectionState;
+  commerceSetIds?: ReadonlySet<string>;
+  setNames?: ReadonlyMap<string, string>;
   actions?: PromptRowActions;
-  /** Latest-run measurement per prompt id. Omitted before any run exists. */
   measurements?: ReadonlyMap<string, PromptMeasurement>;
 }>) {
-  // With no run there is nothing measured for ANY prompt, so the columns are
-  // not drawn at all rather than filling with placeholders.
-  const measured = Boolean(measurements?.size);
-  const { page, setPage, pageCount, from, to } = useTablePage(prompts.length, PAGE_SIZE);
+  const hasRun = Boolean(measurements?.size);
+  const compared = [...(measurements?.values() ?? [])].some(
+    (measurement) => measurement.change.kind !== 'first',
+  );
+  const shelf = prompts.some((prompt) => commerceSetIds?.has(prompt.prompt_set_id));
+  const measuredColumns = hasRun ? measuredColumnsFor({ compared, shelf }) : [];
+  const { page, setPage, pageCount, from, to } = useTablePage(prompts.length, {
+    pageSize: PAGE_SIZE,
+    resetKey,
+    urlKey: 'page',
+  });
   const pagedPrompts = prompts.slice(from - 1, to);
+  const pageIds = pagedPrompts.map((prompt) => prompt.id);
+  const navigate = useNavigate();
+  const projectHref = useProjectHref();
 
   return (
     <DataTable
       label="Prompts"
-      // Every column fits the page from the owner's 982px desktop up; below
-      // that the table scrolls with the prompt pinned.
-      minWidth={measured ? 'md' : 'sm'}
-      pinFirstColumn
-      columns={promptColumns(measured, actions !== undefined)}
+      columns={promptColumns(measuredColumns, actions !== undefined)}
       pageSize={PAGE_SIZE}
       rowCount={pagedPrompts.length}
-      rowLines={3}
-      state={
-        prompts.length === 0
+      selection={
+        selection
           ? {
-              kind: 'empty',
-              icon: ICONS.prompts,
-              headingLevel: 3,
-              heading: 'No prompts match your search or filters',
+              all: pageTicked(pageIds, selection.ids),
+              onAllChange: (checked) => selection.togglePage(pageIds, checked),
+              noun: 'prompts on this page',
             }
           : undefined
       }
+      state={emptyState(prompts.length, onClearFilters)}
       pager={{
         range: { from, to, total: prompts.length, noun: 'prompts' },
         ...pageNumberControls(page, pageCount, setPage),
       }}
     >
-      {pagedPrompts.map((prompt) => (
-        <TableRow key={prompt.id}>
-          <TableCell>
-            {/* The question opens its history: the prompt is the object. It
-                wraps to two lines. Topic and classification are filters in
-                the control strip, not tags on every row (owner, 2026-11-06);
-                the caption only says when audits skip the prompt. */}
-            <TableCellLines
-              title
-              primary={
-                <ProjectLink
-                  href={promptHistoryHref(prompt.id)}
-                  className="text-ink hover:underline"
-                >
-                  {prompt.text}
-                </ProjectLink>
-              }
-            />
-          </TableCell>
-          {measured ? <MeasuredCells measurement={measurements?.get(prompt.id)} /> : null}
-          {actions ? (
-            <PromptRowControls
-              prompt={prompt}
-              actions={actions}
-              onEvidence={evidenceOpener(prompt, measurements?.get(prompt.id), actions)}
-            />
-          ) : (
-            <TableCell>{prompt.enabled ? 'Yes' : 'No'}</TableCell>
-          )}
-        </TableRow>
-      ))}
+      {pagedPrompts.map((prompt) => {
+        const openAnswer = answerOpener(prompt, measurements?.get(prompt.id), onOpenAnswer);
+        return (
+          <TableRow
+            key={prompt.id}
+            className="cursor-pointer"
+            onClick={(event) => {
+              if (!isRowSurfaceClick(event)) return;
+              if (openAnswer) openAnswer();
+              else void navigate(projectHref(promptHistoryHref(prompt.id)));
+            }}
+          >
+            {selection ? (
+              <TableSelectCell
+                label={`Select “${prompt.text}”`}
+                checked={selection.ids.has(prompt.id)}
+                onCheckedChange={(checked, range) => selection.toggle(prompt.id, checked, range)}
+              />
+            ) : null}
+            <TableCell>
+              <TableCellLines
+                title
+                primary={<PromptQuestion prompt={prompt} openAnswer={openAnswer} />}
+                secondary={rowCaption(prompt, setNames?.get(prompt.prompt_set_id))}
+              />
+            </TableCell>
+            <TableCell>
+              <TopicName topicId={prompt.topic_id} names={topicNames} />
+            </TableCell>
+            {hasRun && commerceSetIds?.has(prompt.prompt_set_id) ? (
+              <ShelfMeasuredCells columns={measuredColumns} />
+            ) : null}
+            {hasRun && !commerceSetIds?.has(prompt.prompt_set_id) ? (
+              <MeasuredCells measurement={measurements?.get(prompt.id)} compared={compared} />
+            ) : null}
+            {actions ? <PromptRowMenu prompt={prompt} actions={actions} /> : null}
+          </TableRow>
+        );
+      })}
     </DataTable>
   );
 }
 
-/** Opens the latest run's answers to a measured prompt; nothing for an unmeasured one. */
-function evidenceOpener(
-  prompt: Prompt,
-  measurement: PromptMeasurement | undefined,
-  { onEvidence }: PromptRowActions,
-) {
-  if (!measurement || !onEvidence) return undefined;
-  return () => onEvidence(prompt, measurement.answer);
+function pageTicked(
+  pageIds: readonly string[],
+  ids: ReadonlySet<string>,
+): boolean | 'indeterminate' {
+  const ticked = pageIds.filter((id) => ids.has(id)).length;
+  if (ticked === 0) return false;
+  return ticked === pageIds.length ? true : 'indeterminate';
 }
 
-/** The enabled switch and the actions menu of one editable row. */
-function PromptRowControls({
+function rowCaption(prompt: Prompt, setName: string | undefined): string | undefined {
+  const parts = [
+    setName,
+    prompt.enabled || prompt.status === 'archived' ? '' : 'Disabled',
+    prompt.over_plan_limit ? 'Beyond the plan limit' : '',
+  ];
+  return parts.filter(Boolean).join(' · ') || undefined;
+}
+
+function answerOpener(
+  prompt: Prompt,
+  measurement: PromptMeasurement | undefined,
+  onOpenAnswer: ((prompt: Prompt, answer: PromptAnswerRef) => void) | undefined,
+) {
+  if (!measurement || !onOpenAnswer) return undefined;
+  return () => onOpenAnswer(prompt, measurement.answer);
+}
+
+function PromptQuestion({
   prompt,
-  actions: { onEdit, onDelete, onToggleEnabled, onSetStatus, busyId },
-  onEvidence,
-}: Readonly<{
-  prompt: Prompt;
-  actions: PromptRowActions;
-  /** Opens the latest run's answers; absent for a prompt no run has measured. */
-  onEvidence?: () => void;
-}>) {
+  openAnswer,
+}: Readonly<{ prompt: Prompt; openAnswer: (() => void) | undefined }>) {
   return (
-    <>
-      <TableCell>
-        <Switch
-          checked={prompt.enabled}
-          label={`${prompt.enabled ? 'Disable' : 'Enable'} prompt`}
-          disabled={busyId === prompt.id}
-          onCheckedChange={() => onToggleEnabled(prompt)}
-        />
-      </TableCell>
-      <TableActionsCell>
-        <Menu>
-          <MenuTrigger asChild>
-            <IconButton icon={MoreHorizontal} label="Prompt actions" />
-          </MenuTrigger>
-          <MenuContent align="end">
-            {onSetStatus && prompt.status === 'archived' ? (
-              <MenuItem icon={<Icon icon={Check} />} onSelect={() => onSetStatus(prompt, 'active')}>
-                Restore
-              </MenuItem>
-            ) : null}
-            <MenuItem icon={<Icon icon={Pencil} />} onSelect={() => onEdit(prompt)}>
-              Edit
-            </MenuItem>
-            {onSetStatus && prompt.status !== 'archived' ? (
-              <MenuItem
-                icon={<Icon icon={Archive} />}
-                onSelect={() => onSetStatus(prompt, 'archived')}
-              >
-                Archive
-              </MenuItem>
-            ) : null}
-            {onEvidence ? (
-              <MenuItem icon={<Icon icon={FileSearch} />} onSelect={onEvidence}>
-                Evidence
-              </MenuItem>
-            ) : null}
-            <MenuSeparator />
-            <MenuItem icon={<Icon icon={Trash2} />} danger onSelect={() => onDelete(prompt)}>
-              Delete
-            </MenuItem>
-          </MenuContent>
-        </Menu>
-      </TableActionsCell>
-    </>
+    <TextLink
+      href={promptHistoryHref(prompt.id)}
+      text="inherit"
+      underline="hover"
+      aria-haspopup={openAnswer ? 'dialog' : undefined}
+      onClick={(event) => {
+        const modified = event.metaKey || event.ctrlKey || event.shiftKey || event.altKey;
+        if (!openAnswer || event.button !== 0 || modified) return;
+        event.preventDefault();
+        openAnswer();
+      }}
+    >
+      {prompt.text}
+    </TextLink>
   );
 }
 
-/**
- * The measured columns are drawn only once a run exists. The headers are one
- * word (owner, 2026-11-11); each hint says exactly what its figure measures.
- * A reader who may not edit reads the enabled state as text, with no actions.
- */
-function promptColumns(measured: boolean, editable: boolean): DataTableColumn[] {
+function TopicName({
+  topicId,
+  names,
+}: Readonly<{ topicId: Prompt['topic_id']; names?: ReadonlyMap<string, string> }>) {
+  if (!topicId) return <Absence state="none" label="No topic" />;
+  const name = names?.get(topicId);
+  if (name === undefined) return <Absence state="unavailable" />;
+  return <ClampText className="text-ink-2">{name}</ClampText>;
+}
+
+function PromptRowMenu({
+  prompt,
+  actions: { onEdit, onDelete, onToggleEnabled, onSetStatus },
+}: Readonly<{
+  prompt: Prompt;
+  actions: PromptRowActions;
+}>) {
+  return (
+    <TableActionsCell>
+      <Menu>
+        <MenuTrigger asChild>
+          <IconButton icon={MoreHorizontal} label="Prompt actions" />
+        </MenuTrigger>
+        <MenuContent align="end">
+          {prompt.status === 'archived' ? (
+            <MenuItem icon={<Icon icon={Check} />} onSelect={() => onSetStatus(prompt, 'active')}>
+              Restore
+            </MenuItem>
+          ) : null}
+          <MenuItem icon={<Icon icon={Pencil} />} onSelect={() => onEdit(prompt)}>
+            Edit
+          </MenuItem>
+          {prompt.status === 'archived' ? null : (
+            <MenuItem icon={<Icon icon={Power} />} onSelect={() => onToggleEnabled(prompt)}>
+              {prompt.enabled ? 'Disable' : 'Enable'}
+            </MenuItem>
+          )}
+          {prompt.status === 'archived' ? null : (
+            <MenuItem
+              icon={<Icon icon={Archive} />}
+              onSelect={() => onSetStatus(prompt, 'archived')}
+            >
+              Archive
+            </MenuItem>
+          )}
+          <MenuSeparator />
+          <MenuItem icon={<Icon icon={Trash2} />} danger onSelect={() => onDelete(prompt)}>
+            Delete
+          </MenuItem>
+        </MenuContent>
+      </Menu>
+    </TableActionsCell>
+  );
+}
+
+function promptColumns(
+  measuredColumns: readonly DataTableColumn[],
+  editable: boolean,
+): DataTableColumn[] {
   const columns: DataTableColumn[] = [
-    { key: 'prompt', label: 'Prompt' },
-    ...(measured ? MEASURED_COLUMNS : []),
-    { key: 'enabled', label: 'Enabled', width: 'control' },
+    { key: 'prompt', label: 'Prompt', kind: 'identity', width: 'reading' },
+    { key: 'topic', label: 'Topic', width: 'status' },
+    ...measuredColumns,
   ];
   if (editable)
-    columns.push({ key: 'actions', label: 'Actions', width: 'control', trailing: true });
+    columns.push({ key: 'actions', label: 'Actions', width: 'control', kind: 'actions' });
   return columns;
 }
 
+const VISIBILITY_COLUMN: DataTableColumn = {
+  key: 'visibility',
+  label: 'Visibility',
+  width: 'figure',
+  kind: 'number',
+};
+
+const SHELF_HINT =
+  'Shopping prompts are measured with the shopping shelf on Shopping, not one prompt at a time, so their figures here are not applicable.';
+
+const CHANGE_COLUMN: DataTableColumn = {
+  key: 'change',
+  label: 'Change',
+  width: 'figure',
+  kind: 'number',
+  priority: 'low',
+};
+
 const MEASURED_COLUMNS: readonly DataTableColumn[] = [
-  { key: 'visibility', label: 'Visibility', width: 'figure', numeric: true },
   {
     key: 'mentions',
     label: 'Mentions',
-    width: 'status',
-    hint: "The brands named in this prompt's answers: yours and your competitors'.",
+    width: 'marks',
   },
   {
     key: 'citations',
     label: 'Citations',
     width: 'figure',
-    numeric: true,
+    kind: 'number',
     hint: "The share of this prompt's answers that cited one of your pages.",
+  },
+  {
+    key: 'sources',
+    label: 'Sources',
+    width: 'marks',
   },
   {
     key: 'position',
     label: 'Position',
     width: 'figure',
-    numeric: true,
+    kind: 'number',
+    priority: 'low',
     hint: 'Where your brand was named among the brands in an answer, averaged over the answers that named it.',
   },
-  { key: 'change', label: 'Change', width: 'figure', numeric: true },
+  {
+    key: 'sov',
+    label: 'Share of voice',
+    width: 'figure',
+    kind: 'number',
+    priority: 'low',
+    hint: SHARE_OF_VOICE_HINT,
+  },
+  {
+    key: 'sentiment',
+    label: 'Sentiment',
+    width: 'figure',
+    kind: 'number',
+    priority: 'low',
+    hint: "Net sentiment toward your brand in this prompt's answers: positive minus negative mentions, as a share of the classified ones.",
+  },
 ];
 
-/** A prompt's measured visibility, and its movement since the last run. */
-function MeasuredCells({ measurement }: Readonly<{ measurement?: PromptMeasurement }>) {
+function measuredColumnsFor({
+  compared,
+  shelf,
+}: Readonly<{ compared: boolean; shelf: boolean }>): readonly DataTableColumn[] {
+  const visibility = shelf ? { ...VISIBILITY_COLUMN, hint: SHELF_HINT } : VISIBILITY_COLUMN;
+  return [visibility, ...(compared ? [CHANGE_COLUMN] : []), ...MEASURED_COLUMNS];
+}
+
+function RateValue({
+  measurement,
+  rate,
+}: Readonly<{ measurement?: PromptMeasurement; rate?: number | null }>) {
+  if (!measurement) return NOT_MEASURED;
+  return rate == null ? NO_ANSWERS : percentText(rate);
+}
+
+function MeasuredCells({
+  measurement,
+  compared,
+}: Readonly<{ measurement?: PromptMeasurement; compared: boolean }>) {
   return (
     <>
       <TableCell numeric>
-        {measurement ? (
-          formatRate(measurement.visibilityRate)
-        ) : (
-          <UnavailableValue state="not_measured" />
-        )}
+        <RateValue measurement={measurement} rate={measurement?.visibilityRate} />
       </TableCell>
+      {compared ? (
+        <TableCell numeric>
+          <ChangeValue change={measurement?.change} />
+        </TableCell>
+      ) : null}
       <TableCell>
         {measurement ? (
           <NamedBrandMarks
@@ -269,34 +387,89 @@ function MeasuredCells({ measurement }: Readonly<{ measurement?: PromptMeasureme
             answers="this prompt's answers"
           />
         ) : (
-          <UnavailableValue state="not_measured" />
+          NOT_MEASURED
         )}
       </TableCell>
       <TableCell numeric>
+        <RateValue measurement={measurement} rate={measurement?.ownedCitationRate} />
+      </TableCell>
+      <TableCell>
         {measurement ? (
-          formatRate(measurement.ownedCitationRate)
+          <CitedDomainMarks
+            sources={measurement.visibilityRate === null ? null : measurement.sources}
+          />
         ) : (
-          <UnavailableValue state="not_measured" />
+          NOT_MEASURED
         )}
       </TableCell>
+      <FigureCells measurement={measurement} />
+    </>
+  );
+}
+
+function FigureCells({ measurement }: Readonly<{ measurement?: PromptMeasurement }>) {
+  return (
+    <>
       <TableCell numeric>
-        {measurement?.position == null ? (
-          <UnavailableValue state="not_measured" />
-        ) : (
-          <span
-            title={`Average of ${formatPositionExact(measurement.position)} across this prompt's answers`}
-          >
-            {formatPosition(measurement.position)}
-          </span>
-        )}
+        <AveragePosition measurement={measurement} />
       </TableCell>
       <TableCell numeric>
-        {measurement?.change == null ? (
-          <UnavailableValue state="not_measured" />
+        <ShareOfVoice measurement={measurement} />
+      </TableCell>
+      <TableCell numeric>
+        {measurement?.sentiment ? (
+          <SentimentValue sentiment={measurement.sentiment} tooFew="Too few" showCount={false} />
         ) : (
-          <Delta value={measurement.change} unit=" pp" />
+          NOT_MEASURED
         )}
       </TableCell>
     </>
   );
+}
+
+function ShareOfVoice({ measurement }: Readonly<{ measurement?: PromptMeasurement }>) {
+  if (!measurement) return NOT_MEASURED;
+  if (measurement.visibilityRate === null) return NO_ANSWERS;
+  if (measurement.shareOfVoice === null)
+    return <Absence state="none" reason="No tracked brand was named in these answers." />;
+  return percentText(measurement.shareOfVoice);
+}
+
+function AveragePosition({ measurement }: Readonly<{ measurement?: PromptMeasurement }>) {
+  if (!measurement) return NOT_MEASURED;
+  if (measurement.position === null) return positionAbsence(measurement.visibilityRate);
+  const position = formatMean(measurement.position);
+  return <span title={`Average of ${position} across this prompt's answers`}>{position}</span>;
+}
+
+function ShelfMeasuredCells({ columns }: Readonly<{ columns: readonly DataTableColumn[] }>) {
+  return columns.map((column) => (
+    <TableCell key={column.key} numeric={column.kind === 'number'}>
+      <Absence state="not_applicable" label="Measured with Shopping" />
+    </TableCell>
+  ));
+}
+
+const NOT_COMPARED = {
+  changed_context:
+    'Not comparable with its previous measurement: the run settings or prompt changed.',
+  no_observations: 'Not comparable with its previous measurement: one of the runs had no answers.',
+} as const satisfies Record<Extract<PromptChange, { kind: 'not_compared' }>['reason'], string>;
+
+function ChangeValue({ change }: Readonly<{ change?: PromptChange }>) {
+  if (change === undefined) return NOT_MEASURED;
+  switch (change.kind) {
+    case 'delta':
+      return <Delta value={change.points} unit=" pp" />;
+    case 'first':
+      return (
+        <Absence state="not_applicable" reason="First measurement: nothing earlier to compare." />
+      );
+    case 'not_compared':
+      return <Absence state="unavailable" label="Unknown" reason={NOT_COMPARED[change.reason]} />;
+    default: {
+      const unhandled: never = change;
+      return unhandled;
+    }
+  }
 }

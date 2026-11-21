@@ -24,7 +24,6 @@ const timestampColumns = () => [
   isoDateText(sql.ref('window_end')).as('end'),
   utcText(sql.ref('created_at')).as('at'),
 ];
-/** One explicit persisted origin, including its exact parent and processing versions. */
 export async function readDemandOrigin(
   db: Database,
   scope: Pick<DemandScope, 'workspaceId' | 'projectId'>,
@@ -48,7 +47,6 @@ export async function readDemandOrigin(
   if (!snapshot) throw notFound('Demand snapshot');
   return { signal, snapshot };
 }
-/** The thresholds the detectors read, so the screen states each rule from them. */
 function detectorPolicy(): DemandDetectorPolicy {
   const p = policy.demand;
   return {
@@ -88,7 +86,6 @@ export async function latestDemand(db: Database, workspaceId: string, projectId:
     .selectAll()
     .select(timestampColumns())
     .where('project_id', '=', projectId)
-    // The most recent observed period, as Opportunities selects it.
     .orderBy('window_end', 'desc')
     .orderBy('created_at', 'desc')
     .orderBy('id', 'desc')

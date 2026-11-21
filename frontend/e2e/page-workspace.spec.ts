@@ -32,11 +32,13 @@ const action = {
   target_prompt_id: null,
   origin: 'evidence',
   status: 'open',
+  measurement: null,
   priority_score: 80,
   priority_band: 'high',
-  families: ['site_health'],
+  families: ['search_console'],
   approach: 'improve_page',
-  group: 'own_pages',
+  goal: 'own_pages',
+  grouping: 'improve_pages',
   skill_id: 'content_refresh',
   member_count: 0,
   declarable_member_count: 0,
@@ -48,19 +50,7 @@ const action = {
 
 const catalog = {
   ...skills,
-  workflows: [
-    ...skills.workflows,
-    {
-      id: 'optimize_page',
-      group: 'improve',
-      label: 'Optimize a page',
-      description: 'Work on one of your pages.',
-      skill_id: 'content_refresh',
-      format_id: null,
-      prompt: 'Optimize this page.',
-      inputs: [],
-    },
-  ],
+  workflows: [...skills.workflows, { id: 'optimize_page', label: 'Optimize a page' }],
 };
 
 const ready = (body: string, overrides = {}) =>
@@ -72,7 +62,6 @@ const needsInput = (body: string) =>
     needs_input: 'What does the Teams plan cost?',
   });
 
-/** Stubs the Action, New chat, the page chat and its suggestions; Apply moves the page to revision 2. */
 async function stubWorkspace(page: Page) {
   const state = {
     created: [] as unknown[],
@@ -111,7 +100,6 @@ async function stubWorkspace(page: Page) {
       actionId: ACTION,
     });
     const start = APPLIED.indexOf('$10');
-    // Anchored where it was made (revision 1); its replacement is where it is now.
     const applied = ready(BODY, { status: 'applied', position: { start, end: start + 3 } });
     state.suggestions = suggestionsPage([applied, needsInput(APPLIED)], REV2);
     return route.fulfill({
@@ -123,7 +111,6 @@ async function stubWorkspace(page: Page) {
 
 const highlight = (page: Page, id: string) => page.locator(`mark[data-suggestion-id="${id}"]`);
 
-/** Nothing on the page scrolls sideways at this width. */
 async function expectNoSidewaysScroll(page: Page) {
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
@@ -139,15 +126,13 @@ for (const width of [1280, 390]) {
     const state = await stubWorkspace(page);
     const narrow = width < 1024;
 
-    await page.goto(fixtureProjectPath(`/agent/actions/${ACTION}`));
-    await page.getByRole('link', { name: 'Work with the agent' }).first().click();
+    await page.goto(fixtureProjectPath(`/actions/${ACTION}`));
+    await page.getByRole('link', { name: 'Work with Agent' }).first().click();
     const composer = page.getByLabel('Message the agent');
     await expect(composer).toHaveValue(MESSAGE);
     await composer.press('Enter');
 
-    await expect(
-      page.getByRole('heading', { level: 1, name: 'Actions › acme.test/pricing' }),
-    ).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'acme.test/pricing' })).toBeVisible();
     expect(state.created).toEqual([
       expect.objectContaining({
         message: MESSAGE,
@@ -164,7 +149,6 @@ for (const width of [1280, 390]) {
       await expect(page.getByRole('tab', { name: 'Chat' })).toBeVisible();
       await page.getByRole('tab', { name: /Suggestions/ }).click();
     } else {
-      // The page and the rail sit side by side, the page the wider of the two.
       const pageBox = await page.getByRole('region', { name: 'Page' }).boundingBox();
       const railBox = await page.getByRole('tab', { name: 'Outline' }).boundingBox();
       expect(railBox!.x).toBeGreaterThan(pageBox!.x + pageBox!.width - 1);

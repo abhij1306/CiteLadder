@@ -156,7 +156,6 @@ it('negative caches failures and refuses to attach a result after identity chang
   } finally {
     setLogSink(restore);
   }
-  // The homepage and the well-known fallback each fail with a logged cause.
   expect(
     records
       .filter((entry) => entry.event === 'brand_logo_fetch_failed')

@@ -47,7 +47,6 @@ function mix(counts: Map<string, number>, eligible: number, answers: number) {
 function increment(counts: Map<string, number>, key: string) {
   counts.set(key, (counts.get(key) ?? 0) + 1);
 }
-/** How the gap prompts' answers split across source classes, or why it cannot be said. */
 export function buildSourceProjection(analyses: AnalysisEvidence[], gapIndices: number[]) {
   if (!gapIndices.length) return emptySourceProjection();
   const rows = analyses.filter((a) => gapIndices.includes(a.prompt_index));

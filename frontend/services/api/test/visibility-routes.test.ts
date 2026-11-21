@@ -1,9 +1,3 @@
-/**
- * The persisted visibility reads over HTTP: executions, the Sources series
- * and URL detail, and the AI Overview rates.
- *
- * Includes workspace isolation on every route.
- */
 import { randomUUID } from 'node:crypto';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -79,6 +73,7 @@ describe('GET /executions/{execution_id}', () => {
       analysis: {
         brandMentioned: true,
         brandFirstOffset: 4,
+        firstNamed: { kind: 'competitor', name: 'Globex' },
         score: { competitors_mentioned: ['Globex'] },
         createdAt: new Date('2026-03-01T10:20:30.123Z'),
         citations: [
@@ -101,14 +96,41 @@ describe('GET /executions/{execution_id}', () => {
       search_surface_outcome: 'aio_present_no_text',
       brand_mentioned: true,
       brand_first_offset: 4,
+      first_named: { kind: 'competitor', name: 'Globex' },
       competitors_mentioned: ['Globex'],
-      // An LLM execution has no observed surface: null, not an empty one.
+      search: 'not_used',
       search_surface: null,
       created_at: '2026-03-01T10:20:30.123000Z',
     });
     expect((body.citations as Body[]).map((citation) => [citation.ordinal, citation.url])).toEqual([
       [0, 'https://acme.example/a'],
       [1, 'https://globex.example/b'],
+    ]);
+  });
+
+  it("reports an unexposed search as not reported and ranks the named brands by the analysis's rule", async () => {
+    const auditId = await fixtures.audit(tenant);
+    const { taskId } = await fixtures.execution(tenant, {
+      auditId,
+      providerMetadata: { fanout_availability: 'unavailable' },
+      analysis: {
+        brandMentioned: true,
+        brandFirstOffset: 30,
+        brandMentions: ['Acme Corp'],
+        score: {
+          brand_first_offset: 30,
+          competitors_mentioned: ['Globex'],
+          competitor_first_offsets: { Globex: 10, Initech: 5 },
+        },
+      },
+    });
+
+    const { body } = await get(tenant, `/api/v1/executions/${taskId}`);
+
+    expect(body.search).toBe('not_reported');
+    expect(body.named).toEqual([
+      { name: 'Globex', kind: 'competitor', offset: 10, position: 2 },
+      { name: 'Acme Corp', kind: 'brand', offset: 30, position: 3 },
     ]);
   });
 
@@ -281,6 +303,7 @@ describe('GET /projects/{project_id}/visibility/surface-rates', () => {
         analysis: { competitorMentions },
         observation,
       });
+    await fixtures.competitor(other.projectId, { name: 'Globex', domains: ['globex.example'] });
     await observed(0, {}, ['Globex', 'Globex']);
     await observed(1, {});
     await observed(2, { outcome: 'no_ai_overview', aioPresent: false }, ['Globex']);
@@ -290,6 +313,8 @@ describe('GET /projects/{project_id}/visibility/surface-rates', () => {
     expect(body.competitor_mention_rates).toEqual([
       {
         name: 'Globex',
+        logo_url: null,
+        website_url: 'https://globex.example',
         rate: {
           numerator: 1,
           denominator: 2,
@@ -357,7 +382,6 @@ describe('GET /projects/{project_id}/visibility/sources/*', () => {
   let selected: string;
   let unselected: string;
   const url = 'https://example.com/selected';
-  // The page identity its citations resolved to; this project has no record of it until a test adds one.
   const pageHash = `hash-${randomUUID()}`;
 
   beforeAll(async () => {
@@ -389,7 +413,6 @@ describe('GET /projects/{project_id}/visibility/sources/*', () => {
       promptIndex: 1,
       analysis: { citations: [{ url: 'https://other.example/x', domain: 'other.example' }] },
     });
-    // A task that did not succeed is not evidence, even with an analysis.
     await fixtures.execution(tenant, {
       auditId: selected,
       promptIndex: 2,
@@ -489,13 +512,12 @@ describe('GET /projects/{project_id}/visibility/sources/*', () => {
         logo_url: `/api/v1/projects/${tenant.projectId}/logo`,
         website: 'https://acme.example',
       },
-      // Resolved through the competitor's alias, not only its name.
       {
         kind: 'competitor',
         name: 'TransferWise',
         responses: 1,
         logo_url: null,
-        website: 'wise.example',
+        website: 'https://wise.example',
       },
     ]);
   });
@@ -536,7 +558,6 @@ describe('GET /projects/{project_id}/visibility/sources/*', () => {
       created_at: new Date(at),
     });
     const read = reading('inspected', '2026-02-02T00:00:00Z');
-    // A later attempt that failed must not erase what the earlier one learned.
     await db
       .insertInto('source_page_snapshots')
       .values([read, reading('failed', '2026-02-03T00:00:00Z')])
@@ -614,8 +635,6 @@ describe('GET /projects/{project_id}/visibility/sources/*', () => {
       action_id: action.id,
     });
 
-    // The URL table carries the same standing and Action, and its gap filter
-    // keeps exactly the pages that show that standing.
     const urlRows = async (query: Record<string, string>) => {
       const { body: page } = await get(
         tenant,
@@ -633,7 +652,6 @@ describe('GET /projects/{project_id}/visibility/sources/*', () => {
       ['https://other.example/x', null, null],
     ]);
     expect(await urlRows({ standing: 'gap' })).toEqual([[url, 'gap', action.id]]);
-    // Publisher rows have no standing, so the filter is refused there.
     const domains = await get(tenant, `/api/v1/projects/${tenant.projectId}/visibility/sources`, {
       query: { audit_id: selected, standing: 'gap' },
     });
@@ -688,7 +706,6 @@ describe('GET /projects/{project_id}/visibility/sources/*', () => {
       query: { from: '2026-03-01T00:00:00Z', to: '2026-02-01T00:00:00+05:30' },
     });
     expect(record(reversed.body.error).message).toBe("'from' must not be after 'to'");
-    // A numeric timestamp beyond the years a datetime holds is malformed input.
     const outOfRange = await get(tenant, path, { query: { from: '99999999999999999' } });
     expect(outOfRange.status).toBe(422);
     expect(outOfRange.body.error).toMatchObject({ code: 'validation_error' });

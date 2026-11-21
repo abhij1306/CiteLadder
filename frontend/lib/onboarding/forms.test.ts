@@ -4,7 +4,6 @@ import { ApiError } from '@/lib/api/errors';
 
 import {
   brandStepSchema,
-  deriveDomain,
   normalizeWebsiteUrl,
   onboardingErrorMessage,
   type BrandStepValues,
@@ -31,19 +30,6 @@ describe('normalizeWebsiteUrl', () => {
 
   it('is empty for empty input rather than producing "https://"', () => {
     expect(normalizeWebsiteUrl('   ')).toBe('');
-  });
-});
-
-describe('deriveDomain', () => {
-  it('strips scheme, www and path', () => {
-    expect(deriveDomain('https://www.acme.com/pricing')).toBe('acme.com');
-    expect(deriveDomain('acme.co.uk')).toBe('acme.co.uk');
-  });
-
-  it('returns empty for input that cannot parse', () => {
-    expect(deriveDomain('')).toBe('');
-    expect(deriveDomain('   ')).toBe('');
-    expect(deriveDomain('ftp://acme.com')).toBe('');
   });
 });
 
@@ -87,9 +73,6 @@ describe('onboardingErrorMessage', () => {
   });
 
   it('treats a client timeout as still working, not as a failure', () => {
-    // Requests are bounded at 30s; the work behind them is not. Telling the
-    // user their setup failed while the server was still creating the project
-    // is what made them click Create a second time.
     const timeout = new ApiError('Request timed out', 0, '', undefined, {
       code: 'request_timeout',
       retryable: true,

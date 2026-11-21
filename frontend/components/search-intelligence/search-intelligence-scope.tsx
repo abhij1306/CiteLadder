@@ -11,10 +11,6 @@ import { searchScopeLabel, searchMarketLabel } from '@/lib/config/search-intelli
 import { CollectionViewControl, collectionFilters } from './search-intelligence-controls';
 import type { SearchCollection } from './search-intelligence-collection-state';
 
-/**
- * The saved scope and market, first in the control row's All filters. They
- * pick which saved result the tab reads, so they count as no filter.
- */
 export function savedViewFilters({
   scopes,
   scope,
@@ -34,13 +30,12 @@ export function savedViewFilters({
 }>): FilterDefinition[] {
   const filters: FilterDefinition[] = [];
   const [firstScope] = scopes;
-  if (firstScope)
+  if (firstScope && scopes.length > 1)
     filters.push(
       choiceFilter({
         id: 'scope',
         label: 'Saved scope',
         value: scope ?? firstScope,
-        // Which saved result to read, not a narrowing: never counted on the button.
         defaultValue: scope ?? firstScope,
         groups: [{ options: scopes.map((value) => ({ value, label: searchScopeLabel(value) })) }],
         onChange: onScope,
@@ -61,13 +56,6 @@ export function savedViewFilters({
   return filters;
 }
 
-/**
- * Keyword Research's one control strip, under the tabs: the collection's view
- * switcher, then every picker and filter (scope, market, website, saved
- * result, minimum volume, intent), then one caption line naming what is shown
- * (the website, its market and when it was saved), and the tab's next step at
- * the end. The table below keeps only its search and Export.
- */
 export function scopeControls({
   data,
   tab,
@@ -79,11 +67,8 @@ export function scopeControls({
   data: SearchIntelligenceReadiness;
   tab: string;
   latest?: SearchIntelligenceDataset;
-  /** The scope and market pickers. */
   savedView: FilterDefinition[];
-  /** The open tab's collection; absent on the overview. */
   collection?: SearchCollection;
-  /** The tab's next step. */
   action?: ReactNode;
 }>): FilterBarProps {
   return {
@@ -94,7 +79,6 @@ export function scopeControls({
   };
 }
 
-/** "www.example.com · United States · en · Saved 2 days ago". */
 function SavedCaption({
   data,
   tab,
@@ -117,7 +101,6 @@ function SavedCaption({
           Saved <DisplayTime value={latest.published_at} />
         </>
       ) : (
-        // A saved result without a publish time is still a saved result.
         (latest && 'Save time unavailable') || 'No saved analysis'
       )}
     </span>

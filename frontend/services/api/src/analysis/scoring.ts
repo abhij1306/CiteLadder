@@ -1,4 +1,3 @@
-/** Classify citation ownership from the audit's frozen scoring configuration. */
 import { compareText, scalarText } from '../text-order.ts';
 import { domainMatches, isGroundingRedirect, normalizeDomain } from './domains.ts';
 import { entityOffset, namesAlias, normalizeText, type EntityPolicy } from './aliases.ts';
@@ -9,7 +8,6 @@ import { policy } from '../config.ts';
 type JsonObject = Record<string, unknown>;
 
 type CompetitorConfig = {
-  /** The project competitor row frozen at admission; null in audits frozen without it. */
   id: string | null;
   name: string;
   domains: string[];
@@ -26,7 +24,6 @@ export type ScoringConfig = {
   ownedDomains: unknown[];
   unintendedDomains: unknown[];
   competitors: CompetitorConfig[];
-  /** The brand's frozen matching policy; absent means every occurrence counts. */
   brandMatching?: EntityPolicy;
 };
 
@@ -34,12 +31,10 @@ function isObject(value: unknown): value is JsonObject {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-/** Stored scoring configuration carries arrays, never arbitrary iterables. */
 function listOf(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
 }
 
-/** `str(item) for item in values if item`. */
 function truthyStrings(values: unknown[]): string[] {
   return values.filter(Boolean).map(String);
 }
@@ -49,7 +44,6 @@ function competitorConfigs(
   matching: Record<string, EntityPolicy>,
 ): CompetitorConfig[] {
   return listOf(config.competitors).map((item) => {
-    // The stored list holds objects; anything else fails as `.get` would.
     if (!isObject(item)) throw new TypeError('competitor entry is not an object');
     const name = scalarText(item.name);
     return {
@@ -62,10 +56,6 @@ function competitorConfigs(
   });
 }
 
-/**
- * The parts of `ScoringConfig.from_project(configuration)` that classify a
- * citation and name the tracked entities, over an audit's frozen block.
- */
 export function scoringConfig(configuration: unknown): ScoringConfig {
   const config = isObject(configuration) ? configuration : {};
   const matching = storedEntityMatching(config);
@@ -82,7 +72,6 @@ export function scoringConfig(configuration: unknown): ScoringConfig {
   };
 }
 
-/** Whether `domain` is, or is a subdomain of, any target. */
 export function domainIn(domain: string, targets: readonly unknown[]): boolean {
   return targets.some((target) => domainMatches(domain, target));
 }
@@ -97,7 +86,6 @@ function urlDomain(value: unknown): string {
   }
 }
 
-/** Publisher identity from the strongest URL evidence the citation carries. */
 export function citationDomain(citation: JsonObject): string {
   const resolved = urlDomain(citation.resolved_url);
   if (resolved) return resolved;
@@ -114,7 +102,6 @@ export type ClassifiedCitation = JsonObject & {
   matched_competitor: string | null;
 };
 
-/** The citation with its ownership and competitor classification. */
 export function classifyCitation(citation: JsonObject, config: ScoringConfig): ClassifiedCitation {
   const domain = citationDomain(citation);
   const matched = config.competitors.find((competitor) => domainIn(domain, competitor.domains));
@@ -145,9 +132,16 @@ function classifyFanout(query: string) {
     .map(([name]) => name);
 }
 
+export const cohortNamesBrand = (cohort: string) =>
+  policy.visibility.brand_named_cohorts.includes(cohort);
+
+export const namedByPrompt = (promptNamesBrand: boolean, answer: string) =>
+  promptNamesBrand && answer.trim() !== '';
+
 export function scoreExecution(input: {
   answerText: string;
   promptText: string;
+  promptNamesBrand: boolean;
   searchEvents: JsonObject[];
   citations: JsonObject[];
   searchUsed: boolean;
@@ -155,7 +149,6 @@ export function scoreExecution(input: {
   config: ScoringConfig;
 }) {
   const { config, answerText, promptText, queryTextAvailable } = input;
-  // Each text is normalized once; an entity's offset is null when unnamed.
   const answer = normalizeText(answerText),
     prompt = normalizeText(promptText),
     query = normalizeText(input.searchEvents.map((event) => scalarText(event.query)).join(' '));
@@ -187,7 +180,8 @@ export function scoreExecution(input: {
     search_used: input.searchUsed,
     search_query_count: input.searchEvents.length,
     search_query_text_available: queryTextAvailable,
-    brand_mentioned: brandOffset !== null,
+    brand_mentioned:
+      brandOffset !== null || namedByPrompt(input.promptNamesBrand, input.answerText),
     brand_first_offset: brandOffset,
     brand_injected_in_search: queryTextAvailable ? !promptBrand && brandAt(query) !== null : null,
     prompt_contains_brand: promptBrand,

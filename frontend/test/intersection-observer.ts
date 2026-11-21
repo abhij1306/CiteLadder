@@ -1,11 +1,3 @@
-/**
- * A drivable IntersectionObserver for jsdom, which has none.
- *
- * Components reach for it to answer "is this on screen?" without reading
- * layout on the main thread. A stub that only satisfies the constructor would
- * make every such component untestable in the one state that matters, so this
- * keeps its instances reachable and lets a test say what the answer is.
- */
 type Entry = Pick<IntersectionObserverEntry, 'isIntersecting' | 'target'>;
 
 class IntersectionObserverStub {

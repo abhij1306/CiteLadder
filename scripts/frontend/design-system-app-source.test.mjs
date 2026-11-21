@@ -16,6 +16,18 @@ test('a component directory imported by listed code must be listed too', () => {
   assert.match(violations[0], /components\/integrations/);
 });
 
+test('a lazily imported component directory must be listed too', () => {
+  const violations = appSourceViolations(appCss, [
+    {
+      label: 'components/demand/routes.ts',
+      source:
+        "const lazy = { a: () => import('@/components/perception/screen'), b: () => import('@/components/demand/x') };",
+    },
+  ]);
+  assert.equal(violations.length, 1);
+  assert.match(violations[0], /components\/perception \(imported by components\/demand\/routes\.ts\)/);
+});
+
 test('listed imports and imports from unlisted code pass', () => {
   assert.deepEqual(
     appSourceViolations(appCss, [

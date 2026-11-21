@@ -2,10 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 
 import type { OverviewWidget } from '@citeladder/contracts/overview';
-import { ListScreen } from '@/components/layout/page-shell';
-import { Callout } from '@/components/ui/callout';
-import { Stack } from '@/components/ui/layout';
-import { QueryState } from '@/components/ui/query-state';
+import { ReportPage } from '@/components/templates/report-page';
 import { projectQueries } from '@/lib/api/projects';
 import type { CommandCenter, Project } from '@citeladder/contracts';
 import { useOverviewLayout } from '@/lib/overview/use-overview-layout';
@@ -16,9 +13,13 @@ import { useWorkspaceCapability } from '@/lib/project/project-context';
 import { DashboardActions, ProjectMeta } from './dashboard-sections';
 import { OverviewGrid } from './overview-grid';
 import { OverviewLayoutMenu } from './overview-layout-menu';
-import { OverviewWidgetView } from './overview-widget';
-import { PromptSetupCard } from './prompt-setup-card';
+import { OverviewStart, needsStart } from './overview-start';
+import { OverviewWidgetView, widgetShows } from './overview-widget';
 import { useCommandCenterActions } from './use-command-center-actions';
+import { Notice, readErrorProps } from '@/components/ui/notice';
+import { StateBlock } from '@/components/ui/state-block';
+
+import { OverviewLoading } from './overview-loading';
 
 export function DashboardScreen({
   onEditProject,
@@ -26,23 +27,20 @@ export function DashboardScreen({
   const { workspaceId, projectId, project } = useProjectScope();
   const scope = { workspaceId, projectId };
   const commandCenter = useQuery(projectQueries.commandCenter(scope));
-  // The layout does not depend on the command center, so it is asked for
-  // beside it rather than once the command center has rendered.
   const layout = useQuery(projectQueries.overviewLayout(scope));
   useWarmWidgets(project, layout.data?.widgets);
 
-  if (commandCenter.isLoading) return <DashboardLoading />;
+  if (commandCenter.isLoading) return <DashboardLoading widgets={layout.data?.widgets} />;
   if (commandCenter.isError || !commandCenter.data)
     return (
-      <ListScreen>
-        <QueryState
+      <ReportPage>
+        <StateBlock
           kind="error"
-          error={commandCenter.error}
-          fallback="The command center could not be loaded."
-          onRetry={() => void commandCenter.refetch()}
-          pending={commandCenter.isFetching}
+          {...readErrorProps(commandCenter)}
+          title="Couldn't load the Overview"
+          fallback="The Overview's figures could not be loaded."
         />
-      </ListScreen>
+      </ReportPage>
     );
 
   return (
@@ -54,11 +52,6 @@ export function DashboardScreen({
   );
 }
 
-/**
- * Start the widgets' reads as soon as the layout names them, instead of when
- * they mount behind the command center. Best-effort: a widget still asks for
- * its own read and reports its own failure.
- */
 function useWarmWidgets(project: Project, widgets: readonly OverviewWidget[] | undefined) {
   const client = useQueryClient();
   useEffect(() => {
@@ -66,11 +59,11 @@ function useWarmWidgets(project: Project, widgets: readonly OverviewWidget[] | u
   }, [client, project, widgets]);
 }
 
-function DashboardLoading() {
+function DashboardLoading({ widgets }: Readonly<{ widgets?: readonly OverviewWidget[] }>) {
   return (
-    <ListScreen>
-      <QueryState kind="loading" label="Loading your command center…" />
-    </ListScreen>
+    <ReportPage>
+      <OverviewLoading widgets={widgets} />
+    </ReportPage>
   );
 }
 
@@ -89,26 +82,27 @@ function DashboardData({
   const [editing, setEditing] = useState(false);
   if (layout.query.isError)
     return (
-      <ListScreen>
-        <QueryState
+      <ReportPage>
+        <StateBlock
           kind="error"
-          error={layout.query.error}
+          {...readErrorProps(layout.query)}
+          title="Couldn't load the Overview layout"
           fallback="The Overview layout could not be loaded."
-          onRetry={() => void layout.query.refetch()}
-          pending={layout.query.isFetching}
         />
-      </ListScreen>
+      </ReportPage>
     );
   if (!layout.query.data) return <DashboardLoading />;
   const saved = layout.query.data;
+  const widgets = saved.widgets.filter((widget) => widgetShows(widget.key, data));
   return (
-    <ListScreen
+    <ReportPage
       actions={
         <DashboardActions
           activeProject={activeProject}
           onEditProject={onEditProject}
           downloading={actions.downloading}
           onDownload={actions.download}
+          launch={Boolean(data.measurement)}
           layoutMenu={
             canEdit ? (
               <OverviewLayoutMenu
@@ -123,37 +117,35 @@ function DashboardData({
         />
       }
     >
-      <Stack gap="workspace">
-        <ProjectMeta data={data} />
-        {data.active_prompt_count === 0 ? <PromptSetupCard /> : null}
-        {actions.downloadError ? (
-          <Callout tone="negative">The report could not be downloaded. Try again.</Callout>
-        ) : null}
-        {actions.reorderError ? (
-          <Callout tone="warning">
-            The shared action order changed. Review the refreshed order and try again.
-          </Callout>
-        ) : null}
-        {layout.failed ? (
-          <Callout tone="warning">
-            Someone else changed this Overview. The latest layout is shown; make your change again.
-          </Callout>
-        ) : null}
-        <OverviewGrid
-          widgets={saved.widgets}
-          editing={canEdit && editing}
-          pending={layout.pending}
-          onChange={layout.save}
-          render={(widget) => (
-            <OverviewWidgetView
-              widgetKey={widget.key}
-              data={data}
-              project={activeProject}
-              actions={actions}
-            />
-          )}
-        />
-      </Stack>
-    </ListScreen>
+      <ProjectMeta data={data} />
+      {needsStart(data) ? <OverviewStart data={data} /> : null}
+      {actions.downloadError ? (
+        <Notice tone="negative">The report could not be downloaded. Try again.</Notice>
+      ) : null}
+      {actions.reorderError ? (
+        <Notice tone="warning">
+          The shared action order changed. Review the refreshed order and try again.
+        </Notice>
+      ) : null}
+      {layout.failed ? (
+        <Notice tone="warning">
+          Someone else changed this Overview. The latest layout is shown; make your change again.
+        </Notice>
+      ) : null}
+      <OverviewGrid
+        widgets={editing ? saved.widgets : widgets}
+        editing={canEdit && editing}
+        pending={layout.pending}
+        onChange={layout.save}
+        render={(widget) => (
+          <OverviewWidgetView
+            widgetKey={widget.key}
+            data={data}
+            project={activeProject}
+            actions={actions}
+          />
+        )}
+      />
+    </ReportPage>
   );
 }

@@ -1,12 +1,7 @@
-/**
- * Reader-facing words for AI Traffic contract tokens.
- *
- * The screen speaks the reader's vocabulary, not the schema's: an enum such
- * as `not_connected` or `cdn_edge` reaches a reader only through here, and an
- * unmapped token falls back to spaced words rather than raw snake case.
- */
+import { availabilityLabel } from '@/lib/format';
+
 const CONNECTION = {
-  not_connected: 'Not connected',
+  not_connected: availabilityLabel('not_connected'),
   awaiting_data: 'Awaiting data',
   connected: 'Connected',
 } as const;
@@ -18,7 +13,6 @@ const COVERAGE = {
   unknown: 'Coverage unknown',
 } as const;
 
-/** The collection points a reader can pick, in menu order. */
 export const COLLECTION_POINTS = ['cdn_edge', 'origin', 'application', 'uploaded_file'] as const;
 
 const COLLECTION_POINT: Record<(typeof COLLECTION_POINTS)[number], string> = {
@@ -29,7 +23,7 @@ const COLLECTION_POINT: Record<(typeof COLLECTION_POINTS)[number], string> = {
 };
 
 export function words(token: string): string {
-  const spaced = token.replaceAll('_', ' ');
+  const spaced = token.replaceAll('_', ' ').replaceAll(/\bai\b/gi, 'AI');
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
 
@@ -41,7 +35,6 @@ export const connectionLabel = (token: string) => label(CONNECTION, token);
 export const coverageLabel = (token: string) => label(COVERAGE, token);
 export const collectionPointLabel = (token: string) => label(COLLECTION_POINT, token);
 
-/** Why a live source is stalled, phrased as what the reader can do about it. */
 const STALL_REASON = {
   no_receipts: 'No accepted batches for a day. Check that the sender is still running.',
   oversize: 'A batch over 5 MiB was dropped. Lower the stream buffer size.',
@@ -49,14 +42,12 @@ const STALL_REASON = {
 } as const;
 export const stallReasonLabel = (token: string) => label(STALL_REASON, token);
 
-/** Why the Overview has no tracked-citation figure for the window. */
 const CITATION_GAP = {
-  no_completed_run: 'No AI Visibility run completed in this window.',
+  no_completed_run: 'No visibility run completed in this window.',
   not_computed: 'A run in this window has not been counted yet.',
 } as const;
 export const citationGapLabel = (token: string) => label(CITATION_GAP, token);
 
-/** Which subscription check failed, phrased as the fix. */
 const VERIFICATION_FAILURE = {
   label_mismatch: 'The subscription does not carry this source’s citeladder-source label.',
   push_subscription: 'The subscription pushes or exports messages; use a pull subscription.',
@@ -72,12 +63,11 @@ const LEG_STATE = {
   zero: 'Measured zero',
   flagged: 'Flagged by a data-quality check',
   non_comparable: 'Not comparable',
-  unavailable: 'Unavailable',
+  unavailable: availabilityLabel('unavailable'),
   unknown: 'Coverage unknown',
-  not_connected: 'Not connected',
+  not_connected: availabilityLabel('not_connected'),
 } as const;
 
-/** Reasons from page legs, verification, coverage and GA4 quality checks. */
 const REASON = {
   incomplete_coverage: 'Coverage is incomplete for this window',
   not_computed: CITATION_GAP.not_computed,
@@ -108,7 +98,6 @@ const REASON = {
 } as const;
 
 export const legStateLabel = (token: string) => label(LEG_STATE, token);
-/** A reason may join several quality flags with commas. */
 export const reasonLabel = (token: string) =>
   token
     .split(', ')

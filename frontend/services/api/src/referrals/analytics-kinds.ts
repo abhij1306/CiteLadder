@@ -1,4 +1,3 @@
-/** The AI Referrals chain's analytics kinds. */
 import type { AnalyticsKinds } from '../queue/executor.ts';
 import { classifyReferrals } from './classify.ts';
 import { ingestReferrals } from './ingest.ts';

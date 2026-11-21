@@ -1,7 +1,3 @@
-/**
- * Run the pinned jscpd production ratchets (`--scope frontend|api`) and the
- * advisory frontend test scan (`--tests`).
- */
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -11,13 +7,12 @@ import { execFileSync, spawnSync } from 'node:child_process';
 const FRONTEND = path.resolve(import.meta.dirname, '..');
 const ROOT = path.resolve(FRONTEND, '..');
 const CONFIG_PATH = path.join(ROOT, 'jscpd.json');
-const GIT_EXECUTABLE =
-  process.platform === 'win32' ? String.raw`C:\Program Files\Git\cmd\git.exe` : '/usr/bin/git';
+// An absolute path, not PATH lookup: a PATH entry cannot substitute git (Sonar S4036).
+const GIT_EXECUTABLE = '/usr/bin/git';
 const BIN = process.execPath;
 const JSCPD_ENTRYPOINT = path.join(FRONTEND, 'node_modules', 'jscpd', 'run-jscpd.js');
 const REVISION = /^(?:HEAD|[0-9a-fA-F]{40})$/;
 export const TOOL_VERSION = '5.2.1';
-/** Each ratchet's baseline below `frontend/` and the production directories it scans. */
 export const SCOPES = {
   frontend: {
     baseline: 'scripts/jscpd-baseline.json',
@@ -32,10 +27,7 @@ const scanPaths = (scope) => scope.map((directory) => `./${directory.slice('fron
 const FINGERPRINT_PATTERN = /^[^|]+\|[^|]+\|[^|]+\|[0-9a-f]{16}\|\d+\|\d+$/;
 
 function normalizeName(value) {
-  const reported = String(value);
-  const nativePath = reported.startsWith('\\\\?\\') ? reported.slice(4) : reported;
-  const absolute = path.resolve(nativePath);
-  return path.relative(ROOT, absolute).split(path.sep).join('/');
+  return path.relative(ROOT, path.resolve(String(value)));
 }
 
 function endOfLine(source, index) {
@@ -99,11 +91,9 @@ function normalizedCloneContent(source) {
 }
 
 function cloneBody(file) {
-  const reported = String(file.name);
-  const nativePath = reported.startsWith('\\\\?\\') ? reported.slice(4) : reported;
   const source = fs
-    .readFileSync(path.resolve(nativePath), 'utf8')
-    .split(/\r?\n/)
+    .readFileSync(path.resolve(String(file.name)), 'utf8')
+    .split('\n')
     .slice(file.start - 1, file.end)
     .join('\n');
   return normalizedCloneContent(source);
@@ -131,11 +121,6 @@ function cloneContentSignature(fingerprint) {
   return `${format}|${contentHash}|${lines}|${tokens}`;
 }
 
-/**
- * Structural validation shared by every baseline. A baseline recorded at an
- * older revision was written by whatever tool version and scope existed then,
- * so only the current working-tree baseline is held to the pinned values.
- */
 export function validateHistoricalBaseline(raw) {
   if (
     raw?.format_version !== 1 ||
@@ -224,14 +209,6 @@ function baselineAtRevision(revision, baselineFile) {
   }
 }
 
-/**
- * The gate reports duplication to four decimals, so it judges to four
- * decimals. Deleting clone-free code shrinks the denominator and nudges the
- * ratio in the seventh decimal without adding one duplicated line — failing on
- * that would make removing code harder than adding it. Real duplication is
- * caught by clone fingerprint, which is exact; this ratio is the coarse guard
- * behind it.
- */
 const REPORTED_PRECISION = 4;
 
 function reported(percentage) {
@@ -260,10 +237,6 @@ function appendFrequencyFailures(failures, observed, allowed, label) {
 }
 
 function appendBaselineDiffFailures(failures, baseline, baseBaseline) {
-  // Fingerprints embed file paths under the scanned scope and reflect the
-  // tool's tokenization, so they are only comparable when both match. A
-  // tool upgrade or scope change resets that comparison; the percentage
-  // ratchet below remains the guard in that case.
   const comparable =
     baseline.tool_version === baseBaseline.tool_version &&
     JSON.stringify(baseline.scope) === JSON.stringify(baseBaseline.scope);

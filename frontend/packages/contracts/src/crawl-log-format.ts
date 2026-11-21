@@ -1,4 +1,3 @@
-/** Shared, bounded log parsing for server admission and local upload filtering. */
 export type LogMapping = {
   timestamp: string;
   host: string;
@@ -9,7 +8,6 @@ export type LogMapping = {
   client_ip: string;
   request_id: string;
   timestamp_unit: 'iso' | 'seconds' | 'milliseconds' | 'nanoseconds';
-  /** UTC `YYYY-MM-DD` and `HH:MM:SS` fields used when the timestamp field is absent. */
   timestamp_fallback?: { date: string; time: string };
   /** Field values that mean "absent" (CloudFront writes `-`). */
   missing_tokens?: readonly string[];
@@ -49,7 +47,6 @@ function combined(line: string): Record<string, unknown> | null {
       line,
     );
   if (!match) return null;
-  // Every group takes part in a match, so the defaults never apply.
   const [, clientIp, stamp = '', method, path, status, userAgent] = match;
   const date = /^(\d{2})\/(\w{3})\/(\d{4}):(\d{2}:\d{2}:\d{2}) ([+-]\d{4})$/u.exec(stamp);
   if (!date) return null;
@@ -92,12 +89,10 @@ function logTimestamp(value: unknown, unit: LogMapping['timestamp_unit']) {
     if (!Number.isFinite(ms) || Math.abs(ms) > 8.64e15) return null;
     timestamp = new Date(ms).toISOString();
   }
-  // Require an explicit timezone; machine-local parsing is never evidence.
   return /(?:Z|[+-]\d{2}:\d{2})$/u.test(timestamp) && Number.isFinite(Date.parse(timestamp))
     ? timestamp
     : null;
 }
-/** UTC date and time fields as one ISO timestamp, or absent; a calendar-impossible value is absent. */
 function fallbackTimestamp(date: unknown, time: unknown) {
   if (
     typeof date !== 'string' ||
@@ -150,7 +145,6 @@ export function parseLogLine(line: string, format: string, mapping: LogMapping):
       typeof field(key) !== 'string' && !(key === 'timestamp' && typeof field(key) === 'number'),
   );
   if (missing.length) throw new UnsupportedLogFormat(missing);
-  // A fallback date and time is already ISO, whatever the primary field's unit.
   const iso = format === 'combined' || usesFallback;
   const timestamp = logTimestamp(field('timestamp'), iso ? 'iso' : mapping.timestamp_unit);
   const status = logStatus(field('status'));

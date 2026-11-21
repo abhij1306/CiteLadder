@@ -1,11 +1,12 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { SearchX } from 'lucide-react';
 
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
 import { Delta } from '@/components/ui/delta';
-import { MissingValue } from '@/components/ui/unavailable-value';
-import { ClampText, TableCell, TableRow } from '@/components/ui/table';
+import { ClampText } from '@/components/ui/clamp-text';
+import { TableCell, TableRow, UrlText } from '@/components/ui/table';
+import { SearchX } from '@/lib/icons';
+import { sharedOrigin } from '@/lib/format';
 import {
   performanceQueries,
   type PerformanceDimension,
@@ -22,7 +23,6 @@ import {
   dimensionTab,
   formatDimensionValue,
   formatMetric,
-  measured,
   metricDelta,
   metricDifference,
   sortDirection,
@@ -32,31 +32,6 @@ import {
 } from '@/lib/performance/performance';
 import { cn } from '@/lib/utils';
 
-/**
- * One of the six Performance tables.
- *
- * With a comparison active every metric widens to THREE columns — the
- * selected period, the comparison period, and their absolute difference —
- * exactly as Search Console renders it. Twelve numeric columns will not fit
- * most viewports, so the table scrolls horizontally inside its own frame
- * with the dimension column pinned left: the row's identity stays readable
- * while the reader scrolls the measures, and the page body never scrolls
- * sideways.
- *
- * Rows are paged by keyset against the SNAPSHOT the dashboard resolved, so
- * this table and the chart above it always read the same persisted
- * projection. The exact total comes from that snapshot's persisted
- * per-dimension count — no `COUNT(*)` runs on a page navigation.
- */
-
-/**
- * The sort ACTUALLY applied, given which columns are on screen.
- *
- * Deselecting a metric removes its header, so an ordering by that column
- * would have no visible indicator and no way back to it — the rows would just
- * be in an order the reader cannot explain. The row-identity column is always
- * present, so ordering by that is never orphaned.
- */
 function orderableSort(
   sort: string,
   dimension: PerformanceDimension,
@@ -67,15 +42,8 @@ function orderableSort(
   return displayed.some((card) => card.key === key) ? sort : defaultSort(dimension);
 }
 
-/**
- * The header row: the row identity (a quarter of the table, so every tab
- * lays out identically and switching Queries -> Pages does not reflow the
- * metric columns under the pointer), then each metric. Search Console groups
- * each metric with its own comparison and difference rather than appending
- * all comparisons at the end, so a reader compares adjacent columns. The
- * derived columns are not stored, so they do not sort.
- */
 function dimensionColumns({
+  dimension,
   header,
   metrics,
   activeSort,
@@ -84,6 +52,7 @@ function dimensionColumns({
   selectedLabel,
   compareLabel,
 }: Readonly<{
+  dimension: PerformanceDimension;
   header: string;
   metrics: readonly { key: PerformanceMetricKey; label: string }[];
   activeSort: string;
@@ -93,22 +62,18 @@ function dimensionColumns({
   compareLabel: string;
 }>): DataTableColumn[] {
   return [
-    { key: 'dimension', label: header, width: 'lead' },
+    { key: 'dimension', label: header, kind: dimension === 'page' ? 'url' : 'identity' },
     ...metrics.flatMap((metric): DataTableColumn[] => {
       const label = metric.label.replace(/^(Total|Average) /, '');
       const selected: DataTableColumn = {
         key: metric.key,
         label,
-        width: 'figure',
-        numeric: true,
+        kind: 'number',
         sort: {
           active: sortKey(activeSort) === metric.key,
           descending: sortDirection(activeSort) === 'descending',
           onSort: () => onSort(metric.key),
         },
-        // The range is stated once, in the toolbar. Repeating it under every
-        // column earns its place only when a comparison makes the columns
-        // ambiguous (selected vs comparison vs difference).
         sublabel: comparing ? selectedLabel : undefined,
       };
       if (!comparing) return [selected];
@@ -117,15 +82,13 @@ function dimensionColumns({
         {
           key: `${metric.key}-comparison`,
           label,
-          width: 'figure',
-          numeric: true,
+          kind: 'number',
           sublabel: compareLabel,
         },
         {
           key: `${metric.key}-difference`,
           label,
-          width: 'figure',
-          numeric: true,
+          kind: 'number',
           sublabel: 'Difference',
         },
       ];
@@ -149,12 +112,6 @@ function tableParams(
   };
 }
 
-/**
- * Warm a tab's first page from intent (hover, focus), so clicking the tab
- * swaps in rows already in the cache instead of a loading state. It asks for
- * exactly the key a freshly opened table reads: the first page, the default
- * order, the default page size.
- */
 export function useWarmDimensionTable(
   projectId: string,
 ): (snapshot: TableSnapshot, dimension: PerformanceDimension) => void {
@@ -191,17 +148,10 @@ export function DimensionTable({
   dimension: PerformanceDimension;
   snapshotId: string;
   compareSnapshotId: string | null;
-  /**
-   * The snapshot's persisted row count for this dimension, from the
-   * dashboard. Known before the first page lands, so a freshly opened tab
-   * reserves its pager and a full page from the first frame instead of
-   * growing into them when the rows arrive.
-   */
   measuredRows: number;
   selectedLabel: string;
   compareLabel: string;
   activeMetrics?: ReadonlySet<PerformanceMetricKey>;
-  /** The provider report behind this table is never collected. */
   unavailable?: boolean;
 }>) {
   const workspaceId = useActiveWorkspaceId();
@@ -213,15 +163,6 @@ export function DimensionTable({
   );
   const activeSort = orderableSort(sort, dimension, displayedMetrics);
 
-  // Every value the server binds the cursor to participates in the scope, so
-  // switching any of them drops the stack instead of replaying a refused
-  // cursor. It holds the applied sort and the shown metrics, so hiding the
-  // sorted column drops the stack too — the page it points at was ordered by
-  // the column just removed, and the server refuses its cursor. A page
-  // turn, a sort or a new range keeps the rows on screen until the next page
-  // replaces them. The snapshot's persisted per-dimension count is the exact
-  // total, known before the first page lands, so a freshly opened tab
-  // reserves its pager and a full page from the first frame.
   const { page, table } = useCursorTableQuery({
     workspaceId,
     scopeId: projectId,
@@ -243,7 +184,7 @@ export function DimensionTable({
       ),
     noun: tab.noun,
     loading: `Loading ${tab.noun}…`,
-    error: `Could not load ${tab.noun}. Check your connection and try again.`,
+    subject: `the ${tab.noun}`,
     empty: () => ({
       kind: 'empty',
       icon: SearchX,
@@ -254,6 +195,7 @@ export function DimensionTable({
   });
 
   const columns = dimensionColumns({
+    dimension,
     header: tab.header,
     metrics: displayedMetrics,
     activeSort,
@@ -262,56 +204,42 @@ export function DimensionTable({
     selectedLabel,
     compareLabel,
   });
-  // Every tab holds one footprint, its pager and a page of rows (2026-11-03
-  // app review): a breakdown that fits on one page, and its empty or
-  // not-imported state, reserve the same, so switching tabs never resizes
-  // the panel under the tab row.
   if (unavailable) {
-    // Distinct from an empty table: Search Console does not serve this
-    // breakdown in a form this project imports, so nothing was measured —
-    // which is not the same as having measured nothing.
     return (
       <DataTable
         label={tab.header}
         columns={columns}
-        minWidth={comparing ? 'md' : 'sm'}
         reserveRows
         {...table}
         state={{
           kind: 'empty',
           icon: SearchX,
           heading: `No ${tab.noun} imported`,
-          description: `Search Console does not provide ${tab.noun} with a date range.`,
+          description: 'Not provided for a date range.',
         }}
       />
     );
   }
 
+  const origin =
+    dimension === 'page' ? sharedOrigin(page?.items.map((row) => row.display_value) ?? []) : null;
   return (
-    <DataTable
-      label={tab.header}
-      columns={columns}
-      minWidth={comparing ? 'md' : 'sm'}
-      pinFirstColumn
-      reserveRows
-      {...table}
-    >
+    <DataTable label={tab.header} columns={columns} reserveRows {...table}>
       {page?.items.map((row) => (
         <TableRow key={row.dimension_key}>
           <TableCell>
-            <ClampText
-              className={cn(
-                dimension === 'page' && 'tabular-nums break-all',
-                dimension === 'day' && 'tabular-nums',
-              )}
-            >
-              {formatDimensionValue(dimension, row.display_value)}
-            </ClampText>
+            {dimension === 'page' ? (
+              <UrlText url={row.display_value} origin={origin} />
+            ) : (
+              <ClampText className={cn(dimension === 'day' && 'tabular-nums')}>
+                {formatDimensionValue(dimension, row.display_value)}
+              </ClampText>
+            )}
           </TableCell>
           {displayedMetrics.flatMap((metric) => {
             const selectedCell = (
               <TableCell key={metric.key} numeric>
-                {measured(formatMetric(metric.key, row.metrics[metric.key])) ?? <MissingValue />}
+                {formatMetric(metric.key, row.metrics[metric.key])}
               </TableCell>
             );
             if (!comparing) return [selectedCell];
@@ -324,8 +252,8 @@ export function DimensionTable({
             );
             return [
               selectedCell,
-              <TableCell key={`${metric.key}-comparison`} numeric className="text-ink-muted">
-                {measured(formatMetric(metric.key, comparisonValue)) ?? <MissingValue />}
+              <TableCell key={`${metric.key}-comparison`} numeric className="text-ink-2">
+                {formatMetric(metric.key, comparisonValue)}
               </TableCell>,
               <TableCell key={`${metric.key}-difference`} numeric>
                 <Delta {...metricDelta(metric.key, difference)} />

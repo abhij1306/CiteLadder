@@ -1,12 +1,3 @@
-/**
- * Answer perception reads: the selection summary, its quote pages and the
- * per-entity perception of one execution.
- *
- * Projections over persisted `answer_perceptions` / `entity_sentiments` and
- * the deterministic entity assessments; nothing is classified, called or
- * repaired here. In a perceived audit, a named entity without a perception
- * row is pending; an audit admitted without perception contributes nothing.
- */
 import { z } from 'zod';
 import {
   perceptionLabelSchema,
@@ -14,6 +5,7 @@ import {
   type PerceptionResponse,
 } from '@citeladder/contracts/visibility-perception';
 
+import { frozenComparisonKey } from '../analysis/comparison.ts';
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { utcTextOf, wireUtc } from '../db/timestamps.ts';
@@ -26,17 +18,28 @@ import { chunked, groupBy } from '../lists.ts';
 import { frozenPerceptionVersions } from '../perception/admission.ts';
 import {
   classifiedQuotes,
+  entityScores,
   mentionStatus,
   perceptionSummary,
+  perceptionTrend,
   persistedOutcomeSchema,
   quoteOrder,
   type Mention,
+  type NamedAspect,
   type PerceptionAnswer,
 } from '../perception/metrics.ts';
 import { isNamed } from '../perception/passages.ts';
 import { compareText } from '../text-order.ts';
+import { applyIdentities, brandIdentities } from './brand-identities.ts';
 import { scopedSelection } from './dashboard.ts';
-import { citationsByAnalysis, evidenceScope, observedAt, type RunSelection } from './selection.ts';
+import { periodTrendSelection } from './runs.ts';
+import {
+  citationsByAnalysis,
+  evidenceScope,
+  observedAt,
+  perceptionCohorts,
+  type RunSelection,
+} from './selection.ts';
 
 const QUOTES_CURSOR_SCOPE = 'visibility.perception.quotes';
 
@@ -54,7 +57,7 @@ type Assessment = z.infer<typeof assessmentsSchema>[number];
 const aspectsSchema = z
   .array(
     z.object({
-      theme: z.string(),
+      theme_id: z.string().nullable().catch(null),
       polarity: z.enum(['positive', 'negative']),
       quote: z.string(),
       start: z.number().int(),
@@ -70,13 +73,34 @@ const entityRowSchema = z.object({
   aspects: z.unknown(),
 });
 
-type EntityRow = z.infer<typeof entityRowSchema>;
+type EntityRow = Omit<z.infer<typeof entityRowSchema>, 'aspects'> & { aspects: NamedAspect[] };
 type Perceived = {
   perception: z.infer<typeof persistedOutcomeSchema>;
   entities: Map<string, EntityRow>;
 };
 
-/** Each analysis's perception row at the extractor version its audit froze (`wanted`). */
+async function themeNames(db: Database, workspaceId: string, projectIds: readonly string[]) {
+  const rows = await db
+    .selectFrom('project_themes')
+    .select(['id', 'name'])
+    .where('workspace_id', '=', workspaceId)
+    .where('project_id', 'in', projectIds)
+    .execute();
+  return new Map(rows.map((row) => [row.id, row.name]));
+}
+
+function entityRow(row: unknown, names: ReadonlyMap<string, string>): EntityRow {
+  const entity = entityRowSchema.parse(row);
+  const fallback = policy.perception.project_themes.fallback;
+  return {
+    ...entity,
+    aspects: aspectsSchema.parse(entity.aspects).map(({ theme_id, ...aspect }) => ({
+      ...aspect,
+      theme: (theme_id === null ? undefined : names.get(theme_id)) ?? fallback,
+    })),
+  };
+}
+
 export async function perceptionRows(
   db: Database,
   workspaceId: string,
@@ -87,7 +111,14 @@ export async function perceptionRows(
     await chunked([...wanted.keys()], (ids) =>
       db
         .selectFrom('answer_perceptions')
-        .select(['id', 'analysis_id', 'extractor_version', 'outcome', 'outcome_reason'])
+        .select([
+          'id',
+          'project_id',
+          'analysis_id',
+          'extractor_version',
+          'outcome',
+          'outcome_reason',
+        ])
         .where('workspace_id', '=', workspaceId)
         .where('analysis_id', 'in', ids)
         .execute(),
@@ -95,7 +126,6 @@ export async function perceptionRows(
   ).filter((row) => wanted.get(row.analysis_id) === row.extractor_version);
 }
 
-/** Each analysis's perception at its extractor version, with its entity rows. */
 async function perceptionsOf(
   db: Database,
   workspaceId: string,
@@ -103,6 +133,9 @@ async function perceptionsOf(
 ): Promise<Map<string, Perceived>> {
   const perceptions = await perceptionRows(db, workspaceId, wanted);
   if (!perceptions.length) return new Map();
+  const names = await themeNames(db, workspaceId, [
+    ...new Set(perceptions.map((row) => row.project_id)),
+  ]);
   const entities = groupBy(
     await chunked(
       perceptions.map((row) => row.id),
@@ -132,7 +165,7 @@ async function perceptionsOf(
         entities: new Map(
           (entities.get(row.id) ?? []).map((entity) => [
             entity.entity_id,
-            entityRowSchema.parse(entity),
+            entityRow(entity, names),
           ]),
         ),
       },
@@ -140,7 +173,6 @@ async function perceptionsOf(
   );
 }
 
-/** The named entities of one analysis as mentions, with the entity row behind each. */
 function mentionsOf(assessments: readonly Assessment[], perceived: Perceived | undefined) {
   return assessments
     .filter((row) => isNamed(row.state))
@@ -151,34 +183,34 @@ function mentionsOf(assessments: readonly Assessment[], perceived: Perceived | u
         entity: row.entity_name,
         isBrand: row.entity_kind === 'brand',
         status,
-        aspects: status.kind === 'classified' ? aspectsSchema.parse(entity?.aspects) : [],
+        aspects: status.kind === 'classified' ? (entity?.aspects ?? []) : [],
       };
       return { mention, entity };
     });
 }
 
-/** The selection's perceived answers; citations only when the caller reads drivers. */
 async function selectionAnswers(
   db: Database,
   selection: RunSelection,
-  options: { citations: boolean },
+  options: { citations: boolean; brandQuestions?: boolean },
 ) {
   const scoped = await scopedSelection(db, selection);
-  const rows = (
-    await evidenceScope(db, scoped)
-      .select([
-        'ra.id',
-        'ra.audit_id',
-        'ra.task_id',
-        'ra.logical_engine',
-        'ra.entity_assessments',
-        'audit.configuration',
-        'snapshot.text as prompt',
-        'snapshot.theme as topic',
-        utcTextOf(observedAt).as('observed_at'),
-      ])
-      .execute()
-  ).flatMap((row) => {
+  const cohorts = options.brandQuestions ? perceptionCohorts(scoped.cohort) : undefined;
+  const selected = await evidenceScope(db, scoped, cohorts)
+    .select([
+      'ra.id',
+      'ra.audit_id',
+      'ra.task_id',
+      'ra.logical_engine',
+      'ra.entity_assessments',
+      'audit.configuration',
+      'snapshot.text as prompt',
+      'snapshot.theme as topic',
+      'snapshot.topic_id',
+      utcTextOf(observedAt).as('observed_at'),
+    ])
+    .execute();
+  const rows = selected.flatMap((row) => {
     const versions = frozenPerceptionVersions(row.configuration);
     return versions ? [{ ...row, versions }] : [];
   });
@@ -193,7 +225,7 @@ async function selectionAnswers(
       ? citationsByAnalysis(db, scoped.workspaceId, ids)
       : new Map<string, { domain: string; url: string }[]>(),
   ]);
-  const answers = rows.map((row): PerceptionAnswer => {
+  const answers = rows.map((row): PerceptionAnswer & { topicId: string | null } => {
     const assessments = assessmentsSchema.parse(row.entity_assessments);
     return {
       auditId: row.audit_id,
@@ -208,23 +240,114 @@ async function selectionAnswers(
         metrics: row.versions.metrics_version,
         model: row.versions.model,
       },
+      comparisonKey: frozenComparisonKey(row.configuration, scoped.logicalEngine),
       mentions: mentionsOf(assessments, perceived.get(row.id)).map(({ mention }) => mention),
       brandRecommendation: assessments.find((row) => row.entity_kind === 'brand')?.state ?? null,
+      topicId: row.topic_id,
       citations: (citations.get(row.id) ?? []).map(({ domain, url }) => ({ domain, url })),
     };
   });
-  return { answers, auditIds: [...new Set(rows.map((row) => row.audit_id))].sort(compareText) };
+  return {
+    answers,
+    auditIds: [...new Set(rows.map((row) => row.audit_id))].sort(compareText),
+    partial: rows.length < selected.length,
+    unperceived: new Set(
+      selected.filter((row) => !frozenPerceptionVersions(row.configuration)).map((r) => r.audit_id),
+    ),
+  };
 }
 
 export async function getPerception(
   db: Database,
   selection: RunSelection,
 ): Promise<PerceptionResponse> {
-  const { answers, auditIds } = await selectionAnswers(db, selection, { citations: true });
-  return { ...perceptionSummary(answers, policy.perception), source_audit_ids: auditIds };
+  const scoped = await scopedSelection(db, selection);
+  const [{ answers, auditIds }, period] = await Promise.all([
+    selectionAnswers(db, scoped, { citations: true, brandQuestions: true }),
+    periodTrendSelection(db, scoped),
+  ]);
+  const summary = perceptionSummary(answers, policy.perception);
+  applyIdentities(summary.entities, await brandIdentities(db, scoped));
+  const trend = period
+    ? perceptionTrend(
+        (await selectionAnswers(db, period, { citations: false, brandQuestions: true })).answers,
+      )
+    : summary.trend;
+  return { ...summary, trend, source_audit_ids: auditIds };
 }
 
-/** The decoded cursor position; a malformed one is refused, never read as the start. */
+export async function perceivedAnswers(db: Database, selection: RunSelection) {
+  const { answers, partial } = await selectionAnswers(db, selection, { citations: false });
+  return partial ? null : answers;
+}
+
+export async function groupedSentiments(
+  db: Database,
+  selection: RunSelection,
+  groups: readonly (readonly string[])[],
+) {
+  const { answers, unperceived } = await selectionAnswers(db, selection, { citations: false });
+  const byAudit = groupBy(answers, (answer) => answer.auditId);
+  return groups.map((auditIds) =>
+    auditIds.some((id) => unperceived.has(id))
+      ? null
+      : sentimentsOf(auditIds.flatMap((id) => byAudit.get(id) ?? [])),
+  );
+}
+
+export function sentimentsOf(answers: readonly PerceptionAnswer[]) {
+  return entityScores(answers).map(({ name, is_brand, score, coverage }) => ({
+    name,
+    is_brand,
+    sentiment: {
+      mentions: coverage.mentions,
+      classified: score.classified,
+      positive: score.positive,
+      negative: score.negative,
+      net_sentiment: score.net_sentiment,
+    },
+  }));
+}
+
+export async function brandMentionsByAudit(
+  db: Database,
+  input: {
+    workspaceId: string;
+    audits: readonly { id: string; configuration: unknown }[];
+    analyses: readonly { id: string; audit_id: string; entity_assessments: unknown }[];
+  },
+): Promise<Map<string, Map<string, Mention[]>>> {
+  const extractor = new Map(
+    input.audits.flatMap((audit) => {
+      const versions = frozenPerceptionVersions(audit.configuration);
+      return versions ? [[audit.id, versions.extractor_version] as const] : [];
+    }),
+  );
+  const analyses = input.analyses.flatMap((row) => {
+    const version = extractor.get(row.audit_id);
+    return version ? [{ ...row, version }] : [];
+  });
+  const perceived = await perceptionsOf(
+    db,
+    input.workspaceId,
+    new Map(analyses.map((row) => [row.id, row.version])),
+  );
+  const byAudit = groupBy(analyses, (row) => row.audit_id);
+  return new Map(
+    [...extractor.keys()].map((auditId) => [
+      auditId,
+      new Map(
+        (byAudit.get(auditId) ?? []).map((row) => [
+          row.id,
+          mentionsOf(assessmentsSchema.parse(row.entity_assessments), perceived.get(row.id))
+            .map(({ mention }) => mention)
+            .filter((mention) => mention.isBrand),
+        ]),
+      ),
+    ]),
+  );
+}
+
 function cursorPosition(cursor: string, fingerprint: Record<string, unknown>) {
   const [observed_at, execution_id, entity, ordinal] = decodeKeysetCursor(
     cursor,
@@ -256,7 +379,10 @@ export async function getPerceptionQuotes(
     polarity: filters.polarity,
   };
   const after = filters.cursor ? cursorPosition(filters.cursor, fingerprint) : null;
-  const { answers } = await selectionAnswers(db, selection, { citations: false });
+  const { answers } = await selectionAnswers(db, selection, {
+    citations: false,
+    brandQuestions: true,
+  });
   const quotes = classifiedQuotes(
     answers,
     (mention) => filters.entity === null || mention.entity === filters.entity,
@@ -282,7 +408,6 @@ export async function getPerceptionQuotes(
   };
 }
 
-/** One execution's per-entity perception; empty for an audit admitted without perception. */
 export async function executionPerception(
   db: Database,
   input: {

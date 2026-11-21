@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vite-plus/test';
 
 import type { CommerceProductRow } from '@citeladder/contracts/commerce-suite';
 
-import { productCsv } from './product-columns';
+import { productCell, productCsv } from './product-columns';
 
 const road: CommerceProductRow = {
   holder_id: '22222222-2222-4222-8222-222222222222',
@@ -75,5 +75,42 @@ describe('productCsv', () => {
         '(+2 in other currencies)',
       ],
     ]);
+  });
+});
+
+describe('productCell mentioned price', () => {
+  const priced = (
+    mentioned: Pick<CommerceProductRow['mentioned_price'], 'median' | 'quoted'>,
+    appearances = 3,
+  ): CommerceProductRow => ({
+    ...road,
+    appearances,
+    mentioned_price: { ...road.mentioned_price, ...mentioned },
+  });
+
+  it('says a price no answer quoted is not mentioned, never $0.00, and keeps a real zero', () => {
+    expect(productCell(priced({ median: 0, quoted: 0 }), 'mentioned_price')).toEqual({
+      kind: 'missing',
+      state: 'not_mentioned',
+    });
+    expect(productCell(priced({ median: null, quoted: 0 }), 'mentioned_price')).toEqual({
+      kind: 'missing',
+      state: 'not_mentioned',
+    });
+    expect(productCell(priced({ median: 0, quoted: 2 }), 'mentioned_price')).toEqual({
+      kind: 'value',
+      text: '€0.00',
+    });
+    expect(productCell(priced({ median: null, quoted: 0 }, 0), 'mentioned_price')).toEqual({
+      kind: 'missing',
+      state: 'unavailable',
+    });
+    const abroad = { ...priced({ median: null, quoted: 0 }) };
+    abroad.mentioned_price = { ...abroad.mentioned_price, other_currency: 2 };
+    expect(productCell(abroad, 'mentioned_price')).toEqual({
+      kind: 'missing',
+      state: 'unavailable',
+      note: '+2 in other currencies',
+    });
   });
 });

@@ -1,28 +1,18 @@
 import { runOutcome } from '@/lib/agent/run-state';
 import type { AgentChatDetail, AgentMessage } from '@/lib/api/agent';
 
-/** How the latest run ended, when it ended without an answer. */
 type EndedOutcome = 'failed' | 'stopped_at_limit' | 'cancelled';
-/** `unknown`: an earlier turn, whose run's outcome the chat read does not carry. */
 export type FailureOutcome = EndedOutcome | 'unknown';
 
 type FailureItem = {
   kind: 'failure';
-  /** The request the attempts answered, shown once; null for a reply with no request before it. */
   request: AgentMessage | null;
-  /** Consecutive identical attempts' replies, oldest first. */
   failures: [AgentMessage, ...AgentMessage[]];
   outcome: FailureOutcome;
 };
 
 type ThreadItem = { kind: 'message'; message: AgentMessage } | FailureItem;
 
-/**
- * A reply the run wrote because it ended without an answer. Every reply the
- * model wrote records at least its model call in `steps`; the reply a failed,
- * stopped or cancelled run leaves records nothing — no steps, evidence, web
- * pages or document — so it is told apart by structure, never by its words.
- */
 function isUnansweredReply(message: AgentMessage, placed: ReadonlySet<string>): boolean {
   return (
     message.role === 'agent' &&
@@ -47,7 +37,6 @@ function endedOutcome(run: AgentChatDetail['latest_run']): EndedOutcome | null {
   return kind === 'failed' || kind === 'stopped_at_limit' || kind === 'cancelled' ? kind : null;
 }
 
-/** Takes the user request just before an unanswered reply off the end of the thread. */
 function takeRequest(items: ThreadItem[]): AgentMessage | null {
   const before = items.at(-1);
   const request =
@@ -56,7 +45,6 @@ function takeRequest(items: ThreadItem[]): AgentMessage | null {
   return request;
 }
 
-/** The failure this attempt repeats: the same request, ended with the same words. */
 function repeatedFailure(
   previous: ThreadItem | undefined,
   request: AgentMessage | null,
@@ -69,12 +57,6 @@ function repeatedFailure(
     : null;
 }
 
-/**
- * The thread in order, each unanswered turn as its request and a failure
- * rather than a reply. Consecutive turns that repeat the same request and end
- * the same way collapse into one, counting the attempts. Only the latest run's
- * outcome is known, so only the last turn's failure says how it ended.
- */
 export function threadItems(detail: AgentChatDetail, placed: ReadonlySet<string>): ThreadItem[] {
   const items: ThreadItem[] = [];
   const last = detail.messages.at(-1);

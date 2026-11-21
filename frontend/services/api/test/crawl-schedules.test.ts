@@ -98,7 +98,6 @@ describe('scheduled crawl occurrences', () => {
       failure_count: 0,
     });
 
-    // The next occurrence audits the same tracked pages, as every crawl action does.
     await cancelCrawl(db, tenant.workspaceId, crawl!.id);
     const later = new Date(base.getTime() + 14 * DAY + 60_000);
     const next = new CrawlScheduler(db, settings, { owner: 'first', now: () => later });
@@ -119,7 +118,6 @@ describe('scheduled crawl occurrences', () => {
 
   it('skips an occurrence while a crawl is active, without counting a failure', async () => {
     const seed = await fixtures.crawl('running');
-    // An admitted crawl freezes its robots choice, which the next crawl action keeps.
     await db
       .updateTable('site_crawls')
       .set({ configuration: JSON.stringify({ robots: 'respect' }) })
@@ -238,7 +236,6 @@ describe('scheduled crawl occurrences', () => {
     expect(started.reduce((sum, count) => sum + count, 0)).toBe(1);
     expect(await crawls(tenant)).toHaveLength(1);
 
-    // A schedule another owner holds is not claimed until its lease expires.
     const other = await fixtures.tenant({ websiteUrl: 'https://example.test/' });
     await weekly(other);
     await db

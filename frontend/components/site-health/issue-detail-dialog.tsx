@@ -1,13 +1,10 @@
 import { AskAgentLink } from '@/components/agent/ask-agent-link';
 import { IssueEvidence } from '@/components/site-health/issue-evidence';
 import { IssueFixActions, type IssueFixScope } from '@/components/site-health/issue-fix-actions';
-import { IssueMetadata } from '@/components/site-health/issue-metadata';
 import { AffectedPageLink, SharedOccurrences } from '@/components/site-health/shared-occurrences';
-import { ReadError } from '@/components/ui/read-error';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { CopyButton } from '@/components/ui/copy-button';
-import { Dialog } from '@/components/ui/dialog';
-import { QueryState } from '@/components/ui/query-state';
+import { Drawer } from '@/components/ui/drawer';
 import { Inline, Stack } from '@/components/ui/layout';
 import { Pager } from '@/components/ui/pager';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -25,12 +22,10 @@ import {
 import { dimensionLabel, issueTitle, severityLabel } from '@/lib/site-health/issues';
 import { groupOccurrences, loadedPageCount } from '@/lib/site-health/occurrence-groups';
 import { pageKindLabel } from '@/lib/site-health/page-kinds';
+import { ClampText } from '@/components/ui/clamp-text';
+import { Notice, readErrorProps } from '@/components/ui/notice';
+import { StateBlock } from '@/components/ui/state-block';
 
-/**
- * The issue a dialog describes: its catalog row, or — for an issue the address
- * names that is not on the listed page — its detail, which carries the same
- * facts but no page types.
- */
 export type IssueHead = Pick<
   SiteIssue,
   | 'group_id'
@@ -45,12 +40,7 @@ export type IssueHead = Pick<
 > &
   Partial<Pick<SiteIssue, 'page_kinds'>>;
 
-/**
- * One issue in full, over the Issues list: what it is, how to fix it, the ways
- * to act on it, how many of its pages are fixed (Mark fixed, Re-run all), and
- * the pages it was found on, each linking to its page.
- */
-export function IssueDetailDialog({
+export function IssueDetailDrawer({
   issue,
   scope,
   crawlId,
@@ -61,7 +51,6 @@ export function IssueDetailDialog({
   onClose,
 }: Readonly<{
   issue: IssueHead;
-  /** The project the crawl belongs to: Re-run all refreshes its reads once it lands. */
   scope: IssueFixScope;
   crawlId: string;
   detailQuery: UseQueryResult<SiteIssueDetail>;
@@ -70,8 +59,6 @@ export function IssueDetailDialog({
   onNext: () => void;
   onClose: () => void;
 }>) {
-  // The query keeps the previous issue's page while this one loads; those
-  // pages are not this issue's, so the dialog waits rather than caption them.
   const loaded = detailQuery.isError ? undefined : detailQuery.data;
   const detail = loaded?.group_id === issue.group_id ? loaded : undefined;
   const handoff = {
@@ -82,24 +69,13 @@ export function IssueDetailDialog({
   useAgentPanelSeed(handoff);
   const pageKinds = issue.page_kinds ?? [];
   return (
-    <Dialog
+    <Drawer
       open
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
-      width="wide"
       title={issueTitle(issue)}
-      description={
-        <IssueMetadata issue={issue}>
-          <span className="tabular-nums">
-            {issue.affected_url_count} {issue.affected_url_count === 1 ? 'page' : 'pages'} affected
-          </span>
-          {pageKinds.length > 0 ? <span>{pageKinds.map(pageKindLabel).join(', ')}</span> : null}
-        </IssueMetadata>
-      }
       footer={
-        // A later page that failed keeps the pager, so the reader can still
-        // step back to the pages that loaded.
         detail || canPrevious ? (
           // The retained page keeps its `next_cursor` while the next one is in
           // flight, so a second click would push the SAME cursor onto the
@@ -116,24 +92,27 @@ export function IssueDetailDialog({
         ) : null
       }
     >
-      {/* The rule's description is phrased as the PASSING state ("Page is not
-          blocked from indexing…"); printed under a failing title it read as a
-          contradiction. The fix is what the reader came for, so it leads. */}
       {issue.remediation ? (
         <Stack gap="tight" className="min-w-0">
           <span className="type-caption">How to fix</span>
-          <p className={textRole('itemTitle', 'whitespace-pre-line')}>{issue.remediation}</p>
+          <p className={textRole('body', 'whitespace-pre-line')}>{issue.remediation}</p>
+        </Stack>
+      ) : null}
+      {pageKinds.length > 0 ? (
+        <Stack gap="tight" className="min-w-0">
+          <span className="type-caption">Page kinds</span>
+          <p className={textRole('body')}>{pageKinds.map(pageKindLabel).join(', ')}</p>
         </Stack>
       ) : null}
       <Inline className="flex-wrap">
-        <AskAgentLink appearance="primary" handoff={handoff} />
+        <AskAgentLink handoff={handoff} />
         <CopyButton value={buildFixPrompt(issue)} variant="secondary" className="w-fit">
           Copy fix prompt
         </CopyButton>
       </Inline>
       <IssueFixActions scope={scope} crawlId={crawlId} groupId={issue.group_id} />
       <Stack as="section" gap="workspace" aria-busy={detailQuery.isFetching || undefined}>
-        <h3 className={textRole('sectionTitle')}>Affected pages</h3>
+        <h3 className={textRole('heading')}>Affected pages</h3>
         <OccurrenceList
           issue={issue}
           detail={detail}
@@ -142,43 +121,36 @@ export function IssueDetailDialog({
           firstPage={!canPrevious}
         />
       </Stack>
-    </Dialog>
+    </Drawer>
   );
 }
 
-/**
- * An issue the address names that no listed row describes (another tab, page
- * or a stale link), before its own read has answered: loading, or why it
- * could not load, with a retry. Closing it clears the selection.
- */
-export function PendingIssueDialog({
+export function PendingIssueDrawer({
   detailQuery,
   onClose,
 }: Readonly<{ detailQuery: UseQueryResult<SiteIssueDetail>; onClose: () => void }>) {
   return (
-    <Dialog
+    <Drawer
       open
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
-      width="wide"
       title="Issue"
     >
       {detailQuery.isError ? (
-        <ReadError
-          error={detailQuery.error}
-          fallback="Could not load this issue."
-          onRetry={() => void detailQuery.refetch()}
-          pending={detailQuery.isFetching}
+        <Notice
+          kind="read"
+          {...readErrorProps(detailQuery)}
+          fallback="Couldn't load this issue."
+          title="Couldn't load this issue"
         />
       ) : (
-        <QueryState kind="loading" label="Loading the issue…" />
+        <StateBlock kind="loading" label="Loading the issue…" shape={{ kind: 'list' }} />
       )}
-    </Dialog>
+    </Drawer>
   );
 }
 
-/** What to ask the agent about an issue: across its pages, or on one page. */
 export function askAgentPrompt(
   issue: Pick<SiteIssue, 'title' | 'rule_id' | 'affected_url_count'>,
   page?: string,
@@ -187,11 +159,9 @@ export function askAgentPrompt(
   const pages = count === 1 ? 'page' : 'pages';
   const scope = page ? ` on ${page}` : ` (${count} affected ${pages})`;
   return page
-    ? `Analyze the Site Health issue "${issueTitle(issue)}"${scope} and propose exact page edits from the selected evidence.`
-    : `Analyze the Site Health issue "${issueTitle(issue)}"${scope}, prioritize the work and propose a bounded implementation plan from the supplied sample; say how many pages it covers versus the total.`;
+    ? `Analyze the Website issue "${issueTitle(issue)}"${scope} and propose exact page edits from the selected evidence.`
+    : `Analyze the Website issue "${issueTitle(issue)}"${scope}, prioritize the work and propose a bounded implementation plan from the supplied sample; say how many pages it covers versus the total.`;
 }
-
-const OCCURRENCE_PLACEHOLDERS = ['first', 'second', 'third'] as const;
 
 function OccurrenceList({
   issue,
@@ -204,43 +174,25 @@ function OccurrenceList({
   detail: SiteIssueDetail | undefined;
   crawlId: string;
   query: UseQueryResult<SiteIssueDetail>;
-  /** No earlier page of occurrences was paged past. */
   firstPage: boolean;
 }>) {
   if (query.isError)
     return (
-      <ReadError
-        error={query.error}
-        fallback="Could not load affected URLs."
-        onRetry={() => void query.refetch()}
-        pending={query.isFetching}
+      <Notice
+        kind="read"
+        {...readErrorProps(query)}
+        fallback="Couldn't load affected URLs."
+        title="Couldn't load affected URLs"
       />
     );
-  // The list no longer waits for this read, so "none" and "not yet" are now
-  // genuinely different answers here. Claiming the first while the second is
-  // true told the reader an issue affected nothing, a moment before showing
-  // them the pages it affects.
   if (query.isPending || !detail) {
-    return (
-      <ul aria-busy="true" className={ledgerClasses()}>
-        {OCCURRENCE_PLACEHOLDERS.map((placeholder) => (
-          <Stack as="li" gap="item" key={placeholder} className={ledgerItemClasses()}>
-            <Skeleton />
-            <Skeleton />
-          </Stack>
-        ))}
-      </ul>
-    );
+    return <Skeleton variant="list" rows={3} label="Loading affected pages" />;
   }
   if (detail.occurrences.length === 0)
-    return <QueryState kind="empty" inline message="No affected URLs found." />;
-  // A site-level finding has one occurrence, on the homepage; the pages it
-  // found are in that occurrence's evidence.
+    return <StateBlock kind="empty" inline message="No affected URLs found." />;
   const first = detail.occurrences[0];
   const siteLevel = first ? siteLevelEvidence(issue.rule_id, first.evidence) : null;
   if (siteLevel) return <SiteLevelList evidence={siteLevel} crawlId={crawlId} />;
-  // Grouping sees only the loaded page of occurrences. The loaded rows are
-  // the whole list only when nothing was paged past and nothing follows.
   const complete = firstPage && !detail.next_cursor;
   const loaded = loadedPageCount(detail.occurrences);
   return (
@@ -272,7 +224,6 @@ function OccurrenceList({
   );
 }
 
-/** Evidence found on one page only: the page, what it lacks, and a question about it. */
 function PageOccurrence({
   issue,
   occurrence,
@@ -306,36 +257,16 @@ function SiteLevelList({
   evidence,
   crawlId,
 }: Readonly<{ evidence: SiteLevelEvidence; crawlId: string }>) {
-  if (evidence.kind === 'page_kinds') {
-    return (
-      <ul className={ledgerClasses()}>
-        {evidence.pageKinds.map((row) => (
-          <Inline
-            as="li"
-            key={row.pageKind}
-            className={ledgerItemClasses('flex-wrap justify-between')}
-          >
-            <span className={textRole('itemTitle')}>{pageKindLabel(row.pageKind)}</span>
-            <span className="type-caption tabular-nums">
-              {row.pageCount} {row.pageCount === 1 ? 'page' : 'pages'}
-            </span>
-          </Inline>
-        ))}
-      </ul>
-    );
-  }
+  if (evidence.kind === 'duplicate_sets')
+    return <DuplicateSetList evidence={evidence} crawlId={crawlId} />;
   if (evidence.kind === 'link_targets')
     return <LinkTargetList evidence={evidence} crawlId={crawlId} />;
   if (evidence.pages.length === 0)
     return (
-      <QueryState
+      <StateBlock
         kind="empty"
         inline
-        message={
-          evidence.total > 0
-            ? 'This finding did not record which pages it affects.'
-            : 'No affected URLs found.'
-        }
+        message={evidence.total > 0 ? 'Affected pages not recorded.' : 'No affected URLs found.'}
       />
     );
   const hidden = evidence.total - evidence.pages.length;
@@ -349,9 +280,9 @@ function SiteLevelList({
               key={section.pathPrefix}
               className={ledgerItemClasses('flex-wrap justify-between')}
             >
-              <span className={textRole('itemTitle', '[overflow-wrap:anywhere]')}>
+              <ClampText className={textRole('body', 'min-w-0 flex-1')}>
                 {section.pathPrefix}
-              </span>
+              </ClampText>
               <span className="type-caption tabular-nums">{pageCountLabel(section.pageCount)}</span>
             </Inline>
           ))}
@@ -384,10 +315,64 @@ function SiteLevelList({
   );
 }
 
-/**
- * A sitewide link finding, one row per link target: where the link lands, how
- * many pages carry it, and a sample of them. One template fix clears the row.
- */
+function DuplicateSetList({
+  evidence,
+  crawlId,
+}: Readonly<{
+  evidence: Extract<SiteLevelEvidence, { kind: 'duplicate_sets' }>;
+  crawlId: string;
+}>) {
+  if (evidence.sets.length === 0)
+    return (
+      <StateBlock
+        kind="empty"
+        inline
+        message={evidence.total === 0 ? 'No affected URLs found.' : 'Affected pages not recorded.'}
+      />
+    );
+  const shown = evidence.sets.reduce((sum, set) => sum + set.pages.length, 0);
+  return (
+    <Stack gap="item">
+      <ul className={ledgerClasses()}>
+        {evidence.sets.map((set) => (
+          <Stack
+            as="li"
+            gap="tight"
+            key={set.pages[0]?.siteUrlId ?? set.text}
+            className={ledgerItemClasses()}
+          >
+            <ClampText className={textRole('body')}>
+              {`These ${pageCountLabel(set.pageCount)} share “${set.text}”`}
+            </ClampText>
+            {set.pages.length < set.pageCount ? (
+              <span className="type-caption">Including:</span>
+            ) : null}
+            {/* Each page link is its own row, at least 24 high, so stacked targets never touch (WCAG 2.5.8). */}
+            <Stack as="ul" gap="item">
+              {set.pages.map((page) => (
+                <li key={page.siteUrlId} className="flex min-h-6 min-w-0 items-center">
+                  <AffectedPageLink
+                    crawlId={crawlId}
+                    siteUrlId={page.siteUrlId}
+                    title={page.title}
+                    url={page.url}
+                    pageKind={page.pageKind}
+                  />
+                </li>
+              ))}
+            </Stack>
+          </Stack>
+        ))}
+      </ul>
+      {shown < evidence.total ? (
+        <p className="type-caption">
+          Showing {shown} of {evidence.total} pages.
+        </p>
+      ) : null}
+    </Stack>
+  );
+}
+
 function LinkTargetList({
   evidence,
   crawlId,
@@ -397,14 +382,10 @@ function LinkTargetList({
 }>) {
   if (evidence.targets.length === 0)
     return (
-      <QueryState
+      <StateBlock
         kind="empty"
         inline
-        message={
-          evidence.total === 0
-            ? 'No affected links found.'
-            : 'This finding did not record which links it affects.'
-        }
+        message={evidence.total === 0 ? 'No affected links found.' : 'Affected links not recorded.'}
       />
     );
   return (
@@ -414,23 +395,27 @@ function LinkTargetList({
         const hidden = target.pageCount - target.pages.length;
         return (
           <Stack as="li" gap="tight" key={target.url} className={ledgerItemClasses()}>
-            <span className={textRole('itemTitle', '[overflow-wrap:anywhere]')}>
-              {sitePath(target.url, origin)} → {linkOutcomeLabel(target.outcome, origin)}
-            </span>
+            <ClampText className={textRole('body')}>
+              {`${sitePath(target.url, origin)} → ${linkOutcomeLabel(target.outcome, origin)}`}
+            </ClampText>
             <span className="type-caption tabular-nums">
               On {pageCountLabel(target.pageCount)}
               {hidden > 0 ? ', including:' : ':'}
             </span>
-            {target.pages.map((page) => (
-              <AffectedPageLink
-                key={page.siteUrlId}
-                crawlId={crawlId}
-                siteUrlId={page.siteUrlId}
-                title={page.title}
-                url={page.url}
-                pageKind={page.pageKind}
-              />
-            ))}
+            {/* Each page link is its own row, at least 24 high, so stacked targets never touch (WCAG 2.5.8). */}
+            <Stack as="ul" gap="item">
+              {target.pages.map((page) => (
+                <li key={page.siteUrlId} className="flex min-h-6 min-w-0 items-center">
+                  <AffectedPageLink
+                    crawlId={crawlId}
+                    siteUrlId={page.siteUrlId}
+                    title={page.title}
+                    url={page.url}
+                    pageKind={page.pageKind}
+                  />
+                </li>
+              ))}
+            </Stack>
           </Stack>
         );
       })}
@@ -438,7 +423,6 @@ function LinkTargetList({
   );
 }
 
-/** A fix prompt any assistant or developer can act on, from the rule's own words. */
 export function buildFixPrompt(
   issue: Pick<
     SiteIssue,
@@ -448,7 +432,7 @@ export function buildFixPrompt(
   const rating =
     issue.finding_class === 'defect' ? `${severityLabel(issue.severity)} severity` : 'advisory';
   const lines = [
-    `Fix this Site Health issue on my website: "${issueTitle(issue)}" (${dimensionLabel(issue.dimension)}, ${rating}).`,
+    `Fix this Website issue on my website: "${issueTitle(issue)}" (${dimensionLabel(issue.dimension)}, ${rating}).`,
   ];
   if (issue.description) lines.push('', 'The check passes when:', issue.description);
   if (issue.remediation) lines.push('', 'Recommended remediation:', issue.remediation);

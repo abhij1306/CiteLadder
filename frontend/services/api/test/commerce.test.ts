@@ -16,7 +16,7 @@ import { freezeCommerceContext } from '../src/commerce/audit-context.ts';
 import { enqueue } from './referral-fixtures.ts';
 import { actionRow, opportunityRow } from './opportunity-fixtures.ts';
 import { prompt } from './prompt-fixtures.ts';
-import { updateActionStatus } from '../src/opportunities/actions.ts';
+import { updateActionStatus } from '../src/opportunities/action-decisions.ts';
 import { TEST_SESSION_COOKIE, asOwner, sessionToken, testConfig, testDatabase } from './support.ts';
 import { VisibilityFixtures, type Tenant } from './visibility-fixtures.ts';
 
@@ -80,7 +80,6 @@ const stageCsv = (content = csv) =>
     method: 'POST',
     body: { source: 'csv', content, filename: 'catalog.csv' },
   });
-/** Stage the CSV and apply it with every proposed category. */
 const importCsv = async (content = csv) => {
   const staged = await stageCsv(content);
   expect(staged.status).toBe(201);
@@ -233,13 +232,11 @@ describe('CSV evidence and catalog', () => {
     const [one, two] = await Promise.all([importCsv(), importCsv()]);
     expect(one.status).toBe(200);
     expect(two).toEqual(one);
-    // Staging the same content again returns the applied import and its results.
     expect((await stageCsv()).body).toMatchObject({
       import_id: one.body.import_id,
       result: { import_id: one.body.import_id, created: 1 },
     });
     const catalog = await call<CommerceCatalog>('/catalog');
-    // The list is navigation: names and memberships, never the row's evidence.
     expect(catalog.body).toEqual({
       products: [
         {
@@ -254,7 +251,6 @@ describe('CSV evidence and catalog', () => {
       categories: [
         { id: catalog.body.categories[0]!.id, name: 'Tools', parent_id: null, product_count: 1 },
       ],
-      // No brand profile confirms a business model yet.
       projection: { applicability: 'unknown', in_flight: 0, failed: 0 },
     });
     const artifacts = await db
@@ -274,8 +270,6 @@ describe('CSV evidence and catalog', () => {
       csv_row_number: 2,
       importer_version: policy.commerce.importer_version,
     });
-    // The one import is one catalog revision, whose work is re-matching recent
-    // answers and refreshing the Opportunities its catalog fields feed.
     const revisions = await db
       .selectFrom('commerce_catalog_revisions')
       .select(['id', 'revision_number', 'source_kind', 'source_id'])
@@ -407,7 +401,6 @@ describe('CSV evidence and catalog', () => {
       (await stageCsv('title,brand\n' + 'a,b\n'.repeat(policy.commerce.import_max_rows + 1)))
         .status,
     ).toBe(422);
-    // A refused file stores nothing.
     expect(
       await db
         .selectFrom('commerce_csv_imports')
@@ -421,8 +414,6 @@ describe('CSV evidence and catalog', () => {
       .set({ attributes: '[]' })
       .where('project_id', '=', t.projectId)
       .execute();
-    // The catalog list never reads a row's evidence, so it stays readable; the
-    // discovery context that does read the attributes refuses the corrupt row.
     expect((await call('/catalog')).status).toBe(200);
     expect(
       (
@@ -602,7 +593,6 @@ describe('decisions and persisted reads', () => {
 
     const path = `/products/${product}`;
     const measured = (await call<CommerceProductDetail>(path)).body;
-    // No answer in scope: visibility is unavailable, appearances a real zero.
     expect(measured.product).toMatchObject({
       name: 'One, large',
       visibility: null,
@@ -624,6 +614,12 @@ describe('decisions and persisted reads', () => {
       'dismissed',
       t.userId,
     );
+    expect((await call<CommerceProductDetail>(path)).body.actions).toEqual([]);
+    await db
+      .updateTable('actions')
+      .set({ status: 'implemented', effective_status: 'measuring' })
+      .where('id', '=', action.id)
+      .execute();
     expect((await call<CommerceProductDetail>(path)).body.actions).toEqual([]);
   });
 });

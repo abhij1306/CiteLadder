@@ -1,4 +1,4 @@
-/** The project overview: each section is its owner's read, run in parallel. */
+import { analyticsAppPath } from '@citeladder/contracts/mcp-app';
 import type { Database } from '../db/database.ts';
 import { listMarkets } from '../projects/markets.ts';
 import { readBrandMemory } from '../projects/brand-profile.ts';
@@ -33,7 +33,6 @@ const sections: Record<string, (read: ProjectRead) => Promise<Evidence>> = {
   search_intelligence: searchIntelligence,
 };
 
-/** Every section the overview can return; the tool's `sections` argument selects among them. */
 export const overviewSections: [string, ...string[]] = ['profile', ...Object.keys(sections)];
 
 export async function businessContext(
@@ -65,7 +64,6 @@ export async function businessContext(
       primary_market: project.primary_market,
       country_code: project.country_code,
       language_code: project.language_code,
-      // Each market is measured separately; visibility reads take its id (null: default).
       markets: markets.map(({ id, label, country_code, language_code, is_default }) => ({
         id,
         label,
@@ -73,7 +71,7 @@ export async function businessContext(
         language_code,
         is_default,
       })),
-      link: appLink(origin, '/visibility', project.id),
+      link: appLink(origin, analyticsAppPath('overview'), project.id),
     },
     ...(wanted.has('profile')
       ? { profile: profile ?? unavailable('no_brand_profile'), ...entities }

@@ -1,29 +1,24 @@
 import { resolveSpec, type SettingSource, type SettingSpec } from './settings.ts';
 
 export const heartbeatFailureLimit = 2;
-/** Interactive POSTs borrow existing workers without waiting for a new job. */
 export const interactiveExecution = {
   admissionSeconds: 30,
   timeoutSeconds: 240,
   concurrency: 2,
 };
 
-/**
- * In-request work one API instance runs at a time: interactive audits and
- * Agent turns together. A full instance answers 429 with `Retry-After`; the
- * queued work stays durable. On shutdown, open work is stopped and given
- * `shutdownGraceMs` to settle before the server closes.
- */
 export const interactiveCapacity = {
   slots: 6,
   retryAfterSeconds: 15,
   shutdownGraceMs: 8000,
 };
 
-/** Runner lanes run concurrently; an idle lane is polled at most this far apart. */
 export const runnerLanes = {
   idlePollMs: 5000,
 };
+
+/** About one Cloud Run cold start: a runner starts its successor this long before its deadline. */
+export const handoverLeadMs = 180_000;
 
 const defaults = {
   drainLockWaitMs: 15_000,

@@ -36,8 +36,6 @@ describe('RootErrorsBlock', () => {
     expect(first.getByText('http_5xx')).toBeInTheDocument();
     expect(first.getByText('HTTP 500')).toBeInTheDocument();
     expect(first.getByText('812 ms')).toBeInTheDocument();
-    // No PageDetail exists for a URL the crawl never admitted: the rows must
-    // not link anywhere.
     expect(within(block).queryByRole('link')).not.toBeInTheDocument();
   });
 

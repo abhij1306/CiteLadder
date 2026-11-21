@@ -1,4 +1,3 @@
-/** Crawl inventory, analyzed pages and one page's persisted detail. */
 import {
   inventoryPageSchema,
   pageDetailSchema,
@@ -35,7 +34,6 @@ import {
 import { hash } from '../../crypto-text.ts';
 
 type Paging = { limit: number; cursor: string | null };
-// A pathological artifact never balloons a detail response.
 const MAX_EVALUATIONS = policy.site_health.reads.max_detail_evaluations;
 
 const pageSummary = (row: PageRow, referrers: Map<string, Referrer[]>) => ({
@@ -76,7 +74,6 @@ async function window(
   sort: PageSort,
   paging: Paging,
 ) {
-  // The fingerprint binds a cursor to the endpoint, its filters and its order.
   const fingerprint = {
     crawl_id: crawl.id,
     status: filters.status ?? null,
@@ -115,7 +112,6 @@ export async function pages(
   paging: Paging,
 ) {
   const crawl = await loadCrawl(db, workspaceId, crawlId);
-  // A failed root fetch never became a page row, so its calls ride alongside.
   const [{ items, next, referrers }, root] = await Promise.all([
     window(db, crawl, 'pages', filters, sort, paging).then(async (page) => ({
       ...page,
@@ -134,7 +130,6 @@ export async function pages(
   });
 }
 
-/** Whether the URL was admitted to this crawl itself (inherited inventory has no detail here). */
 export async function requireAdmitted(db: Database, crawl: Crawl, siteUrlId: string) {
   const observed = await new WorkspaceScope(crawl.workspace_id)
     .selectFrom(db, 'site_url_observations')
@@ -212,8 +207,11 @@ export async function pageDetail(
       ? undefined
       : workspace
           .selectFrom(db, 'site_page_analyses')
-          .leftJoin('site_fetch_artifacts as f', 'f.id', 'site_page_analyses.artifact_id')
-          // The audit the page's latest analysis came from, perhaps a later rerun.
+          .leftJoin('site_fetch_artifacts as f', (join) =>
+            join
+              .onRef('f.id', '=', 'site_page_analyses.artifact_id')
+              .onRef('f.crawl_id', '=', 'site_page_analyses.crawl_id'),
+          )
           .innerJoin('site_crawls as audited', (join) =>
             join
               .onRef('audited.id', '=', 'site_page_analyses.crawl_id')
@@ -241,7 +239,6 @@ export async function pageDetail(
       .where('crawl_id', '=', crawl.id)
       .where('site_url_id', '=', siteUrlId)
       .where('extractor_version', '=', crawl.extractor_version)
-      // The formula the crawl's own link-metrics run wrote, not today's configuration.
       .orderBy('created_at')
       .orderBy('formula_version')
       .limit(1)
@@ -253,7 +250,7 @@ export async function pageDetail(
     analysis
       ? sql<IssueRow>`
           select i.*, e.reason_code from site_issues i
-          join site_rule_evaluations e on e.id = i.evaluation_id
+          join site_rule_evaluations e on e.analysis_id = i.analysis_id and e.id = i.evaluation_id
           join site_page_analyses a on a.id = ${analysis.id}
           where i.workspace_id = ${workspaceId} and ${shownIssueFilter(crawl, 'i', 'a')}
           order by i.created_at, i.id`
@@ -314,12 +311,10 @@ export async function pageDetail(
     page_kind_evidence: analysis ? record(analysis.page_kind_evidence) : null,
     page_traits: analysis ? strings(analysis.page_traits) : null,
     issue_count: analysis ? issues.length : null,
-    // A page with no analyzed fetch has no facts, not zero of each.
     facts: analysis?.artifact_id ? pageFacts(facts) : null,
     delivery: deliveryFacts(facts, analysis?.decoded_bytes ?? null),
     issues: issues.map((issue) => ({
       ...issueOccurrence(issue, page),
-      // The crawl's Issues group for this rule, as the catalog names it.
       group_id: issueGroupId(crawl.id, issue.rule_id, issue.finding_class),
       score_roles: ruleScoreRoles(issue.rule_id),
     })),
@@ -345,7 +340,6 @@ export async function pageDetail(
       created_at: evaluation.created_at.toISOString(),
     })),
     artifact_id: analysis?.artifact_id ?? null,
-    // The versions of the audit that measured the page, else the crawl's own.
     extractor_version: (analysis ?? crawl).extractor_version,
     analyzer_version: (analysis ?? crawl).analyzer_version,
     rule_version: (analysis ?? crawl).rule_catalog_version,

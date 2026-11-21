@@ -28,10 +28,6 @@ type AnalyzeRequest = z.output<typeof actionAnalyzeRequestSchema>;
 const NO_CRAWL = 'Run a crawl first. Analyze a page reads the content pages of your latest crawl.';
 const NOT_CONTENT = 'Choose one of the content pages in your latest crawl.';
 
-/**
- * The latest crawl's content pages whose address or title contains `query`,
- * in address order, at most the configured number; `truncated` says more match.
- */
 export async function listAnalyzablePages(db: Database, scope: ProjectScope, query: string | null) {
   const crawlId = await resolveCrawlId(db, scope);
   if (crawlId === null) return { crawl_id: null, items: [], truncated: false };
@@ -65,7 +61,6 @@ export async function listAnalyzablePages(db: Database, scope: ProjectScope, que
   };
 }
 
-/** The chosen page as one of the latest crawl's content pages, or a 422. */
 async function contentPage(db: Database, scope: ProjectScope, siteUrlId: string) {
   const crawlId = await resolveCrawlId(db, scope);
   if (crawlId === null) throw new ApiError(422, NO_CRAWL);
@@ -77,7 +72,6 @@ async function contentPage(db: Database, scope: ProjectScope, siteUrlId: string)
   return { siteUrlId: page.id, url: page.normalized_url };
 }
 
-/** The chosen topic, which must hold prompts, and only prompts it holds. */
 async function chosenTopic(db: Database, scope: ProjectScope, input: AnalyzeRequest) {
   const topic = await topicWithPrompts(db, scope, input.topic_id);
   if (!topic) throw new ApiError(422, 'Choose one of your topics.');
@@ -89,13 +83,6 @@ async function chosenTopic(db: Database, scope: ProjectScope, input: AnalyzeRequ
   return topic;
 }
 
-/**
- * Starts the page's analysis: validates the page, topic and prompts, then
- * creates the chat with the Action attached in the same transaction. A
- * repeat for the same page reuses its Action and starts a new chat, since
- * each chat reads the live page afresh; a retried request (same
- * Idempotency-Key and body) returns the chat it already started.
- */
 export async function analyzePage(
   db: Database,
   store: AgentStore,
@@ -135,7 +122,6 @@ export async function analyzePage(
     .where('project_id', '=', scope.projectId)
     .where('id', '=', created.chatId)
     .executeTakeFirstOrThrow();
-  // Only a replay of an unrelated chat request under the same key lacks one.
   if (!chat.action_id) throw new ApiError(409, 'This Idempotency-Key was used for another request');
   return { actionId: chat.action_id, chatId: created.chatId, run: created.run };
 }

@@ -1,8 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { Building2, Plus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
-import { SidebarIdentButton, SidebarTextTooltip } from '@/components/ui/app-shell';
+import { SidebarIdentButton, SidebarTextTooltip } from '@/components/ui/sidebar';
 import {
   Menu,
   MenuContent,
@@ -12,8 +11,8 @@ import {
   MenuTrigger,
 } from '@/components/ui/menu';
 import { BrandMark } from '@/components/ui/brand-mark';
+import { Building2, Plus } from '@/lib/icons';
 import { projectQueries } from '@/lib/api/projects';
-import { logoDomain } from '@/lib/brand/logo-dev';
 import {
   newProjectDestination,
   useSelectProject,
@@ -56,8 +55,7 @@ export function ProjectSwitcher() {
   } = useProjectContext();
   const { mayCreate, canAddProject } = useProjectCreation();
 
-  const label = activeProject?.brand_name ?? activeProject?.name ?? 'No project';
-  const domain = logoDomain(activeProject?.website_url) ?? undefined;
+  const label = activeProject?.brand_name || activeProject?.name || 'No project';
 
   return (
     <Menu>
@@ -66,13 +64,17 @@ export function ProjectSwitcher() {
           <SidebarIdentButton
             aria-label={label}
             title={label}
-            meta={domain}
+            pending={isLoading}
             lead={
-              <BrandMark
-                name={label}
-                logoUrl={activeProject?.brand.logo_url}
-                websiteUrl={activeProject?.website_url}
-              />
+              isLoading ? (
+                <span aria-hidden className="bg-well rounded-mark size-5 shrink-0" />
+              ) : (
+                <BrandMark
+                  name={label}
+                  logoUrl={activeProject?.brand.logo_url}
+                  websiteUrl={activeProject?.website_url}
+                />
+              )
             }
           />
         </MenuTrigger>
@@ -88,13 +90,7 @@ export function ProjectSwitcher() {
                 <MenuItem
                   key={workspace.id}
                   data-active={selected}
-                  // A different workspace shares none of this route's
-                  // resources — a run id, a crawl id, a selected category all
-                  // belong to the one being left — so a switch lands on the
-                  // new workspace's Overview rather than carrying a path that
-                  // will only resolve to "unavailable". Re-picking the active
-                  // workspace stays the no-op it looks like.
-                  onSelect={() => selectWorkspace(workspace.id, selected ? undefined : '/projects')}
+                  onSelect={() => selectWorkspace(workspace.id)}
                   icon={<Building2 aria-hidden />}
                   selected={selected}
                 >
@@ -109,7 +105,7 @@ export function ProjectSwitcher() {
         <MenuSeparator />
         {projects.length === 0 ? (
           <MenuItem disabled>
-            <span className="text-ink-muted min-w-0 flex-1 truncate">
+            <span className="text-ink-2 min-w-0 flex-1 truncate">
               No projects in {activeWorkspace?.name ?? 'this workspace'}
             </span>
           </MenuItem>
@@ -120,9 +116,6 @@ export function ProjectSwitcher() {
             <MenuItem
               key={project.id}
               data-active={selected}
-              // The list carries summaries, so a switch renders only once the
-              // project's own view has answered. Highlighting a row (pointer
-              // or keyboard) asks for it, so a choice rarely waits on it.
               onFocus={() => {
                 if (!selected) void queryClient.prefetchQuery(projectQueries.detail(project.id));
               }}

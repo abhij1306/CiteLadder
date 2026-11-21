@@ -1,28 +1,25 @@
-import { useQuery, type UseQueryResult } from '@tanstack/react-query';
+import type { UseQueryResult } from '@tanstack/react-query';
 import { ProjectLink } from '@/components/ui/project-link';
 
 import { Button } from '@/components/ui/button';
-import { ListScreen } from '@/components/layout/page-shell';
-import { QueryState } from '@/components/ui/query-state';
-import { ReadError } from '@/components/ui/read-error';
+import { ReportPage } from '@/components/templates/report-page';
 import { IssuesCatalog } from '@/components/site-health/issues-catalog';
 import { ICONS } from '@/lib/icons';
-import { siteHealthQueries } from '@/lib/api/site-health-queries';
-import type { SiteHealthDashboard } from '@citeladder/contracts';
+import { useLiveCrawlDashboard } from '@/lib/site-health/use-live-crawl-dashboard';
+import type { SiteCrawl, SiteHealthDashboard } from '@citeladder/contracts';
+import { Inline } from '@/components/ui/layout';
+import { CrawlStatusBadge } from '@/components/site-health/crawl-status-badge';
+import { dashboardRunNotice } from '@/lib/site-health/run-notice';
+import { CRAWL_STATES, crawlDisplayStatus } from '@/lib/site-health/status';
 import { httpErrorStatus } from '@/lib/api/errors';
 import { useProjectScope } from '@/lib/project/active-project-scope';
+import { Notice, readErrorProps } from '@/components/ui/notice';
+import { READ_FAILED, StateBlock } from '@/components/ui/state-block';
+import { IssuesPageLoading } from '@/components/site-health/issues-summary-loading';
 
-/**
- * Issues screen container (Slice 8, mockup 710).
- *
- * Resolves the active project's current (latest/selected) crawl via the
- * dashboard projection, then renders the grouped Issues catalog for that
- * crawl. If no crawl has produced issues yet, it directs the user to run Site
- * Health first (the catalog is per-crawl and there is nothing to group).
- */
 export function IssuesScreen() {
   const { workspaceId, projectId } = useProjectScope();
-  const dashboardQuery = useQuery(siteHealthQueries.dashboard({ workspaceId, projectId }));
+  const dashboardQuery = useLiveCrawlDashboard({ workspaceId, projectId });
   return (
     <IssuesDataRegion workspaceId={workspaceId} projectId={projectId} dashboard={dashboardQuery} />
   );
@@ -39,28 +36,29 @@ function IssuesDataRegion({
 }>) {
   if (dashboard.isLoading)
     return (
-      <ListScreen narrow>
-        <QueryState kind="loading" label="Loading issues…" />
-      </ListScreen>
+      <ReportPage>
+        <IssuesPageLoading />
+      </ReportPage>
     );
 
   const status = httpErrorStatus(dashboard.error);
   const accessDenied = status === 401 || status === 403;
   if (dashboard.isError && (accessDenied || !dashboard.data)) {
     return (
-      <ListScreen narrow>
-        <QueryState
+      <ReportPage>
+        <StateBlock
           kind="error"
           error={dashboard.error}
-          fallback={
+          fallback={accessDenied ? '' : READ_FAILED}
+          title={
             accessDenied
-              ? 'Site Health is unavailable for this project.'
-              : 'Could not load Site Health.'
+              ? 'Site health is unavailable for this project'
+              : "Couldn't load the latest Site health crawl"
           }
           onRetry={() => void dashboard.refetch()}
           pending={dashboard.isFetching}
         />
-      </ListScreen>
+      </ReportPage>
     );
   }
 
@@ -86,42 +84,62 @@ function IssuesLoadedRegion({
         projectId={projectId}
         crawlId={crawl.id}
         notice={
-          <ReadError
-            error={dashboard.error}
-            fallback="Could not refresh Site Health."
-            onRetry={() => void dashboard.refetch()}
-            pending={dashboard.isFetching}
+          <Notice
+            kind="read"
+            {...readErrorProps(dashboard)}
+            fallback={READ_FAILED}
+            title="Could not refresh the latest Site health crawl"
           />
         }
       />
     ) : (
-      <ListScreen narrow>
-        <QueryState
+      <ReportPage>
+        <StateBlock
           kind="error"
-          error={dashboard.error}
-          fallback="Could not refresh Site Health."
-          onRetry={() => void dashboard.refetch()}
-          pending={dashboard.isFetching}
+          {...readErrorProps(dashboard)}
+          fallback={READ_FAILED}
+          title="Could not refresh the latest Site health crawl"
         />
-      </ListScreen>
+      </ReportPage>
     );
   }
   if (!crawl) {
     return (
-      <ListScreen narrow>
-        <QueryState
+      <ReportPage>
+        <StateBlock
           kind="empty"
           icon={ICONS.issues}
-          heading="No Site Health crawl yet"
-          description="Run Site Health to discover and analyze this project's pages — grouped issues will appear here once a crawl finishes."
+          heading="No Site health crawl yet"
           action={
-            <Button variant="secondary" asChild>
-              <ProjectLink href="/site">Go to Website</ProjectLink>
+            <Button asChild>
+              <ProjectLink href="/site">Go to Site health</ProjectLink>
             </Button>
           }
         />
-      </ListScreen>
+      </ReportPage>
     );
   }
-  return <IssuesCatalog workspaceId={workspaceId} projectId={projectId} crawlId={crawl.id} />;
+  return (
+    <IssuesCatalog
+      workspaceId={workspaceId}
+      projectId={projectId}
+      crawlId={crawl.id}
+      notice={<IssuesRunNotice crawl={crawl} />}
+    />
+  );
+}
+
+function IssuesRunNotice({ crawl }: Readonly<{ crawl: SiteCrawl }>) {
+  const message = CRAWL_STATES[crawlDisplayStatus(crawl)].active
+    ? 'Crawl in progress. Issues update in batches as pages are analyzed.'
+    : dashboardRunNotice(crawl)?.message;
+  if (!message) return null;
+  return (
+    <Notice tone="info">
+      <Inline className="flex-wrap">
+        <CrawlStatusBadge crawl={crawl} />
+        <span>{message}</span>
+      </Inline>
+    </Notice>
+  );
 }

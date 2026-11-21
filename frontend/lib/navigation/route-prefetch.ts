@@ -5,147 +5,218 @@ import { findAppRoute, type AppRoutePath } from '@/lib/navigation/app-routes';
 import { preloadRouteChunk } from '@/lib/navigation/route-chunks';
 
 export type ProjectScope = { projectId: string; workspaceId: string };
-type RoutePrefetcher = (client: QueryClient, scope: ProjectScope) => Promise<void>;
 
-/**
- * Primary read intent for data-heavy application destinations. Query keys are
- * identical to each screen's default request, so pointer and keyboard intent
- * warm the existing domain cache rather than creating a navigation cache.
- *
- * **Every prefetcher imports its API module dynamically, and that is load-bearing.**
- * This map reaches a dozen domains. `sidebar-nav` imports it, `app-shell` imports
- * that, and the router imports the shell — so a static import here placed every
- * domain's client, and the Zod schema module behind each one, in the chunk the
- * browser must download before it can render anything at all. The whole point
- * of the map is that none of those reads have happened yet.
- *
- * The extra microtask before the request is free: nothing awaits a prefetch,
- * and the chunk is already warm by the second hover.
- */
-const ROUTE_PREFETCHERS: Readonly<Partial<Record<AppRoutePath, RoutePrefetcher>>> = {
-  '/projects': prefetchOverview,
-  '/site': prefetchSiteHealth,
-  '/issues': prefetchIssues,
-  '/demand': async (client, scope) => {
-    const { demandQueries } = await import('@/lib/api/demand');
-    warmQuery(client, demandQueries.latest(scope));
-  },
-  '/performance': async (client, scope) => {
-    // The landing view, built from the screen's own defaults: the latest
-    // persisted snapshot, daily buckets, no comparison.
-    const [{ performanceQueries }, { INITIAL_DASHBOARD_PARAMS }] = await Promise.all([
-      import('@/lib/api/performance'),
-      import('@/lib/performance/performance'),
-    ]);
-    warmQuery(client, performanceQueries.dashboard(scope, INITIAL_DASHBOARD_PARAMS));
-  },
-  '/search-intelligence': async (client, scope) => {
-    // Readiness gates the whole screen: nothing below the tabs draws without it.
-    const { searchIntelligenceQueries } = await import('@/lib/api/search-intelligence');
-    warmQuery(client, searchIntelligenceQueries.readiness(scope));
-  },
-  '/products': async (client, scope) => {
-    const [{ commerceQueries }, { DEFAULT_PRODUCT_FILTERS, productSearch }] = await Promise.all([
-      import('@/lib/api/commerce'),
-      import('@/lib/products/product-filters'),
-    ]);
-    // The catalog (header and categories) and the landing page of the table.
-    warmQuery(client, commerceQueries.catalog(scope));
-    warmQuery(
-      client,
-      commerceQueries.products(scope, productSearch(DEFAULT_PRODUCT_FILTERS), null),
-    );
-  },
-  '/products/overview': async (client, scope) => {
-    const [{ commerceQueries }, { DEFAULT_OVERVIEW_FILTERS, overviewSearch }] = await Promise.all([
-      import('@/lib/api/commerce'),
-      import('@/lib/products/product-filters'),
-    ]);
-    // The category filter's options and the landing window's overview.
-    warmQuery(client, commerceQueries.catalog(scope));
-    warmQuery(client, commerceQueries.overview(scope, overviewSearch(DEFAULT_OVERVIEW_FILTERS)));
-  },
-  // New chat: its recommended Actions are the screen's one project read.
-  '/agent': async (client, scope) => {
-    const { actionsQueries } = await import('@/lib/api/actions');
-    warmQuery(client, actionsQueries.list(scope));
-  },
-  // The grouped list's reads, one per group.
-  '/agent/actions': async (client, scope) => {
-    const { actionsQueries } = await import('@/lib/api/actions');
-    for (const read of actionsQueries.groupPreviews(scope, {})) warmQuery(client, read);
-  },
-  '/agent/skills': async (client, { workspaceId }) => {
-    const { agentQueries } = await import('@/lib/api/agent');
-    warmQuery(client, agentQueries.skills(workspaceId));
-  },
-  '/agent/context': async (client, scope) => {
-    // The profile fills the first tab; the brand-facts gate decides which tabs exist.
-    const { projectQueries } = await import('@/lib/api/projects');
-    warmQuery(client, projectQueries.brandProfile(scope));
-    warmQuery(client, projectQueries.brandFacts(scope));
-  },
-  '/prompts': async (client, scope) => {
-    const [{ promptsQueries }, { topicsQueries }, { visibilityQueries }] = await Promise.all([
-      import('@/lib/api/prompts'),
-      import('@/lib/api/topics'),
-      import('@/lib/api/visibility-queries'),
-    ]);
-    // The library's three independent reads: its sets, its topic filter, and
-    // what the latest run measured for each prompt.
-    warmQuery(client, promptsQueries.sets(scope));
-    warmQuery(client, topicsQueries.list(scope));
-    warmQuery(client, visibilityQueries.prompts(scope));
-  },
-  '/visibility': async (client, scope) => {
-    const [
-      { runsQueries },
-      { INITIAL_VISIBILITY_PARAMS },
-      { visibilityQueries },
-      { projectQueries },
-    ] = await Promise.all([
-      import('@/lib/api/runs'),
-      import('@/lib/api/visibility'),
-      import('@/lib/api/visibility-queries'),
-      import('@/lib/api/projects'),
-    ]);
-    warmQuery(client, runsQueries.list(scope));
-    // The market picker's list, which the screen reads beside the runs.
-    warmQuery(client, projectQueries.markets(scope));
-    // The landing selection, built from the screen's own defaults. A key
-    // spelled out here drifted from the one the screen reads and warmed an
-    // entry nothing consumed.
-    warmQuery(client, visibilityQueries.project(scope, INITIAL_VISIBILITY_PARAMS));
-  },
-  '/runs': async (client, scope) => {
-    const { runsQueries } = await import('@/lib/api/runs');
-    warmQuery(client, runsQueries.list(scope));
-  },
-  '/ai-traffic': async (client, scope) => {
-    const [{ aiTrafficQueries }, { TRAFFIC_RANGES }] = await Promise.all([
-      import('@/lib/api/ai-traffic'),
-      import('@/lib/config/crawl-logs'),
-    ]);
-    // The landing view's three reads, side by side: the sources that choose
-    // the default tab, and the Overview tab's summary and insights.
-    const range = TRAFFIC_RANGES[0].value;
-    warmQuery(client, aiTrafficQueries.sources(scope));
-    warmQuery(client, aiTrafficQueries.overview(scope, { range }));
-    warmQuery(client, aiTrafficQueries.insights(scope, range));
-  },
+type Warm<M> = (
+  modules: M,
+  client: QueryClient,
+  scope: ProjectScope,
+  search: URLSearchParams,
+) => void | Promise<void>;
+
+type RouteReads = Readonly<{
+  load: () => Promise<unknown>;
+  prefetch: (client: QueryClient, scope: ProjectScope, search: URLSearchParams) => Promise<void>;
+}>;
+
+function routeReads<M>(load: () => Promise<M>, warm: Warm<M>): RouteReads {
+  return {
+    load,
+    prefetch: async (client, scope, search) => warm(await load(), client, scope, search),
+  };
+}
+
+const opensOn = (search: URLSearchParams, defaultTab: string) =>
+  (search.get('tab') ?? defaultTab) === defaultTab;
+
+const visibilitySelection = () =>
+  Promise.all([
+    import('@/lib/api/runs'),
+    import('@/lib/api/visibility'),
+    import('@/lib/api/visibility-queries'),
+    import('@/lib/api/projects'),
+  ]);
+
+const warmVisibilitySelection: Warm<Awaited<ReturnType<typeof visibilitySelection>>> = (
+  [{ runsQueries }, { INITIAL_VISIBILITY_PARAMS }, { visibilityQueries }, { projectQueries }],
+  client,
+  scope,
+) => {
+  warmQuery(client, runsQueries.list(scope));
+  warmQuery(client, projectQueries.markets(scope));
+  warmQuery(client, visibilityQueries.project(scope, INITIAL_VISIBILITY_PARAMS));
 };
 
-/**
- * Warm the Overview's two independent reads side by side — the command center
- * and the layout — and, once the layout names its widgets, the reads those
- * widgets make. The screen used to ask for each of these only after the one
- * before it had rendered: three or four round trips in a row.
- */
-async function prefetchOverview(client: QueryClient, scope: ProjectScope) {
-  const [{ projectQueries }, { warmOverviewWidgets }] = await Promise.all([
-    import('@/lib/api/projects'),
-    import('@/lib/overview/widget-queries'),
-  ]);
+const ROUTE_READS: Readonly<Partial<Record<AppRoutePath, RouteReads>>> = {
+  '/projects': routeReads(
+    () => Promise.all([import('@/lib/api/projects'), import('@/lib/overview/widget-queries')]),
+    warmOverview,
+  ),
+  '/site': routeReads(
+    () =>
+      Promise.all([
+        import('@/lib/api/site-health-queries'),
+        import('@/lib/api/site-health-latest-crawl'),
+        import('@/lib/site-health/use-site-health-screen'),
+        import('@/lib/site-health/status'),
+      ]),
+    warmSiteHealth,
+  ),
+  '/issues': routeReads(
+    () =>
+      Promise.all([
+        import('@/lib/api/site-health-queries'),
+        import('@/lib/api/site-health-latest-crawl'),
+        import('@/lib/site-health/issue-filters'),
+      ]),
+    warmIssues,
+  ),
+  '/performance': routeReads(
+    () => Promise.all([import('@/lib/api/performance'), import('@/lib/performance/performance')]),
+    ([{ performanceQueries }, { INITIAL_DASHBOARD_PARAMS }], client, scope) =>
+      warmQuery(client, performanceQueries.dashboard(scope, INITIAL_DASHBOARD_PARAMS)),
+  ),
+  '/search-intelligence': routeReads(
+    () => Promise.all([import('@/lib/api/demand'), import('@/lib/api/search-intelligence')]),
+    ([{ demandQueries }, { searchIntelligenceQueries }], client, scope, search) => {
+      if (opensOn(search, 'demand')) warmQuery(client, demandQueries.latest(scope));
+      else warmQuery(client, searchIntelligenceQueries.readiness(scope));
+    },
+  ),
+  '/products': routeReads(
+    () => Promise.all([import('@/lib/api/commerce'), import('@/lib/products/product-filters')]),
+    ([{ commerceQueries }, { DEFAULT_PRODUCT_FILTERS, productSearch }], client, scope) => {
+      warmQuery(client, commerceQueries.catalog(scope));
+      warmQuery(
+        client,
+        commerceQueries.products(scope, productSearch(DEFAULT_PRODUCT_FILTERS), null),
+      );
+    },
+  ),
+  '/products/overview': routeReads(
+    () => Promise.all([import('@/lib/api/commerce'), import('@/lib/products/product-filters')]),
+    ([{ commerceQueries }, { DEFAULT_OVERVIEW_FILTERS, overviewSearch }], client, scope) => {
+      warmQuery(client, commerceQueries.catalog(scope));
+      warmQuery(client, commerceQueries.overview(scope, overviewSearch(DEFAULT_OVERVIEW_FILTERS)));
+    },
+  ),
+  '/agent': routeReads(
+    () => import('@/lib/api/actions'),
+    ({ actionsQueries }, client, scope) => warmQuery(client, actionsQueries.list(scope)),
+  ),
+  '/actions': routeReads(
+    () => import('@/lib/api/actions'),
+    ({ actionsQueries, DEFAULT_ACTION_TREE }, client, scope) =>
+      warmQuery(client, actionsQueries.tree(scope, DEFAULT_ACTION_TREE)),
+  ),
+  '/agent/skills': routeReads(
+    () => import('@/lib/api/agent'),
+    ({ agentQueries }, client, { workspaceId }) =>
+      warmQuery(client, agentQueries.skills(workspaceId)),
+  ),
+  '/agent/context': routeReads(
+    () => import('@/lib/api/projects'),
+    ({ projectQueries }, client, scope) => {
+      warmQuery(client, projectQueries.brandProfile(scope));
+      warmQuery(client, projectQueries.brandFacts(scope));
+    },
+  ),
+  '/prompts': routeReads(
+    () =>
+      Promise.all([
+        import('@/lib/api/prompts'),
+        import('@/lib/api/topics'),
+        import('@/lib/api/visibility-queries'),
+        import('@/lib/prompts/prompt-sets'),
+      ]),
+    warmPrompts,
+  ),
+  '/prompts/build': routeReads(
+    () => Promise.all([import('@/lib/api/projects'), import('@/lib/api/prompts')]),
+    ([{ projectQueries }, { promptsQueries }], client, scope) => {
+      warmQuery(client, projectQueries.brandProfile(scope));
+      warmQuery(client, projectQueries.businessMap(scope));
+      warmQuery(client, promptsQueries.sets(scope));
+    },
+  ),
+  '/visibility': routeReads(visibilitySelection, warmVisibilitySelection),
+  '/insights': routeReads(visibilitySelection, warmVisibilitySelection),
+  '/competitors': routeReads(visibilitySelection, warmVisibilitySelection),
+  '/perception': routeReads(visibilitySelection, (modules, client, scope, search) => {
+    warmQuery(client, modules[3].projectQueries.brandFacts(scope));
+    return warmVisibilitySelection(modules, client, scope, search);
+  }),
+  '/runs': routeReads(
+    () => import('@/lib/api/runs'),
+    ({ runsQueries }, client, scope) => warmQuery(client, runsQueries.list(scope)),
+  ),
+  '/ai-traffic': routeReads(
+    () => Promise.all([import('@/lib/api/ai-traffic'), import('@/lib/config/crawl-logs')]),
+    ([{ aiTrafficQueries }, { TRAFFIC_RANGES }], client, scope, search) => {
+      const range = TRAFFIC_RANGES[0].value;
+      warmQuery(client, aiTrafficQueries.sources(scope));
+      if (!opensOn(search, 'overview')) return;
+      warmQuery(client, aiTrafficQueries.overview(scope, { range }));
+      warmQuery(client, aiTrafficQueries.insights(scope, range));
+    },
+  ),
+  '/settings': routeReads(
+    () =>
+      Promise.all([
+        import('@/lib/api/auth'),
+        import('@/lib/api/providers'),
+        import('@/lib/api/integrations'),
+        import('@/lib/api/mcp-connections'),
+      ]),
+    warmSettings,
+  ),
+};
+
+function warmSettings(
+  [{ authQueries }, { providerQueries }, { integrationsQueries }, { mcpConnectionQueries }]: [
+    typeof import('@/lib/api/auth'),
+    typeof import('@/lib/api/providers'),
+    typeof import('@/lib/api/integrations'),
+    typeof import('@/lib/api/mcp-connections'),
+  ],
+  client: QueryClient,
+  { workspaceId }: ProjectScope,
+  search: URLSearchParams,
+) {
+  warmQuery(client, authQueries.security());
+  warmQuery(client, providerQueries.catalog());
+  warmQuery(client, providerQueries.connections(workspaceId));
+  warmQuery(client, providerQueries.states(workspaceId));
+  const tab = search.get('tab');
+  if (tab === 'integrations') warmQuery(client, integrationsQueries.connections(workspaceId));
+  if (tab === 'connections') warmQuery(client, mcpConnectionQueries.list(workspaceId));
+}
+
+async function warmPrompts(
+  [{ promptsQueries }, { topicsQueries }, { visibilityQueries }, { mainPromptSet }]: [
+    typeof import('@/lib/api/prompts'),
+    typeof import('@/lib/api/topics'),
+    typeof import('@/lib/api/visibility-queries'),
+    typeof import('@/lib/prompts/prompt-sets'),
+  ],
+  client: QueryClient,
+  scope: ProjectScope,
+) {
+  const sets = promptsQueries.sets(scope);
+  warmQuery(client, sets);
+  warmQuery(client, topicsQueries.list(scope));
+  warmQuery(client, visibilityQueries.latestPerPrompt(scope));
+  const main = mainPromptSet((await readFromIntent(client, sets))?.prompt_sets ?? []);
+  if (main) warmQuery(client, promptsQueries.candidates(scope, main.id));
+}
+
+async function warmOverview(
+  [{ projectQueries }, { warmOverviewWidgets }]: [
+    typeof import('@/lib/api/projects'),
+    typeof import('@/lib/overview/widget-queries'),
+  ],
+  client: QueryClient,
+  scope: ProjectScope,
+) {
   warmQuery(client, projectQueries.commandCenter(scope));
   const layoutQuery = projectQueries.overviewLayout(scope);
   warmQuery(client, layoutQuery);
@@ -159,31 +230,20 @@ async function prefetchOverview(client: QueryClient, scope: ProjectScope) {
     );
 }
 
-/**
- * Warm the Website screen's dashboard and, beside it, the page preview the
- * screen requests once the dashboard names its crawl.
- *
- * A cached dashboard already names the crawl, so the preview is warmed under
- * it directly. Otherwise the project-scoped read answers for the newest crawl
- * (the one the dashboard shows) and names it, and the answer is filed under
- * that crawl's key — the preview no longer waits a round trip for the
- * dashboard. Only a finished crawl's answer is filed: an active crawl's
- * preview shows completed rows only, which is a different key.
- */
-async function prefetchSiteHealth(client: QueryClient, scope: ProjectScope) {
+async function warmSiteHealth(
+  [{ siteHealthQueries }, { latestCrawlQueries }, screen, { CRAWL_STATES }]: [
+    typeof import('@/lib/api/site-health-queries'),
+    typeof import('@/lib/api/site-health-latest-crawl'),
+    typeof import('@/lib/site-health/use-site-health-screen'),
+    typeof import('@/lib/site-health/status'),
+  ],
+  client: QueryClient,
+  scope: ProjectScope,
+) {
   const { workspaceId } = scope;
-  const [{ siteHealthQueries }, { latestCrawlQueries }, screen, { CRAWL_STATES }] =
-    await Promise.all([
-      import('@/lib/api/site-health-queries'),
-      import('@/lib/api/site-health-latest-crawl'),
-      import('@/lib/site-health/use-site-health-screen'),
-      import('@/lib/site-health/status'),
-    ]);
   const dashboard = siteHealthQueries.dashboard(scope);
   const cached = client.getQueryData(dashboard.queryKey);
   warmQuery(client, dashboard);
-  // The monitored set supplies the analysis progress totals; it needs only the project.
-  warmQuery(client, siteHealthQueries.monitored(scope));
   if (cached) {
     const preview = screen.pagePreviewQuery(workspaceId, cached);
     if (preview) warmQuery(client, preview);
@@ -198,37 +258,24 @@ async function prefetchSiteHealth(client: QueryClient, scope: ProjectScope) {
     client.setQueryData(key, page);
 }
 
-/**
- * Warm the issues page itself, not only the dashboard above it.
- *
- * The catalog asks one crawl for its issues, and only the dashboard names the
- * crawl. A cached dashboard warms the catalog under its crawl directly;
- * otherwise the project-scoped read answers for the current crawl (the one the
- * dashboard shows unless a crawl is running), beside the dashboard rather than
- * after it, and its answer is filed under the crawl it names.
- *
- * Only the DEFAULT page is warmed. A reader arriving with filters in the
- * address wants a different key, and warming this one would spend a request on
- * a page they will not see.
- */
-async function prefetchIssues(client: QueryClient, scope: ProjectScope) {
-  const { workspaceId } = scope;
-  const [
+async function warmIssues(
+  [
     { siteHealthQueries },
     { latestCrawlQueries },
     { emptyIssueFilters, issueCatalogParams, ISSUE_PRIORITY_PARAMS },
-  ] = await Promise.all([
-    import('@/lib/api/site-health-queries'),
-    import('@/lib/api/site-health-latest-crawl'),
-    import('@/lib/site-health/issue-filters'),
-  ]);
+  ]: [
+    typeof import('@/lib/api/site-health-queries'),
+    typeof import('@/lib/api/site-health-latest-crawl'),
+    typeof import('@/lib/site-health/issue-filters'),
+  ],
+  client: QueryClient,
+  scope: ProjectScope,
+) {
+  const { workspaceId } = scope;
   const dashboard = siteHealthQueries.dashboard(scope);
   const cachedCrawlId = client.getQueryData(dashboard.queryKey)?.crawl?.id;
   warmQuery(client, dashboard);
-  // The identical params `IssuesCatalog` builds for an unfiltered first page.
-  // Spelling them out differently here would warm a key nothing reads.
   const params = issueCatalogParams(emptyIssueFilters, null);
-  // The summary above the list reads the crawl's worst issues beside it.
   const warmSummary = (crawlId: string) =>
     warmQuery(client, siteHealthQueries.issues(workspaceId, crawlId, ISSUE_PRIORITY_PARAMS));
   if (cachedCrawlId) {
@@ -244,38 +291,36 @@ async function prefetchIssues(client: QueryClient, scope: ProjectScope) {
   warmSummary(crawlId);
 }
 
-/**
- * Warm the reads the application shell makes for a project on every screen:
- * the Actions badge beside the navigation reads the unfiltered first page of
- * the project's Actions. Its component loads lazily, so on a cold load the
- * read otherwise started a round trip after the page's own.
- */
+const shellReads = () => import('@/lib/api/actions');
+
 export function prefetchProjectShell(client: QueryClient, scope: ProjectScope): Promise<void> {
-  return import('@/lib/api/actions')
+  return shellReads()
     .then(({ actionsQueries }) => warmQuery(client, actionsQueries.list(scope)))
     .catch(() => {});
 }
 
-/**
- * Warm a destination's route code and, with a project, its primary read.
- *
- * Settles, never rejects, once every read the destination warms has been
- * issued — nothing needs to wait for that except a caller withdrawing those
- * reads, which must not run before they exist.
- */
+function readsFor(pathname: string): RouteReads | undefined {
+  const route = findAppRoute(pathname);
+  return route?.path === pathname ? ROUTE_READS[route.path] : undefined;
+}
+
+export function preloadRouteReads(href: string): void {
+  const { pathname } = new URL(href, 'https://citeladder.local');
+  preloadRouteChunk(pathname);
+  void shellReads().catch(() => {});
+  void readsFor(pathname)
+    ?.load()
+    .catch(() => {});
+}
+
 export function prefetchRoute(
   client: QueryClient,
   href: string,
   project: ProjectScope | null,
 ): Promise<void> {
-  const pathname = new URL(href, 'https://citeladder.local').pathname;
+  const { pathname, searchParams } = new URL(href, 'https://citeladder.local');
   preloadRouteChunk(pathname);
-  const route = findAppRoute(pathname);
-  // Only a destination's own path warms its read; a record under it has its own.
-  const prefetcher =
-    project && route?.path === pathname ? ROUTE_PREFETCHERS[route.path] : undefined;
-  if (!project || !prefetcher) return Promise.resolve();
-  // Intent is best-effort: a chunk that fails to load must not surface here,
-  // and the navigation that follows will report the failure properly.
-  return prefetcher(client, project).catch(() => {});
+  const reads = project ? readsFor(pathname) : undefined;
+  if (!project || !reads) return Promise.resolve();
+  return reads.prefetch(client, project, searchParams).catch(() => {});
 }

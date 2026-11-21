@@ -12,7 +12,6 @@ import { RequestValidationError } from '../src/http/params.ts';
 
 const ID = '018f4f6e-1c2d-7a3b-8c4d-5e6f7a8b9c0d';
 
-/** A tail over `count` numbered events, served `pageSize` at a time, and how often it was read. */
 function numberedTail(
   count: number,
   options: { pageSize: number; states?: SubjectState[]; maxSeconds?: number },
@@ -123,7 +122,6 @@ describe('event tail', () => {
     const first = await reader.read();
     expect(new TextDecoder().decode(first.value)).toBe('id: 1\nevent: progress\ndata: {"n":1}\n\n');
     await sleep(50);
-    // A slow reader holds the server at one page ahead, not the whole backlog.
     expect(reads.pages).toBeLessThanOrEqual(2);
     await reader.cancel();
   });

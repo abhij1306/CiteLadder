@@ -256,7 +256,6 @@ it('stops counting a reading judged against an outdated roster until the page is
   expect([...(await latestReadings(db, own.scope, [first!.id])).keys()]).toEqual([first!.id]);
   expect(await gaps()).toEqual([await hashOf(first!.id)]);
 
-  // The competitor is removed; the newest inspection judges with the new roster.
   await new Promise<void>((resolve) => {
     setTimeout(resolve, 5);
   });
@@ -321,7 +320,6 @@ it('runs recorded acquisition through persisted admission, robots refusal and ba
       .where('project_id', '=', own.projectId)
       .where('task_kind', 'in', ['opportunity_refresh', 'opportunity_verification'])
       .execute(),
-    // Nothing is declared on this project, so only the refresh is queued.
   ).toHaveLength(1);
 });
 it('keeps terminal handoff idempotent and rejects a task whose project belongs to another workspace', async () => {
@@ -498,7 +496,6 @@ it('recovers an expired page lease, ignores old spend and retries a redirect in 
   const token = 'https://redirect.test/long-token';
   expect(await spendRedirect(db, own.scope, token, now)).toBe('charged');
   expect(await spendRedirect(db, own.scope, token, now)).toBe('duplicate');
-  // A token that failed is followed again once the budget window turns over.
   const tomorrow = new Date(now.getTime() + 24 * 3600000);
   expect(await spendRedirect(db, own.scope, token, tomorrow)).toBe('charged');
 });
@@ -530,7 +527,6 @@ it('reads cited pages before organic results, never-read before stale, and skips
   await state(urls[1]!, { inspection_state: 'not_inspected', recurrence_count: 1 });
   await state(urls[2]!, { inspection_state: 'inspected', last_inspected_at: now });
   await state(urls[3]!, { source_class: 'competitor_owned' });
-  // Seen only in organic search results, never in an answer.
   await state(urls[4]!, { last_cited_at: null, recurrence_count: 50 });
   const failed = await db
     .insertInto('source_page_snapshots')

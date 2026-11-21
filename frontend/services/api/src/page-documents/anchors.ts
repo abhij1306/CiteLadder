@@ -1,23 +1,10 @@
-/**
- * Spans of a page document's Markdown body and how they move between two
- * revisions (content rules engine, "Findings and anchoring"). Offsets are
- * UTF-16 code units, half-open, as JavaScript and CodeMirror count them.
- *
- * Two revisions are compared line by line (longest common subsequence, with
- * each line keeping its newline), and each changed run of lines is narrowed
- * to the characters that differ. A span survives a change only when the
- * change lies wholly outside it; it then moves by what changed before it. A
- * span a change touches is gone, even if the same text appears elsewhere.
- */
 import { policy } from '../config.ts';
 
 const p = policy.content_optimization.suggestions;
 
 export type Span = { start: number; end: number };
-/** One changed region: `[from, to)` of the older body became `inserted` characters. */
 type Change = { from: number; to: number; inserted: number };
 
-/** The body's lines, each with its newline, so offsets add up to the body's length. */
 function lines(body: string) {
   const parts = body.split('\n');
   const last = parts.pop() ?? '';
@@ -25,7 +12,6 @@ function lines(body: string) {
   return last ? [...withNewlines, last] : withNewlines;
 }
 
-/** Offsets where each line starts, plus the body's length. */
 function starts(parts: readonly string[]) {
   const at = [0];
   let offset = 0;
@@ -36,12 +22,6 @@ function starts(parts: readonly string[]) {
   return at;
 }
 
-/**
- * Suffix common subsequences of two line lists weighted by characters: cell
- * (i, j) is the most unchanged characters a[i..] and b[j..] can share. Weighing
- * by length keeps a paragraph or heading in place rather than a blank line,
- * so a moved paragraph does not drag its unchanged neighbours into the change.
- */
 function lcsTable(a: readonly string[], b: readonly string[]) {
   const width = b.length + 1;
   const table = new Uint32Array((a.length + 1) * width);
@@ -53,7 +33,6 @@ function lcsTable(a: readonly string[], b: readonly string[]) {
   return at;
 }
 
-/** Line ranges `[i0, i1)` of `a` replaced by `[j0, j1)` of `b`, in order. */
 type Hunk = { i0: number; i1: number; j0: number; j1: number };
 
 function lineHunks(a: readonly string[], b: readonly string[]): Hunk[] {
@@ -65,13 +44,11 @@ function lineHunks(a: readonly string[], b: readonly string[]): Hunk[] {
   const endA = a.length - tail;
   const endB = b.length - tail;
   if (head === endA && head === endB) return [];
-  // Past the bound the whole middle is one change: coarser, never wrong.
   if ((endA - head + 1) * (endB - head + 1) > p.diff_max_cells)
     return [{ i0: head, i1: endA, j0: head, j1: endB }];
   return walkHunks(a.slice(head, endA), b.slice(head, endB), head);
 }
 
-/** The changed runs between `midA` and `midB` along their weighted LCS, offset by `head`. */
 function walkHunks(midA: readonly string[], midB: readonly string[], head: number): Hunk[] {
   const at = lcsTable(midA, midB);
   const hunks: Hunk[] = [];
@@ -94,7 +71,6 @@ function walkHunks(midA: readonly string[], midB: readonly string[], head: numbe
   return hunks;
 }
 
-/** A changed run of characters narrowed to what differs: its common head and tail are unchanged. */
 function narrowed(
   before: string,
   after: string,
@@ -111,7 +87,6 @@ function narrowed(
   return { from: from + head, to: to - tail, inserted: newTo - tail - (newFrom + head) };
 }
 
-/** What changed from one body to the next, as ordered, non-overlapping regions of the older body. */
 export function bodyChanges(before: string, after: string): Change[] {
   if (before === after) return [];
   const a = lines(before);
@@ -130,13 +105,11 @@ export function bodyChanges(before: string, after: string): Change[] {
   );
 }
 
-/** Whether a change alters the text of a span: it overlaps it, or inserts inside it. */
 function touches(change: Change, span: Span) {
   if (change.from === change.to) return change.from > span.start && change.from < span.end;
   return change.from < span.end && change.to > span.start;
 }
 
-/** Where a span is after the changes, or null when one of them altered its text. */
 export function mapSpan(changes: readonly Change[], span: Span): Span | null {
   let shift = 0;
   for (const change of changes) {
@@ -146,10 +119,6 @@ export function mapSpan(changes: readonly Change[], span: Span): Span | null {
   return { start: span.start + shift, end: span.end + shift };
 }
 
-/**
- * Replaces non-overlapping spans of a body in one pass. Returns the new body
- * and where each replacement now sits, in the order the edits were given.
- */
 export function replaceSpans(body: string, edits: readonly { at: Span; text: string }[]) {
   const order = edits
     .map((edit, index) => ({ ...edit, index }))
@@ -169,12 +138,10 @@ export function replaceSpans(body: string, edits: readonly { at: Span; text: str
   };
 }
 
-/** Whether two spans share any character. */
 export function overlaps(a: Span, b: Span) {
   return a.start < b.end && b.start < a.end;
 }
 
-/** A span's exact text and its context each side (W3C TextQuoteSelector). */
 export function quoteOf(body: string, span: Span) {
   return {
     exact: body.slice(span.start, span.end),
@@ -185,7 +152,6 @@ export function quoteOf(body: string, span: Span) {
 
 const HEADING = /^#{1,6}[ \t]/u;
 
-/** The body between the headings around a span: from the heading above it to the next heading after it. */
 export function sectionOf(body: string, span: Span): Span {
   let start = 0;
   let end = body.length;

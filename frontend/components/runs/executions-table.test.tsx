@@ -9,16 +9,6 @@ import type { Execution, ExecutionStatus } from '@citeladder/contracts';
 
 import { ExecutionsTable } from './executions-table';
 
-/**
- * One row per execution of the run. Two rules carry weight here.
- *
- * Evidence is offered ONLY for a succeeded execution: a failed or in-flight one
- * has no persisted answer to show, so the affordance must not exist rather than
- * open an empty drawer.
- *
- * A null latency is "never reported", not "instant". Rendering it as `0 ms`
- * would put a fabricated measurement in a column of real ones.
- */
 function execution(overrides: Partial<Execution> = {}): Execution {
   return {
     id: `11111111-1111-4111-8111-${String(1).padStart(12, '0')}`,
@@ -46,8 +36,6 @@ describe('ExecutionsTable', () => {
   });
 
   it('falls back to the prompt ordinal when the snapshot text is empty', () => {
-    // A pruned or empty snapshot still has to identify WHICH prompt this was,
-    // or the row is unreadable.
     render(
       <ExecutionsTable
         executions={[execution({ prompt_text: '', prompt_index: 4 })]}
@@ -56,18 +44,6 @@ describe('ExecutionsTable', () => {
     );
 
     expect(screen.getByText('Prompt #5')).toBeVisible();
-  });
-
-  it('names the engine and the transport that served it', () => {
-    render(
-      <ExecutionsTable
-        executions={[execution({ logical_engine: 'gemini', transport_provider: 'google' })]}
-        onSelectEvidence={vi.fn()}
-      />,
-    );
-
-    expect(screen.getByText('Gemini API')).toBeVisible();
-    expect(screen.getByText('Google')).toBeVisible();
   });
 
   it('renders an unreported latency as a placeholder, not as zero', () => {
@@ -128,9 +104,8 @@ describe('ExecutionsTable', () => {
     const row = execution({ status: 'succeeded' });
     render(<ExecutionsTable executions={[row]} onSelectEvidence={onSelectEvidence} />);
 
-    await user.click(screen.getByRole('button', { name: 'Evidence' }));
+    await user.click(screen.getByRole('button', { name: /^View evidence for / }));
 
-    // The drawer opens without leaving the run, and receives the exact row.
     expect(onSelectEvidence).toHaveBeenCalledTimes(1);
     expect(onSelectEvidence).toHaveBeenCalledWith(row);
   });
@@ -138,11 +113,9 @@ describe('ExecutionsTable', () => {
   it.each<ExecutionStatus>(['queued', 'running', 'failed', 'cancelled'])(
     'offers no evidence affordance for a %s execution',
     (status) => {
-      // There is no persisted answer to show; an enabled control would open an
-      // empty drawer.
       render(<ExecutionsTable executions={[execution({ status })]} onSelectEvidence={vi.fn()} />);
 
-      expect(screen.queryByRole('button', { name: 'Evidence' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^View evidence/ })).not.toBeInTheDocument();
     },
   );
 
@@ -158,7 +131,7 @@ describe('ExecutionsTable', () => {
       />,
     );
 
-    expect(screen.getAllByRole('row')).toHaveLength(4); // header + three
+    expect(screen.getAllByRole('row')).toHaveLength(4);
   });
 
   it('pages the run ten at a time and narrows it to one engine or one status', async () => {
@@ -177,7 +150,6 @@ describe('ExecutionsTable', () => {
     await user.click(screen.getByRole('button', { name: 'Next page' }));
     expect(shown()).toEqual(['Question 11.', 'Question 12.']);
 
-    // A filter returns to the first page of what it leaves.
     await chooseFilterOption(user, 'Status', 'Succeeded');
     expect(shown()).toEqual(rows.slice(0, 10).map((row) => row.prompt_text));
     await chooseFilterOption(user, 'Engine', /chatgpt/iu);

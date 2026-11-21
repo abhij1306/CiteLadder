@@ -1,4 +1,4 @@
-import { act, screen } from '@testing-library/react';
+import { act, fireEvent, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { afterEach, expect, it, vi } from 'vite-plus/test';
@@ -9,7 +9,13 @@ import { CommandField } from './command-menu';
 
 afterEach(() => vi.restoreAllMocks());
 
-function MessageField({ replacement }: { replacement: string }) {
+function MessageField({
+  replacement,
+  onEnter = vi.fn(),
+}: {
+  replacement: string;
+  onEnter?: () => void;
+}) {
   const [value, setValue] = useState('');
   return (
     <>
@@ -18,10 +24,10 @@ function MessageField({ replacement }: { replacement: string }) {
         id="message"
         value={value}
         onChange={setValue}
-        onEnter={vi.fn()}
+        onEnter={onEnter}
         disabled={false}
         placeholder="Ask a question"
-        rows={3}
+        maxRows={8}
         commands={{
           options: () => [{ key: 'pricing', label: 'Pricing page', replacement }],
           onPick: vi.fn(),
@@ -54,3 +60,15 @@ it.each([false, true])(
     expect(field).toHaveValue(`${replacement} Shorten it.`);
   },
 );
+
+it('sends on Enter but not on the Enter that confirms an IME composition', () => {
+  const onEnter = vi.fn();
+  renderWithProviders(<MessageField replacement="@Pricing" onEnter={onEnter} />);
+  const field = screen.getByRole('combobox', { name: 'Message' });
+  fireEvent.keyDown(field, { key: 'Enter', isComposing: true });
+  // Safari: isComposing is false on the confirming keydown, keyCode is 229.
+  fireEvent.keyDown(field, { key: 'Enter', keyCode: 229 });
+  expect(onEnter).toHaveBeenCalledTimes(0);
+  fireEvent.keyDown(field, { key: 'Enter', keyCode: 13 });
+  expect(onEnter).toHaveBeenCalledTimes(1);
+});

@@ -7,7 +7,12 @@ import { parseSitemapAsync } from '../src/site-health/analysis/off-thread.ts';
 import { discoveryLinks } from '../src/site-health/discovery-links.ts';
 import { classifyUrlAdmission } from '../src/site-health/url-admission.ts';
 import { document } from '../src/web-evidence/html.ts';
-import { parseSitemap, SitemapCollector, SitemapParseError } from '../src/web-evidence/sitemaps.ts';
+import {
+  parseSitemap,
+  SitemapCollector,
+  SitemapParseError,
+  SitemapTooLargeError,
+} from '../src/web-evidence/sitemaps.ts';
 
 const reasons = policy.site_health.crawl.exclusions;
 const scope = { domain: 'example.test' };
@@ -32,7 +37,6 @@ describe('URL admission', () => {
       disposition: 'inventory_only',
       itemKind: 'document',
     });
-    // Sitemaps are the one asset extension crawler infrastructure may fetch.
     expect(classifyUrlAdmission('https://example.test/sitemap.xml').accepted).toBe(false);
     expect(
       classifyUrlAdmission('https://example.test/sitemap-1.xml.gz', { infrastructure: 'sitemap' })
@@ -82,7 +86,6 @@ describe('URL admission', () => {
       priority('https://example.test/blog/widget'),
     );
     const kind = (path: string) => classifyUrlAdmission(`https://example.test${path}`).valueKind;
-    // Whole tokens and the section first, not any substring anywhere.
     expect(kind('/blog/product-review')).toBe('article');
     expect(kind('/about-us')).toBe('about');
     expect(kind('/help/getting-started')).toBe('guide');
@@ -227,6 +230,8 @@ describe('sitemaps', () => {
         .join('')}</urlset>`,
     );
   const read = (body: Buffer) => parseSitemap(body, 'text/xml', limits);
+  const collector = (options: { maxSiteUrls?: number; follows?: (ref: string) => boolean } = {}) =>
+    new SitemapCollector({ limits, maxSiteUrls: 100, follows: () => true, ...options });
   it('reads page URLs and index references, and decodes gzip under the cap', () => {
     expect(parseSitemap(urlset('https://example.test/a?x=1&amp;y=2'), 'text/xml', limits)).toEqual({
       urls: ['https://example.test/a?x=1&y=2'],
@@ -249,14 +254,13 @@ describe('sitemaps', () => {
     const four = urlset('/1', '/2', '/3', '/4')
       .toString()
       .replaceAll('> /', '> https://example.test/');
-    const capped = new SitemapCollector(limits);
+    const capped = collector();
     capped.add('https://example.test/sitemap.xml', read(Buffer.from(four)), 0);
     expect([capped.urls.length, capped.truncated]).toEqual([3, true]);
-    const whole = new SitemapCollector(limits);
+    const whole = collector();
     whole.add('https://example.test/sitemap.xml', read(urlset('https://example.test/1')), 0);
     expect([whole.urls.length, whole.truncated]).toEqual([1, false]);
-    // At the depth bound, a reference back to a read index leaves nothing unread.
-    const looped = new SitemapCollector(limits);
+    const looped = collector();
     const index = (loc: string) =>
       Buffer.from(`<sitemapindex><sitemap><loc>${loc}</loc></sitemap></sitemapindex>`);
     looped.add('https://example.test/a.xml', read(index('https://example.test/b.xml')), 0);
@@ -272,14 +276,14 @@ describe('sitemaps', () => {
       <url><loc>https://example.test/b</loc></url>
       <url><loc>https://example.test/a</loc><lastmod>2020-01-01</lastmod></url></urlset>`,
     );
-    const collector = new SitemapCollector(limits);
-    collector.add('https://example.test/sitemap.xml', read(dated), 0);
-    expect(collector.urls).toEqual([
+    const walk = collector();
+    walk.add('https://example.test/sitemap.xml', read(dated), 0);
+    expect(walk.urls).toEqual([
       'https://example.test/a',
       'https://example.test/b',
       'https://example.test/a',
     ]);
-    expect(collector.lastmod).toEqual(new Map([['https://example.test/a', '2026-09-01']]));
+    expect(walk.lastmod).toEqual(new Map([['https://example.test/a', '2026-09-01']]));
   });
 
   it('refuses entity declarations, malformed XML and decompression bombs', () => {
@@ -290,28 +294,50 @@ describe('sitemaps', () => {
     expect(() => parseSitemap(Buffer.from('<urlset><url>'), 'text/xml', limits)).toThrow(
       SitemapParseError,
     );
-    const bomb = gzipSync(Buffer.alloc(limits.maxDecodedBytes * 4, 'a'));
-    expect(() => parseSitemap(bomb, 'application/gzip', limits)).toThrow(SitemapParseError);
+    const thrown = (body: Buffer) => {
+      try {
+        parseSitemap(body, 'application/gzip', limits);
+      } catch (error) {
+        return error instanceof Error ? error.constructor : null;
+      }
+      return null;
+    };
+    expect(thrown(gzipSync(Buffer.alloc(limits.maxDecodedBytes * 4, 'a')))).toBe(
+      SitemapTooLargeError,
+    );
+    expect(thrown(Buffer.from([0x1f, 0x8b, 1, 2, 3]))).toBe(SitemapParseError);
   });
 
-  it('caps collected URLs and stops following references at the depth bound or a loop', () => {
-    const collector = new SitemapCollector(limits);
+  it('caps collected URLs site-wide and stops following references at the depth bound, a loop or another domain', () => {
+    const walk = collector({
+      maxSiteUrls: 3,
+      follows: (ref) => ref.startsWith('https://example.test/'),
+    });
     const index = Buffer.from(
       '<sitemapindex><sitemap><loc>https://example.test/root.xml</loc></sitemap>' +
         '<sitemap><loc>https://example.test/child.xml</loc></sitemap></sitemapindex>',
     );
-    expect(collector.add('https://example.test/root.xml', read(index), 0)).toEqual([
+    expect(walk.add('https://example.test/root.xml', read(index), 0)).toEqual([
       'https://example.test/child.xml',
     ]);
-    expect(collector.add('https://example.test/child.xml', read(index), 1)).toEqual([]);
-    collector.add('https://example.test/u1.xml', read(urlset('a', 'b')), 1);
-    collector.add('https://example.test/u2.xml', read(urlset('c', 'd')), 1);
-    expect(collector.urls).toEqual(['a', 'b', 'c']);
-    // A fragment or spelling variant of a visited sitemap is the same document.
+    expect(walk.add('https://example.test/child.xml', read(index), 1)).toEqual([]);
+    walk.add('https://example.test/u1.xml', read(urlset('a', 'b')), 1);
+    expect(walk.truncated).toBe(false);
+    walk.add('https://example.test/u2.xml', read(urlset('c', 'd')), 1);
+    expect([walk.urls, walk.truncated]).toEqual([['a', 'b', 'c'], true]);
     const again = Buffer.from(
       '<sitemapindex><sitemap><loc>https://EXAMPLE.test/root.xml#top</loc></sitemap></sitemapindex>',
     );
-    expect(collector.add('https://example.test/other.xml', read(again), 0)).toEqual([]);
+    expect(walk.add('https://example.test/other.xml', read(again), 0)).toEqual([]);
+    const offsite = collector({ follows: (ref) => ref.startsWith('https://example.test/') });
+    const mixed = Buffer.from(
+      '<sitemapindex><sitemap><loc>https://example.test/s1.xml</loc></sitemap>' +
+        '<sitemap><loc>https://other.test/s2.xml</loc></sitemap></sitemapindex>',
+    );
+    expect(offsite.add('https://example.test/index.xml', read(mixed), 0)).toEqual([
+      'https://example.test/s1.xml',
+    ]);
+    expect(offsite.truncated).toBe(true);
   });
 
   it('parses a sitemap off the event loop with the same answer and refusals', async () => {

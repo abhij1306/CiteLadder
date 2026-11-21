@@ -65,19 +65,24 @@ describe('bounded runner', () => {
       await db.destroy();
     }
   });
-  it.each([1, 8])(
-    'bounds Site Health batches by its policy and the pool (worker limit %i)',
-    async (concurrency) => {
-      const config = testConfig({ SITE_HEALTH_WORKER_CONCURRENCY: String(concurrency) });
+  it.each([
+    { concurrency: 1, pool: 4, slots: 1 },
+    { concurrency: 8, pool: 4, slots: 3 },
+    { concurrency: 8, pool: 1, slots: 1 },
+  ])(
+    'bounds Site Health batches by its policy and the pool less one (worker limit $concurrency, pool $pool)',
+    async ({ concurrency, pool, slots }) => {
+      const config = testConfig({
+        SITE_HEALTH_WORKER_CONCURRENCY: String(concurrency),
+        RUNNER_DB_POOL_SIZE: String(pool),
+      });
       const db = createDatabase(config, { execution: true });
       const run = vi.spyOn(SiteHealthWorker.prototype, 'drain').mockResolvedValue(0);
       try {
         const owners = await runnerOwners(db, config);
-        await owners.lanes.find((lane) => lane.name === 'site-health')!.run(() => true);
-        expect(run).toHaveBeenCalledWith(
-          Math.min(concurrency, config.execution.poolSize),
-          expect.any(Function),
-        );
+        const peersDue = async () => false;
+        await owners.lanes.find((lane) => lane.name === 'site-health')!.run(() => true, peersDue);
+        expect(run).toHaveBeenCalledWith(slots, expect.any(Function), peersDue);
       } finally {
         run.mockRestore();
         await db.destroy();
@@ -192,7 +197,6 @@ describe('bounded runner', () => {
   it('pauses only within the remaining budget and backs off on due-but-unclaimed work', () => {
     expect(idlePause(null, 10_000, 5000)).toBeNull();
     expect(idlePause(40, 300, 5000)).toBe(40);
-    // A due row another claimer holds must not spin, nor pause past the deadline.
     expect(idlePause(0, 10_000, 5000)).toBe(250);
     expect(idlePause(0, 200, 5000)).toBeNull();
     expect(idlePause(60_000, 300_000, 5000)).toBe(5000);
@@ -221,7 +225,6 @@ describe('bounded runner', () => {
         .set({ status: 'running', lease_owner: 'dead-worker', lease_expires_at: expiry })
         .where('id', '=', running)
         .execute();
-      // A killed holder's lease is recovered at expiry, so the runner must stay for it.
       expect((await worker.nextDue())?.getTime()).toBe(expiry.getTime());
       await db
         .updateTable('site_crawl_tasks')
@@ -246,8 +249,6 @@ describe('bounded runner', () => {
         taskScope: { workspaceId: seed.workspaceId, crawlId: seed.crawlId },
         executors: { link_metrics: async () => {} },
       });
-      // A sibling holds the crawl lock for the whole run, so both the task's
-      // own lock and the settle that follows time out.
       let release = () => {};
       const released = new Promise<void>((resolve) => {
         release = resolve;
@@ -359,7 +360,6 @@ describe('bounded runner', () => {
           run: async () => {
             if (order.includes('site claimed')) return 0;
             order.push('site claimed');
-            // The pre-fix sequential drain reaches the audits only after this window.
             await Promise.race([released.promise, sleep(1000)]);
             order.push('site settled');
             return 1;
@@ -428,6 +428,50 @@ describe('bounded runner', () => {
     expect(auditsAlongside).toBe(true);
   });
 
+  it('tells a grouped lane whether a peer of its group has work due, and an ungrouped lane to yield', async () => {
+    let peerDue: Date | null = null;
+    let probeFails = false;
+    const grouped: (boolean | string)[] = [];
+    const ungrouped: boolean[] = [];
+    await drainLanes(
+      [
+        {
+          name: 'analytics',
+          group: 'web-fetch',
+          run: async () => 0,
+          nextDue: async () => {
+            if (probeFails) throw new Error('probe failed');
+            return peerDue;
+          },
+        },
+        {
+          name: 'site-health',
+          group: 'web-fetch',
+          run: async (_canAdmit, peersDue) => {
+            grouped.push(await peersDue());
+            peerDue = new Date(Date.now() - 1000);
+            grouped.push(await peersDue());
+            peerDue = null;
+            probeFails = true;
+            grouped.push(await peersDue().catch(() => 'rejected'));
+            probeFails = false;
+            return 0;
+          },
+        },
+        {
+          name: 'audits',
+          run: async (_canAdmit, peersDue) => {
+            ungrouped.push(await peersDue());
+            return 0;
+          },
+        },
+      ],
+      options(),
+    );
+    expect(grouped).toEqual([false, true, 'rejected']);
+    expect(ungrouped).toEqual([true]);
+  });
+
   it('polls an idle lane for new work while another lane stays busy', async () => {
     let busy = true;
     let picked = 0;
@@ -438,7 +482,6 @@ describe('bounded runner', () => {
           name: 'site-health',
           run: async () => {
             if (!busy) return 0;
-            // New audit work is committed after the audits lane went idle.
             setTimeout(() => (queued = 1), 20);
             await sleep(200);
             busy = false;
@@ -457,7 +500,6 @@ describe('bounded runner', () => {
       ],
       { ...options(), deadline: Number.POSITIVE_INFINITY, idlePollMs: 50 },
     );
-    // Picked up within the poll interval, before the busy lane returned.
     expect(picked).toBe(1);
   });
 

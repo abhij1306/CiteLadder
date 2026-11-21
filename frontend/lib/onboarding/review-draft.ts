@@ -1,13 +1,3 @@
-/**
- * In-progress review edits, kept for this browser tab so a reload does not
- * discard them.
- *
- * The URL already carries the discovery and step; this keeps what the reader
- * changed on the review step (websites, competitors and the business profile)
- * in `sessionStorage`, keyed by discovery. It is untrusted browser state: it is
- * parsed on read, dropped when it does not match, and completion still sends
- * everything to the server for validation.
- */
 import { z } from 'zod';
 
 import { brandDiscoverySchema } from '@citeladder/contracts/visibility';
@@ -41,7 +31,6 @@ function storageKey(discoveryId: string) {
   return `${STORAGE_PREFIX}${discoveryId}`;
 }
 
-/** The saved edits for this discovery, or `null` when none are usable. */
 export function readReviewDraft(discoveryId: string): ReviewDraft | null {
   try {
     const raw = window.sessionStorage.getItem(storageKey(discoveryId));
@@ -61,15 +50,11 @@ export function saveReviewDraft(discoveryId: string, draft: ReviewDraft) {
       storageKey(discoveryId),
       JSON.stringify({ version: 1, ...draft } satisfies z.input<typeof reviewDraftSchema>),
     );
-  } catch {
-    // Storage is a convenience: without it the edits last until a reload.
-  }
+  } catch {}
 }
 
 export function clearReviewDraft(discoveryId: string) {
   try {
     window.sessionStorage.removeItem(storageKey(discoveryId));
-  } catch {
-    // Nothing was saved.
-  }
+  } catch {}
 }

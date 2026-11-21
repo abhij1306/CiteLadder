@@ -10,34 +10,25 @@ const o = policy.opportunity.opportunities;
 
 const windowDays: Partial<Record<ExpectedCheck['kind'], number>> = o.CHECK_KIND_WINDOW_DAYS;
 
-/** How long after go-live new evidence still answers a check of this kind. */
 export function checkWindowDays(kind: ExpectedCheck['kind']): number {
   return windowDays[kind] ?? o.VERIFICATION_WINDOW_DAYS;
 }
 
-/** The longest window any check kind has; a source never looks further back. */
 export const MAX_WINDOW_DAYS = Math.max(
   o.VERIFICATION_WINDOW_DAYS,
   ...Object.values(o.CHECK_KIND_WINDOW_DAYS),
 );
 
-/**
- * One expected check's reading from one source. `met` and `unmet` answer the
- * check; `waiting` was read but is not final;
- * `unavailable` could not answer and says why.
- */
 export type CheckOutcome = {
   state: 'met' | 'unmet' | 'waiting' | 'unavailable';
   reason: string | null;
   observed_at: string;
   source_kind: string;
   source_id: string;
-  /** An issue-family check's per-page reading of its cohort; absent for every other kind. */
   pages?: IssueFamilyPages;
 };
 type IssueFamilyPages = z.infer<typeof issueFamilyPagesSchema>;
 export type Evaluation = {
-  /** Outcomes by expected-check index, for the checks this source can read. */
   outcomes: Map<number, CheckOutcome>;
   analysis_ids: Set<string>;
   rule_evaluation_ids: Set<string>;
@@ -66,7 +57,6 @@ const checkOutcome = z.object({
   pages: issueFamilyPagesSchema.optional(),
 });
 
-/** Per-check states recorded by the declaration's latest observation. */
 export function storedOutcomes(result: unknown): Map<number, CheckOutcome> {
   const parsed = z.array(checkOutcome).safeParse(record(result).checks);
   return new Map((parsed.success ? parsed.data : []).map(({ index, ...item }) => [index, item]));
@@ -75,11 +65,6 @@ export function storedOutcomes(result: unknown): Map<number, CheckOutcome> {
 const answered = (item: CheckOutcome | undefined) =>
   item?.state === 'met' || item?.state === 'unmet';
 
-/**
- * Fold a source's outcomes into the previous per-check states. An answer is
- * never replaced by a reading that could not answer, and between two answers
- * (or two non-answers) the later reading wins, whichever order they arrive in.
- */
 export function mergeOutcomes(
   previous: ReadonlyMap<number, CheckOutcome>,
   current: ReadonlyMap<number, CheckOutcome>,
@@ -96,7 +81,6 @@ export function mergeOutcomes(
   return merged;
 }
 
-/** The observation over merged states: any unmet check contradicts; all met verifies. */
 export function observationKind(
   merged: ReadonlyMap<number, CheckOutcome>,
   total: number,
@@ -107,10 +91,6 @@ export function observationKind(
   return total > 0 && met === total ? 'verified' : 'observed';
 }
 
-/**
- * Whether a source's reading is worth an appended observation: it read the
- * check (even if not finally), or it changed what a reader is told.
- */
 export function worthRecording(
   previous: ReadonlyMap<number, CheckOutcome>,
   current: ReadonlyMap<number, CheckOutcome>,
@@ -136,14 +116,12 @@ function metricMatches(
 const numeric = (value: unknown): value is number =>
   typeof value === 'number' && Number.isFinite(value);
 
-/** A declared rule expectation in the evaluation vocabulary it is compared with. */
 export function expectedRuleOutcome(expected: unknown) {
   if (expected === 'pass') return 'satisfied';
   if (expected === 'fail') return 'missing';
   return expected;
 }
 
-/** A per-prompt composite score in a metric snapshot, or null. */
 export function promptScore(metrics: unknown, index: number): number | null {
   const rows = record(metrics).per_prompt;
   const value = Array.isArray(rows)
@@ -152,7 +130,6 @@ export function promptScore(metrics: unknown, index: number): number | null {
   return numeric(value) ? value : null;
 }
 
-/** A frozen baseline against a later reading, under the check's direction. */
 export function compareMetric(
   check: Record<string, unknown>,
   baseline: unknown,

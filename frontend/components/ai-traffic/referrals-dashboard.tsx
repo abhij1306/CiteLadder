@@ -1,10 +1,9 @@
-import { SearchX } from 'lucide-react';
-
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
-import { Stack } from '@/components/ui/layout';
+import { AppGrid } from '@/components/ui/app-grid';
 import { TableCell, TableRow } from '@/components/ui/table';
-import { TrendChart, type TrendPoint } from '@/components/ui/trend-chart';
+import { AreaChart } from '@/components/ui/area-chart';
+import { type TrendPoint } from '@/components/ui/series-data';
+import { SearchX } from '@/lib/icons';
 import type { AiReferrals } from '@/lib/api/ai-traffic';
 import {
   aiSourceLabel,
@@ -14,45 +13,58 @@ import {
   totalSourceSessions,
 } from '@/lib/ai-traffic/series';
 import { bucketCountLabel } from '@/lib/ai-traffic/options';
-import { formatCount, formatPercent, formatWindowDate } from '@/lib/format';
-import { useState } from 'react';
+import { formatAmount, formatCount, formatPercent, formatWindowDate } from '@/lib/format';
+import { stringUrlCodec, useUrlState } from '@/lib/navigation/url-state';
 import { Tabs, TabPanel } from '@/components/ui/tabs';
 import {
-  formatRevenue,
   Measure,
   ReferralComparison,
   ReferralLandingPages,
   ReferralQuality,
 } from './referral-details';
+import {
+  Section,
+  SectionContent,
+  SectionHeader,
+  SectionStack,
+  SectionTitle,
+  TitledSection,
+} from '@/components/ui/section';
+
+const REFERRAL_VIEWS = [
+  { value: 'overview', label: 'Overview' },
+  { value: 'sources', label: 'Sources' },
+  { value: 'landing', label: 'Landing pages' },
+] as const;
+type ReferralView = (typeof REFERRAL_VIEWS)[number]['value'];
+const viewCodec = stringUrlCodec<ReferralView>(
+  REFERRAL_VIEWS.map((view) => view.value),
+  'overview',
+);
 
 export function AiReferralsDashboard({
   data,
   fetching,
 }: Readonly<{ data: AiReferrals; fetching: boolean }>) {
-  const [tab, setTab] = useState('overview');
+  const [tab, setTab] = useUrlState('referrals_view', viewCodec);
   return (
-    <Stack gap="workspace" aria-busy={fetching}>
+    <SectionStack aria-busy={fetching}>
       <ReferralQuality data={data} />
       <Tabs
         value={tab}
         onValueChange={setTab}
         ariaLabel="Referral views"
         spaced
-        items={[
-          { value: 'overview', label: 'Overview' },
-          { value: 'sources', label: 'Sources' },
-          { value: 'landing', label: 'Landing pages' },
-        ]}
+        items={REFERRAL_VIEWS}
       >
-        {/* The tab strip, the cards and the comparison are blocks: 12 apart. */}
         <TabPanel value="overview">
-          <Stack gap="workspace">
-            <Stack gap="workspace" className="desktop:grid-cols-2">
+          <SectionStack>
+            <AppGrid layout="halves">
               <ReferralVolumeCard data={data} />
               <ReferralShareCard data={data} />
-            </Stack>
+            </AppGrid>
             <ReferralComparison data={data} />
-          </Stack>
+          </SectionStack>
         </TabPanel>
         <TabPanel value="sources">
           <SourceTotals data={data} />
@@ -61,18 +73,12 @@ export function AiReferralsDashboard({
           <ReferralLandingPages data={data} />
         </TabPanel>
       </Tabs>
-    </Stack>
+    </SectionStack>
   );
 }
 
-/**
- * A referral trend in a card: the series on the chart's own axes (dates
- * under the plot, the scale in its gutter), so no hand-placed labels drift
- * from the line they name.
- */
 function TrendCard({
   title,
-  description,
   badge,
   points,
   unit,
@@ -80,31 +86,29 @@ function TrendCard({
   formatTick,
 }: Readonly<{
   title: string;
-  description: string;
   badge: string;
   points: TrendPoint[];
-  /** What the line counts: its name in the legend and the table. */
   unit: string;
   domainMax?: number;
   formatTick?: (value: number) => string;
 }>) {
   return (
-    <Card>
-      <CardHeader actions={<span className="type-caption">{badge}</span>}>
-        <CardTitle>{title}</CardTitle>
-        <CardDescription>{description}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <TrendChart
+    <Section>
+      <SectionHeader actions={<span className="type-caption">{badge}</span>}>
+        <SectionTitle>{title}</SectionTitle>
+      </SectionHeader>
+      <SectionContent>
+        <AreaChart
           label={title}
           name={unit}
           data={points}
           height="sm"
           yMax={domainMax}
           yFormat={formatTick}
+          you={false}
         />
-      </CardContent>
-    </Card>
+      </SectionContent>
+    </Section>
   );
 }
 
@@ -115,9 +119,11 @@ function ReferralVolumeCard({ data }: Readonly<{ data: AiReferrals }>) {
   return (
     <TrendCard
       title="AI-referred sessions"
-      description="GA4 sessions whose source matches a known AI assistant"
       badge={bucketCountLabel(data.granularity, data.referral_volume.length)}
-      points={toCountChartPoints(data.referral_volume)}
+      points={toCountChartPoints(data.referral_volume, {
+        granularity: data.granularity,
+        windowEnd: data.window_end,
+      })}
       unit="Sessions"
       domainMax={countDomainMax(values)}
     />
@@ -128,9 +134,11 @@ function ReferralShareCard({ data }: Readonly<{ data: AiReferrals }>) {
   return (
     <TrendCard
       title="Share of GA4 sessions"
-      description="AI-referred sessions divided by all sessions in the same GA4 source report"
       badge={bucketCountLabel(data.granularity, data.referral_share.length)}
-      points={toPercentChartPoints(data.referral_share)}
+      points={toPercentChartPoints(data.referral_share, {
+        granularity: data.granularity,
+        windowEnd: data.window_end,
+      })}
       unit="Share"
       formatTick={(value) => `${Math.round(value)}%`}
     />
@@ -141,49 +149,51 @@ function SourceTotals({ data }: Readonly<{ data: AiReferrals }>) {
   const total = totalSourceSessions(data.sources);
   const measured = data.referral_volume.some((point) => point.value !== null);
   return (
-    <DataTable
+    <TitledSection
       title="AI referral sources"
       description={
         <>
           {formatCount(total)} identified sessions
           {data.window_start && data.window_end
-            ? ` for ${formatWindowDate(data.window_start)} – ${formatWindowDate(data.window_end)}`
+            ? ` · ${formatWindowDate(data.window_start)} – ${formatWindowDate(data.window_end)}`
             : ''}
-          . Shares use all GA4 source-report sessions as the denominator.
         </>
       }
-      columns={sourceColumns(data.currency_code)}
-      minWidth="lg"
-      state={
-        data.sources.length
-          ? undefined
-          : {
-              kind: 'empty',
-              icon: SearchX,
-              heading: measured
-                ? 'GA4 data was measured, but no sessions matched a known AI source in this window'
-                : 'AI-referral classification is not complete for this window, so source totals are unavailable',
-            }
-      }
     >
-      <SourceTotalsRows data={data} />
-    </DataTable>
+      <DataTable
+        label="AI referral sources"
+        columns={sourceColumns(data.currency_code)}
+        state={
+          data.sources.length
+            ? undefined
+            : {
+                kind: 'empty',
+                icon: SearchX,
+                heading: measured
+                  ? 'No sessions matched a known AI source in this window'
+                  : 'Source totals unavailable: classification is not complete for this window',
+              }
+        }
+      >
+        <SourceTotalsRows data={data} />
+      </DataTable>
+    </TitledSection>
   );
 }
 
 function sourceColumns(currency: string | null): DataTableColumn[] {
   return [
     { key: 'source', label: 'Source' },
-    { key: 'sessions', label: 'Sessions', width: 'figure', numeric: true },
-    { key: 'share', label: 'Share of GA4 sessions', width: 'metric', numeric: true },
-    { key: 'engagement', label: 'Engagement rate', width: 'metric', numeric: true },
-    { key: 'key-events', label: 'Key events', width: 'figure', numeric: true },
-    { key: 'transactions', label: 'Transactions', width: 'figure', numeric: true },
+    { key: 'sessions', label: 'Sessions', width: 'figure', kind: 'number' },
+    { key: 'share', label: 'Share of GA4 sessions', width: 'metric', kind: 'number' },
+    { key: 'engagement', label: 'Engagement rate', width: 'metric', kind: 'number' },
+    { key: 'key-events', label: 'Key events', width: 'figure', kind: 'number' },
+    { key: 'transactions', label: 'Transactions', width: 'figure', kind: 'number' },
     {
       key: 'revenue',
       label: `Purchase revenue (${currency ?? 'currency unavailable'})`,
       width: 'metric',
-      numeric: true,
+      kind: 'number',
     },
   ];
 }
@@ -198,13 +208,10 @@ function SourceTotalsRows({ data }: Readonly<{ data: AiReferrals }>) {
             <TableCell>{aiSourceLabel(source.ai_source)}</TableCell>
             <TableCell numeric>{formatCount(source.sessions)}</TableCell>
             <TableCell numeric>
-              <Measure value={source.share} format={(v) => formatPercent(v, 1)} />
+              <Measure value={source.share} format={formatPercent} />
             </TableCell>
             <TableCell numeric>
-              <Measure
-                value={measures?.engagement_rate ?? null}
-                format={(v) => formatPercent(v, 1)}
-              />
+              <Measure value={measures?.engagement_rate ?? null} format={formatPercent} />
             </TableCell>
             <TableCell numeric>
               <Measure value={measures?.key_events ?? null} format={formatCount} />
@@ -215,7 +222,7 @@ function SourceTotalsRows({ data }: Readonly<{ data: AiReferrals }>) {
             <TableCell numeric>
               <Measure
                 value={measures?.purchase_revenue ?? null}
-                format={(v) => formatRevenue(v, data.currency_code)}
+                format={(v) => formatAmount(v, data.currency_code)}
               />
             </TableCell>
           </TableRow>

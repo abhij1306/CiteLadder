@@ -1,17 +1,11 @@
-/**
- * Opportunity refresh and routes against real PostgreSQL. Native fixtures seed
- * evidence and the native enqueue owner admits execution.
- *
- * Covers detection and supersession, the queue, the project lock and the
- * Action handoffs.
- */
 import { randomUUID } from 'node:crypto';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { createApp } from '../src/app.ts';
 import { editProduct } from '../src/commerce/edits.ts';
-import { updateActionStatus, attachOrCreateAction } from '../src/opportunities/actions.ts';
+import { actionItem, attachOrCreateAction } from '../src/opportunities/actions.ts';
+import { updateActionStatus } from '../src/opportunities/action-decisions.ts';
 import { policy } from '../src/config.ts';
 import { loadWorkerSettings } from '../src/config/analytics.ts';
 import { record } from '../src/db/json.ts';
@@ -37,6 +31,24 @@ const seeds: Seed[] = [];
 
 async function seed(): Promise<Seed> {
   const created = await seedOpportunityScenario(db);
+  const pageB = await db
+    .selectFrom('site_urls')
+    .select('id')
+    .where('workspace_id', '=', created.workspace_id)
+    .where('normalized_url', '=', URL_B)
+    .executeTakeFirstOrThrow();
+  await angleRun(db, scope(created), {
+    angles: [
+      {
+        label: 'Soil testing',
+        siteUrlId: pageB.id,
+        members: [
+          { url: 'https://globex.com/soil', title: 'Globex soil', competitor: true, citations: 5 },
+          { url: 'https://review.example/soil', title: 'Soil kits compared', citations: 5 },
+        ],
+      },
+    ],
+  });
   await db.transaction().execute(async (trx) => {
     for (let replay = 0; replay < 2; replay++)
       await enqueueOpportunityRefresh(trx, {
@@ -139,7 +151,7 @@ describe('opportunity_refresh', () => {
       'retired_format',
     );
   });
-  it('claims the one native-enqueued task and persists exact provenance', async () => {
+  it('claims the one native-enqueued task and persists exact provenance, one finding per Issues group', async () => {
     const tasks = await db
       .selectFrom('analytics_tasks')
       .select(['status', 'attempt_count', 'error_code'])
@@ -156,19 +168,24 @@ describe('opportunity_refresh', () => {
     expect(snapshot).toMatchObject({
       audit_id: own.audit_id,
       site_crawl_id: own.crawl_id,
-      total_count: 4,
+      total_count: 6,
       source_analysis_ids: [own.analysis0_id],
-      source_issue_ids: [own.issue_structured_id, own.issue_content_id].sort(),
       analyzer_version: o.ANALYZER_VERSION,
       formula_version: o.FORMULA_VERSION,
     });
+    expect(snapshot.source_issue_ids).toEqual(
+      expect.arrayContaining([own.issue_structured_id, own.issue_content_id]),
+    );
+    expect(snapshot.source_issue_ids).toHaveLength(3);
 
     const rows = await live(own);
     expect(rows.map((row) => [row.rule_id, Number(row.priority_score)])).toEqual([
       ['brand_absent_high_value_prompt', 120],
       ['owned_page_not_cited', 80],
-      ['missing_structured_data', 20],
-      ['content_structure_incomplete', 10],
+      ['content_gap_improve_page', 50],
+      ['site_issue_family', 30.3],
+      ['site_issue_family', 20.2],
+      ['site_issue_family', 10.1],
     ]);
     const absent = byRule(rows, 'brand_absent_high_value_prompt');
     expect(absent).toMatchObject({
@@ -179,11 +196,34 @@ describe('opportunity_refresh', () => {
       source_issue_ids: [],
       source_traffic_ids: null,
     });
-    expect(byRule(rows, 'content_structure_incomplete')).toMatchObject({
-      target_url: URL_B,
-      source_issue_ids: [own.issue_content_id],
-    });
+    const gap = byRule(rows, 'content_gap_improve_page');
+    expect(gap).toMatchObject({ target_url: URL_B, source_issue_ids: [] });
     expect(rows.every((row) => row.action_id !== null)).toBe(true);
+    const actions = await db
+      .selectFrom('actions')
+      .selectAll()
+      .where('workspace_id', '=', own.workspace_id)
+      .orderBy('target_kind')
+      .orderBy('target_label')
+      .execute();
+    expect(
+      actions.map(actionItem).map((item) => [item.target_kind, item.target_label, item.summary]),
+    ).toEqual([
+      [
+        'issue_family',
+        'Missing structured data',
+        'Add schema.org structured data (JSON-LD preferred).',
+      ],
+      [
+        'issue_family',
+        'No answer-first content structure',
+        'Open each section with a direct answer before elaborating.',
+      ],
+      ['issue_family', 'technical.title_missing', null],
+      ['page', URL_B, 'Cited content angle your page does not win'],
+      ['prompt', 'best crm for small teams', 'Brand absent on high-value prompt'],
+    ]);
+    expect(actions[3]!.member_opportunity_ids).toEqual([gap.id]);
   });
 
   it('replays a claimed refresh as a no-op when the snapshot is current', async () => {
@@ -260,7 +300,6 @@ describe('opportunity_refresh', () => {
     const before = await snapshotCount(s);
     await recomputeOpportunities(db, scope(s), { skipIfCurrent: true });
     expect(await snapshotCount(s)).toBe(before);
-    // A description is not matching identity: no catalog revision or match pass follows it.
     await editProduct(db, scope(s), productId, { description: 'Waterproof trail shoe' });
     await recomputeOpportunities(db, scope(s), { skipIfCurrent: true });
     expect(await snapshotCount(s)).toBe(before + 1);
@@ -268,10 +307,6 @@ describe('opportunity_refresh', () => {
     expect(await snapshotCount(s)).toBe(before + 1);
   });
 
-  /**
-   * A completed Commerce run whose one category prompt was answered with a
-   * third-party citation and no uploaded product.
-   */
   async function uncoveredCategoryRun(tenant: Tenant, completedAt: Date) {
     const auditId = await visibility.audit(tenant, { scope: 'commerce', completedAt });
     const categoryId = randomUUID();
@@ -327,7 +362,6 @@ describe('opportunity_refresh', () => {
   it('keeps brand and Commerce Actions when a Commerce run follows the brand run', async () => {
     const s = await seed();
     const tenant = { userId: s.user_id, workspaceId: s.workspace_id, projectId: s.project_id };
-    // Completed after the seed's brand run, so it is the project's newest run of any scope.
     const categoryId = await uncoveredCategoryRun(tenant, new Date(Date.now() + 60_000));
     await recomputeOpportunities(db, scope(s));
     const rows = await live(s);
@@ -335,9 +369,11 @@ describe('opportunity_refresh', () => {
     expect(rules).toEqual([
       ['brand_absent_high_value_prompt', `prompt:${s.prompt0_id}`],
       ['cited_alternatives_without_uploaded_presence', `category:${categoryId}`],
-      ['content_structure_incomplete', expect.any(String)],
-      ['missing_structured_data', expect.any(String)],
+      ['content_gap_improve_page', `url:${URL_B}`],
       ['owned_page_not_cited', expect.any(String)],
+      ['site_issue_family', 'issue-family:aeo.answer_first'],
+      ['site_issue_family', 'issue-family:aeo.structured_data_present'],
+      ['site_issue_family', 'issue-family:technical.title_missing'],
     ]);
     const snapshot = await db
       .selectFrom('opportunity_snapshots')
@@ -345,7 +381,6 @@ describe('opportunity_refresh', () => {
       .where('workspace_id', '=', s.workspace_id)
       .orderBy('created_at', 'desc')
       .executeTakeFirstOrThrow();
-    // The brand evidence still comes from the brand run.
     expect(snapshot.audit_id).toBe(s.audit_id);
   });
 
@@ -404,7 +439,6 @@ describe('opportunity_refresh', () => {
       .where('id', '=', id)
       .executeTakeFirstOrThrow();
     expect(task).toEqual({ status: 'succeeded', attempt_count: 1 });
-    // Already current: the second trigger claims, finds nothing new, writes nothing.
     expect(await snapshotCount(own)).toBe(snapshots);
   });
 
@@ -465,11 +499,13 @@ describe('opportunity_refresh', () => {
 
     const snapshot = await recomputeOpportunities(db, scope(s));
 
-    expect(snapshot.total_count).toBe(2);
+    expect(snapshot.total_count).toBe(4);
     const second = await live(s);
-    expect(second.map((row) => row.rule_id).sort()).toEqual([
-      'content_structure_incomplete',
-      'missing_structured_data',
+    expect(second.map((row) => row.rule_id)).toEqual([
+      'content_gap_improve_page',
+      'site_issue_family',
+      'site_issue_family',
+      'site_issue_family',
     ]);
     const closed = new Map(
       (
@@ -484,18 +520,15 @@ describe('opportunity_refresh', () => {
           .execute()
       ).map((row) => [row.id, row]),
     );
-    const firstContent = byRule(first, 'content_structure_incomplete');
-    const secondContent = byRule(second, 'content_structure_incomplete');
+    const firstContent = byRule(first, 'content_gap_improve_page');
+    const secondContent = byRule(second, 'content_gap_improve_page');
     expect(secondContent.id).not.toBe(firstContent.id);
     expect(secondContent.action_id).toBe(firstContent.action_id);
-    expect(byRule(second, 'missing_structured_data').evidence).toEqual(
-      byRule(first, 'missing_structured_data').evidence,
-    );
+    expect(secondContent.evidence).toEqual(firstContent.evidence);
     expect(closed.get(firstContent.id)?.superseded_by_id).toBe(secondContent.id);
     const absent = closed.get(byRule(first, 'brand_absent_high_value_prompt').id);
     expect(absent?.superseded_at).not.toBeNull();
     expect(absent?.superseded_by_id).toBeNull();
-    // Its prompt Action keeps its row with the evidence cleared.
     const cleared = await db
       .selectFrom('actions')
       .select(['member_opportunity_ids', 'priority_score', 'evidence_cleared_at', 'diagnosis'])
@@ -510,7 +543,7 @@ describe('opportunity_refresh', () => {
   it('keeps a dismissed status across a refresh', async () => {
     const s = await seed();
     await recomputeOpportunities(db, scope(s));
-    const thin = byRule(await live(s), 'content_structure_incomplete');
+    const thin = byRule(await live(s), 'content_gap_improve_page');
     await updateActionStatus(
       db,
       { workspaceId: s.workspace_id, projectId: null },
@@ -528,7 +561,7 @@ describe('opportunity_refresh', () => {
       .executeTakeFirstOrThrow();
     expect(action.status).toBe('dismissed');
     expect(action.member_opportunity_ids).toEqual([
-      byRule(await live(s), 'content_structure_incomplete').id,
+      byRule(await live(s), 'content_gap_improve_page').id,
     ]);
   });
 
@@ -542,7 +575,7 @@ describe('opportunity_refresh', () => {
 
     await recomputeOpportunities(db, scope(s));
 
-    const thin = byRule(await live(s), 'content_structure_incomplete');
+    const thin = byRule(await live(s), 'content_gap_improve_page');
     expect(thin.action_id).toBe(agent.id);
     const action = await db
       .selectFrom('actions')
@@ -594,17 +627,19 @@ describe('Opportunity routes', () => {
     expect([...first.body.items, ...rest.body.items].map((item) => item.rule_id)).toEqual([
       'brand_absent_high_value_prompt',
       'owned_page_not_cited',
-      'missing_structured_data',
-      'content_structure_incomplete',
+      'content_gap_improve_page',
+      'site_issue_family',
+      'site_issue_family',
+      'site_issue_family',
     ]);
     expect(rest.body.next_cursor).toBeNull();
     expect(
-      (await read('rule_id=content_structure_incomplete')).body.items.map((item) => item.rule_id),
-    ).toEqual(['content_structure_incomplete']);
+      (await read('rule_id=content_gap_improve_page')).body.items.map((item) => item.rule_id),
+    ).toEqual(['content_gap_improve_page']);
     expect((await read('min_priority=80')).body.items).toHaveLength(2);
 
     const replayed = await read(
-      `limit=3&rule_id=content_structure_incomplete&cursor=${first.body.next_cursor}`,
+      `limit=2&rule_id=content_gap_improve_page&cursor=${first.body.next_cursor}`,
     );
     expect([replayed.status, replayed.body.error.code]).toEqual([400, 'invalid_cursor']);
     const malformed = await read('cursor=not*a*cursor');
@@ -612,7 +647,7 @@ describe('Opportunity routes', () => {
     for (const query of ['type=bogus', 'severity=bogus', 'status=bogus', 'min_priority=0x10'])
       expect([query, (await read(query)).status]).toEqual([query, 422]);
 
-    const thin = byRule(await live(s), 'content_structure_incomplete');
+    const thin = byRule(await live(s), 'content_gap_improve_page');
     await updateActionStatus(
       db,
       { workspaceId: s.workspace_id, projectId: null },
@@ -621,19 +656,19 @@ describe('Opportunity routes', () => {
       s.user_id,
     );
     expect((await read('status=dismissed')).body.items.map((item) => item.rule_id)).toEqual([
-      'content_structure_incomplete',
+      'content_gap_improve_page',
     ]);
   });
 
-  it('serves an Opportunity detail with its exact source issues to the owner', async () => {
+  it('serves an Opportunity detail with its exact source analyses to the owner', async () => {
     const s = await seed();
     await recomputeOpportunities(db, scope(s));
-    const row = byRule(await live(s), 'content_structure_incomplete');
+    const row = byRule(await live(s), 'brand_absent_high_value_prompt');
     const { status, response } = await request(s, `/api/v1/opportunities/${row.id}`);
     expect(status).toBe(200);
     expect(await response.json()).toMatchObject({
       id: row.id,
-      source_issue_ids: [s.issue_content_id],
+      source_analysis_ids: [s.analysis0_id],
     });
   });
 

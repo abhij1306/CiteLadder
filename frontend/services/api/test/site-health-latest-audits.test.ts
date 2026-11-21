@@ -1,10 +1,11 @@
 import { afterAll, describe, expect, it } from 'vitest';
 import { record } from '../src/db/json.ts';
 import { recomputeOpportunities } from '../src/opportunities/refresh.ts';
-import { issueHistory, issues, unfilteredIssues } from '../src/site-health/reads/issues.ts';
+import { issueHistory } from '../src/site-health/reads/issue-history.ts';
+import { issues, unfilteredIssues } from '../src/site-health/reads/issues.ts';
 import { pageDetail, pages } from '../src/site-health/reads/pages.ts';
-import { publishFinalPageAnalyses } from '../src/site-health/terminal-analysis.ts';
 import { testDatabase } from './support.ts';
+import { landFinalRevisions } from './site-health-finalize-fixtures.ts';
 import { SiteFixtures, type SiteSeed } from './site-health-fixtures.ts';
 
 const db = testDatabase();
@@ -20,7 +21,6 @@ const SITEWIDE = 'technical.sitewide_broken_link';
 const minutes = (count: number) => new Date(Date.UTC(2026, 10, 1, 9, count));
 const paging = { limit: 50, cursor: null };
 
-/** Land the crawl's audit the way terminal publication does: under its lock. */
 async function land(seed: SiteSeed) {
   await db.transaction().execute(async (trx) => {
     const crawl = await trx
@@ -30,11 +30,10 @@ async function land(seed: SiteSeed) {
       .where('workspace_id', '=', seed.workspaceId)
       .forUpdate()
       .executeTakeFirstOrThrow();
-    await publishFinalPageAnalyses(trx, crawl);
+    await landFinalRevisions(trx, crawl);
   });
 }
 
-/** Another crawl of the seed's project, audited at `at`. */
 async function crawlAt(
   seed: SiteSeed,
   at: Date,
@@ -49,7 +48,6 @@ async function crawlAt(
   return { ...seed, crawlId };
 }
 
-/** The page analyzed in `seed`'s crawl with one rule's evaluation; a miss is an issue. */
 async function audit(
   seed: SiteSeed,
   path: string,
@@ -63,11 +61,9 @@ async function audit(
   return page;
 }
 
-/** The read's rule groups with how many pages each affects. */
 const groups = (page: Awaited<ReturnType<typeof issues>>) =>
   page.items.map((item) => [item.rule_id, item.affected_url_count]);
 
-/** Each listed page's URL path with its issue count. */
 async function pageCounts(seed: SiteSeed) {
   const page = await pages(db, seed.workspaceId, seed.crawlId, {}, 'url', paging);
   return page.items.map((row) => [new URL(row.normalized_url).pathname, row.issue_count]);
@@ -97,7 +93,6 @@ describe("Site Health reads show each tracked page's latest audit", () => {
     const fixed = await audit(rerun, '/a', SITEMAP, 'satisfied', a.id);
     await land(rerun);
 
-    // The persisted (unfiltered) catalog and a filtered read agree.
     expect(groups(await issues(db, seed.workspaceId, full.crawlId, all, paging))).toEqual([
       [CLIENT, 1],
     ]);
@@ -110,7 +105,6 @@ describe("Site Health reads show each tracked page's latest audit", () => {
     ]);
     const detail = await pageDetail(db, seed.workspaceId, full.crawlId, a.id);
     expect(detail.issues).toEqual([]);
-    // The page reports the versions of the audit that measured it.
     expect(detail.scoring_version).toBe('rerun-scoring');
     const history = await issueHistory(db, seed.workspaceId, full.crawlId, a.id, paging);
     expect(history.items.map((item) => [item.rule_id, item.crawl_id])).toEqual([
@@ -119,9 +113,14 @@ describe("Site Health reads show each tracked page's latest audit", () => {
 
     const snapshot = await db
       .selectFrom('site_health_snapshots')
-      .select(['issue_count', 'source_analysis_ids'])
+      .select(['id', 'issue_count'])
       .where('crawl_id', '=', full.crawlId)
       .executeTakeFirstOrThrow();
+    const analysisSet = await db
+      .selectFrom('site_health_snapshot_analyses')
+      .select('analysis_id')
+      .where('snapshot_id', '=', snapshot.id)
+      .execute();
     expect(snapshot.issue_count).toBe(1);
     const rerunAnalysis = await db
       .selectFrom('site_page_analyses')
@@ -130,7 +129,7 @@ describe("Site Health reads show each tracked page's latest audit", () => {
       .where('site_url_id', '=', fixed.id)
       .where('is_current', '=', true)
       .executeTakeFirstOrThrow();
-    expect(snapshot.source_analysis_ids).toContain(rerunAnalysis.id);
+    expect(analysisSet.map((row) => row.analysis_id)).toContain(rerunAnalysis.id);
     const crawl = await db
       .selectFrom('site_crawls')
       .select('score_summary')
@@ -154,13 +153,11 @@ describe("Site Health reads show each tracked page's latest audit", () => {
     expect(groups(await issues(db, seed.workspaceId, cancelled.crawlId, all, paging))).toEqual([
       [CLIENT, 1],
     ]);
-    // The earlier crawl still shows what it found before the next site crawl.
     expect(groups(await issues(db, seed.workspaceId, first.crawlId, all, paging))).toEqual([
       [CLIENT, 1],
       [SITEMAP, 1],
     ]);
 
-    // A rerun names only its own page.
     const rerun = await crawlAt(seed, minutes(20), { rerun: true });
     await audit(rerun, '/b', CLIENT, 'missing', b.id);
     await land(rerun);
@@ -175,7 +172,6 @@ describe("Site Health reads show each tracked page's latest audit", () => {
     const root = await audit(full, '/', SITEWIDE, 'missing');
     await fixtures.monitor(seed, [root.id]);
     await land(full);
-    // Only a site crawl judges sitewide links, so a re-audit of the root cannot clear them.
     const rerun = await crawlAt(seed, minutes(10), { rerun: true });
     await audit(rerun, '/', SITEMAP, 'satisfied', root.id);
     await land(rerun);
@@ -193,7 +189,6 @@ describe("Site Health reads show each tracked page's latest audit", () => {
 
   it('refreshes Opportunities once a rerun lands in the current crawl, and not before', async () => {
     const seed = await fixtures.crawl('completed');
-    // After the seed's own crawl, so this full crawl is the current one.
     const full = await crawlAt(seed, new Date(Date.now() + 60_000));
     const a = await audit(full, '/a', SITEMAP, 'missing');
     await fixtures.monitor(seed, [a.id]);
@@ -212,4 +207,24 @@ describe("Site Health reads show each tracked page's latest audit", () => {
       site_rerun_id: rerun.crawlId,
     });
   });
+
+  it('shows each tracked page a running crawl has not reached by its earlier audit', async () => {
+    const seed = await fixtures.crawl('completed');
+    const earlier = await crawlAt(seed, minutes(0));
+    const tracked = [];
+    for (let index = 0; index < PROBE_PAGES; index++)
+      tracked.push(await audit(earlier, `/p-${index}`, SITEMAP, 'missing')); // NOSONAR -- Fixture pages in order.
+    await fixtures.monitor(
+      seed,
+      tracked.map((page) => page.id),
+    );
+    await land(earlier);
+    const running = await crawlAt(seed, minutes(10), { status: 'running' });
+    const all = unfilteredIssues('defect');
+    expect(groups(await issues(db, seed.workspaceId, running.crawlId, all, paging))).toEqual([
+      [SITEMAP, PROBE_PAGES],
+    ]);
+  });
 });
+
+const PROBE_PAGES = 24;

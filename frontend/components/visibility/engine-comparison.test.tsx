@@ -16,19 +16,20 @@ function engine(overrides: Partial<VisibilityEngine> = {}): VisibilityEngine {
     ...overrides,
   };
 }
-function visibility(per_engine: VisibilityEngine[]): Visibility {
-  return { per_engine, rankings: [], model_provenance: [] } as unknown as Visibility;
+function visibility(
+  per_engine: VisibilityEngine[],
+  model_provenance: Visibility['model_provenance'] = [],
+): Visibility {
+  return { per_engine, rankings: [], model_provenance } as unknown as Visibility;
 }
 describe('model outcome comparison', () => {
   it('shows presence, citations and sample coverage without duplicating the composite', () => {
     render(<EngineComparison visibility={visibility([engine()])} filter="all" />);
-    expect(screen.getByText('50%')).toBeVisible();
-    expect(screen.getByText('25%')).toBeVisible();
-    // The answer count is the reader's; the run's expected-vs-measured
-    // bookkeeping that used to sit beside it is not.
+    expect(screen.getByText('50.0%')).toBeVisible();
+    expect(screen.getByText('25.0%')).toBeVisible();
     expect(screen.getByText('12')).toBeVisible();
     expect(screen.queryByText(/expected/)).toBeNull();
-    expect(screen.queryByText('62%')).toBeNull();
+    expect(screen.queryByText(/^62(\.0)?%$/)).toBeNull();
   });
   it('uses catalog order and narrows to the selected engine', () => {
     const { rerender } = render(
@@ -55,8 +56,28 @@ describe('model outcome comparison', () => {
         filter="all"
       />,
     );
-    expect(screen.getByText('0%')).toBeVisible();
+    expect(screen.getByText('0.0%')).toBeVisible();
     expect(screen.getByText('Not measured')).toBeVisible();
+  });
+  it('names the model an API route pinned, never an observed surface route id', () => {
+    const route = (logical_engine: string, transport_model: string) => ({
+      logical_engine,
+      transport_provider: 'p',
+      transport_model,
+      retrieval_enabled: true,
+    });
+    render(
+      <EngineComparison
+        visibility={visibility(
+          [engine({ logical_engine: 'chatgpt' }), engine({ logical_engine: 'chatgpt_search' })],
+          [route('chatgpt', 'gpt-6.1-terra'), route('chatgpt_search', 'chat_gpt-llm-scraper')],
+        )}
+        filter="all"
+      />,
+    );
+    expect(screen.getByText('gpt-6.1-terra')).toBeVisible();
+    expect(screen.getByText('ChatGPT Search')).toBeVisible();
+    expect(screen.queryByText(/llm-scraper/)).toBeNull();
   });
   it('opens the selected engine evidence', () => {
     const onSelect = vi.fn();

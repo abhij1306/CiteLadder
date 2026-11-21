@@ -4,12 +4,11 @@ import { cn } from '@/lib/utils';
 type DiffLine = { kind: 'same' | 'added' | 'removed'; text: string };
 
 const DIFF_LINE = {
-  same: { mark: ' ', label: null, tone: 'text-ink-muted' },
-  removed: { mark: '−', label: 'Removed', tone: 'bg-surface-sunken text-ink-secondary' },
-  added: { mark: '+', label: 'Added', tone: 'bg-surface-sunken text-ink-secondary' },
+  same: { mark: ' ', label: null, tone: 'text-ink-2' },
+  removed: { mark: '−', label: 'Removed', tone: 'bg-well text-ink-2' },
+  added: { mark: '+', label: 'Added', tone: 'bg-well text-ink-2' },
 } as const;
 
-/** A computed line diff, with removed/added marks announced to screen readers. */
 export function LineDiff({
   lines,
   label,
@@ -24,10 +23,7 @@ export function LineDiff({
   return (
     <ol
       aria-label={label}
-      className={textRole(
-        'caption',
-        'border-line grid overflow-x-auto rounded-md border font-mono',
-      )}
+      className={textRole('caption', 'bg-well grid overflow-x-auto rounded-control font-mono')}
     >
       {keyedLines.map((line) => {
         const style = DIFF_LINE[line.kind];

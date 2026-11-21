@@ -11,7 +11,6 @@ type Row = {
   decision: Record<string, unknown>;
   disposition: string;
   category: string;
-  /** The candidate's phrasing was informed by the project's own searches. */
   grounded: boolean;
 };
 const rate = (numerator: number, denominator: number) =>
@@ -50,8 +49,6 @@ export function calibrationReport(rows: Row[]) {
       rejected.filter((row) => verdict(row) === 'pass').length,
       rejected.length,
     ),
-    // Every question a core or branded draft is asked; the core-only ones under
-    // their own thresholds, the brand-only ones answered by branded drafts alone.
     questions: Object.fromEntries(
       Object.keys({ ...noulQuestions('core'), ...noulQuestions('brand_diagnostic') }).map(
         (question) => {
@@ -90,7 +87,6 @@ export function calibrationReport(rows: Row[]) {
         rejected_caught: rate(rejected.filter(fails).length, rejected.length),
       };
     }),
-    // Grounded versus ungrounded review outcomes; counts only, never query text.
     by_grounding: Object.fromEntries(
       (['grounded', 'ungrounded'] as const).map((key) => {
         const counts = tally(
@@ -128,7 +124,6 @@ export function calibrationReport(rows: Row[]) {
   };
 }
 
-/** Explicit administrative, read-only operation; never selects prompt text. */
 export async function loadCalibration(db: Database, actor: string, since?: Date) {
   const uuid = z.uuid().safeParse(actor);
   const admin = await db

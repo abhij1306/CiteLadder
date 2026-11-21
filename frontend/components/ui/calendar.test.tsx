@@ -6,9 +6,6 @@ import { DateField } from './date-field';
 
 describe('Calendar', () => {
   it('selects the exact ISO day that was clicked', () => {
-    // The day must survive the round trip unshifted: parsing an ISO day into a
-    // local Date and formatting it back moves it across a day boundary either
-    // side of UTC, which is how a picker returns "yesterday".
     const onSelect = vi.fn();
     render(<Calendar value="2026-09-05" onSelect={onSelect} ariaLabel="Start date" />);
     fireEvent.click(screen.getByRole('button', { name: '2026-09-01' }));
@@ -39,8 +36,6 @@ describe('Calendar', () => {
   });
 
   it('ignores a date that only looks valid', () => {
-    // Date.UTC OVERFLOWS: Feb 31 becomes March 3. The shape test alone would
-    // accept it and the grid would open on the wrong month.
     render(<Calendar value="2026-02-31" onSelect={vi.fn()} ariaLabel="Start date" />);
     const pressed = screen
       .getAllByRole('button')

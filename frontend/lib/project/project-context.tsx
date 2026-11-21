@@ -34,7 +34,6 @@ export {
 
 const isMissing = (error: unknown) => httpErrorStatus(error) === 404;
 
-/** The scope the URL is asking for, if any. */
 function useRequestedScope() {
   const searchParams = useSearchParams()[0];
   return {
@@ -43,7 +42,6 @@ function useRequestedScope() {
   };
 }
 
-/** One workspace's project summaries, keyed by AND requested for that workspace. */
 function useWorkspaceProjects(workspaceId: string | null, allowed: boolean) {
   return useQuery({
     ...projectQueries.list(workspaceId ?? 'unresolved'),
@@ -51,19 +49,6 @@ function useWorkspaceProjects(workspaceId: string | null, allowed: boolean) {
   });
 }
 
-/**
- * The active project's full view. The list carries summaries, so the view is
- * the project's own detail read. It starts as soon as a selection exists —
- * alongside the list, not after it — and an explicit address shares the
- * requested project's read.
- *
- * It has failed with nothing usable when the list failed and nothing but the
- * list could vouch for the selection — no project at all, or a stored one the
- * list never confirmed (its view answering does not make the workspace's
- * projects known) — or when a settled list's selection has no view. An
- * explicit address is authorized by its own detail read, which reports its
- * own failure.
- */
 function useActiveProjectView({
   activeProjectId,
   activeWorkspaceId,
@@ -98,16 +83,10 @@ function useActiveProjectView({
   };
 }
 
-/** The resolved workspace becomes the selection; until one resolves, the selection stands. */
 function adoptWorkspace(resolved: string | null, selected: string | null) {
   return resolved ?? selected;
 }
 
-/**
- * Resolve workspace membership independently of projects. An explicit project
- * is authorized by its detail read, so a stale list cannot hide a new project.
- * Cache keys and requests carry the same workspace identity.
- */
 export function ProjectProvider({ children }: Readonly<{ children: ReactNode }>) {
   const queryClient = useQueryClient();
   const { requestedProjectId, urlWorkspaceId } = useRequestedScope();
@@ -119,27 +98,14 @@ export function ProjectProvider({ children }: Readonly<{ children: ReactNode }>)
     readStoredActiveWorkspaceId(),
   );
 
-  // The membership authority. Needs only the session cookie, so it loads
-  // alongside `me` rather than after it, and it is deliberately NOT scoped by
-  // a workspace header — it is what decides which workspaces exist.
-  // These are the loader's bootstrap reads; they carry its bounded timeout so
-  // a stall reaches the gate's retry notice in seconds, on either creation
-  // path (loader-seeded or provider-issued).
   const workspacesQuery = useQuery(workspaceQueries.list());
 
-  // The narrow resolution read for an explicit id. Authorized from the path,
-  // so it answers before any workspace is known and its `workspace_id` is
-  // what establishes the workspace for everything that follows.
   const detailQuery = useQuery({
     ...projectQueries.detail(requestedProjectId ?? 'none'),
     enabled: requestedProjectId !== null,
   });
 
   const resolvedProject = requestedProjectId === null ? null : (detailQuery.data ?? null);
-  // A URL naming both a workspace and a project from a DIFFERENT workspace is
-  // rejected rather than reconciled: combining one project's id with another
-  // workspace's limits is how a request ends up authorized against one
-  // tenancy and budgeted against another.
   const contradictoryRequest = Boolean(
     urlWorkspaceId && resolvedProject && resolvedProject.workspace_id !== urlWorkspaceId,
   );
@@ -158,10 +124,8 @@ export function ProjectProvider({ children }: Readonly<{ children: ReactNode }>)
 
   const projectsQuery = useWorkspaceProjects(activeWorkspaceId, !contradictoryRequest);
   const listSettled = projectsQuery.isSuccess;
-  // Include an authorized detail even if the list predates its creation.
   const projects = useMemo<ProjectSummary[]>(() => {
     const listed = projectsQuery.data ?? [];
-    // A project whose workspace contradicts the URL is rejected, not merged.
     if (!resolvedProject || contradictoryRequest) return listed;
     if (listed.some((project) => project.id === resolvedProject.id)) return listed;
     return [...listed, resolvedProject];
@@ -222,9 +186,6 @@ export function ProjectProvider({ children }: Readonly<{ children: ReactNode }>)
     (workspaceId: string) => {
       setSelectedWorkspaceId(workspaceId);
       writeStoredActiveWorkspaceId(workspaceId);
-      // A different workspace owns a different project set, so the previous
-      // workspace's selection must not survive the switch and be resolved
-      // against the new list.
       setSelectedProjectId(null);
       writeStoredActiveProjectId(null);
     },
@@ -235,7 +196,6 @@ export function ProjectProvider({ children }: Readonly<{ children: ReactNode }>)
 
   useEffect(() => {
     writeStoredActiveWorkspaceId(activeWorkspaceId);
-    // Error reports scope themselves like every other request; the API still checks membership.
     setReportingWorkspace(activeWorkspaceId);
   }, [activeWorkspaceId]);
 
@@ -243,16 +203,6 @@ export function ProjectProvider({ children }: Readonly<{ children: ReactNode }>)
     if (activeProjectId) writeStoredActiveProjectId(activeProjectId);
   }, [activeProjectId]);
 
-  // Adopt the RESOLVED workspace as this session's selection.
-  //
-  // The address is allowed to stop naming it: `projectDestination` drops
-  // `?workspace=` on the grounds that a verified project id already identifies
-  // its workspace. That is true only once the project detail has answered —
-  // and with the selection living nowhere but the URL, the render in between
-  // fell all the way back to the FIRST membership, sending one project-list
-  // request against a workspace the reader is not in and flashing the loader
-  // before the detail pulled it back. Adopted during render, so the selection
-  // never lags the workspace the screen already resolved.
   const adoptedWorkspaceId = adoptWorkspace(activeWorkspaceId, selectedWorkspaceId);
   if (adoptedWorkspaceId !== selectedWorkspaceId) setSelectedWorkspaceId(adoptedWorkspaceId);
 

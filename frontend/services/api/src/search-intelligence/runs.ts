@@ -51,7 +51,6 @@ function lockRun(trx: Database, scope: Scope, runId: string) {
 
 type LockedRun = NonNullable<Awaited<ReturnType<typeof lockRun>>>;
 
-/** Refuse a review that can no longer commit paid work as quoted. */
 async function assertConfirmable(trx: Database, scope: Scope, run: LockedRun, now: Date) {
   if (run.status !== RUN_REVIEWED)
     throw conflict(asApiErrorCode('review_not_confirmable'), 'Review is no longer confirmable');
@@ -74,7 +73,7 @@ async function assertConfirmable(trx: Database, scope: Scope, run: LockedRun, no
   if (active !== undefined)
     throw conflict(
       asApiErrorCode('acquisition_in_progress'),
-      'Another Keyword Research analysis is already active',
+      'Another Keyword research analysis is already active',
     );
 }
 
@@ -96,7 +95,6 @@ async function enqueueAcquisition(trx: Database, scope: Scope, runId: string): P
   return existing.id;
 }
 
-/** Confirm a reviewed run once; a repeated confirmation returns the run unchanged. */
 export function confirmRun(db: Database, scope: Scope, runId: string) {
   return db.transaction().execute(async (trx) => {
     // The project lock serializes confirmations, so one acquisition is active.
@@ -112,7 +110,6 @@ export function confirmRun(db: Database, scope: Scope, runId: string) {
     const now = new Date();
     await assertConfirmable(trx, scope, run, now);
     const plan = jsonObjects(run.call_plan, 'search_intelligence_runs.call_plan');
-    // Every dataset reused from a recent snapshot: nothing to acquire.
     const transition =
       plan.length === 0
         ? { status: RUN_SUCCEEDED, completed_at: now }

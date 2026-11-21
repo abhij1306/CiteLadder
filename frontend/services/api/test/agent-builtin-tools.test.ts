@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { randomUUID } from 'node:crypto';
+import { afterAll, describe, expect, it } from 'vitest';
 import {
   agentToolList,
   editDocument,
@@ -12,7 +13,13 @@ import type { SkillCatalog } from '../src/agent/contracts.ts';
 import { ToolRegistry } from '../src/agent/tools.ts';
 import { offeredRuleIds } from '../src/page-documents/content-rules.ts';
 import { z } from 'zod';
-import { catalog as baseCatalog } from './agent-support.ts';
+import { AgentFixtures, catalog as baseCatalog, scripted, text, toolUse } from './agent-support.ts';
+import { readChat } from '../src/agent/reads.ts';
+import { proposeDeclaration, type ProposalTurn } from '../src/agent/proposals.ts';
+import type { Scope } from '../src/agent/contracts.ts';
+import type { TurnState } from '../src/agent/turn-budget.ts';
+import { actionRow, opportunityRow } from './opportunity-fixtures.ts';
+import { testDatabase } from './support.ts';
 
 const bounds = { output_title_max_chars: 20, output_body_max_chars: 200 };
 const catalog: SkillCatalog = {
@@ -85,15 +92,29 @@ describe('Agent built-in tools', () => {
     expect(saveDocument(catalog, turn, draft, bounds)).toEqual({
       ok: true,
       document: 2,
-      text: 'Document 2: staged as a new document in Article format; it is saved with your reply, and the app tells the person so. Now reply briefly; do not repeat the document or announce the save.',
+      text: "Document 2 saved ('Guide'). Reply now.",
     });
     expect(turn.staged.get(2)).toEqual({
       kind: 'content',
       skillId: 'content',
       payload: { title: 'Guide', body: 'Body', format_id: 'article' },
     });
-    // A second new document in the same turn takes the next number.
     expect(saveDocument(catalog, turn, { ...draft, title: 'FAQ' }, bounds).document).toBe(3);
+    const repeat = {
+      ok: false,
+      text: 'Document 2 was already saved in this turn and that save was kept. Change it with edit_document, or reply now.',
+    };
+    expect(
+      saveDocument(catalog, turn, { ...draft, title: ' guide ', body: 'Other' }, bounds),
+    ).toEqual(repeat);
+    expect(saveDocument(catalog, turn, { ...draft, document: 2, body: 'Other' }, bounds)).toEqual(
+      repeat,
+    );
+    expect(saveDocument(catalog, turn, { ...draft, document: 1, body: 'Other' }, bounds)).toEqual(
+      repeat,
+    );
+    expect(turn.staged.get(2)?.payload.body).toBe('Body');
+    expect([...turn.staged.keys()]).toEqual([2, 3]);
   });
 
   it('keeps the person’s own UUIDs in a staged document and scrubs every other one', () => {
@@ -120,18 +141,22 @@ describe('Agent built-in tools', () => {
     expect(turn.staged.get(2)?.payload.body).toBe(`<label for="${own}">`);
   });
 
-  it('replaces a document of the loaded kind, once per step, and refuses another kind', () => {
+  it('replaces a document of the loaded kind, once per turn, and refuses another kind', () => {
     const turn = state({ skill: content(), documents: [saved()] });
     const replaced = saveDocument(catalog, turn, { document: 1, title: 'New', body: 'B' }, bounds);
-    expect(replaced).toMatchObject({ ok: true, document: 1 });
-    // The document's format applies when the save names none.
-    expect(turn.staged.get(1)?.payload).toMatchObject({ title: 'New', format_id: 'faq' });
-    expect(
-      saveDocument(catalog, turn, { document: 1, title: 'Again', body: 'B' }, bounds, new Set([1])),
-    ).toEqual({
-      ok: false,
-      text: 'Save Document 1 once per step. The first save in this step was kept.',
+    expect(replaced).toEqual({
+      ok: true,
+      document: 1,
+      text: "Document 1 saved ('New'). Reply now.",
     });
+    expect(turn.staged.get(1)?.payload).toMatchObject({ title: 'New', format_id: 'faq' });
+    expect(saveDocument(catalog, turn, { document: 1, title: 'Again', body: 'C' }, bounds)).toEqual(
+      {
+        ok: false,
+        text: 'Document 1 was already saved in this turn and that save was kept. Change it with edit_document, or reply now.',
+      },
+    );
+    expect(turn.staged.get(1)?.payload.title).toBe('New');
     const planning = state({ skill: plan(), documents: [saved()] });
     expect(saveDocument(catalog, planning, { document: 1, title: 'P', body: 'B' }, bounds)).toEqual(
       {
@@ -151,7 +176,6 @@ describe('Agent built-in tools', () => {
       ok: false,
       text: 'Set format_id to one of: article, faq.',
     });
-    // The chat's pinned format applies when a new document names none.
     const continuing = state({ skill: content(), formatId: 'faq' });
     saveDocument(catalog, continuing, { title: 'T', body: 'B' }, bounds);
     expect(continuing.staged.get(1)?.payload).toMatchObject({ format_id: 'faq' });
@@ -166,7 +190,6 @@ describe('Agent built-in tools', () => {
 
   it('edits the named document with exact, unique replacements, all or none', () => {
     const turn = state({ documents: [saved()] });
-    // With one document the number may be left out, and no methodology is needed.
     expect(
       editDocument(
         catalog,
@@ -183,7 +206,7 @@ describe('Agent built-in tools', () => {
     ).toEqual({
       ok: true,
       document: 1,
-      text: 'Document 1: applied 2 edits in FAQ format; it is saved with your reply, and the app tells the person so. Now reply briefly; do not repeat the document or announce the save.',
+      text: 'Document 1: applied 2 edits; it is saved with your reply, and the app tells the person so. Now reply briefly; do not repeat the document or announce the save.',
     });
     expect(turn.staged.get(1)).toEqual({
       kind: 'content',
@@ -196,7 +219,6 @@ describe('Agent built-in tools', () => {
         target: null,
       },
     });
-    // A later edit in the same turn changes the staged text, not the saved one.
     editDocument(catalog, turn, { edits: [{ old_string: 'Intro.', new_string: 'Hi.' }] }, bounds);
     expect(turn.staged.get(1)?.payload.body).toBe('Hi.\n\nSizes run true to size.');
 
@@ -354,7 +376,6 @@ describe('Agent built-in tools', () => {
           replacement: 'School shoes for kids, sized by age.',
           needsInput: null,
           dependsOn: [],
-          // Writing the text for the Site Health finding replaces its advice.
           replaces: [open],
         },
         {
@@ -392,7 +413,6 @@ describe('Agent built-in tools', () => {
         'depends_on section needs old_string; for a field or the whole page use body. No suggestions were staged.',
       );
       expect(fresh.suggestions).toEqual([]);
-      // Only a page document takes suggestions.
       expect(
         suggestEdits(
           catalog,
@@ -408,14 +428,12 @@ describe('Agent built-in tools', () => {
     it('accepts only a rule the turn offers, or the rule of a Site Health finding open on the page', () => {
       const refused = (overrides: Record<string, unknown>, turn = pageTurn()) =>
         suggestEdits(catalog, turn, { suggestions: [suggestion(overrides)] }, bounds).text;
-      // A catalog rule whose evidence the turn lacks is not offered.
       expect(refused({ rule_id: 'coverage.cited_angles' })).toBe(
         'rule_id coverage.cited_angles is not a content rule offered for this page. Use one from the content_rules section: ai_answers.precise_terms, proof.specific_statistics. No suggestions were staged.',
       );
       expect(refused({ rule_id: 'clarity.made_up' })).toBe(
         'rule_id clarity.made_up is not a content rule offered for this page. Use one from the content_rules section: ai_answers.precise_terms, proof.specific_statistics. No suggestions were staged.',
       );
-      // Site Health raises its own rules; the model only writes the fix for one failing on the page.
       expect(refused({ rule_id: 'aeo.answer_first' })).toBe(
         'aeo.answer_first is a Site Health rule that is not failing on this page; Site Health raises it, not you. Write fixes only for the site_health_findings in content_rules. No suggestions were staged.',
       );
@@ -427,7 +445,6 @@ describe('Agent built-in tools', () => {
       ).toBe(
         'rule_id ai_answers.precise_terms is not a content rule offered for this page, and none are offered this turn; suggest only text for an open Site Health finding. No suggestions were staged.',
       );
-      // The open meta description finding takes its text even when no rule is offered.
       const bare = state({ ...pageTurn(), rules: new Set() });
       const finding = suggestEdits(
         catalog,
@@ -540,15 +557,128 @@ describe('Agent built-in tools', () => {
       ['edit_document', false],
       ['fetch', false],
       ['load_skill', false],
+      ['propose_declaration', false],
       ['read_zeta', false],
       ['save_document', true],
       ['suggest_edits', false],
     ]);
-    // The provider checks the same input schema the tool parses, without null branches.
-    expect(tools[3]!.input_schema).toEqual({
+    expect(tools[4]!.input_schema).toEqual({
       type: 'object',
       properties: { limit: { type: 'integer' } },
       additionalProperties: false,
     });
+  });
+});
+
+describe('propose_declaration on PostgreSQL', () => {
+  const db = testDatabase();
+  const fixtures = new AgentFixtures(db);
+  afterAll(async () => {
+    await fixtures.cleanup();
+    await db.destroy();
+  });
+  async function action(scope: Scope, ruleId: string | null = 'brand_absent_high_value_prompt') {
+    const where = { workspace_id: scope.workspaceId, project_id: scope.projectId };
+    const target = `https://acme.example/page-${randomUUID().slice(0, 8)}`;
+    const member = ruleId
+      ? opportunityRow(where, {
+          rule_id: ruleId,
+          opportunity_type: 'site_health',
+          severity: 'high',
+          target_key: `page:${target}`,
+        })
+      : null;
+    if (member) await db.insertInto('opportunities').values(member).execute();
+    const row = actionRow(where, {
+      group_key: `page:${target}`,
+      target_kind: 'page',
+      target_label: target,
+      target_url: target,
+      member_opportunity_ids: JSON.stringify(member ? [member.id] : []),
+    });
+    await db.insertInto('actions').values(row).execute();
+    return { id: row.id, label: target };
+  }
+  const seen = (scope: Scope, ...ids: string[]): ProposalTurn => ({
+    scope,
+    known: new Set(ids),
+    documents: [],
+  });
+
+  it('refuses an Action the turn did not see, one in another workspace and one it cannot declare', async () => {
+    const scope = await fixtures.scope();
+    const stranger = await fixtures.scope();
+    const [unseen, foreign, empty, links] = await Promise.all([
+      action(scope),
+      action(stranger),
+      action(scope, null),
+      action(scope, 'site_contextual_links'),
+    ]);
+    const state: Pick<TurnState, 'staged' | 'proposals' | 'steps'> = {
+      staged: new Map(),
+      proposals: [],
+      steps: [],
+    };
+    const propose = (turn: ProposalTurn, id: string) =>
+      proposeDeclaration(db, turn, state, { action_id: `citeladder://action/${id}` });
+    const notSeen = {
+      ok: false,
+      text: 'Propose a declaration only for the chat’s Action, one the person mentioned, or one a read returned this turn. Read the Action first.',
+    };
+    expect(await propose(seen(scope, empty.id), unseen.id)).toEqual(notSeen);
+    expect(await propose(seen(scope, foreign.id), foreign.id)).toEqual(notSeen);
+    expect((await propose(seen(scope, empty.id), empty.id)).text).toBe(
+      'This Action cannot be declared now. No finding targets it. Tell the person instead of proposing it.',
+    );
+    expect((await propose(seen(scope, links.id), links.id)).text).toMatch(/Internal links/u);
+    expect(state.proposals).toEqual([]);
+    expect(await propose(seen(stranger, foreign.id), foreign.id)).toMatchObject({ ok: true });
+    expect(state.proposals.map((proposal) => proposal.action_id)).toEqual([foreign.id]);
+  });
+
+  it('commits a mentioned Action’s proposal on the reply, once, and declares nothing', async () => {
+    const scope = await fixtures.scope();
+    const target = await action(scope);
+    const { run, lease } = await fixtures.claimed(scope, {
+      message: 'I shipped it. Should I mark it implemented?',
+      mentionIds: [target.id],
+    });
+    const today = new Date().toISOString().slice(0, 10);
+    const proposal = { action_id: target.id, go_live_day: today, deployment_reference: ' PR 12 ' };
+    await fixtures
+      .runtime(
+        scope,
+        scripted([
+          [
+            toolUse('propose_declaration', proposal, 'call_a'),
+            toolUse('propose_declaration', proposal, 'call_b'),
+          ],
+          [text('Confirm it below.')],
+        ]),
+      )
+      .execute(lease);
+    const chat = await readChat(db, scope, run.chat_id);
+    const answer = chat.messages.at(-1)!;
+    expect(answer.proposals).toEqual([
+      {
+        kind: 'declaration',
+        action_id: target.id,
+        revision: null,
+        go_live_day: today,
+        deployment_reference: 'PR 12',
+      },
+    ]);
+    expect(answer.steps.filter((step) => step.kind === 'proposal')).toEqual([
+      { kind: 'proposal', label: target.label },
+    ]);
+    expect(chat.messages[0]!.proposals).toEqual([]);
+    expect(chat.actions).toEqual([{ id: target.id, target_label: target.label, status: 'open' }]);
+    expect(
+      await db
+        .selectFrom('opportunity_implementation_events')
+        .select('id')
+        .where('action_id', '=', target.id)
+        .execute(),
+    ).toEqual([]);
   });
 });

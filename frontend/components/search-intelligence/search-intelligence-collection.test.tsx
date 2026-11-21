@@ -5,7 +5,7 @@ import { expect, it, vi } from 'vite-plus/test';
 import type { SearchIntelligenceDataset } from '@/lib/api/search-intelligence';
 import { SearchIntelligenceCollection } from './search-intelligence-collection';
 import { useSearchCollection } from './search-intelligence-collection-state';
-import { AllFilters } from '@/components/ui/all-filters';
+import { FiltersMenu } from '@/components/ui/filters-menu';
 import { openFilterRow } from '@/test/all-filters';
 import { CollectionViewControl, collectionFilters } from './search-intelligence-controls';
 
@@ -23,7 +23,6 @@ const saved = {
   target_hostname: 'owned.test',
 } as SearchIntelligenceDataset;
 
-/** The page's composition: the strip's controls above the tab's collection. */
 function Tab({
   tab,
   datasets,
@@ -45,7 +44,7 @@ function Tab({
   return (
     <>
       <CollectionViewControl collection={collection} />
-      <AllFilters filters={collectionFilters(collection)} />
+      <FiltersMenu filters={collectionFilters(collection)} />
       <SearchIntelligenceCollection
         collection={collection}
         datasets={datasets}
@@ -83,7 +82,7 @@ it('offers the keyword filters only while a keyword dataset is on screen', async
   await user.keyboard('{Escape}');
   await user.click(screen.getByRole('radio', { name: 'Top pages' }));
   expect(screen.getByText('Dataset pages')).toBeInTheDocument();
-  await user.click(screen.getByRole('button', { name: /^All filters/ }));
+  await user.click(screen.getByRole('button', { name: /^Filters/ }));
   expect(await screen.findByRole('menuitem', { name: /^Website/ })).toBeVisible();
   expect(screen.queryByRole('menuitem', { name: /^Min. search volume/ })).not.toBeInTheDocument();
 });

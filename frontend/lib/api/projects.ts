@@ -1,7 +1,3 @@
-/**
- * Projects domain endpoints (F2), with their query and mutation descriptors.
- * Workspace-scoped; no `user_id`. Every response passes through `strictValidate`.
- */
 import { mutationOptions, queryOptions, type QueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 
@@ -11,7 +7,11 @@ import { opportunitiesApi } from './opportunities';
 import { queryKeys } from './query-keys';
 import type { ProjectScope } from './query-keys/scope';
 import { refreshSeedQueries } from './topics';
-import { brandFactListSchema, brandFactSchema } from '@citeladder/contracts/fact-checking';
+import {
+  brandFactImportResultSchema,
+  brandFactListSchema,
+  brandFactSchema,
+} from '@citeladder/contracts/fact-checking';
 import { commandCenterSchema } from '@citeladder/contracts/opportunities';
 import {
   overviewLayoutSchema,
@@ -27,6 +27,7 @@ import {
 } from '@citeladder/contracts/project';
 import type {
   BrandFactCreateRequest,
+  BrandFactImportRequest,
   BrandFactUpdateRequest,
   BrandProfileUpdateRequest,
   BusinessMapUpdateRequest,
@@ -70,7 +71,6 @@ export const projectsApi = {
     );
     return strictValidate(overviewLayoutSchema, res, 'projects.getOverviewLayout');
   },
-  /** `widgets: null` resets to the default layout. */
   updateOverviewLayout: async (
     projectId: string,
     input: OverviewLayoutUpdate,
@@ -99,7 +99,6 @@ export const projectsApi = {
   },
   deleteProject: (projectId: string, options?: ApiRequestOptions) =>
     apiClient.delete<void>(`/projects/${projectId}`, options),
-  /** The project's measurement markets, its default first (`id: null`). */
   listMarkets: async (projectId: string, options?: ApiRequestOptions) => {
     const res = await apiClient.get(`/projects/${projectId}/markets`, options);
     return strictValidate(projectMarketListSchema, res, 'projects.listMarkets');
@@ -130,7 +129,6 @@ export const projectsApi = {
     );
     return strictValidate(brandProfileSchema, res, 'projects.updateBrandProfile');
   },
-  /** The fact-checking pilot's brand facts; `enabled: false` outside the pilot. */
   getBrandFacts: async (projectId: string, options?: ApiRequestOptions) => {
     const res = await apiClient.get(`/projects/${projectId}/brand-facts`, options);
     return strictValidate(brandFactListSchema, res, 'projects.getBrandFacts');
@@ -143,7 +141,6 @@ export const projectsApi = {
     const res = await apiClient.post(`/projects/${projectId}/brand-facts`, input, options);
     return strictValidate(brandFactSchema, res, 'projects.createBrandFact');
   },
-  /** Edit the revision that was read; a stale revision is a 409. */
   updateBrandFact: async (
     projectId: string,
     factId: string,
@@ -157,11 +154,18 @@ export const projectsApi = {
     );
     return strictValidate(brandFactSchema, res, 'projects.updateBrandFact');
   },
+  importBrandFacts: async (
+    projectId: string,
+    input: BrandFactImportRequest,
+    options?: ApiRequestOptions,
+  ) => {
+    const res = await apiClient.post(`/projects/${projectId}/brand-facts/import`, input, options);
+    return strictValidate(brandFactImportResultSchema, res, 'projects.importBrandFacts');
+  },
   getBusinessMap: async (projectId: string, options?: ApiRequestOptions) => {
     const res = await apiClient.get<BusinessMap>(`/projects/${projectId}/business-map`, options);
     return strictValidate(businessMapSchema, res, 'projects.getBusinessMap');
   },
-  /** Replace the business map; surviving entries keep their provenance. */
   updateBusinessMap: async (
     projectId: string,
     input: BusinessMapUpdateRequest,
@@ -181,53 +185,38 @@ const scoped = (scope: ProjectScope, signal?: AbortSignal) => ({
   workspaceId: scope.workspaceId,
 });
 
-/**
- * Project read options: the shell's reads, shared by the route loader and the
- * project context under one bounded bootstrap timeout, and the Overview's,
- * shared by the screen and navigation intent.
- */
 export const projectQueries = {
-  /** The Overview's composed projection of the project's persisted state. */
   commandCenter: (scope: ProjectScope) =>
     queryOptions({
       queryKey: queryKeys.projects.commandCenter(scope),
       queryFn: ({ signal }) => projectsApi.getCommandCenter(scope.projectId, scoped(scope, signal)),
     }),
-  /** The company facts and audience the Agent's Context screen edits. */
   brandProfile: (scope: ProjectScope) =>
     queryOptions({
       queryKey: queryKeys.projects.brandProfile(scope),
       queryFn: ({ signal }) => projectsApi.getBrandProfile(scope.projectId, scoped(scope, signal)),
     }),
-  /** The offerings' buyers, jobs and terms that steer prompt generation. */
   businessMap: (scope: ProjectScope) =>
     queryOptions({
       queryKey: queryKeys.projects.businessMap(scope),
       queryFn: ({ signal }) => projectsApi.getBusinessMap(scope.projectId, scoped(scope, signal)),
     }),
-  /** The brand facts and the fact-checking pilot gate that decides Context's tabs. */
   brandFacts: (scope: ProjectScope) =>
     queryOptions({
       queryKey: queryKeys.projects.brandFacts(scope),
       queryFn: ({ signal }) => projectsApi.getBrandFacts(scope.projectId, scoped(scope, signal)),
     }),
-  /** The project's measurement markets, its default first: the market pickers' list. */
   markets: (scope: ProjectScope) =>
     queryOptions({
       queryKey: queryKeys.projects.markets(scope),
       queryFn: ({ signal }) => projectsApi.listMarkets(scope.projectId, scoped(scope, signal)),
     }),
-  /** Which widgets the project's Overview shows; independent of the command center. */
   overviewLayout: (scope: ProjectScope) =>
     queryOptions({
       queryKey: queryKeys.projects.overviewLayout(scope),
       queryFn: ({ signal }) =>
         projectsApi.getOverviewLayout(scope.projectId, scoped(scope, signal)),
     }),
-  /**
-   * One workspace's projects as the switcher shows them. A summary is not a
-   * project view: the active project is its own detail read.
-   */
   list: (workspaceId: string) =>
     queryOptions({
       queryKey: queryKeys.projects.summaries(workspaceId),
@@ -238,7 +227,6 @@ export const projectQueries = {
           timeoutMs: getBootstrapReadTimeoutMs(),
         }),
     }),
-  /** An explicit project, authorized from its path before any workspace is known. */
   detail: (projectId: string) =>
     queryOptions({
       queryKey: queryKeys.projects.detail(projectId),
@@ -251,10 +239,6 @@ export const projectQueries = {
     }),
 };
 
-/**
- * Re-read the shell after a failed bootstrap: the memberships and every
- * project read, so a retry recovers whichever of them failed.
- */
 export function retryProjectShell(client: QueryClient) {
   return Promise.all([
     client.refetchQueries({ queryKey: queryKeys.workspaces.list() }),
@@ -272,14 +256,6 @@ export async function refreshAfterProjectCreated(client: QueryClient, workspaceI
   void client.invalidateQueries({ queryKey: listKey });
 }
 
-/**
- * Look up brand and competitor logos after a write that set or changed the
- * project's domains: creation and a project edit. Opening the app never
- * fetches logos. The API answers from its own cache (negative entries
- * included) and rate-limits the lookup; a failure leaves the initials fallback
- * and is not retried. The project's list and detail reads carry the logo, and
- * they are re-read only when one was found.
- */
 export function refreshBrandLogos(client: QueryClient, projectId: string, workspaceId: string) {
   void projectsApi
     .refreshProjectLogos(projectId, { workspaceId })
@@ -293,10 +269,6 @@ export function refreshBrandLogos(client: QueryClient, projectId: string, worksp
     .catch(() => undefined);
 }
 
-/**
- * A saved brand profile is written into its read at once, and the Overview's
- * command center, which shows the company facts, re-reads.
- */
 function profileSaved(client: QueryClient, scope: ProjectScope, profile: BrandProfile) {
   client.setQueryData(queryKeys.projects.brandProfile(scope), profile);
   void client.invalidateQueries({
@@ -307,19 +279,14 @@ function profileSaved(client: QueryClient, scope: ProjectScope, profile: BrandPr
 const refreshBrandFacts = (client: QueryClient, projectId: string) =>
   client.invalidateQueries({ queryKey: queryKeys.projects.resource(projectId, 'brand-facts') });
 
-/** A project scope whose workspace is known: writes always name one. */
 type WorkspaceProjectScope = ProjectScope & Readonly<{ workspaceId: string }>;
-/** The owners a business-step save writes; `null` leaves that owner as it is. */
 type BusinessUpdate = Readonly<{
   profile: BrandProfileUpdateRequest | null;
   map: BusinessMapUpdateRequest | null;
 }>;
-/** The Overview's actions in their new order, and the order version that was read. */
 type ActionOrder = Readonly<{ ordered: Opportunity[]; expectedVersion: number }>;
 
-/** Project writes; each one refreshes or writes every read it changes. */
 export const projectMutations = {
-  /** Edit the project's settings; the website or a competitor's domains may change. */
   update: (scope: WorkspaceProjectScope) =>
     mutationOptions({
       mutationFn: (input: ProjectUpdateRequest) =>
@@ -329,11 +296,6 @@ export const projectMutations = {
         await client.invalidateQueries({ queryKey: queryKeys.projects.all });
       },
     }),
-  /**
-   * Delete a project. Every project read is refreshed, and the result is the
-   * workspace's list as it is after the deletion, so the caller can choose
-   * where to go while the delete is still pending.
-   */
   remove: (workspaceId: string | null) =>
     mutationOptions({
       mutationFn: async (projectId: string, { client }) => {
@@ -342,7 +304,6 @@ export const projectMutations = {
         return client.fetchQuery(projectQueries.list(String(workspaceId)));
       },
     }),
-  /** Add a measurement market; the response is the project's new market list. */
   addMarket: (scope: ProjectScope) =>
     mutationOptions({
       mutationFn: (input: ProjectMarketCreate) =>
@@ -350,7 +311,6 @@ export const projectMutations = {
       onSuccess: (list, _input, _result, { client }) =>
         client.setQueryData(queryKeys.projects.markets(scope), list),
     }),
-  /** Remove a measurement market; the runs that named it read differently now. */
   removeMarket: (scope: ProjectScope) =>
     mutationOptions({
       mutationFn: (marketId: string) =>
@@ -368,10 +328,13 @@ export const projectMutations = {
         projectsApi.createBrandFact(scope.projectId, input, scoped(scope)),
       onSuccess: (_fact, _input, _result, { client }) => refreshBrandFacts(client, scope.projectId),
     }),
-  /**
-   * Edit the revision that was read. A refusal (a stale revision) re-reads
-   * the facts too, so the next edit starts from the current revision.
-   */
+  importBrandFacts: (scope: ProjectScope) =>
+    mutationOptions({
+      mutationFn: (input: BrandFactImportRequest) =>
+        projectsApi.importBrandFacts(scope.projectId, input, scoped(scope)),
+      onSuccess: (_result, _input, _context, { client }) =>
+        refreshBrandFacts(client, scope.projectId),
+    }),
   updateBrandFact: (scope: ProjectScope) =>
     mutationOptions({
       mutationFn: ({ factId, input }: { factId: string; input: BrandFactUpdateRequest }) =>
@@ -385,15 +348,9 @@ export const projectMutations = {
         projectsApi.updateBrandProfile(scope.projectId, input, scoped(scope)),
       onSuccess: (profile, _input, _result, { client }) => {
         profileSaved(client, scope, profile);
-        // Seed queries carry the category and offerings, so the builder rereads them.
         void refreshSeedQueries(client, scope.projectId);
       },
     }),
-  /**
-   * The Prompt Builder's business step: the profile first, so the map never
-   * names an offering the profile does not list yet. Each owner is written
-   * into its read as soon as it lands, so a map refusal keeps the saved profile.
-   */
   saveBusiness: (scope: ProjectScope) =>
     mutationOptions({
       mutationFn: async ({ profile, map }: BusinessUpdate, { client }) => {
@@ -410,16 +367,9 @@ export const projectMutations = {
           client.setQueryData(queryKeys.projects.businessMap(scope), next);
         }
       },
-      // Offerings and category terms decide which searches seed a run.
       onSuccess: (_data, _input, _result, { client }) =>
         refreshSeedQueries(client, scope.projectId),
     }),
-  /**
-   * Save the Overview layout. A save names the version it edited, so a stale
-   * save fails instead of overwriting someone else's arrangement; the layout
-   * shows the edit at once, and a failed save rolls back and re-reads the
-   * layout that won.
-   */
   saveOverviewLayout: (scope: ProjectScope) => {
     const queryKey = queryKeys.projects.overviewLayout(scope);
     return mutationOptions({
@@ -443,11 +393,6 @@ export const projectMutations = {
       },
     });
   },
-  /**
-   * Reorder the Overview's actions. The command center shows the new order at
-   * once; a refusal (another reorder won the version) rolls it back, and
-   * either way the order is re-read.
-   */
   reorderActions: (scope: ProjectScope) => {
     const queryKey = queryKeys.projects.commandCenter(scope);
     return mutationOptions({

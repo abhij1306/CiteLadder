@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vite-plus/test';
 
-import { addWidget, addableWidgets, moveWidget, removeWidget, toggleWidth } from './layout';
+import {
+  addWidget,
+  addableWidgets,
+  moveWidget,
+  overviewRows,
+  removeWidget,
+  toggleWidth,
+} from './layout';
 
 const layout = [
   { key: 'project_state', size: 'half' },
@@ -27,6 +34,29 @@ describe('Overview layout edits', () => {
     ]);
   });
 
+  it('pairs half widgets into rows, a lone half alone in its row, pairing again after each full widget', () => {
+    const keys = (widgets: Parameters<typeof overviewRows>[0]) =>
+      overviewRows(widgets).map((row) => row.map((widget) => widget.key));
+    expect(keys(layout)).toEqual([['project_state'], ['movement'], ['company_facts']]);
+    expect(
+      keys([
+        { key: 'project_state', size: 'half' },
+        { key: 'top_movers', size: 'half' },
+        { key: 'movement', size: 'half' },
+        { key: 'company_facts', size: 'full' },
+        { key: 'next_action', size: 'half' },
+        { key: 'ranked_actions', size: 'half' },
+        { key: 'missing_prompts', size: 'half' },
+      ]),
+    ).toEqual([
+      ['project_state', 'top_movers'],
+      ['movement'],
+      ['company_facts'],
+      ['next_action', 'ranked_actions'],
+      ['missing_prompts'],
+    ]);
+  });
+
   it('removes a widget but keeps the last one', () => {
     expect(removeWidget(layout, 1).map((widget) => widget.key)).toEqual([
       'project_state',
@@ -39,11 +69,9 @@ describe('Overview layout edits', () => {
 
   it('offers only widgets not shown, and adds one at half width at the end', () => {
     expect(addableWidgets(layout)).toEqual([
-      'citation_share',
       'next_action',
       'missing_prompts',
       'ranked_actions',
-      'progress_proof',
       'visibility_trend',
       'share_of_voice',
       'top_movers',

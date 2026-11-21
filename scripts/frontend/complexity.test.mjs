@@ -66,7 +66,6 @@ const apiPolicy = (functions) => ({
 });
 
 test('the API complexity ratchet only tightens against its base', () => {
-  // A base from before the production LOC rule was retired still compares.
   const base = apiPolicy({ 'services/api/src/a.ts::run': 20 });
   base.defaults.max_production_loc = 500;
   assert.deepEqual(

@@ -22,7 +22,6 @@ function proseRanges(text: string, headings: string[]) {
   return ranges;
 }
 
-/** A word repeated back to back ("Actions Actions") is a flattened label/value widget, not prose. */
 const repeatsAdjacentWord = (tokens: string[]) =>
   tokens.some((token, index) => index > 0 && token === tokens[index - 1]);
 
@@ -39,11 +38,8 @@ function usablePassage(value: string) {
 const contentWords = (anchor: string) =>
   words(anchor).filter((token) => !stopWords.has(token[0].toLowerCase())).length;
 
-/** Exact, bounded source spans; flattened crawl text does not establish DOM paragraphs. */
 export function sourcePassages(text: string, headings: string[] = []): SourcePassages {
   const passages: SourcePassages = [];
-  // The extractor flattens headings into the text. Split at their observed,
-  // ordered occurrences so an H1 and its opening sentence cannot form an anchor.
   for (const range of proseRanges(text, headings)) {
     for (const { segment, index: offset } of segmenter.segment(
       text.slice(range.start, range.end),
@@ -81,15 +77,12 @@ function anchorEnd(
   return end;
 }
 
-/** Candidate phrases share destination vocabulary; JEV decides meaning in context. */
 export function sourcePlacements(
   passages: SourcePassages,
   targetTerms: Set<string>,
   targetNames: string[],
 ): InternalLinkPlacement[] {
   const found: InternalLinkPlacement[] = [];
-  // A destination whose whole name is one word ("Pricing") may be linked by that
-  // word; any other anchor needs enough words to name the destination, not a topic.
   const names = new Set(
     targetNames.map((name) => name.trim().toLowerCase()).filter((name) => words(name).length === 1),
   );
@@ -113,11 +106,9 @@ export function sourcePlacements(
         namesTarget(anchor)
       )
         found.push({ ...passage, anchor, anchor_start: first.index });
-      // The next anchor starts after this one.
       start = end + 1;
     }
   }
-  // Longer phrases carry more specific meaning; retain source order for ties.
   return found
     .toSorted((a, b) => words(b.anchor).length - words(a.anchor).length)
     .slice(0, limits.max_placements);

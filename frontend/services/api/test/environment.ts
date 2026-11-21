@@ -1,6 +1,5 @@
 import { isInheritedCredential } from './inherited-credentials.ts';
 
-/** Fail before importing application owners if a runner inherited live credentials. */
 const inheritedCredentials = Object.entries(process.env)
   .filter(([name, value]) => value && isInheritedCredential(name))
   .map(([name]) => name);

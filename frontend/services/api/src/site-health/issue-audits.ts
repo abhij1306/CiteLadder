@@ -1,10 +1,3 @@
-/**
- * What one crawl's audit found on each page it audited: the input a landing
- * (`issue-states.ts`) moves issue states from. Read-only: a page analyzed at
- * its own URL reports the rules with a current issue and those a determinate
- * evaluation passed; a page whose fetch ended at another URL, or whose newest
- * analyze attempt answered 404/410, reports that instead.
- */
 import { sql } from 'kysely';
 
 import { policy } from '../config.ts';
@@ -19,15 +12,12 @@ const GONE_STATUSES = policy.site_health.reads.task_outcomes.gone_status_codes;
 
 type Finding = { issueId: string; evaluationId: string; ruleVersion: string };
 
-/** One page's outcome in one audit. */
 export type PageAudit =
   | {
       kind: 'analyzed';
       siteUrlId: string;
       analysisId: string;
-      /** Rules with a current issue on the page. */
       found: ReadonlyMap<string, Finding>;
-      /** Rules a determinate evaluation passed: the evaluation that verified each. */
       passed: ReadonlyMap<string, { evaluationId: string; ruleVersion: string }>;
     }
   | {
@@ -39,18 +29,54 @@ export type PageAudit =
       evidence: Record<string, unknown>;
     };
 
-/** Whether the artifact's final URL is another page than the one tracked. */
 function redirected(finalUrl: string, trackedHash: string) {
   try {
     return canonicalIdentity(finalUrl).hash !== trackedHash;
   } catch {
-    // An unparseable final URL is no evidence of a redirect.
     return false;
   }
 }
 
-/** Every page the crawl audited, with what the audit found. */
-export async function pageAudits(db: Database, crawl: Crawl): Promise<PageAudit[]> {
+const batchSize = () => policy.site_health.crawl.finalize.projection_pages;
+
+async function auditedPagesAfter(
+  db: Database,
+  crawl: Crawl,
+  { after, size }: { after: string | null; size: number },
+) {
+  const { rows } = await sql<{ site_url_id: string }>`
+    select p.site_url_id from (
+      select a.site_url_id from site_page_analyses a
+      where a.workspace_id = ${crawl.workspace_id} and a.crawl_id = ${crawl.id} and a.is_current
+        and a.finalized_at is not null and a.status = 'completed'
+      union
+      select t.site_url_id from site_crawl_tasks t
+      where t.workspace_id = ${crawl.workspace_id} and t.crawl_id = ${crawl.id}
+        and t.task_kind = 'analyze' and t.status = 'failed' and t.site_url_id is not null
+    ) p
+    where ${after === null ? sql`true` : sql`p.site_url_id > ${after}::uuid`}
+    order by p.site_url_id limit ${size}`.execute(db);
+  return rows.map((row) => row.site_url_id);
+}
+
+export async function eachPageAuditBatch(
+  db: Database,
+  crawl: Crawl,
+  visit: (audits: PageAudit[]) => Promise<void>,
+) {
+  const size = batchSize();
+  let after: string | null = null;
+  for (;;) {
+    const ids: string[] = await auditedPagesAfter(db, crawl, { after, size }); // NOSONAR -- Keyset batches, in order.
+    if (!ids.length) return;
+    await visit(await pageAudits(db, crawl, ids)); // NOSONAR -- Keyset batches, in order.
+    const last = ids.at(-1);
+    if (!last || ids.length < size) return;
+    after = last;
+  }
+}
+
+async function pageAudits(db: Database, crawl: Crawl, pageIds: string[]): Promise<PageAudit[]> {
   const analyses = await db
     .selectFrom('site_page_analyses as a')
     .innerJoin('site_fetch_artifacts as f', (join) =>
@@ -65,6 +91,7 @@ export async function pageAudits(db: Database, crawl: Crawl): Promise<PageAudit[
     .where('a.is_current', '=', true)
     .where('a.finalized_at', 'is not', null)
     .where('a.status', '=', 'completed')
+    .where('a.site_url_id', '=', sql<string>`any(${pageIds}::uuid[])`)
     .execute();
   const audits: PageAudit[] = [];
   const analyzed = analyses.filter((row) => {
@@ -79,7 +106,10 @@ export async function pageAudits(db: Database, crawl: Crawl): Promise<PageAudit[
     });
     return false;
   });
-  audits.push(...(await analyzedAudits(db, crawl, analyzed)), ...(await goneAudits(db, crawl)));
+  audits.push(
+    ...(await analyzedAudits(db, crawl, analyzed)),
+    ...(await goneAudits(db, crawl, pageIds)),
+  );
   return audits;
 }
 
@@ -97,9 +127,6 @@ async function analyzedAudits(
   if (!analyses.length) return [];
   const current = new Map(analyses.map((row) => [row.site_url_id, row]));
   const pageIds = [...current.keys()];
-  // The page's own evaluations: those its current analysis names, plus the
-  // site-level findings later written against it. Site checks every analysis
-  // names belong to the root page and are judged there.
   const evaluations = await db
     .selectFrom('site_rule_evaluations as e')
     .innerJoin('site_page_analyses as p', (join) =>
@@ -153,7 +180,6 @@ async function analyzedAudits(
   for (const row of evaluations) {
     const analysis = current.get(row.site_url_id);
     const audit = audits.get(row.site_url_id);
-    // Evaluations are already the page's own, so a named id is its current analysis's.
     const named =
       namedIds.has(row.id) ||
       (row.source_architecture_id !== null && row.analysis_id === analysis?.id);
@@ -166,18 +192,17 @@ async function analyzedAudits(
   return [...audits.values()];
 }
 
-/** Pages whose newest analyze generation in the crawl failed with 404/410. */
-async function goneAudits(db: Database, crawl: Crawl): Promise<PageAudit[]> {
+async function goneAudits(db: Database, crawl: Crawl, pageIds: string[]): Promise<PageAudit[]> {
   const rows = await db
     .selectFrom((query) =>
       query
         .selectFrom('site_crawl_tasks')
-        .select(['id', 'workspace_id', 'site_url_id', 'status', 'error_code'])
+        .select(['id', 'workspace_id', 'crawl_id', 'site_url_id', 'status', 'error_code'])
         .distinctOn('site_url_id')
         .where('workspace_id', '=', crawl.workspace_id)
         .where('crawl_id', '=', crawl.id)
         .where('task_kind', '=', 'analyze')
-        .where('site_url_id', 'is not', null)
+        .where('site_url_id', '=', sql<string>`any(${pageIds}::uuid[])`)
         .orderBy('site_url_id')
         .orderBy('generation', 'desc')
         .orderBy('id', 'desc')
@@ -186,11 +211,11 @@ async function goneAudits(db: Database, crawl: Crawl): Promise<PageAudit[]> {
     .select([
       't.site_url_id',
       sql<string | null>`(select a.id from site_fetch_attempts a
-        where a.task_id = t.id and a.workspace_id = t.workspace_id
+        where a.task_id = t.id and a.workspace_id = t.workspace_id and a.crawl_id = t.crawl_id
           and a.status_code = any(${GONE_STATUSES}::int[])
         order by a.attempt_number desc, a.request_ordinal desc limit 1)`.as('attempt_id'),
       sql<number | null>`(select a.status_code from site_fetch_attempts a
-        where a.task_id = t.id and a.workspace_id = t.workspace_id
+        where a.task_id = t.id and a.workspace_id = t.workspace_id and a.crawl_id = t.crawl_id
           and a.status_code = any(${GONE_STATUSES}::int[])
         order by a.attempt_number desc, a.request_ordinal desc limit 1)`.as('status_code'),
     ])

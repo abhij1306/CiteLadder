@@ -1,10 +1,3 @@
-/**
- * How the project's buyers already search, from data it has persisted:
- * imported Search Console queries and published Search Intelligence keywords.
- * Generation uses these only to steer draft phrasing. The loader reads stored
- * rows; it never fetches, and a weight orders queries without ever being
- * presented as AI prompt volume.
- */
 import { sql, type RawBuilder } from 'kysely';
 
 import { namesEntity, type EntityPolicy } from '../analysis/aliases.ts';
@@ -19,20 +12,16 @@ const O = policy.prompts.generation.observed;
 
 type ObservedSource = 'gsc' | 'search_intelligence';
 export type ObservedQuery = {
-  /** The highest-impression Search Console row, or the Search Intelligence row. */
   id: string;
   source: ObservedSource;
   text: string;
   topic_id: string;
-  /** Impressions for Search Console, search volume for keyword research: ordering only. */
   weight: number;
-  /** The branded-query classification that admitted it: classifier version and any override. */
   classifier_version: string;
   override_id: string | null;
 };
 type Sourced = Omit<ObservedQuery, 'topic_id' | 'classifier_version' | 'override_id'>;
 
-/** The evidence ref a candidate carries for each search that grounded its slot. */
 export const observedRef = (
   query: Pick<ObservedQuery, 'id' | 'source' | 'classifier_version' | 'override_id'>,
 ) => ({
@@ -42,14 +31,12 @@ export const observedRef = (
   classifier_version: query.classifier_version,
   override_id: query.override_id,
 });
-/** Whether evidence refs include an observed search: the one `grounded` rule. */
 export const isGrounded = (refs: unknown) =>
   Array.isArray(refs) &&
   refs.some(
     (ref: unknown) =>
       typeof ref === 'object' && ref !== null && 'kind' in ref && ref.kind === O.evidence_kind,
   );
-/** `isGrounded` in SQL, for a jsonb evidence-refs expression; false when absent. */
 export const groundedSql = (refs: RawBuilder<unknown>) =>
   sql<boolean>`coalesce(${refs} @> ${JSON.stringify([{ kind: O.evidence_kind }])}::jsonb, false)`;
 
@@ -58,12 +45,6 @@ const SEED_SOURCES = {
   search_intelligence: 'search_intelligence',
 } as const satisfies Record<string, ObservedSource>;
 
-/**
- * The searches a request lets steer wording: every loaded search when it names
- * no seed source, none for `none`, else that source's searches, narrowed to
- * the chosen ids when it names any. Admission still checks copies against
- * every search the run read, whichever steered it.
- */
 export function seedQueries(
   observed: readonly ObservedQuery[],
   seeds: {
@@ -87,10 +68,8 @@ export type ObservedScope = {
 };
 
 export const baseLanguage = (code: string) => code.trim().toLowerCase().split(/[-_]/u)[0] ?? '';
-/** A dataset's base language in SQL, split on `-` or `_` exactly like `baseLanguage`. */
 const datasetLanguage = sql<string>`split_part(replace(lower(language_code), '_', '-'), '-', 1)`;
 
-/** Search Console queries of the latest query snapshot within the window, summed per query. */
 async function searchConsoleQueries(db: Database, scope: ObservedScope): Promise<Sourced[]> {
   const workspace = new WorkspaceScope(scope.workspaceId);
   const snapshot = await workspace
@@ -128,7 +107,6 @@ async function searchConsoleQueries(db: Database, scope: ObservedScope): Promise
   }));
 }
 
-/** Keywords of the latest published dataset of each configured kind in the project language. */
 async function keywordResearchQueries(db: Database, scope: ObservedScope): Promise<Sourced[]> {
   const language = baseLanguage(scope.languageCode);
   if (!language) return [];
@@ -167,12 +145,6 @@ async function keywordResearchQueries(db: Database, scope: ObservedScope): Promi
   }));
 }
 
-/**
- * The seed sources the project has persisted data for, in the order a request
- * names them: a Search Console query snapshot, and a published Search
- * Intelligence dataset of a grounding kind in the project language. A source
- * listed here may still yield no usable query.
- */
 export async function persistedSeedSources(
   db: Database,
   scope: Pick<ObservedScope, 'workspaceId' | 'projectId' | 'languageCode'>,
@@ -203,7 +175,6 @@ export async function persistedSeedSources(
 // ICU word boundaries also split scripts written without spaces (Japanese, Chinese, Thai).
 const WORDS = new Intl.Segmenter(undefined, { granularity: 'word' });
 
-/** At least `min_tokens` words, or a shorter question opening with a question word. */
 function queryShaped(text: string, language: string): boolean {
   const tokens = [...WORDS.segment(text)]
     .filter((segment) => segment.isWordLike)
@@ -213,7 +184,6 @@ function queryShaped(text: string, language: string): boolean {
   return tokens.length >= O.min_tokens || (O.question_words[language] ?? []).includes(first);
 }
 
-/** The topic sharing the most comparable tokens with `text`; none when nothing is shared. */
 function bindTopic(text: string, topics: readonly { id: string; tokens: Set<string> }[]) {
   const own = bindingTokens(text);
   let best: { id: string; shared: number } | null = null;
@@ -224,18 +194,11 @@ function bindTopic(text: string, topics: readonly { id: string; tokens: Set<stri
   return best?.id ?? null;
 }
 
-/** Search Console impressions before keyword volume: weights of different sources never compare. */
 const byWeight = (a: Sourced, b: Sourced) =>
   Number(b.source === 'gsc') - Number(a.source === 'gsc') ||
   b.weight - a.weight ||
   compareText(a.text, b.text);
 
-/**
- * Non-branded, competitor-free, query-shaped searches bound to one of the
- * project's topics: at most `max_per_topic` per topic, Search Console
- * impressions before keyword volume, returned in that ranking order. The
- * caller authorized the project.
- */
 export async function loadObservedQueries(
   db: Database,
   scope: ObservedScope,

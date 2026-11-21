@@ -1,18 +1,12 @@
-/**
- * Browser-side helpers for the Add products dialog: the sample CSV for each
- * file source and the category review.
- */
 import { CATALOG_TEMPLATE_COLUMNS } from '@citeladder/contracts/commerce-requests';
 import type { CatalogCategoryProposal } from '@citeladder/contracts/commerce-suite';
 
-/** A downloadable sample: its file name, header and example rows in column order. */
 export type SampleCsv = {
   filename: string;
   columns: readonly string[];
   rows: readonly (readonly string[])[];
 };
 
-/** One example row under the template header, in column order. */
 const EXAMPLE: Record<(typeof CATALOG_TEMPLATE_COLUMNS)[number], string> = {
   title: 'Trail Runner',
   brand: 'Your brand',
@@ -26,17 +20,12 @@ const EXAMPLE: Record<(typeof CATALOG_TEMPLATE_COLUMNS)[number], string> = {
   gtin: '',
 };
 
-/** The CSV template: the header and one example row. */
 export const CATALOG_SAMPLE: SampleCsv = {
   filename: 'catalog-sample.csv',
   columns: CATALOG_TEMPLATE_COLUMNS,
   rows: [CATALOG_TEMPLATE_COLUMNS.map((column) => EXAMPLE[column])],
 };
 
-/**
- * A Merchant Center feed as CSV, by Google's field names: two sizes of one
- * product grouped by `item_group_id`, and a lone product.
- */
 export const MERCHANT_FEED_SAMPLE: SampleCsv = {
   filename: 'merchant-feed-sample.csv',
   columns: [
@@ -91,11 +80,6 @@ export const MERCHANT_FEED_SAMPLE: SampleCsv = {
   ],
 };
 
-/**
- * The proposed categories left out: each one the person unticked and every
- * category under it, since a product joins a path only up to its first
- * left-out category.
- */
 export function leftOutCategories(
   tree: readonly CatalogCategoryProposal[],
   unticked: ReadonlySet<string>,

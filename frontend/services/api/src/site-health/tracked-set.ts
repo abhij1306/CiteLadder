@@ -8,6 +8,7 @@
  * lowering it keeps the first N, raising it extends the set in place
  * (`fitTrackedSet`). Memberships are written by `admission-writes.ts`.
  */
+import { sql } from 'kysely';
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { record } from '../db/json.ts';
@@ -17,16 +18,9 @@ import type { Candidate } from './frontier.ts';
 import type { Crawl } from './site-task.ts';
 import { hostTwinHash } from './url-identity.ts';
 
-/**
- * The project's stable order: value tier first (the root's is the highest),
- * then the URL's identity hash, the SHA-256 of its canonical form. Every crawl
- * orders the same URLs the same way, and the order within a tier never
- * favours header or footer links.
- */
 export const trackedOrder = (a: Pick<Candidate, 'priority' | 'hash'>, b: typeof a) =>
   b.priority - a.priority || compareText(a.hash, b.hash);
 
-/** One candidate per URL, and one of each www/apex twin pair, in the stable order. */
 export function orderedUnique(candidates: Candidate[]) {
   const unique = new Map<string, Candidate>();
   for (const item of candidates.toSorted(trackedOrder)) {
@@ -59,38 +53,43 @@ function trackedTarget(crawl: Crawl) {
   );
 }
 
-/** Every page the project ever tracked, by URL hash, and how many are active now. */
-async function trackedPages(trx: Database, crawl: Crawl) {
+async function trackedPages(trx: Database, crawl: Crawl, hashes: string[]) {
+  const active = await trx
+    .selectFrom('monitored_site_urls')
+    .select((eb) => eb.fn.countAll<string>().as('count'))
+    .where('workspace_id', '=', crawl.workspace_id)
+    .where('project_id', '=', crawl.project_id)
+    .where('fill_order', 'is not', null)
+    .where('active', '=', true)
+    .executeTakeFirstOrThrow();
+  if (!hashes.length) return { hashes: new Set<string>(), active: Number(active.count) };
+  // Driven from the candidates through both unique (project, ...) keys: a join
+  // led by the tracked set grew per chunk to 25 s at 30,000 pages.
   const rows = await trx
-    .selectFrom('monitored_site_urls as m')
-    .innerJoin('site_urls as u', (join) =>
-      join
-        .onRef('u.id', '=', 'm.site_url_id')
-        .onRef('u.workspace_id', '=', 'm.workspace_id')
-        .onRef('u.project_id', '=', 'm.project_id'),
+    .selectFrom('site_urls as u')
+    .select('u.url_hash')
+    .where('u.workspace_id', '=', crawl.workspace_id)
+    .where('u.project_id', '=', crawl.project_id)
+    .where('u.url_hash', '=', sql<string>`any(${hashes}::text[])`)
+    .where(
+      sql<boolean>`exists (select 1 from monitored_site_urls m
+        where m.project_id = u.project_id and m.site_url_id = u.id
+          and m.workspace_id = u.workspace_id and m.fill_order is not null)`,
     )
-    .select(['u.url_hash', 'm.active'])
-    .where('m.workspace_id', '=', crawl.workspace_id)
-    .where('m.project_id', '=', crawl.project_id)
-    .where('m.fill_order', 'is not', null)
     .execute();
-  return {
-    hashes: new Set(rows.map((row) => row.url_hash)),
-    active: rows.filter((row) => row.active).length,
-  };
+  return { hashes: new Set(rows.map((row) => row.url_hash)), active: Number(active.count) };
 }
 
-/**
- * Fill the tracked set's free slots from `candidates` in the stable order,
- * skipping every page tracked before and every document (a PDF is inventory,
- * never an audited page). Returns the joined pages with their site URL ids.
- * The caller holds the workspace runtime lock.
- */
 export async function fillTrackedSet(trx: Database, crawl: Crawl, candidates: Candidate[]) {
-  const tracked = await trackedPages(trx, crawl);
+  const ordered = orderedUnique(candidates);
+  const tracked = await trackedPages(
+    trx,
+    crawl,
+    ordered.map((item) => item.hash),
+  );
   const room = trackedTarget(crawl) - tracked.active;
   if (room <= 0) return [];
-  const picked = orderedUnique(candidates)
+  const picked = ordered
     .filter((item) => item.disposition === 'analyze' && !tracked.hashes.has(item.hash))
     .slice(0, room);
   if (!picked.length) return [];
@@ -106,6 +105,10 @@ export async function fillTrackedSet(trx: Database, crawl: Crawl, candidates: Ca
     const siteUrlId = ids.get(item.hash)!;
     return joined.has(siteUrlId) ? [{ item, siteUrlId }] : [];
   });
+}
+
+export async function trackedRoom(trx: Database, crawl: Crawl) {
+  return trackedTarget(crawl) - (await trackedPages(trx, crawl, [])).active;
 }
 
 /**

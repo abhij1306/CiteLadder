@@ -14,11 +14,6 @@ import {
   type TopicRow,
 } from '@/lib/prompts/builder-topics';
 
-/**
- * The "Review topics" step's state: the project's topics plus proposals,
- * edited locally. Proposing is a metered model call the person asks for;
- * nothing is written until Confirm applies the whole plan at once.
- */
 export function useBuilderTopics({
   scope,
   topics,
@@ -38,7 +33,6 @@ export function useBuilderTopics({
       setOverflow(result.overflow);
     },
   });
-  // The descriptor refreshes every read the confirmed topics change.
   const confirmation = topicsMutations.confirm(scope);
   const confirmPlan = useMutation({
     ...confirmation,
@@ -51,7 +45,6 @@ export function useBuilderTopics({
   const confirm = {
     isPending: confirmPlan.isPending,
     error: confirmPlan.error,
-    /** Apply the plan as it stands now. */
     mutateAsync: () => confirmPlan.mutateAsync(plan),
   };
 

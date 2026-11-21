@@ -1,4 +1,3 @@
-/** Scoped citation inventory and selected organic-result candidates; no provider I/O. */
 import { randomUUID } from 'node:crypto';
 import { sql } from 'kysely';
 
@@ -14,7 +13,6 @@ import { fenceInspectionTask } from './task-fence.ts';
 import { compareText } from '../text-order.ts';
 
 type OrganicResult = { url: string; title: string; rank: number };
-/** One organic SERP item with a public page identity and a valid rank, or null. */
 function organicRow(raw: unknown, fallbackRank: number): OrganicResult | null {
   const item = record(raw);
   if (item.type !== 'organic' || typeof item.url !== 'string') return null;
@@ -49,11 +47,6 @@ type PageInput = {
   sourceClass?: string | null;
   taxonomy?: string | null;
 };
-/**
- * Upsert every page in one statement. A citation sighting refreshes the
- * page's class, recurrence and URL-derived format; an organic sighting only
- * makes sure the page exists. Recurrence counts an audit once.
- */
 async function upsertPages(
   db: Database,
   scope: SourceScope,
@@ -166,7 +159,6 @@ async function auditInTransaction(
   if (!audit) throw new Error('Source-page audit is outside its project');
   await acquireProjectLock(trx, scope.projectId);
 }
-/** Admit the pages behind redirects this run resolved, and only those. */
 export async function syncCitedPages(
   db: Database,
   scope: SourceScope,
@@ -181,12 +173,6 @@ export async function syncCitedPages(
     await syncCited(trx, scope, auditId, now, hashes);
   });
 }
-/**
- * The audit's cited and organic pages; returns redirect tokens still to follow.
- * A reading goes stale with age, with a newer inspector, or when it was judged
- * against another roster (a competitor added, a mention rule changed), so the
- * page is read again rather than judged on names it never looked for.
- */
 export function syncPages(
   db: Database,
   scope: SourceScope,
@@ -314,7 +300,6 @@ async function syncOrganicPages(db: Database, scope: SourceScope, auditId: strin
       .onConflict((oc) => oc.columns(['audit_task_id', 'source_page_id']).doNothing())
       .execute();
 }
-/** Point this audit's citations of a followed redirect at the page it reached. */
 export async function resolveCitation(
   db: Database,
   scope: SourceScope,

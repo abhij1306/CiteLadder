@@ -8,17 +8,17 @@ import {
 } from '@/lib/config/search-intelligence';
 
 import { Button } from '@/components/ui/button';
-import { Callout } from '@/components/ui/callout';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Disclosure } from '@/components/ui/disclosure';
 import { Field } from '@/components/ui/field';
+import { FigureStrip } from '@/components/ui/figure-strip';
 import { Input } from '@/components/ui/input';
 import { Inline, Stack } from '@/components/ui/layout';
-import { panelClasses } from '@/components/ui/panel';
 import { Select } from '@/components/ui/select';
 import { textRole } from '@/components/ui/typography';
 import { ledgerClasses, ledgerItemClasses } from '@/components/ui/workspace';
-import { formatCount, pluralCount } from '@/lib/format';
+import { formatCount, formattedText, pluralCount } from '@/lib/format';
+import { isRecord } from '@/lib/utils';
 import type { SearchDatasetSelectionRequest } from '@citeladder/contracts/search-intelligence-requests';
 import type {
   ResearchScope,
@@ -32,6 +32,8 @@ import {
   reviewCompetitors,
   selectionKey,
 } from './search-intelligence-review-selection';
+import { Notice } from '@/components/ui/notice';
+import { wellClasses } from '@/components/ui/slip';
 
 export type Advanced = {
   researchScope: ResearchScope;
@@ -44,7 +46,6 @@ export type Advanced = {
   saveDefaults: boolean;
 };
 
-/** The offered markets, plus the saved one when the server no longer offers it. */
 export function marketOptions(location: string, markets: SearchIntelligenceReadiness['markets']) {
   const options = searchMarketOptions(markets);
   return location && !options.some((item) => item.value === location)
@@ -52,10 +53,6 @@ export function marketOptions(location: string, markets: SearchIntelligenceReadi
     : options;
 }
 
-/**
- * The datasets on offer: your website and the first competitor open, the other
- * competitors one disclosure away so a first review stays short.
- */
 export function DatasetChoices({
   readiness,
   isSelected,
@@ -121,8 +118,8 @@ function DatasetGroup({
   onDepth: (option: SearchDatasetSelectionRequest, text: string) => void;
 }>) {
   return (
-    <fieldset className={panelClasses()}>
-      <legend className={textRole('label')}>{legend}</legend>
+    <fieldset className={wellClasses()}>
+      <legend className={textRole('body', 'text-ink-2')}>{legend}</legend>
       <Stack gap="compact">
         {options.map((option) => {
           const checked = isSelected(option);
@@ -189,7 +186,7 @@ export function AdvancedOptions({
           )}
         </Field>
       ) : null}
-      <Field label="Keyword language" hint="A two-letter code, such as en or de.">
+      <Field label="Keyword language" hint="e.g. en, de">
         {(field) => (
           <Input
             {...field}
@@ -198,10 +195,7 @@ export function AdvancedOptions({
           />
         )}
       </Field>
-      <Field
-        label="Keyword order"
-        hint="Which keywords are fetched first when there are more than you asked for."
-      >
+      <Field label="Keyword order">
         {(field) => (
           <Select
             {...field}
@@ -218,7 +212,7 @@ export function AdvancedOptions({
           />
         )}
       </Field>
-      <Field label="Minimum search volume" hint="Keywords below this volume are not fetched.">
+      <Field label="Minimum search volume">
         {(field) => (
           <Input
             {...field}
@@ -286,7 +280,7 @@ export function ReviewFooter({
           Back
         </Button>
         <Button variant="primary" disabled={busy} onClick={onConfirm}>
-          Confirm {runEstimate(review)} analysis
+          Confirm {formattedText(runEstimate(review))} analysis
         </Button>
       </Inline>
     );
@@ -306,16 +300,15 @@ export function HistoryScopeNotice({
 }: Readonly<{ scope: ResearchScope; selections: SearchDatasetSelectionRequest[] }>) {
   if (!historyScopeConflict(selections, scope)) return null;
   return (
-    <Callout tone="negative">
+    <Notice tone="negative">
       Backlink history covers the whole domain. Deselect it or set the research scope to Domain +
       subdomains.
-    </Callout>
+    </Notice>
   );
 }
 
 function hostOf(target: unknown): string {
-  const origin =
-    typeof target === 'object' && target ? (target as { origin?: unknown }).origin : '';
+  const origin = isRecord(target) ? target.origin : '';
   try {
     return new URL(String(origin)).hostname;
   } catch {
@@ -328,26 +321,17 @@ export function ReviewSummary({ review }: Readonly<{ review: SearchIntelligenceR
   return (
     <Stack gap="workspace">
       <Stack as="section" gap="compact">
-        <h3 className={textRole('sectionTitle')}>What will be fetched</h3>
-        {/* The three figures share one row, never 2 × 2 (decision D9). */}
-        <Stack as="dl" gap="compact" className="type-body grid-cols-3">
-          <div>
-            <dt className="type-label">Requests</dt>
-            <dd className="type-figure">{review.planned_calls}</dd>
-          </div>
-          <div>
-            <dt className="type-label">Results, at most</dt>
-            <dd className="type-figure">{formatCount(review.planned_rows)}</dd>
-          </div>
-          <div>
-            <dt className="type-label">Estimated cost</dt>
-            <dd className="type-figure">{runEstimate(review)}</dd>
-          </div>
-          <div className="col-span-full">
-            <dt className="type-label">Scope</dt>
-            <dd>{searchScopeLabel(typeof scope === 'string' ? scope : undefined)}</dd>
-          </div>
-        </Stack>
+        <h3 className={textRole('heading')}>What will be fetched</h3>
+        <FigureStrip
+          segments={[
+            { key: 'requests', label: 'Requests', value: formatCount(review.planned_calls) },
+            { key: 'results', label: 'Results, at most', value: formatCount(review.planned_rows) },
+            { key: 'cost', label: 'Estimated cost', value: runEstimate(review) },
+          ]}
+        />
+        <p className={textRole('body', 'text-ink-2')}>
+          Scope: {searchScopeLabel(typeof scope === 'string' ? scope : undefined)}
+        </p>
         <p className={textRole('caption')}>
           The estimate is a ceiling: a request that could take the cost past it is not sent.
           DataForSEO bills your own account.
@@ -355,8 +339,8 @@ export function ReviewSummary({ review }: Readonly<{ review: SearchIntelligenceR
       </Stack>
       {review.call_plan.length ? (
         <Stack as="section" gap="compact">
-          <h3 className={textRole('sectionTitle')}>Requests</h3>
-          <ul className={ledgerClasses('type-body')}>
+          <h3 className={textRole('heading')}>Requests</h3>
+          <ul className={ledgerClasses('type-body text-ink-2')}>
             {review.call_plan.map((call) => {
               const target = hostOf(call.target),
                 comparison = hostOf(call.comparison);
@@ -373,7 +357,7 @@ export function ReviewSummary({ review }: Readonly<{ review: SearchIntelligenceR
                     {comparison ? ` vs ${comparison}` : ''}
                   </span>
                   {call.estimated_cost_usd === undefined ? null : (
-                    <span className="text-ink-muted">
+                    <span className="text-ink-2">
                       ${estimateUsd(String(call.estimated_cost_usd))}
                     </span>
                   )}
@@ -384,7 +368,7 @@ export function ReviewSummary({ review }: Readonly<{ review: SearchIntelligenceR
         </Stack>
       ) : null}
       {review.reused_datasets.length ? (
-        <p className="type-body">
+        <p className="type-body text-ink-2">
           {pluralCount(review.reused_datasets.length, 'recent result')} will be reused at no cost.
         </p>
       ) : null}

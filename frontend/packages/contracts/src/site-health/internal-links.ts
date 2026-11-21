@@ -13,7 +13,6 @@ export const internalLinkPlacementSchema = sourcePassageSchema.extend({
   anchor_start: z.number().int().nonnegative(),
 });
 
-/** One crawled page as frozen into an internal-link analysis. */
 export const internalLinkPageSchema = z.object({
   analysis_id: z.uuid(),
   artifact_id: z.uuid(),
@@ -23,13 +22,10 @@ export const internalLinkPageSchema = z.object({
   h1: z.string(),
   description: z.string(),
   excerpt: z.string(),
-  /** Null when primary source text was unavailable or truncated. */
   source_passages: z.array(sourcePassageSchema).nullable(),
   page_kind: z.string(),
-  /** Main-content links observed in the crawl; null when not measured. */
   contextual_inbound: z.number().int().nonnegative().nullable(),
   contextual_targets: z.array(z.string()),
-  /** False when link capture was truncated, so a missing link is not provable. */
   links_complete: z.boolean(),
   eligible_target: z.boolean(),
   extractor_version: z.string(),
@@ -44,11 +40,8 @@ export const internalLinkSchema = z.object({
   id: z.uuid(),
   source: internalLinkPageSummarySchema,
   target: internalLinkPageSummarySchema,
-  /** Exact phrase from the selected source placement. */
   anchor: z.string(),
-  /** Omitted in historical saved results; new recommendations have a placement. */
   placement: internalLinkPlacementSchema.nullable().optional(),
-  /** P(yes) that the source should link to the destination. */
   usefulness: z.number().min(0).max(1),
   action_id: z.uuid().nullable(),
   action_status: z.string().nullable(),
@@ -103,7 +96,6 @@ export const internalLinksInputSchema = z.object({
   crawl_id: z.uuid(),
   idempotency_key: z.uuid(),
 });
-/** A new internal-link analysis of one crawl; the key makes a retried request idempotent. */
 export type InternalLinksInput = z.input<typeof internalLinksInputSchema>;
 
 export type InternalLinkPage = z.infer<typeof internalLinkPageSchema>;

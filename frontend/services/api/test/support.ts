@@ -30,7 +30,6 @@ async function actingUser(request: Request): Promise<string | null> {
   throw new ApiError(401, 'Invalid token');
 }
 
-/** Deterministic test configuration; never inherits a live environment. */
 export function testConfig(overrides: Record<string, string> = {}): ServiceConfig {
   const databaseUrl = process.env.API_TEST_DATABASE_URL;
   if (!databaseUrl) {
@@ -67,7 +66,6 @@ export async function asOwner<T>(work: (owner: Database) => Promise<T>): Promise
   }
 }
 
-/** A workspace owner's member actor, checked against `required` as a route's gate would. */
 export function ownerActor<P extends Permission>(
   workspaceId: string,
   userId: string,
@@ -83,7 +81,6 @@ export function sessionToken(claims: Record<string, unknown>, key = TEST_SESSION
     .sign(new TextEncoder().encode(key));
 }
 
-/** Rows created by one test file, removed again in `cleanup`. */
 export class Fixtures {
   private readonly users: string[] = [];
   private readonly workspaces: string[] = [];
@@ -126,10 +123,6 @@ export class Fixtures {
     return id;
   }
 
-  /**
-   * Another tenant workspace the user joined (a person owns at most one): a
-   * fresh Owner holds it and the user is a member with `role`.
-   */
   async joinedWorkspace(
     userId: string,
     options: { role?: 'admin' | 'member' | 'viewer' } = {},

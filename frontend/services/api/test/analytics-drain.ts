@@ -7,11 +7,6 @@ type DrainOptions = Omit<
   'taskScope'
 >;
 
-/**
- * Ids of the workspace's analytics tasks, optionally of one kind. The local
- * database is shared with other test runs, so analytics workers in tests are
- * scoped to these ids rather than claiming whatever the queue holds.
- */
 export async function workspaceTaskIds(db: Database, workspaceId: string, kind?: string) {
   const rows = await db
     .selectFrom('analytics_tasks')
@@ -22,11 +17,6 @@ export async function workspaceTaskIds(db: Database, workspaceId: string, kind?:
   return rows.map((row) => row.id);
 }
 
-/**
- * Drains one workspace's analytics tasks, successors included, as
- * `runUntilIdle` drains the queue: each pass is scoped to the tasks the
- * workspace holds then. Returns how many tasks ran.
- */
 export async function drainWorkspace(
   db: Database,
   workspaceId: string,

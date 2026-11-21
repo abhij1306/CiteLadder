@@ -3,6 +3,7 @@ import { afterAll, describe, expect, it, vi } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import type { z } from 'zod';
 import * as sharedTools from '../src/mcp/tools.ts';
+import { writeTools } from '../src/mcp/write-tools.ts';
 import { AgentFixtures, reply, save, scripted, toolUse, type Response } from './agent-support.ts';
 import { testDatabase } from './support.ts';
 import { agentTools, sharedReads, smallerLimit } from '../src/agent/tool-adapters.ts';
@@ -30,8 +31,6 @@ describe('Agent bindings to the evidence and Action owners', () => {
         string,
         Parameters<typeof smallerLimit>[0]
       >;
-    // read_performance takes fixed page sizes: 25 steps down to 10, and 10 has no smaller one.
-    // A short page (18 of 25 rows) still reaches 10, though 10 is more than half of 18.
     const performance = shape('read_performance').limit!;
     expect([25, 18, 10].map((rows) => smallerLimit(performance, rows))).toEqual([10, 10, null]);
     const portfolio = shape('read_prompt_portfolio').limit!;
@@ -117,7 +116,14 @@ describe('Agent bindings to the evidence and Action owners', () => {
     expect([...named].filter((name) => !offered.has(name))).toEqual([]);
     const chatOnly = ['list_projects', 'render_visibility', 'render_site_health', 'open_analytics'];
     expect(chatOnly.filter((name) => offered.has(name))).toEqual([]);
-    // The public plugin's twins call the same catalogue.
+    const lacking = [...chatOnly, ...writeTools.map((tool) => tool.name)];
+    const described = offered.catalog().map((tool) => tool.description);
+    expect(lacking.filter((name) => described.some((text) => text.includes(name)))).toEqual([]);
+    const actions = described.find((text) =>
+      text.startsWith('List the work CiteLadder recommends'),
+    );
+    expect(actions).toMatch(/Pass action_id for one Action in full: [^.]+\.$/u);
+    expect(sharedTools.definitions.read_actions.description).toContain('update_action_status');
     const plugin = new URL('../../../../plugins/citeladder/skills/', import.meta.url);
     const pluginNamed = new Set(
       (
@@ -141,7 +147,6 @@ describe('Agent bindings to the evidence and Action owners', () => {
     const scope = await fixtures.scope();
     const demand = (queries: string[], onResult = () => {}) =>
       sharedReads(
-        // Records each query PostgreSQL answered.
         db.withPlugin({
           transformQuery: ({ node }) => node,
           transformResult: async ({ result }) => {
@@ -154,7 +159,6 @@ describe('Agent bindings to the evidence and Action owners', () => {
     const unstopped: string[] = [];
     await demand(unstopped).read(scope, {}, signal(), 10_000);
     expect(unstopped.length).toBeGreaterThan(1);
-    // Stop (or the read timeout) lands after the first query: no further query runs.
     const controller = new AbortController();
     const stopped: string[] = [];
     await expect(
@@ -263,6 +267,8 @@ describe('Agent bindings to the evidence and Action owners', () => {
     expect(
       JSON.parse((await tools.execute(db, scope, 'read_actions', {}, signal())).text).items,
     ).toEqual([expect.objectContaining({ id: action.id })]);
+    const found = await tools.execute(db, scope, 'search', { query: 'guide' }, signal());
+    expect(found.refs).toEqual([{ id: action.id, record_uri: `citeladder://action/${action.id}` }]);
   });
   it('replays earlier reads to the model and lists only this turn’s reads as sources', async () => {
     const scope = await fixtures.scope();
@@ -289,7 +295,6 @@ describe('Agent bindings to the evidence and Action owners', () => {
         for (const block of message.content)
           if (block.type === 'tool_result') replayedResults.push(String(block.tool_use_id));
     });
-    // The model still holds the earlier result; the reply cites only this turn's reads.
     expect(replayedResults).toEqual(['call_fetch']);
     expect(withoutRead.messages.at(-1)?.evidence_refs).toEqual([]);
     expect(withoutRead.messages.at(-1)?.content).toBe('Project evidence');
@@ -312,7 +317,6 @@ describe('Agent bindings to the evidence and Action owners', () => {
     const tools = agentTools(db);
     const store = fixtures.store({ registryVersion: tools.version, context: readAgentContext });
     const queue = new AgentQueue(db, 30);
-    /** The opening message the model received on a turn's first call. */
     const opened: string[] = [];
     const execute = async (responses: Response[]) => {
       const claimed = await queue.claim('workflow-acceptance', [scope.workspaceId]);
@@ -330,6 +334,16 @@ describe('Agent bindings to the evidence and Action owners', () => {
       skillId: 'content',
       message: 'Write a buyer guide',
     });
+    const handedOff = await db
+      .selectFrom('actions')
+      .innerJoin('action_status_events as e', 'e.action_id', 'actions.id')
+      .select(['actions.status', 'actions.effective_status', 'e.previous_status'])
+      .where('actions.id', '=', action.id)
+      .execute();
+    expect([action.status, handedOff]).toEqual([
+      'open',
+      [{ status: 'in_progress', effective_status: 'in_progress', previous_status: 'open' }],
+    ]);
     const drafted = await execute([save('First draft')]);
     expect(opened[0]).toContain(action.id);
     const draft = drafted.outputs[0]!;
@@ -347,7 +361,6 @@ describe('Agent bindings to the evidence and Action owners', () => {
       message: 'Refine my edit',
     });
     const refined = await execute([save('Refined accepted guide', { document: 1 })]);
-    // The user's edit is new to the model, so the turn supplies it.
     expect(opened[0]).toContain('User edited draft');
     const [document] = refined.outputs;
     const accepted = document!.latest_revision;
@@ -423,7 +436,6 @@ describe('Agent bindings to the evidence and Action owners', () => {
             target_kind: 'page',
             target: 'https://other.test/page',
           }),
-          // A new document in the Action's chat belongs to that Action.
           save('Second guide', { title: 'Guide two' }),
         ]),
         { attachTarget: attachAgentTarget },

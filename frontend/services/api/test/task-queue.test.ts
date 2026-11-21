@@ -1,8 +1,3 @@
-/**
- * The analytics queue against real PostgreSQL: claims by disjoint kind sets
- * never overlap, a workspace gets one task before any gets a second, and only
- * the lease owner may run or extend a claimed row.
- */
 import { randomUUID } from 'node:crypto';
 
 import { sql, type AliasNode, type OperationNode, type SelectQueryNode } from 'kysely';
@@ -62,7 +57,6 @@ afterAll(async () => {
   await db.destroy();
 });
 
-/** Column names referenced by a node, not descending into subqueries. */
 function referencedColumns(node: unknown, into = new Set<string>()): Set<string> {
   if (node === null || typeof node !== 'object') return into;
   const operation = node as OperationNode & Record<string, unknown>;
@@ -159,9 +153,51 @@ describe('TaskQueue', () => {
     expect(referencedColumns(node.where)).toEqual(new Set(['status', 'available_at']));
     const ranked = (node.joins![0]!.table as AliasNode).node as SelectQueryNode;
     const due = (ranked.from!.froms[0] as AliasNode).node as SelectQueryNode;
-    expect(referencedColumns(due.where)).toEqual(new Set(['status', 'available_at', 'task_kind']));
-    expect(due.limit?.limit).toMatchObject({ value: 500 });
+    const branch = (query: SelectQueryNode) =>
+      (query.from!.froms[0] as AliasNode).node as SelectQueryNode;
+    const urgent = due.setOperations![0]!.expression as SelectQueryNode;
+    for (const window of [branch(due), branch(urgent)]) {
+      expect(referencedColumns(window.where)).toEqual(
+        new Set(['status', 'available_at', 'task_kind']),
+      );
+      expect(window.limit?.limit).toMatchObject({ value: 500 });
+    }
     expect(node.endModifiers?.map((item) => item.modifier)).toEqual(['ForUpdate', 'SkipLocked']);
+  });
+
+  it('finds a newer high-priority task behind a full window of older low-priority ones', async () => {
+    const busy = workspaces[0]!;
+    const old = new Date(Date.now() - 60_000);
+    await db
+      .insertInto('analytics_tasks')
+      .values(
+        Array.from({ length: 500 }, () => {
+          const id = randomUUID();
+          return {
+            id,
+            workspace_id: busy,
+            task_kind: 'ingest_referrals',
+            payload: {},
+            idempotency_key: `queue-test:${id}`,
+            status: 'queued',
+            priority: 0,
+            randomized_position: 0,
+            available_at: old,
+            attempt_count: 0,
+            max_attempts: 3,
+            error_code: '',
+            error_detail: '',
+            created_at: old,
+            updated_at: old,
+          };
+        }),
+      )
+      .execute();
+    const urgent = await task(busy, 'ingest_referrals', 1000);
+
+    const claimed = await queue.claim({ owner: 'urgent', kinds: TS_KINDS, limit: 1 });
+
+    expect(claimed.map((row) => row.id)).toEqual([urgent]);
   });
 
   it('never duplicates claims between concurrent workers', async () => {

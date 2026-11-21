@@ -16,11 +16,9 @@ export const demandSignalSchema = responseObject({
   priority_score: z.number().nullable(),
   priority_inputs: z.record(z.string(), z.unknown()),
   created_at: z.string(),
-  // The Action this signal was promoted into; null when it was not.
   action_id: z.uuid().nullable(),
 });
 
-/** The detectors one demand snapshot runs; every snapshot reports each of them. */
 export const demandDetectorSchema = z.enum([
   'striking_distance',
   'cannibalization',
@@ -30,7 +28,6 @@ export const demandDetectorSchema = z.enum([
 ]);
 export type DemandDetector = z.infer<typeof demandDetectorSchema>;
 
-/** How far one detector ran: in full, partly, not at all, or held back for history. */
 export const demandDetectorStateSchema = z.enum([
   'available',
   'partial',
@@ -39,7 +36,6 @@ export const demandDetectorStateSchema = z.enum([
 ]);
 export type DemandDetectorState = z.infer<typeof demandDetectorStateSchema>;
 
-/** What a snapshot's detectors found: written by the snapshot task, read by the signal filters. */
 export const demandSnapshotSummarySchema = responseObject({
   signal_count: z.number().int(),
   counts_by_type: z.record(z.string(), z.number().int()),
@@ -54,11 +50,6 @@ export const demandSnapshotSummarySchema = responseObject({
 });
 export type DemandSnapshotSummary = z.infer<typeof demandSnapshotSummarySchema>;
 
-/**
- * The detectors' thresholds from the API's demand policy, sent with the
- * snapshot so the screen states each rule from the values the detectors read
- * and never restates them. Shares are fractions (0.1 is 10%).
- */
 export const demandDetectorPolicySchema = responseObject({
   striking_distance: responseObject({
     min_impressions: z.number(),
@@ -114,17 +105,12 @@ export const demandRecomputeResponseSchema = responseObject({
   status: z.string(),
 });
 
-/**
- * A manual recompute of one date window. The API refines it so `window_end`
- * is not before `window_start`.
- */
 export const demandRecomputeRequestSchema = z.strictObject({
   window_start: z.iso.date(),
   window_end: z.iso.date(),
 });
 export type DemandRecomputeRequest = z.input<typeof demandRecomputeRequestSchema>;
 
-/** An owner's branded/non-branded call for one search query. */
 export const demandClassificationOverrideRequestSchema = z.strictObject({
   query: z.string().min(1).max(512),
   classification: z.enum(['branded', 'non_branded', 'ambiguous']),

@@ -1,10 +1,3 @@
-/**
- * The `content_gaps` refresh family against real PostgreSQL: which angles
- * become gaps, the Actions they land on (ordinary Actions on the one list),
- * retention across failed, empty and old runs, lineage identity,
- * planned-to-owned continuity and workspace isolation. Angle runs are seeded
- * directly; nothing calls a model.
- */
 import { randomUUID } from 'node:crypto';
 
 import { afterAll, describe, expect, it } from 'vitest';
@@ -41,7 +34,6 @@ afterAll(async () => {
 
 type Project = SiteSeed & { pageId: string };
 
-/** A crawled project with one content page (a comparison) at PAGE_URL. */
 async function project(): Promise<Project> {
   const seed = await fixtures.crawl();
   const page = await fixtures.page(seed, '/crm-pricing', storedFacts({ title: 'CRM pricing' }));
@@ -58,7 +50,6 @@ async function project(): Promise<Project> {
 
 const scopeOf = (p: Project) => ({ workspaceId: p.workspaceId, projectId: p.projectId });
 
-// Four citations across two domains: above both placeholder thresholds.
 const PRICING = [
   { url: 'https://globex.com/pricing', title: 'Globex pricing', competitor: true },
   { url: 'https://review.example/crm-pricing', title: 'CRM pricing compared' },
@@ -83,7 +74,6 @@ const create = (extra: Partial<AngleSeed> = {}): AngleSeed => ({
 const run = (p: Project, options: Parameters<typeof angleRun>[2]) =>
   angleRun(db, scopeOf(p), options);
 
-/** The live content-gap findings, as [rule, target key, Action id]. */
 async function gaps(p: Project) {
   const rows = await db
     .selectFrom('opportunities')
@@ -130,9 +120,7 @@ describe('content gaps', () => {
       angles: [
         improve(p),
         create(),
-        // Covered: the matched page is already cited for the angle's prompts.
         improve(p, { label: 'Pricing tiers', ownedCited: true }),
-        // Below the domain minimum.
         { label: 'Thin', members: [{ url: 'https://solo.example/a', title: 'A', citations: 5 }] },
       ],
     });
@@ -238,7 +226,6 @@ describe('content gaps', () => {
       cursor: null,
     });
     expect(listed.items).toEqual([]);
-    // A current run with no gaps: a real "no gaps", with no content-gap limitation.
     expect(empty.limitations.filter((text) => text.startsWith('Content'))).toEqual([]);
   });
 
@@ -251,7 +238,6 @@ describe('content gaps', () => {
     await recomputeOpportunities(db, scopeOf(p));
     expect(await gaps(p)).toHaveLength(1);
 
-    // Time passes: the run's newest audit is now 46 days old.
     await db
       .updateTable('content_angle_runs')
       .set({ window_end: new Date(Date.now() - 46 * DAY) })
@@ -271,13 +257,11 @@ describe('content gaps', () => {
       await promptSet(db, p.projectId),
       'best crm pricing for startups',
     );
-    // An id the library no longer has (or never had in this project).
     const gone = randomUUID();
     await run(p, { angles: [improve(p, { promptIds: [kept, gone] })] });
     await recomputeOpportunities(db, scopeOf(p));
 
     const [found] = await gaps(p);
-    // In the run's stored order.
     expect(record(found!.evidence).prompts).toEqual([
       { id: kept, text: 'best crm pricing for startups' },
       { id: gone, text: null },

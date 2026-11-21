@@ -29,7 +29,6 @@ afterAll(async () => {
   await db.destroy();
 });
 
-/** A worker held to one seeded run. */
 function runWorker(
   run: { workspaceId: string; runId: string },
   client: Pick<IntegrationClient, 'page'>,
@@ -132,9 +131,7 @@ async function seedRun(provider: 'gsc' | 'ga4' | 'bing' = 'gsc') {
 
 describe('integration worker paging and resume', () => {
   it.each([
-    // Stopped before it had one provider request timeout: admitted late, refunded.
     { timeout: settings.sync_request_timeout_seconds, attempts: 0 },
-    // Had the full timeout and committed nothing: the attempt counts.
     { timeout: 0.000001, attempts: 1 },
   ])(
     'releases an interrupted sync for retry without claiming another run (timeout $timeout s)',
@@ -160,7 +157,6 @@ describe('integration worker paging and resume', () => {
           .selectAll()
           .where('id', 'in', [selected.runId, other.runId])
           .execute();
-        // A deadline stop is not a provider failure: the run is released for the next claim.
         expect(rows.find((row) => row.id === selected.runId)).toMatchObject({
           status: 'queued',
           attempt_count: attempts,
@@ -202,8 +198,6 @@ describe('integration worker paging and resume', () => {
         .executeTakeFirstOrThrow();
       expect(run.max_attempts).toBe(4);
       await runWorker({ workspaceId, runId }, client).runOnce(controller.signal);
-      // The fourth attempt reached the deadline after committing a page: it is
-      // refunded, so the run stays claimable instead of exhausting its attempts.
       expect(
         await db
           .selectFrom('integration_sync_runs')
@@ -280,7 +274,6 @@ describe('integration worker paging and resume', () => {
 
   it.each([
     ['invalid_grant', 'grant_auth_failed', 'needs_reauth'],
-    // Only a refused grant asks for reconnection; another refusal keeps it.
     ['invalid_request', 'provider_api_error', 'connected'],
   ])(
     'a refresh refused as %s fails the sync as %s with the grant %s',
@@ -462,7 +455,6 @@ describe('integration worker paging and resume', () => {
         return { payload: { rows: [], metadata }, rawRowCount: 0 };
       },
     };
-    // The newer revision (higher priority) first, then the older one finishes later.
     expect(await runWorker({ ...run, runId: newer }, client).runOnce()).toBe(true);
     metadata = { timeZone: 'Asia/Kolkata', currencyCode: 'INR' };
     expect(await runWorker(run, client).runOnce()).toBe(true);
@@ -588,7 +580,6 @@ describe('integration worker paging and resume', () => {
       .execute();
     const grants: string[] = [];
     const client = { page: vi.fn(async () => ({ payload: { rows: [] }, rawRowCount: 0 })) };
-    // A token is resolved per page; record each claimed run's grant once.
     const token: ConstructorParameters<typeof IntegrationWorker>[3] = async (_db, grantId) => {
       if (!grants.includes(grantId)) grants.push(grantId);
       return 'recorded-token';
@@ -630,7 +621,6 @@ describe('integration worker paging and resume', () => {
       .execute();
     const claimed: string[] = [];
     const client = { page: vi.fn(async () => ({ payload: { rows: [] }, rawRowCount: 0 })) };
-    // A token is resolved per page; record each claimed run once.
     let current: string | undefined;
     const worker = new IntegrationWorker(db, client, settings, async (_db, grantId) => {
       if (current === undefined) {
@@ -680,11 +670,8 @@ describe('integration worker paging and resume', () => {
           initial.lease_expires_at!.getTime(),
         ),
       );
-      // Scoped to this run: other suites' leases share the table.
       const scope = { workspaceId: target.workspaceId, runId: target.runId };
       expect(await recoverIntegrationLeases(db, undefined, scope)).toBe(0);
-      // The live heartbeat may renew (and lock) the lease between expiring it and
-      // recovering it; expire again until recovery wins, as it eventually must.
       await vi.waitFor(async () => {
         await db
           .updateTable('integration_sync_runs')
@@ -710,7 +697,6 @@ describe('integration worker paging and resume', () => {
         .where('sync_run_id', '=', target.runId)
         .execute(),
     ).toEqual([]);
-    // Keep this fixture out of later worker claims.
     await db
       .updateTable('integration_sync_runs')
       .set({ status: 'cancelled' })
@@ -779,7 +765,6 @@ describe('integration worker paging and resume', () => {
         .where('id', '=', retry.runId)
         .executeTakeFirstOrThrow(),
     ).toEqual({ status: 'succeeded', attempt_count: 2 });
-    // Neither the settled nor the exhausted run is claimable again.
     expect(await runWorker(retry, client).runOnce()).toBe(false);
     expect(await runWorker(exhausted, client).runOnce()).toBe(false);
   });
@@ -921,8 +906,6 @@ describe('integration worker paging and resume', () => {
       },
     };
     await runWorker(run, client).runOnce();
-    // Out-of-window days are not invalid rows, so the partition is complete and
-    // the readers select it.
     const selected = await db
       .selectFrom('integration_metric_rows')
       .select('dimension_key')

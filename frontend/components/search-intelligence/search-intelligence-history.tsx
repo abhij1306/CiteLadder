@@ -1,19 +1,20 @@
 import { useQuery } from '@tanstack/react-query';
 import { AppGrid } from '@/components/ui/app-grid';
-import { formatChartCount } from '@/components/ui/chart';
 import { Stack } from '@/components/ui/layout';
-import { QueryState } from '@/components/ui/query-state';
-import { ReadError, readErrorProps } from '@/components/ui/read-error';
 import { Skeleton } from '@/components/ui/skeleton';
-import { TrendChart, type TrendPoint } from '@/components/ui/trend-chart';
+import { AreaChart } from '@/components/ui/area-chart';
+import { type TrendPoint } from '@/components/ui/series-data';
 import { textRole } from '@/components/ui/typography';
 import {
   searchIntelligenceQueries,
   type SearchIntelligenceDataset,
 } from '@/lib/api/search-intelligence';
+import { formatCount, formatMonth, formatWindowDate } from '@/lib/format';
 import { useProjectScope } from '@/lib/project/active-project-scope';
+import { Section, SectionHeader, SectionTitle } from '@/components/ui/section';
+import { Notice, readErrorProps } from '@/components/ui/notice';
+import { StateBlock } from '@/components/ui/state-block';
 
-/** One month of saved history; a null value is an unobserved month and draws as a gap. */
 type HistoryRow = {
   date: string;
   backlinks: number | null;
@@ -21,15 +22,35 @@ type HistoryRow = {
   lost: number | null;
 };
 
+function useHistory(datasetId: string) {
+  const { workspaceId, projectId } = useProjectScope();
+  return useQuery(searchIntelligenceQueries.datasetHistory({ workspaceId, projectId }, datasetId));
+}
+
 export function SearchIntelligenceHistory({
   dataset,
 }: Readonly<{ dataset: SearchIntelligenceDataset }>) {
-  const { workspaceId, projectId } = useProjectScope();
-  const query = useQuery(
-    searchIntelligenceQueries.datasetHistory({ workspaceId, projectId }, dataset.id),
+  const query = useHistory(dataset.id);
+  return (
+    <Section aria-labelledby="backlink-history">
+      <SectionHeader>
+        <SectionTitle id="backlink-history">Backlink history</SectionTitle>
+      </SectionHeader>
+      <HistoryBody query={query} />
+    </Section>
   );
+}
+
+function HistoryBody({ query }: Readonly<{ query: ReturnType<typeof useHistory> }>) {
   if (query.isError)
-    return <ReadError {...readErrorProps(query)} fallback="Saved history could not be loaded." />;
+    return (
+      <Notice
+        kind="read"
+        {...readErrorProps(query)}
+        fallback="Saved history could not be loaded."
+        title="Saved history could not be loaded"
+      />
+    );
   if (query.isPending) return <Skeleton variant="chart" />;
   const rows = query.data.rows;
   const observations = rows
@@ -45,7 +66,7 @@ export function SearchIntelligenceHistory({
   const last = observations.at(-1);
   if (!first || !last || observations.length < 2)
     return (
-      <QueryState
+      <StateBlock
         kind="empty"
         inline
         message="History needs at least two saved observations to show a trend."
@@ -54,54 +75,39 @@ export function SearchIntelligenceHistory({
   const data = fillMonths(observations, first.date, last.date);
   const points = (value: (row: HistoryRow) => number | null): TrendPoint[] =>
     data.map((row) => ({
-      label: longMonth(row.date),
-      axisLabel: shortMonth(row.date),
+      label: formatMonth(row.date),
       value: value(row),
     }));
   return (
-    <AppGrid as="section" layout="halves" aria-label="Saved backlink history">
+    <AppGrid layout="halves">
       <p className={textRole('caption', 'shell:col-span-2')}>
-        Monthly domain-level history for {dataset.target_domain}, {first.date} to {last.date}.
-        Coverage includes the provider’s historical link population and may differ from the live
-        summary. Missing observations are gaps.
+        {formatWindowDate(first.date)} to {formatWindowDate(last.date)}
       </p>
       <Stack gap="compact" className="min-w-0 content-start">
-        <h3 className={textRole('itemTitle', 'min-h-6')}>Total backlinks</h3>
-        <TrendChart
+        <h3 className={textRole('subheading', 'min-h-6')}>Total backlinks</h3>
+        <AreaChart
           label="Saved monthly backlink totals"
           name="Backlinks"
           data={points((row) => row.backlinks)}
           yFormat={compactCount}
-          format={formatChartCount}
+          format={formatCount}
+          you={false}
         />
       </Stack>
       <Stack gap="compact" className="min-w-0 content-start">
-        <h3 className={textRole('itemTitle', 'min-h-6')}>Monthly changes</h3>
-        <TrendChart
+        <h3 className={textRole('subheading', 'min-h-6')}>Monthly changes</h3>
+        <AreaChart
           label="Saved monthly new and lost backlinks"
           name="New backlinks"
           data={points((row) => row.new)}
           series={[{ label: 'Lost backlinks', values: data.map((row) => row.lost) }]}
           yFormat={compactCount}
-          format={formatChartCount}
+          format={formatCount}
+          you={false}
         />
       </Stack>
     </AppGrid>
   );
-}
-
-/** `2026-07` → `07/26`, under the axis. */
-function shortMonth(date: string): string {
-  return `${date.slice(5, 7)}/${date.slice(2, 4)}`;
-}
-
-/** `2026-07` → `Jul 2026`, in the hover card and the table. */
-function longMonth(date: string): string {
-  return new Date(`${date.slice(0, 7)}-01T00:00:00Z`).toLocaleDateString('en-US', {
-    month: 'short',
-    year: 'numeric',
-    timeZone: 'UTC',
-  });
 }
 
 function compactCount(value: number): string {
@@ -118,7 +124,6 @@ function validHistoryDate(date: string): boolean {
   return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === date;
 }
 
-/** One row per month from the first date's month to the last's; missing months are gaps. */
 function fillMonths(rows: HistoryRow[], firstDate: string, lastDate: string): HistoryRow[] {
   const byMonth = new Map(rows.map((row) => [row.date.slice(0, 7), row]));
   const start = new Date(`${firstDate.slice(0, 7)}-01T00:00:00Z`);

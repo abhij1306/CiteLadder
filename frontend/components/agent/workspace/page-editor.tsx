@@ -9,15 +9,11 @@ import type { SuggestionHighlight } from '@/lib/agent/page-workspace';
 import { highlightAt, highlightField, setHighlights } from './editor-highlights';
 import { livePreview } from './editor-preview';
 
-/** What the workspace asks of the editor: show a suggestion's text, or a heading. */
 export type PageEditorHandle = {
-  /** Selects the suggestion's text and scrolls it to the middle of the page. */
   revealHighlight: (id: string) => void;
-  /** Puts the cursor at an offset and scrolls it to the top of the page. */
   jumpTo: (position: number) => void;
 };
 
-/** A change the workspace made (a fresh revision, the Agent's streamed edit), not the person. */
 const external = Annotation.define<boolean>();
 
 function access(readOnly: boolean): Extension {
@@ -34,7 +30,6 @@ type Callbacks = {
   onHighlight: (id: string) => void;
 };
 
-/** Reports the person's edits, what they selected, and a highlight the caret moved into. */
 function listener(callbacks: { current: Callbacks }) {
   let selected = '';
   return EditorView.updateListener.of((update: ViewUpdate) => {
@@ -52,7 +47,6 @@ function listener(callbacks: { current: Callbacks }) {
   });
 }
 
-/** A press on a highlight opens its card, in a read-only page too. */
 const highlightPress = (callbacks: { current: Callbacks }) =>
   EditorView.domEventHandlers({
     click: (event) => {
@@ -64,18 +58,9 @@ const highlightPress = (callbacks: { current: Callbacks }) =>
     },
   });
 
-/** Highlights inside the document, so a stale read can never place one past its end. */
 const within = (highlights: readonly SuggestionHighlight[], length: number) =>
   highlights.filter((highlight) => highlight.to <= length);
 
-/**
- * The page document's Markdown body in CodeMirror with live preview (E2). The
- * person's edits are reported through `onChange`; the workspace owns the
- * draft and saves it as a revision. While `editing` is false the editor shows
- * `text` (the latest revision, or the Agent's edit as it streams) and the
- * suggestions' highlights; while the person edits, highlights map through
- * every change and a new `text` waits until the draft is saved or discarded.
- */
 export function PageEditor({
   ref,
   label,
@@ -103,7 +88,6 @@ export function PageEditor({
   useEffect(() => {
     callbacks.current = { onChange, onSelection, onHighlight };
   });
-  // The first render's values build the editor; later ones reach it through the effects below.
   const initial = useRef({ text, label, readOnly });
 
   useEffect(() => {
@@ -138,7 +122,6 @@ export function PageEditor({
     view.current?.dispatch({ effects: readOnlyMode.current.reconfigure(access(readOnly)) });
   }, [readOnly]);
 
-  // A new revision or a streamed edit replaces the text unless the person is editing.
   useEffect(() => {
     const current = view.current;
     if (!current || editing || current.state.doc.toString() === text) return;

@@ -1,11 +1,12 @@
 import type { ExecutionPerception } from '@citeladder/contracts/visibility-perception';
 
-import { Badge } from '@/components/ui/badge';
+import { Absence } from '@/components/ui/absence';
+import { StatusMark } from '@/components/ui/status-mark';
+import { Tag } from '@/components/ui/tag';
 import { Inline, Stack } from '@/components/ui/layout';
-import { panelClasses } from '@/components/ui/panel';
 import { Label, textRole } from '@/components/ui/typography';
 import type { Highlight } from '@/lib/markdown/highlight';
-import { themeLabel } from '@/lib/visibility/perception';
+import { wellClasses } from '@/components/ui/slip';
 
 const SENTIMENT_LABELS = {
   positive: 'Positive',
@@ -14,7 +15,6 @@ const SENTIMENT_LABELS = {
   mixed: 'Mixed',
 } as const;
 
-/** The verified quotes, to mark in the rendered answer. */
 export function perceptionHighlights(perception: readonly ExecutionPerception[]): Highlight[] {
   return perception.flatMap((entity) =>
     entity.state === 'classified'
@@ -23,29 +23,31 @@ export function perceptionHighlights(perception: readonly ExecutionPerception[])
   );
 }
 
-const STATE_WORDS: Record<Exclude<ExecutionPerception['state'], 'classified'>, string> = {
+const STATE_WORDS: Record<
+  Exclude<ExecutionPerception['state'], 'classified' | 'unavailable'>,
+  string
+> = {
   not_assessable: 'Not assessable',
   low_confidence: 'Low confidence',
   pending: 'Classifying…',
-  unavailable: 'Unavailable',
 };
 
 function PerceptionChip({ entity }: Readonly<{ entity: ExecutionPerception }>) {
   const label = entity.label;
   if (entity.state === 'classified' && label && label !== 'not_assessable')
     return (
-      <Badge variant="sentiment" value={label}>
+      <StatusMark variant="sentiment" value={label}>
         {SENTIMENT_LABELS[label]}
-      </Badge>
+      </StatusMark>
     );
+  if (entity.state === 'unavailable') return <Absence state="unavailable" />;
   return (
-    <Badge>
+    <Tag>
       {entity.state === 'classified' ? STATE_WORDS.not_assessable : STATE_WORDS[entity.state]}
-    </Badge>
+    </Tag>
   );
 }
 
-/** How this answer portrayed each business it named, with the quotes behind it. */
 export function EvidencePerception({
   perception,
 }: Readonly<{ perception: readonly ExecutionPerception[] }>) {
@@ -55,21 +57,18 @@ export function EvidencePerception({
       <Label>Perception</Label>
       <Stack as="ul" gap="item">
         {perception.map((entity) => (
-          <Stack as="li" gap="tight" key={entity.entity} className={panelClasses('min-w-0')}>
+          <Stack as="li" gap="tight" key={entity.entity} className={wellClasses('min-w-0')}>
             <Inline as="span" className="flex-wrap">
               <span className={textRole('emphasis')}>{entity.entity}</span>
               {entity.is_brand ? (
-                <span className={textRole('caption', 'text-ink-muted')}>You</span>
+                <span className={textRole('caption', 'text-ink-2')}>You</span>
               ) : null}
               <PerceptionChip entity={entity} />
             </Inline>
             {entity.state === 'classified'
               ? entity.aspects.map((aspect) => (
-                  <span
-                    key={`${aspect.start}:${aspect.end}`}
-                    className="type-caption text-ink-secondary"
-                  >
-                    {themeLabel(aspect.theme)} ({aspect.polarity}): “{aspect.quote}”
+                  <span key={`${aspect.start}:${aspect.end}`} className="type-caption text-ink-2">
+                    {aspect.theme} ({aspect.polarity}): “{aspect.quote}”
                   </span>
                 ))
               : null}

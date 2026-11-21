@@ -1,4 +1,3 @@
-/** Live authorization for persisted MCP evidence. */
 import type { RecordKindName } from '@citeladder/contracts/record-kinds';
 import { sql, type RawBuilder } from 'kysely';
 import { policy } from '../config.ts';
@@ -17,6 +16,8 @@ import { holdsWrite, mcpPolicy } from './config.ts';
 import { findWorkspaceMember, memberCan, rolesWith } from '../auth/workspace.ts';
 import { appLink, recordPath } from './links.ts';
 import { containsPattern } from '../db/like.ts';
+import { LISTED_ACTION } from '../opportunities/actions.ts';
+import { statusView } from '../opportunities/action-status.ts';
 
 // A tool call that authorizes several reads checks grant and membership once.
 // Only a principal minted for one call shares its check; any other is live.
@@ -88,10 +89,6 @@ export async function authorizeProject(
   if (!row) throw new McpInputError('Project was not found in this account');
   return row;
 }
-/**
- * The member's actor for a change in the project's workspace. The grant must
- * hold write; the live role, read here, decides what each command allows.
- */
 export async function writeActor(
   db: Database,
   principal: McpPrincipal,
@@ -128,10 +125,6 @@ export async function writeActor(
   };
 }
 
-/**
- * A project's topic or competitor by its name, which is unique ignoring case,
- * inside the write actor's workspace.
- */
 export async function requireNamed(
   db: Database,
   actor: Actor,
@@ -148,7 +141,6 @@ export async function requireNamed(
   return row;
 }
 
-/** The named prompt set, or the project's only one, inside the write actor's workspace. */
 export async function promptSetOf(
   db: Database,
   actor: Actor,
@@ -190,13 +182,11 @@ export function decodeCursor(value: string, size: number): string[] {
     throw new McpInputError('cursor is invalid');
   }
 }
-/** A record a later `fetch` can resolve; the Agent derives a turn's sources from these. */
 export const reference = (kind: RecordKindName, id: string) => ({
   kind,
   id,
   record_uri: `citeladder://${kind}/${id}`,
 });
-/** Evidence that does not exist yet: never zero, never repaired by reading it. */
 export const unavailable = (reason: string): Evidence => ({
   state: 'unavailable',
   reason,
@@ -296,20 +286,27 @@ async function searchActions({
   like,
   append,
 }: SearchContext) {
-  // Active Actions only: dismissed and finished work is not a current lead.
+  const a = policy.opportunity.actions;
   let actions = db
     .selectFrom('actions')
-    .select(['id', 'project_id', 'target_label', 'approach'])
+    .select(['id', 'project_id', 'target_label', 'approach', 'effective_status'])
     .where('workspace_id', 'in', workspaces)
-    .where('effective_status', 'in', policy.opportunity.actions.ACTION_ACTIVE_STATUSES)
+    .where(LISTED_ACTION)
     .where((eb) => eb.or([like('target_label'), like('approach'), like('target_url')]));
   if (projectId) actions = actions.where('project_id', '=', projectId);
   for (const row of await actions
+    .orderBy(sql`effective_status in (${sql.join(a.ACTION_ACTIVE_STATUSES)}) desc`)
     .orderBy(sql`priority_score desc nulls last`)
     .orderBy('id')
     .limit(limit - results.length)
     .execute())
-    append('action', row.id, row.project_id, row.target_label || 'Action', row.approach ?? '');
+    append(
+      'action',
+      row.id,
+      row.project_id,
+      row.target_label || 'Action',
+      `Status: ${statusView(row.effective_status).status}. ${row.approach ?? ''}`.trim(),
+    );
 }
 async function searchPrompts({
   db,
@@ -343,7 +340,6 @@ export async function searchBusinessContext(
   limit: number,
   origin: string,
 ) {
-  // A pinned caller searches its own project.
   if ('kind' in principal) projectId ??= principal.projectId;
   const normalized = query.trim();
   if (!normalized) throw new McpInputError('query must not be empty');

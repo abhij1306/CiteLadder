@@ -4,7 +4,6 @@ import type { IssueOccurrence, SiteIssue } from '@citeladder/contracts';
 import { renderWithProviders } from '@/test/render';
 import { IssuesCatalog as ScopedIssuesCatalog } from './issues-catalog';
 
-/** Shared fixtures for the Issues catalog tests. */
 export const CRAWL = '44444444-4444-4444-8444-444444444444';
 export const ISSUE_A = 'aaaaaaaa-1111-4111-8111-111111111111';
 export const URL_A = 'cccccccc-1111-4111-8111-111111111111';
@@ -20,13 +19,6 @@ export function IssuesCatalog(props: Readonly<{ crawlId: string }>) {
   });
 }
 
-/**
- * The catalog's filters live in the address bar through
- * `lib/navigation/url-state.ts`. No router is registered in these tests, so it
- * takes its `window.history` fallback — which is why the URL contract is
- * asserted against `window.location` and browser history is driven with the
- * real `history.back()`/`forward()`.
- */
 export function renderIssues(
   ui: ReactElement,
   initialLocation = window.location.pathname + window.location.search,
@@ -120,10 +112,6 @@ export const summary = {
   section_counts: { technical: 24, content: 9, aeo: 14 },
 };
 
-/**
- * Whether an issues request is the summary's (its worst defects, across every
- * tab) rather than the list's, which always names its tab.
- */
 export function isSummaryRequest(request: Request): boolean {
   return !new URL(request.url).searchParams.has('section');
 }

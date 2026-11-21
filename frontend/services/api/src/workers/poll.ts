@@ -4,8 +4,6 @@ export function waitForPoll(milliseconds: number, signal: AbortSignal): Promise<
       resolve();
       return;
     }
-    // The signal lives as long as the process: remove the listener however the
-    // sleep ends, or every idle poll leaves one behind.
     const onAbort = () => {
       clearTimeout(timer);
       resolve();

@@ -1,11 +1,3 @@
-/**
- * The page evidence the earned-page detector reads, assembled from what the
- * source-page inspector already committed.
- *
- * Each page is judged on its latest successful reading, so a later failed or
- * in-flight read never discards what was already learned, by the same gap
- * rule as the URLs table (`analysis/listing-gap.ts`).
- */
 import { sql } from 'kysely';
 
 import { policy } from '../config.ts';
@@ -31,7 +23,6 @@ import { compareText, scalarText } from '../text-order.ts';
 
 const e = policy.opportunity.earned_actions;
 const s = policy.opportunity.source_pages;
-/** Which analyses in this audit cited each identified third-party page. */
 async function citedByHash(db: Database, workspaceId: string, auditId: string) {
   const rows = await new WorkspaceScope(workspaceId)
     .selectFrom(db, 'citations')
@@ -49,7 +40,6 @@ async function citedByHash(db: Database, workspaceId: string, auditId: string) {
   return grouped;
 }
 
-/** The audit's answers, indexed once for every page that cites them. */
 function answerIndex(visibility: VisibilityEvidence) {
   const byId = new Map(visibility.analyses.map((row) => [row.analysis_id, row]));
   const snapshots = new Map(visibility.prompt_snapshots.map((row) => [row.prompt_index, row]));
@@ -58,13 +48,11 @@ function answerIndex(visibility: VisibilityEvidence) {
     const indices = [...new Set(selected.map((row) => row.prompt_index))].sort((a, b) => a - b);
     const prompts = indices.flatMap((index) => snapshots.get(index) ?? []);
     return {
-      // A deleted prompt keeps its frozen text but has nothing left to measure.
       prompts: prompts.flatMap((row) =>
         row.prompt_id ? [{ prompt_id: row.prompt_id, text: row.text }] : [],
       ),
       themes: [...new Set(prompts.flatMap((row) => row.theme || []))].sort(compareText),
       analysis_ids: selected.map((row) => row.analysis_id).sort(compareText),
-      // Descriptive only: every name in an answer attaches to every page it cited.
       answer_competitors: [...new Set(selected.flatMap((row) => row.competitor_names))].sort(
         compareText,
       ),
@@ -112,7 +100,6 @@ function pageEvidence(
   };
 }
 
-/** Page-keyed earned hits for this audit, over its full answer set. */
 export async function earnedPageHits(
   db: Database,
   scope: { workspaceId: string; projectId: string },

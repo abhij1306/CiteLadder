@@ -6,11 +6,10 @@ import { ApiError } from '@/lib/api/errors';
 import type { Visibility } from '@citeladder/contracts';
 import { renderWithProviders as render } from '@/test/render';
 
-import { SelectionGate } from './selection-gate';
+import { AnalysisRead, SelectionGate } from './selection-gate';
 
 const RUN_ID = '00000000-0000-4000-8000-000000000001';
 
-/** The selection projection as the dashboard reads it, answered by `answer`. */
 function Gate({ answer }: Readonly<{ answer: () => Promise<Visibility | null> }>) {
   const query = useQuery({ queryKey: ['selection-gate-test'], queryFn: answer });
   return (
@@ -23,16 +22,8 @@ function Gate({ answer }: Readonly<{ answer: () => Promise<Visibility | null> }>
 const projection = (extra: Partial<Visibility> = {}) =>
   ({ audit_id: RUN_ID, rankings: [], per_engine: [], ...extra }) as unknown as Visibility;
 
-const never = () =>
-  new Promise<never>(() => {
-    // Never settles: the selection stays unread.
-  });
+const never = () => new Promise<never>(() => {});
 
-/**
- * Every Visibility tab reads through this gate, so what it shows for a
- * selection nobody has read decides whether a tab can claim "no mentions" or
- * "no sources" about it.
- */
 describe('SelectionGate', () => {
   it('shows a loading selection as loading, never as a finding', async () => {
     render(<Gate answer={never} />);
@@ -54,7 +45,7 @@ describe('SelectionGate', () => {
 
     expect(await screen.findByText("Couldn't load the selected measurement")).toBeVisible();
     expect(screen.getByRole('button', { name: 'Retry' })).toBeVisible();
-    expect(screen.queryByText('Not measured yet')).toBeNull();
+    expect(screen.queryByText('No measurements yet')).toBeNull();
   });
 
   it('says results are being prepared while a finished run is still written, with no retry', async () => {
@@ -70,18 +61,14 @@ describe('SelectionGate', () => {
       />,
     );
 
-    expect(
-      await screen.findByText(
-        'Results for this run are still being prepared. They appear here as soon as they are ready.',
-      ),
-    ).toBeVisible();
+    expect(await screen.findByText('Results for this run are still being prepared.')).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
   });
 
   it('says nothing is measured yet for a selection with no measured run', async () => {
     render(<Gate answer={() => Promise.resolve(null)} />);
 
-    expect(await screen.findByText('Not measured yet')).toBeVisible();
+    expect(await screen.findByText('No measurements yet')).toBeVisible();
     expect(
       screen.getByText('Results appear here once a run in this selection finishes measuring.'),
     ).toBeVisible();
@@ -99,7 +86,7 @@ describe('SelectionGate', () => {
       />,
     );
 
-    expect(await screen.findByText('Not measured yet')).toBeVisible();
+    expect(await screen.findByText('No measurements yet')).toBeVisible();
     expect(screen.queryByText(/Measured run/u)).toBeNull();
   });
 
@@ -113,6 +100,33 @@ describe('SelectionGate', () => {
     );
 
     expect(await screen.findByText(`Measured run ${RUN_ID}`)).toBeVisible();
-    expect(screen.queryByText('Not measured yet')).toBeNull();
+    expect(screen.queryByText('No measurements yet')).toBeNull();
+  });
+});
+
+describe('AnalysisRead', () => {
+  const settled = { error: null, refetch: () => undefined, isFetching: false };
+  const renderRead = (ready: number | undefined) =>
+    render(
+      <AnalysisRead
+        query={settled}
+        title="Couldn't load"
+        busyLabel="Updating"
+        busy={false}
+        ready={ready}
+      >
+        {(value) => <p>Value {value}</p>}
+      </AnalysisRead>,
+    );
+
+  it('renders a falsy value it has, and the skeleton only while nothing has arrived', () => {
+    const { container, unmount } = renderRead(0);
+    expect(screen.getByText('Value 0')).toBeVisible();
+    expect(container.querySelector('[aria-busy="true"]')).toBeNull();
+    unmount();
+
+    const loading = renderRead(undefined);
+    expect(loading.container.querySelector('[aria-busy="true"]')).not.toBeNull();
+    expect(screen.queryByText(/Value/u)).toBeNull();
   });
 });

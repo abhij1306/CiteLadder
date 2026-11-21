@@ -1,17 +1,7 @@
-/**
- * Search Demand detector descriptions (frontend config owner).
- *
- * Each detector's rule, in the words its info hint shows. The thresholds are
- * the API's demand policy, sent with the snapshot (`detector_policy`), so a
- * retuned threshold changes the sentence with the detector. `tab` is the
- * signal filter that lists the detector's signals, where its status is shown;
- * a filter listing several detectors' signals shows their combined status.
- */
 import type { DemandDetector, DemandDetectorPolicy } from '@citeladder/contracts';
 import { formatCount, formatPercent } from '@/lib/format';
 import type { FilterTab } from '@/lib/demand/signals';
 
-/** A CTR gap in percentage points (0.02 is 2 points). */
 const points = (fraction: number) => `${Math.round(fraction * 100)} points`;
 
 export const DEMAND_DETECTORS: readonly {

@@ -1,8 +1,3 @@
-/**
- * Every expected-check kind, and what derives from the rule catalog's
- * `check_kind`: the reading each member promises before declaration, the
- * readings an Action is measured with, and which sources read which kinds.
- */
 import { policy } from '../../config.ts';
 import { contextualLinkCheck } from './contextual-link.ts';
 import { issueFamilyCheck } from './issue-family.ts';
@@ -33,11 +28,9 @@ export const isCheckKind = (kind: unknown): kind is CheckKind =>
 const catalog: Readonly<Record<string, { check_kind: CheckKind | null }>> =
   policy.opportunity.opportunities.OPPORTUNITY_RULES_BY_ID;
 
-/** The check kind a rule's findings freeze; null for a rule nothing measures. */
 export const ruleCheckKind = (ruleId: string): CheckKind | null =>
   catalog[ruleId]?.check_kind ?? null;
 
-/** The check kinds each source kind can read. */
 export const SOURCE_CHECK_KINDS: Readonly<Record<SourceKind, readonly CheckKind[]>> = {
   site_crawl: CHECK_KINDS.filter((kind) => CHECKS[kind].sources.includes('site_crawl')),
   audit: CHECK_KINDS.filter((kind) => CHECKS[kind].sources.includes('audit')),
@@ -47,10 +40,6 @@ export const SOURCE_CHECK_KINDS: Readonly<Record<SourceKind, readonly CheckKind[
   ),
 };
 
-/**
- * The reading that would measure a member once declared, or null when
- * nothing can: the same decision `freeze` makes, without its baselines.
- */
 export function memberMeasurementLeg(member: MemberFacts): MeasurementLeg | null {
   const kind = ruleCheckKind(member.rule_id);
   if (kind === null) return null;

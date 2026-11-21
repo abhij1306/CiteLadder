@@ -9,7 +9,8 @@ import { openFilterOptions } from '@/test/all-filters';
 import { renderWithProviders } from '@/test/render';
 import { makeProject } from '@/test/fixtures/project';
 import { downloadCsv } from '@/lib/csv/download';
-import { ListScreen } from '@/components/layout/page-shell';
+import { ReportPage } from '@/components/templates/report-page';
+import { FilterBar } from '@/components/ui/filter-bar';
 import { InternalLinksPanel } from './internal-links-panel';
 import { useInternalLinksBands } from './internal-links-panel-bands';
 
@@ -78,17 +79,31 @@ function Navigation() {
   );
 }
 
-/** The tab as the screen draws it: actions in the header, search and filters in the control band. */
 function LinksTab({ canAnalyze }: Readonly<{ canAnalyze?: boolean }>) {
   const links = useInternalLinksBands({
     scope: { projectId: project.id, workspaceId: project.workspace_id },
     enabled: true,
     canAnalyze,
   });
+  const controls = links.controls;
   return (
-    <ListScreen actions={links.actions} controls={links.controls}>
+    <ReportPage
+      filters={
+        controls ? (
+          <FilterBar
+            {...controls}
+            actions={
+              <>
+                {links.actions}
+                {controls.actions}
+              </>
+            }
+          />
+        ) : undefined
+      }
+    >
       <InternalLinksPanel read={links.read} workspaceId={project.workspace_id} />
-    </ListScreen>
+    </ReportPage>
   );
 }
 
@@ -198,7 +213,6 @@ describe('Internal links', () => {
     }));
     mswServer.use(http.get(endpoint, () => HttpResponse.json({ ...read(analysis()), history })));
     renderPanel();
-    await screen.findByRole('button', { name: /^All filters/ });
     await openFilterOptions(userEvent.setup(), 'Saved analysis');
     const labels = (await screen.findAllByRole('menuitemradio')).map((option) =>
       option.textContent?.split(' · ').at(-1),
@@ -263,11 +277,7 @@ describe('Internal links', () => {
   it('tells "nothing to compare" apart from "checked and nothing qualified"', async () => {
     mswServer.use(http.get(endpoint, () => HttpResponse.json(read(analysis()))));
     renderPanel();
-    expect(
-      await screen.findByText(
-        '30 page pairs were checked and none qualified for a contextual link.',
-      ),
-    ).toBeInTheDocument();
+    expect(await screen.findByText('30 page pairs checked, none qualified')).toBeInTheDocument();
   });
 
   it('pages suggestions with rows per page and opens the review drawer', async () => {
@@ -292,14 +302,15 @@ describe('Internal links', () => {
     );
     renderPanel();
     expect(await screen.findByText('Anchor 0')).toBeInTheDocument();
-    // No Action yet reads as the missing mark, named for assistive technology only.
     const firstRow = screen.getByRole('row', { name: /Anchor 0/ });
-    expect(within(firstRow).getByText('No Action yet')).toHaveClass('sr-only');
-    expect(within(firstRow).getByText('–')).toBeVisible();
-    // One export, at the end of the control row; the header keeps the tab's primary action.
+    expect(within(firstRow).getByText('No Action yet').closest('[data-absence]')).toHaveAttribute(
+      'data-absence',
+      'not_set',
+    );
     const header = screen.getByRole('banner');
-    expect(within(header).getByRole('button', { name: 'Analyze again' })).toBeInTheDocument();
+    expect(within(header).queryByRole('button', { name: 'Analyze again' })).not.toBeInTheDocument();
     const controls = screen.getByRole('group', { name: 'Search and filters' });
+    expect(within(controls).getByRole('button', { name: 'Analyze again' })).toBeInTheDocument();
     await userEvent.click(within(controls).getByRole('button', { name: 'Export CSV' }));
     expect(downloadCsv).toHaveBeenCalledWith(
       'internal-links',
@@ -333,6 +344,33 @@ describe('Internal links', () => {
       'Consider Anchor 11 when preparing this page for publication.',
     );
     expect(within(drawer).getByRole('button', { name: /Copy HTML/ })).toBeInTheDocument();
+    expect(within(drawer).queryByText('Suggested anchor text')).toBeNull();
+  });
+
+  it('links a suggestion’s source page to its page detail', async () => {
+    const link = {
+      id: uuid(200),
+      source: page(0, 'Source'),
+      target: page(1, 'Destination'),
+      anchor: 'Anchor',
+      placement: null,
+      usefulness: 0.9,
+      action_id: null,
+      action_status: null,
+    };
+    const current = analysis({ recommendations: [link] });
+    mswServer.use(http.get(endpoint, () => HttpResponse.json(read(current))));
+    renderPanel();
+    const source = await screen.findByRole('link', { name: 'Source' });
+    expect(new URL(source.getAttribute('href')!, 'http://x').pathname).toBe(
+      `/site/crawls/${current.crawl_id}/pages/${link.source.site_url_id}`,
+    );
+    expect(screen.queryByRole('link', { name: 'Destination' })).toBeNull();
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Review link from Source to Destination' }),
+    );
+    const drawer = await screen.findByRole('dialog');
+    expect(within(drawer).getByText('Suggested anchor text')).toBeInTheDocument();
   });
 
   it('distinguishes failed analysis and unknown diagnostic reasons', async () => {

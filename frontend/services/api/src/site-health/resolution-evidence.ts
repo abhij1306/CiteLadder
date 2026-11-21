@@ -1,4 +1,3 @@
-/** Exact attempt and artifact provenance for terminal URL resolution checks. */
 import type {
   SitewideLinkEvidence,
   SitewideTargetOutcome,
@@ -21,15 +20,12 @@ export type Resolution = {
   status: number | null;
   finalUrl: string;
   redirected: boolean;
-  /** Redirects followed to reach `finalUrl`; 0 for a URL that answered directly. */
   hops: number;
-  /** The fetch error of the URL's last call, '' when it completed. */
   errorCode: string;
   taskId: string;
   attemptId: string;
   artifactId: string | null;
 };
-/** What the crawl observed about a canonical target page it analyzed. */
 export type CanonicalTarget = { noindex: boolean; canonical: string | null };
 
 const sourceIds = (row: Resolution) => [
@@ -39,20 +35,10 @@ const sourceIds = (row: Resolution) => [
 ];
 const limit = policy.site_health.page_analysis.facts.limits.evidence_urls;
 const MAX_HOPS = policy.site_health.page_analysis.rules.redirect_max_hops;
-/** A fetch that gave up following redirects: a loop or a chain past the hop cap. */
 const REDIRECT_LIMIT = policy.site_health.page_analysis.acquisition.error_codes.redirect_limit;
-/** Statuses that mean "sign in first", not "this link is broken". */
 const ACCESS_RESTRICTED = new Set([401, 403]);
-/**
- * Targets the crawler deliberately did not fetch (robots-denied, refused by
- * admission). They answered no HTTP request, so they are neither broken nor
- * redirecting. They leave the judged set (named as excluded_targets) instead
- * of staying unchecked: unchecked, one robots-denied footer link made every
- * page's link checks unknown.
- */
 const isExcludedTarget = (resolution: Resolution) =>
   resolution.status === null && taskOutcome({ errorCode: resolution.errorCode }) === 'excluded';
-/** Excluded targets stay named in the evidence, distinct from the ones that answered. */
 const excludedTargets = (urls: string[], resolutions: Map<string, Resolution>) =>
   urls.slice(0, limit).map((url) => ({ url, reason: resolutions.get(url)!.errorCode }));
 
@@ -111,7 +97,6 @@ export async function fetchResolutions(db: Database, crawl: Crawl) {
   return resolutions;
 }
 
-/** A redirect the crawler followed, or one it abandoned as a loop or overlong chain. */
 const redirects = (resolution: Resolution) =>
   resolution.redirected || resolution.errorCode === REDIRECT_LIMIT;
 
@@ -121,14 +106,11 @@ export function canonicalResolution(
   resolutions: Map<string, Resolution>,
   targets: Map<string, CanonicalTarget> = new Map(),
 ) {
-  // The same unique, trimmed set canonicalIntegrity judges: a repeated identical
-  // declaration is one canonical, so its target still resolves.
   const unique = [...new Set(declarations.map((value) => value.trim()).filter(Boolean))];
   const only = onlyOf(unique);
   const target = only === undefined ? '' : (canonicalUrl(only, finalUrl) ?? '');
   const resolution = resolutions.get(target);
   const limited = resolution?.status === 429;
-  // A self-canonical names this page: its own noindex is `technical.indexable`'s finding.
   const self = target === canonicalUrl(finalUrl);
   const evaluation = canonicalIntegrity({
     declarations,
@@ -154,22 +136,15 @@ export function canonicalResolution(
   return evaluation;
 }
 
-/**
- * An HTTP error, except that a link to a sign-in-gated page works for the
- * people it is for; a sitemap that lists one still advertises a URL search
- * engines cannot read.
- */
 const isBroken = (status: number, sitemap: boolean) =>
   status >= 400 && (sitemap || !ACCESS_RESTRICTED.has(status));
 
-/** A link target this crawl fetched whose answer was an HTTP error. */
 const isBrokenLink = (resolution: Resolution | undefined) =>
   typeof resolution?.status === 'number' &&
   resolution.status !== 429 &&
   !isExcludedTarget(resolution) &&
   isBroken(resolution.status, false);
 
-/** A link target this crawl fetched that redirected or was abandoned as a loop. */
 const isRedirectingLink = (resolution: Resolution | undefined) =>
   resolution !== undefined &&
   resolution.status !== 429 &&
@@ -179,10 +154,6 @@ const isRedirectingLink = (resolution: Resolution | undefined) =>
 
 type TargetJudgement = 'limited' | 'excluded' | 'unfetched' | 'shared' | 'passed' | 'broken';
 
-/**
- * How one target counts: rate limited, excluded, never answered, a broken
- * sitewide link judged once on the crawl root, else passed or broken.
- */
 function judgeTarget(
   resolution: Resolution | undefined,
   sitemap: boolean,
@@ -213,8 +184,6 @@ export function resolutionSet(
   const broken = having('broken');
   const excluded = having('excluded');
   const shared = having('shared');
-  // Excluded targets are outside the set this rule judges, not passes within it;
-  // a broken sitewide link is judged once, on the crawl root.
   const judged = targets.length - excluded.length - shared.length;
   const evaluation =
     sitemap && !targets.length
@@ -250,17 +219,11 @@ export function resolutionSet(
   return evaluation;
 }
 
-/** Where a redirecting URL ended up, for evidence a reader can act on. */
 const redirectTarget = (url: string, resolution: Resolution): SitewideTargetOutcome =>
   resolution.errorCode === REDIRECT_LIMIT
     ? { url, reason: 'redirect_limit' }
     : { url, final_url: resolution.finalUrl, hops: resolution.hops };
 
-/**
- * Internal link targets this crawl fetched that answered with a redirect. A
- * redirecting sitewide link leaves the page's set, named as a sitewide
- * target: the crawl root judges it once.
- */
 export function linkRedirects(
   targets: string[],
   resolutions: Map<string, Resolution>,
@@ -313,7 +276,6 @@ export function linkRedirects(
 
 const SITEWIDE = policy.site_health.page_analysis.rules.sitewide_link;
 
-/** A page whose links were judged, as sitewide-link evidence names it. */
 export type LinkingPage = {
   siteUrlId: string;
   url: string;
@@ -322,12 +284,7 @@ export type LinkingPage = {
   artifactId: string;
 };
 
-/**
- * The internal link targets most judged pages share: template navigation,
- * header and footer links. A target is sitewide when at least
- * `min_linking_pages` pages, and `min_page_share` of all judged pages, link it.
- */
-export function sitewideTargets(linksByPage: readonly (readonly string[])[]): Set<string> {
+export function sitewideTargets(linksByPage: readonly Iterable<string>[]): Set<string> {
   const counts = new Map<string, number>();
   for (const links of linksByPage)
     for (const target of new Set(links)) counts.set(target, (counts.get(target) ?? 0) + 1);
@@ -338,12 +295,6 @@ export function sitewideTargets(linksByPage: readonly (readonly string[])[]): Se
   return new Set([...counts].filter(([, count]) => count >= threshold).map(([target]) => target));
 }
 
-/**
- * One crawl-root finding per link problem, keyed by the sitewide target rather
- * than by every page that carries it: each failing target names how many
- * judged pages link it and a bounded sample of them, with the exact attempt
- * and artifact IDs of its resolution and of the sampled pages.
- */
 function sitewideFinding(
   ruleId: string,
   { failing, unchecked }: { failing: readonly string[]; unchecked: readonly string[] },
@@ -351,7 +302,6 @@ function sitewideFinding(
   resolutions: Map<string, Resolution>,
   outcome: (url: string, resolution: Resolution) => SitewideTargetOutcome,
 ) {
-  // Like a page's link checks, an unfetched or rate-limited target cannot pass.
   if (!failing.length && unchecked.length)
     return finalizeEvaluation(ruleId, 'unknown', {
       reason: 'unchecked_targets',
@@ -369,7 +319,6 @@ function sitewideFinding(
       page_kind: page.pageKind,
       artifact_id: page.artifactId,
     }));
-  // Every linking page of each kind, not the sample: the Issues page-kind filter counts by these.
   const pageKindCounts: Record<string, number> = {};
   for (const page of pages.values())
     if (page.pageKind) pageKindCounts[page.pageKind] = (pageKindCounts[page.pageKind] ?? 0) + 1;
@@ -391,17 +340,12 @@ function sitewideFinding(
   } satisfies SitewideLinkEvidence);
 }
 
-/**
- * The crawl root's sitewide link checks: broken targets and redirecting
- * targets among `sitewide`, judged once for the pages that link them.
- */
 export function sitewideLinks(
   sitewide: ReadonlySet<string>,
   linkers: ReadonlyMap<string, readonly LinkingPage[]>,
   resolutions: Map<string, Resolution>,
 ) {
   const targets = [...sitewide].toSorted(compareText);
-  // The same targets a page's link checks leave unchecked: no answer, or a 429.
   const unanswered = (resolution: Resolution | undefined, loopAnswers: boolean) =>
     resolution === undefined ||
     resolution.status === 429 ||
@@ -431,10 +375,6 @@ export function sitewideLinks(
   ];
 }
 
-/**
- * Every URL this crawl requested that redirected: more than the allowed hops,
- * or abandoned at the redirect limit, is a chain or loop to flatten.
- */
 export function redirectChains(resolutions: Map<string, Resolution>) {
   const abandoned = (resolution: Resolution) => resolution.errorCode === REDIRECT_LIMIT;
   const redirected = [...resolutions].filter(

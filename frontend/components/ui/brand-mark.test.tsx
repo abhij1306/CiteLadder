@@ -10,11 +10,9 @@ describe('BrandMark', () => {
     expect(brandInitials('Acme')).toBe('AC');
     expect(brandInitials('Acme Corporation')).toBe('AC');
     expect(brandInitials('')).toBe('?');
-    // Discovery hands back the long form in tow, and it is not part of the name.
     expect(brandInitials('EY (Ernst & Young)')).toBe('EY');
     expect(brandInitials('PwC (PricewaterhouseCoopers)')).toBe('PW');
     expect(brandInitials('(((')).toBe('?');
-    // One code point, not half a surrogate pair.
     expect(brandInitials('\u{1D54F} Corp')).toBe('\u{1D54F}C');
   });
 
@@ -43,7 +41,6 @@ describe('BrandMark', () => {
   });
 
   describe('with a Logo.dev token configured', () => {
-    // The module reads the token at import time, so set it before importing.
     async function renderWithToken(ui: (mod: typeof import('./brand-mark')) => React.ReactElement) {
       process.env.NEXT_PUBLIC_LOGO_DEV_PUBLISHABLE = 'pk_test';
       vi.resetModules();
@@ -65,13 +62,11 @@ describe('BrandMark', () => {
         />
       ));
 
-      // 1. our own cached asset first — no third-party request for a working logo
       const cached = container.querySelector('img');
       expect(cached?.getAttribute('src')).toMatch(/\/api\/v1\/projects\/acme\/logo$/);
 
       fireEvent.error(cached!);
 
-      // 2. Logo.dev, keyed by the site's host, asking for a 404 (not a monogram)
       const remote = container.querySelector('img');
       const src = remote?.getAttribute('src') ?? '';
       expect(src).toContain('https://img.logo.dev/www.acme.com?');
@@ -79,7 +74,6 @@ describe('BrandMark', () => {
 
       fireEvent.error(remote!);
 
-      // 3. the first letter
       expect(container.querySelector('img')).toBeNull();
       expect(container.textContent).toBe('A');
     });

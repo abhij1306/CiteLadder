@@ -34,7 +34,6 @@ import {
   apiKeyKeys,
 } from './query-keys/core';
 import { integrationKeys } from './query-keys/integrations';
-import { opportunityKeys } from './query-keys/opportunities';
 import { runKeys, visibilityKeys } from './query-keys/runs';
 import { siteHealthKeys } from './query-keys/site-health';
 import { performanceKeys } from './query-keys/performance';
@@ -56,7 +55,6 @@ export const queryKeys = {
   demand: demandKeys,
   searchIntelligence: searchIntelligenceKeys,
   aiTraffic: aiTrafficKeys,
-  opportunities: opportunityKeys,
   actions: actionKeys,
   agent: agentKeys,
   commerce: commerceKeys,

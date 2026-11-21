@@ -1,10 +1,3 @@
-/**
- * Deterministic AI-referral classification (no model may guess a source).
- *
- * Connected-data config owns the rule tables.
- * Tiers run in a fixed order (referrer host, then UTM, then user agent) and
- * the first rule to fire within a tier wins.
- */
 import { domainMatches } from '../analysis/domains.ts';
 import { policy } from '../config.ts';
 
@@ -46,7 +39,6 @@ function match(
 function matchReferrerHost(referrerHost: string | null | undefined): RuleMatch | null {
   const host = normalize(referrerHost);
   if (!host) return null;
-  // Boundary-safe: "notchatgpt.com" never matches "chatgpt.com".
   const rule = referrals.host_rules.find((candidate) => domainMatches(host, candidate.host));
   return rule ? match(rule, referrals.match_signals.referrer) : null;
 }
@@ -58,8 +50,6 @@ function matchUtm(
   const source = normalize(utmSource);
   const medium = normalize(utmMedium);
   if (!source && !medium) return null;
-  // A host-like rule source also matches its subdomains ("www.perplexity.ai"),
-  // boundary-safe like the referrer tier; bare tokens stay exact.
   const sourceMatches = (expected: string) =>
     expected === source || (expected.includes('.') && domainMatches(source, expected));
   const rule = referrals.utm_rules.find(
@@ -77,7 +67,6 @@ function matchUserAgent(userAgent: string | null | undefined): RuleMatch | null 
   return rule ? match(rule, referrals.match_signals.user_agent) : null;
 }
 
-/** The one deterministic outcome for a signal set, or null (`other`). */
 export function classifyReferralSignals(signals: ReferralSignals): RuleMatch | null {
   return (
     matchReferrerHost(signals.referrer_host) ??

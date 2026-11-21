@@ -1,9 +1,3 @@
-/**
- * Audit commands. A launch creates one queued audit per selected market. The
- * browser may then drive each audit's first results in the request (`run`);
- * the public API launches in one call with an estimate guard and leaves
- * execution to the runner.
- */
 import type { z } from 'zod';
 
 import { auditRuntime } from '../audits/config.ts';
@@ -19,9 +13,7 @@ import { ApiError } from '../errors.ts';
 import { interactiveSlots } from '../http/interactive-slots.ts';
 import { permission, type Authorized } from './permission.ts';
 
-/** Launching and driving audits, which spends prompt runs. */
 export const AUDITS_RUN = permission({ capability: 'run', scope: 'audits:run' });
-/** Cancelling an audit. */
 export const AUDITS_CANCEL = permission({ capability: 'write', scope: 'audits:run' });
 type Runner = Authorized<typeof AUDITS_RUN>;
 
@@ -41,11 +33,6 @@ export async function createQueuedAudit(
   return readAudits(db, actor.workspaceId, ids);
 }
 
-/**
- * Drive a queued audit's first phases inside the request, in one of this
- * instance's interactive slots: a full instance answers 429 and the runner
- * keeps the queued audit.
- */
 export async function runAudit(
   db: Database,
   config: ServiceConfig,
@@ -59,11 +46,6 @@ export async function runAudit(
   return readAudit(db, actor.workspaceId, auditId);
 }
 
-/**
- * Estimate, then create the queued audit only when the estimate's maximum
- * attempt count (every answer times its retry budget) is within the caller's
- * ceiling: 409 `estimate_exceeds_limit` otherwise.
- */
 export async function launchAudit(
   db: Database,
   config: ServiceConfig,
@@ -97,7 +79,6 @@ export async function launchAudit(
   return readAudits(db, actor.workspaceId, ids);
 }
 
-/** An audit outside the caller's project (when it named one) is a 404. */
 export async function cancelAudit(
   db: Database,
   actor: Authorized<typeof AUDITS_CANCEL>,

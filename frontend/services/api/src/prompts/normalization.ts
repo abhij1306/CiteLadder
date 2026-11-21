@@ -1,16 +1,9 @@
-/**
- * Prompt-text identity: the per-set dedupe key.
- *
- * Writers compute this persisted hash before insertion; schema fixtures
- * supply it explicitly.
- */
 import { policy } from '../config.ts';
 import { hash } from '../crypto-text.ts';
 import { collapseIdentityWhitespace } from '../traffic/normalization.ts';
 
 const TRAILING = new Set(policy.prompts.trailing_punctuation);
 
-/** Lower-case, collapse whitespace, and strip trailing punctuation. */
 function normalizePromptText(text: string): string {
   const characters = [...collapseIdentityWhitespace(text).toLowerCase()];
   let end = characters.length;
@@ -18,5 +11,4 @@ function normalizePromptText(text: string): string {
   return characters.slice(0, end).join('');
 }
 
-/** sha256 hex digest of the normalized text: the dedupe key. */
 export const promptTextHash = (text: string): string => hash(normalizePromptText(text));

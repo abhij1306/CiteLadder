@@ -11,13 +11,11 @@ export type LinkCandidate = {
   id: string;
   source: string;
   target: string;
-  /** The destination's key in its source page's JEV request (`targets.<key>`). */
   key: string;
   similarity: number;
   placements: InternalLinkPlacement[];
 };
 
-/** One JEV request per source page: its targets share the source state. */
 export type LinkRequest = {
   id: string;
   candidates: { id: string; key: string }[];
@@ -33,7 +31,6 @@ function path(url: string): string {
   }
 }
 
-/** A page title without its site-name suffix. */
 function pageName(title: string): string {
   return title.split(/\s[|\-–—]\s/u)[0]!.trim();
 }
@@ -55,7 +52,6 @@ function passageVector(text: string): Map<string, number> {
   return new Map([...counts].map(([word, count]) => [word, count / norm]));
 }
 
-/** Unit-length TF-IDF vectors; site-wide template words carry no weight. */
 function vectors(pages: InternalLinkPage[]) {
   const tokens = new Map(pages.map((page) => [page.analysis_id, terms(page)]));
   const frequency = new Map<string, number>();
@@ -99,7 +95,6 @@ const titleWords = (page: InternalLinkPage) =>
       .match(/[\p{L}\p{N}]+/gu) ?? [],
   );
 
-/** Colour/size variants of one product, which a contextual link would not help. */
 export function isVariant(a: InternalLinkPage, b: InternalLinkPage): boolean {
   if (a.page_kind !== 'product' || b.page_kind !== 'product') return false;
   const left = titleWords(a);
@@ -156,10 +151,6 @@ function linkRequest(source: InternalLinkPage, targets: [LinkCandidate, Internal
   return { state: { rubric: limits.rubric, source: pageState(source), targets: state }, questions };
 }
 
-/**
- * Group each source page's shortlist into one JEV request: the source and
- * rubric are sent once, with a link (and anchor) question per destination.
- */
 export function linkRequests(
   pages: InternalLinkPage[],
   candidates: LinkCandidate[],
@@ -176,10 +167,7 @@ export function linkRequests(
   }));
 }
 
-/** Shortlist the most related unlinked destinations for every source page. */
 export function linkCandidates(pages: InternalLinkPage[]): LinkCandidate[] {
-  // Destination labels identify an anchor's subject; sales descriptions must not
-  // turn generic phrases such as "crafted with care" into linkable entities.
   const vector = vectors(pages.map((page) => ({ ...page, description: '' })));
   const candidates: LinkCandidate[] = [];
   for (const source of pages) {
@@ -211,7 +199,6 @@ export function linkCandidates(pages: InternalLinkPage[]): LinkCandidate[] {
     const chosen: InternalLinkPage[] = [];
     for (const { target, similarity, placements } of ranked) {
       if (chosen.length >= limits.targets_per_page) break;
-      // One destination per product family: its variants would repeat the suggestion.
       if (chosen.some((page) => isVariant(page, target))) continue;
       candidates.push({
         id: randomUUID(),

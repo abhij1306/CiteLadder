@@ -1,12 +1,3 @@
-/**
- * The two bounded model steps of a content-angle run (content optimization
- * section 1), per topic: clustering cited titles into angles, then picking
- * the owned content page that covers each angle, or none. The model only
- * groups, names and picks among the IDs it is given; it never produces a URL,
- * a count or a fact. The system texts are fixed here. `methodology_version`
- * stays at 1 until customers exist, so a change to them applies from the next
- * run whose clustering inputs change; each call records its input hash.
- */
 import { z } from 'zod';
 
 import { policy } from '../config.ts';
@@ -50,7 +41,6 @@ const MATCH_SYSTEM = [
   'Answer with JSON only: {"matches": [{"angle_id": string, "owned_page_id": string | null}]}.',
 ].join('\n');
 
-/** The ID the model sees for the `index`-th page or candidate. */
 export const memberId = (index: number) => `u${index + 1}`;
 export const pageId = (index: number) => `p${index + 1}`;
 export const angleId = (index: number) => `a${index + 1}`;
@@ -62,7 +52,6 @@ const prompt = (system: string, payload: unknown): Prompt => {
   return { system, user, inputHash: hash(`${system}\n${user}`) };
 };
 
-/** The clustering request for one topic's URLs, in their given order. */
 export function clusterPrompt(input: {
   language: string;
   maxLabelChars: number;
@@ -79,7 +68,6 @@ export function clusterPrompt(input: {
   });
 }
 
-/** A URL's path without its query or fragment, so the model can tell what kind of page it is. */
 function urlPath(url: string): string {
   try {
     return new URL(url).pathname;
@@ -88,11 +76,6 @@ function urlPath(url: string): string {
   }
 }
 
-/**
- * The owned-match request for one topic's angles and their prefiltered
- * candidates; `pageIds` is the ID the model sees for each offered page, by
- * site URL ID.
- */
 export function matchPrompt(input: {
   language: string;
   angles: readonly { label: string; titles: readonly string[]; candidates: readonly string[] }[];

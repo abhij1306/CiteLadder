@@ -1,8 +1,3 @@
-/**
- * Enforce the function CC and test-file LOC ratchets of the frontend and the
- * API service, and reject policy relaxation. `--policy frontend|api` selects
- * the policy. Production source size is check-token-size.mjs's rule.
- */
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -12,9 +7,8 @@ import { lineIndex, parseSource } from './source-ast.mjs';
 
 const FRONTEND = path.resolve(import.meta.dirname, '..');
 const REPOSITORY = path.resolve(FRONTEND, '..');
-const GIT_EXECUTABLE =
-  process.platform === 'win32' ? String.raw`C:\Program Files\Git\cmd\git.exe` : '/usr/bin/git';
-/** Each policy's file below `frontend/`, its fixed roots and its historical root renames. */
+// An absolute path, not PATH lookup: a PATH entry cannot substitute git (Sonar S4036).
+const GIT_EXECUTABLE = '/usr/bin/git';
 export const POLICIES = {
   frontend: {
     file: 'scripts/frontend_complexity_policy.json',
@@ -27,10 +21,6 @@ export const POLICIES = {
     renames: new Map(),
   },
 };
-/**
- * Directories below a root that no ratchet measures: kysely-codegen writes them
- * and `db:types:check` verifies them, so no one maintains them by hand.
- */
 const GENERATED_DIRECTORIES = ['services/api/src/generated/'];
 const REVISION = /^(?:HEAD|[0-9a-fA-F]{40})$/;
 // ESTree names for the kinds the TypeScript walk counted. Accessors and
@@ -61,7 +51,6 @@ function isFunction(node) {
 }
 function cyclomatic(node) {
   let score = 1;
-  // Nested functions carry their own score, so the walk stops at their border.
   const visit = (child) => {
     if (!child || typeof child !== 'object') return;
     if (Array.isArray(child)) {
@@ -77,7 +66,6 @@ function cyclomatic(node) {
   for (const key of visitorKeys[node.type] ?? []) visit(node[key]);
   return score;
 }
-/** The identifier a declaration binds a function to, if it is one of those. */
 function declaredName(node) {
   if (node.type === 'VariableDeclarator' && node.id?.type === 'Identifier') return node.id.name;
   if (
@@ -89,7 +77,6 @@ function declaredName(node) {
   }
   return null;
 }
-/** See through the wrappers that sit between a binding and its function. */
 function unwrapFunction(node) {
   let current = node;
   while (
@@ -103,12 +90,6 @@ function unwrapFunction(node) {
   }
   return current && typeof current === 'object' ? current : {};
 }
-/**
- * A function's identity within its file, which exceptions key on. It holds no
- * line or column, so an edit elsewhere in the file keeps every identity: a
- * function is named by its own name or the binding that holds it, an anonymous
- * one by its enclosing function, and a repeated name by its occurrence (`#2`).
- */
 function baseName(node, bindingName, enclosing) {
   if (node.id?.name) return node.id.name;
   if (bindingName) return bindingName;
@@ -139,11 +120,6 @@ function filesUnder(root) {
   visit(root);
   return result.sort((left, right) => left.localeCompare(right));
 }
-/**
- * A test, or a helper in a test directory (the API service keeps its fixtures
- * in `test/`). Only the path below `frontend/` counts, so a checkout under a
- * directory named `test` does not raise every module to the test ceiling.
- */
 function isTestFile(file) {
   const below = path.relative(FRONTEND, file);
   const outside = below.startsWith('..') || path.isAbsolute(below);
@@ -176,9 +152,6 @@ export function measure(file) {
       scope = occurrence === 1 ? base : `${base}#${occurrence}`;
       functions.push({ name: scope, cc: cyclomatic(node), line: lineOf(node.start) });
     }
-    // A binding names only the function it initializes directly. Letting the
-    // name flow further would label every nested callback with it, so
-    // `const xs = [() => 1]` would name the callback `xs`.
     const holder = declaredName(node);
     for (const key of visitorKeys[node.type] ?? []) {
       const value = node[key];
@@ -187,7 +160,7 @@ export function measure(file) {
     }
   };
   visit(program, null, null);
-  return { loc: source.split(/\r?\n/).length, test: isTestFile(file), functions };
+  return { loc: source.split('\n').length, test: isTestFile(file), functions };
 }
 
 function hasExactKeys(value, keys) {
@@ -249,7 +222,7 @@ export function collect(policy) {
   const measurements = {};
   for (const root of policy.roots)
     for (const file of filesUnder(path.join(FRONTEND, root))) {
-      const relative = path.relative(FRONTEND, file).split(path.sep).join('/');
+      const relative = path.relative(FRONTEND, file);
       if (!GENERATED_DIRECTORIES.some((directory) => relative.startsWith(directory)))
         measurements[relative] = measure(file);
     }
@@ -294,7 +267,6 @@ export function staleExceptionFailures(measurements, policy) {
 }
 export function policyDiffFailures(base, current, name) {
   const { roots, renames } = POLICIES[name];
-  // The base may predate the current shape, so only shared keys are compared.
   validatePolicy(current, roots);
   const failures = [];
   const normalizedBaseRoots = base.roots.map((root) => renames.get(root) ?? root);

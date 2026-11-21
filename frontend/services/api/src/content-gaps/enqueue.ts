@@ -1,9 +1,3 @@
-/**
- * The content-angle refresh's triggers: a finished audit (its citations are
- * committed) and a terminal crawl (content pages and owned matches depend on
- * it). One task per trigger and methodology version; the task itself decides
- * from its input keys whether anything changed.
- */
 import type { Transaction } from 'kysely';
 
 import { policy } from '../config.ts';

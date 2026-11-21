@@ -15,7 +15,6 @@ import {
   summary,
 } from './issues-catalog.test-support';
 
-/** The Issues screen with the form issue open, as a link to it opens it. */
 const OPEN = `/issues?issue=${ISSUE_A}`;
 
 beforeAll(() => mswServer.listen({ onUnhandledFrame: 'error' }));
@@ -78,8 +77,6 @@ describe('IssuesCatalog', () => {
 
       renderIssues(<IssuesCatalog crawlId={CRAWL} />, OPEN);
 
-      // The two pages differ only in the control's ordinal, which is not
-      // shown, so they are one fix.
       expect(await screen.findAllByText('input[name="email"]')).toHaveLength(1);
       expect(screen.getByText('On 2 pages')).toBeInTheDocument();
       expect(screen.getByRole('link', { name: /Page 1/ })).toHaveAttribute(
@@ -87,7 +84,6 @@ describe('IssuesCatalog', () => {
         `/site/crawls/${CRAWL}/pages/cccccccc-0001-4111-8111-111111111111`,
       );
       expect(screen.getByRole('link', { name: /Page 3/ })).toBeInTheDocument();
-      // The group's question names the issue, not one page of it.
       const shared = screen.getByRole('link', { name: 'Ask agent about these pages' });
       const handoff = parseAgentHandoff(
         new URL(shared.getAttribute('href')!, 'http://x').searchParams,
@@ -96,7 +92,6 @@ describe('IssuesCatalog', () => {
         issue_group_reference: { crawl_id: CRAWL, group_id: ISSUE_A },
       });
       expect(handoff.prompt).toContain('input[name="email"]');
-      // Evidence on one page only keeps that page's own row and question.
       expect(screen.getByText('select[id="country"]')).toBeInTheDocument();
       expect(screen.getAllByRole('link', { name: 'Ask agent about this page' })).toHaveLength(1);
     });

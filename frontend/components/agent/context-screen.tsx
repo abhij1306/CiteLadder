@@ -1,74 +1,40 @@
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
-import { Save } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import { AgentInstructionsCard, useAgentInstructions } from '@/components/agent/agent-instructions';
+import { BrandAliasesPanel } from '@/components/knowledge-base/brand-aliases-panel';
 import { BrandFactsPanel } from '@/components/knowledge-base/brand-facts-panel';
+import { ProjectThemesPanel } from '@/components/knowledge-base/project-themes-panel';
 import {
-  AudienceCard,
   CompanyFactsCard,
-  ProfileSaveNotices,
   TrackedCompetitorsCard,
 } from '@/components/knowledge-base/brand-profile-cards';
-import { BusinessMapSummary } from '@/components/knowledge-base/business-map-summary';
+import { BusinessMapTab } from '@/components/knowledge-base/business-map-tab';
+import { useBusinessDraft } from '@/components/knowledge-base/use-business-draft';
 import {
   useBrandProfileForm,
   type BrandProfileForm,
 } from '@/components/knowledge-base/use-brand-profile-form';
-import { ListScreen } from '@/components/layout/page-shell';
-import { CompetitorSuggestions } from '@/components/visibility/prompt-insights';
-import { Button } from '@/components/ui/button';
-import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Icon } from '@/components/ui/icon';
-import { Stack } from '@/components/ui/layout';
-import { QueryState } from '@/components/ui/query-state';
-import { readErrorProps } from '@/components/ui/read-error';
-import { TabPanel, TabsRoot } from '@/components/ui/tabs';
+import { SettingsPage } from '@/components/templates/settings-page';
+import { TabPanel, TabRail, TabsRoot } from '@/components/ui/tabs';
+import { readErrorProps } from '@/components/ui/notice';
 import { projectQueries } from '@/lib/api/projects';
-import { visibilityQueries } from '@/lib/api/visibility-queries';
 import type { BrandProfile, Project } from '@citeladder/contracts';
+import { CONTEXT_TABS, type ContextTab } from '@/lib/agent/context-tabs';
 import { stringUrlCodec, useUrlState } from '@/lib/navigation/url-state';
 import { useProjectScope } from '@/lib/project/active-project-scope';
 import { useWorkspaceCapability } from '@/lib/project/project-context';
 import { useBrandFacts } from '@/lib/project/use-brand-facts';
+import { StateBlock } from '@/components/ui/state-block';
+import { SettingsGroup } from '@/components/ui/setting-row';
 
-const CONTEXT_TABS = [
-  // Short labels: six tabs share one row on the owner's 982px desktop.
-  { id: 'facts', label: 'Company' },
-  { id: 'audience', label: 'Audience & Offerings' },
-  { id: 'map', label: 'Business map' },
-  { id: 'competitors', label: 'Competitors' },
-  { id: 'instructions', label: 'Agent instructions' },
-  // Last, and only once the pilot gate answers: it joins the end of the row,
-  // so its arrival moves no other tab.
-  { id: 'brand-facts', label: 'Brand facts' },
-] as const;
-
-type ContextTab = (typeof CONTEXT_TABS)[number]['id'];
 type ProfileRead = UseQueryResult<BrandProfile>;
 
 const CONTEXT_TAB_CODEC = stringUrlCodec<ContextTab>(
-  CONTEXT_TABS.map((tab) => tab.id),
+  CONTEXT_TABS.map((tab) => tab.value),
   'facts',
 );
 
-/** Which save the identity band offers on each tab; read-only tabs offer none. */
-const TAB_SAVE: Readonly<Record<ContextTab, 'profile' | 'instructions' | null>> = {
-  facts: 'profile',
-  audience: 'profile',
-  map: null,
-  competitors: null,
-  'brand-facts': null,
-  instructions: 'instructions',
-};
-
-/**
- * What the agent knows about the business before it reads any evidence, one
- * tab per subject: the company facts, audience and offerings, the read-only
- * business map the Prompt Builder edits, the tracked competitors, the pilot's
- * Brand facts, and the project's Agent instructions. Each tab's content sits
- * on a card; the identity band carries the active tab's save.
- */
 export function ContextScreen() {
   const { workspaceId, project } = useProjectScope();
   return <ContextWorkspace workspaceId={workspaceId} project={project} />;
@@ -80,9 +46,6 @@ function ContextWorkspace({
 }: Readonly<{ workspaceId: string; project: Project }>) {
   const [requestedTab, setTab] = useUrlState('tab', CONTEXT_TAB_CODEC);
   const profile = useQuery(projectQueries.brandProfile({ workspaceId, projectId: project.id }));
-  // The five fixed tabs render at once; Brand facts joins the end of the row
-  // when the pilot gate answers. Outside the pilot there is no tab; an
-  // unreadable gate shows its error there.
   const facts = useBrandFacts();
   const form = useBrandProfileForm({
     projectId: project.id,
@@ -90,78 +53,27 @@ function ContextWorkspace({
     profile: profile.data,
   });
   const instructions = useAgentInstructions(workspaceId, project.id);
-  const offersBrandFacts = facts.isError || Boolean(facts.data?.enabled);
-  const tabs = CONTEXT_TABS.filter((tab) => tab.id !== 'brand-facts' || offersBrandFacts);
-  // `?tab=` is deep-linkable, so a link can ask for a tab this project does
-  // not offer. A link to Brand facts holds that tab while the gate is read.
-  const awaitingGate = requestedTab === 'brand-facts' && facts.isPending;
-  const offered = awaitingGate || tabs.some((tab) => tab.id === requestedTab);
-  const activeTab = offered ? requestedTab : 'facts';
-  const saveKind = TAB_SAVE[activeTab];
+  const business = useBusinessDraft({ workspaceId, projectId: project.id });
 
   return (
-    <TabsRoot value={activeTab} onValueChange={setTab}>
-      <ListScreen
-        narrow
-        tabs={{
-          items: tabs.map((tab) => ({ value: tab.id, label: tab.label })),
-          ariaLabel: 'Context sections',
-        }}
-        actions={
-          <SaveAction
-            kind={saveKind === 'profile' && !profile.data ? null : saveKind}
-            form={form}
-            instructions={instructions}
-          />
-        }
+    <TabsRoot value={requestedTab} onValueChange={setTab} orientation="vertical">
+      <SettingsPage
+        wide={requestedTab === 'map'}
+        rail={<TabRail items={CONTEXT_TABS} ariaLabel="Context sections" />}
       >
         <ContextPanels
           project={project}
           workspaceId={workspaceId}
           profile={profile}
           form={form}
-          brandFacts={
-            <BrandFactsTab facts={facts} workspaceId={workspaceId} projectId={project.id} />
-          }
+          brandFacts={<BrandFactsTab facts={facts} workspaceId={workspaceId} project={project} />}
           instructions={<AgentInstructionsCard instructions={instructions} />}
+          businessMap={
+            <BusinessMapTab business={business} projectId={project.id} workspaceId={workspaceId} />
+          }
         />
-      </ListScreen>
+      </SettingsPage>
     </TabsRoot>
-  );
-}
-
-/**
- * One save button in the identity band for every tab, so switching tabs never
- * moves the band: a tab with nothing to save keeps the button's box, hidden.
- */
-function SaveAction({
-  kind,
-  form,
-  instructions,
-}: Readonly<{
-  kind: 'profile' | 'instructions' | null;
-  form: BrandProfileForm;
-  instructions: ReturnType<typeof useAgentInstructions>;
-}>) {
-  if (kind === 'instructions' && instructions.mayEdit)
-    return (
-      <Button variant="primary" onClick={instructions.save} disabled={!instructions.canSave}>
-        <Icon icon={Save} />
-        Save instructions
-      </Button>
-    );
-  const hidden = kind !== 'profile';
-  return (
-    <Button
-      variant="primary"
-      className={hidden ? 'invisible' : undefined}
-      aria-hidden={hidden || undefined}
-      onClick={form.save}
-      disabled={hidden || form.saving}
-    >
-      <Icon icon={Save} />
-      {form.saving ? 'Saving…' : 'Save brand knowledge'}
-    </Button>
   );
 }
 
@@ -172,6 +84,7 @@ function ContextPanels({
   form,
   brandFacts,
   instructions,
+  businessMap,
 }: Readonly<{
   project: Project;
   workspaceId: string;
@@ -179,38 +92,22 @@ function ContextPanels({
   form: BrandProfileForm;
   brandFacts: ReactNode;
   instructions: ReactNode;
+  businessMap: ReactNode;
 }>) {
-  const suggestions = useQuery(
-    visibilityQueries.competitorSuggestions({ workspaceId, projectId: project.id }),
-  );
+  const mayEdit = useWorkspaceCapability('write');
   return (
     <>
       <TabPanel value="facts">
-        <ProfileTab profile={profile} form={form}>
-          <CompanyFactsCard form={form} />
-        </ProfileTab>
+        {profile.data ? <CompanyFactsCard form={form} /> : <ProfileState profile={profile} />}
       </TabPanel>
-      <TabPanel value="audience">
-        <ProfileTab profile={profile} form={form}>
-          <AudienceCard form={form} />
-        </ProfileTab>
+      <TabPanel value="themes">
+        <SettingsGroup title="Themes">
+          <ProjectThemesPanel scope={{ workspaceId, projectId: project.id }} mayEdit={mayEdit} />
+        </SettingsGroup>
       </TabPanel>
-      <TabPanel value="map">
-        {profile.data ? (
-          <BusinessMapSummary
-            projectId={project.id}
-            workspaceId={workspaceId}
-            profile={profile.data}
-          />
-        ) : (
-          <ProfileState profile={profile} />
-        )}
-      </TabPanel>
+      <TabPanel value="map">{businessMap}</TabPanel>
       <TabPanel value="competitors">
-        <Stack gap="workspace">
-          <TrackedCompetitorsCard project={project} />
-          <CompetitorSuggestions projectId={project.id} suggestionsQuery={suggestions} />
-        </Stack>
+        <TrackedCompetitorsCard project={project} />
       </TabPanel>
       <TabPanel value="brand-facts">{brandFacts}</TabPanel>
       <TabPanel value="instructions">{instructions}</TabPanel>
@@ -218,61 +115,64 @@ function ContextPanels({
   );
 }
 
-/** A tab the profile save covers: its notices above its card, once the profile is read. */
-function ProfileTab({
-  profile,
-  form,
-  children,
-}: Readonly<{
-  profile: ProfileRead;
-  form: BrandProfileForm;
-  children: ReactNode;
-}>) {
-  if (!profile.data) return <ProfileState profile={profile} />;
-  return (
-    <Stack gap="workspace">
-      <ProfileSaveNotices form={form} />
-      {children}
-    </Stack>
-  );
-}
-
-/** The profile's loading or read error, in the one query-state footprint. */
 function ProfileState({ profile }: Readonly<{ profile: ProfileRead }>) {
-  if (profile.isPending) return <QueryState kind="loading" label="Loading company facts…" />;
+  if (profile.isPending)
+    return (
+      <StateBlock
+        kind="loading"
+        label="Loading company facts…"
+        shape={{ kind: 'facts', rows: 5 }}
+      />
+    );
   return (
-    <QueryState
+    <StateBlock
       kind="error"
       {...readErrorProps(profile)}
+      title="Couldn't load company facts"
       fallback="Company facts could not be loaded."
     />
   );
 }
 
-/**
- * Brand facts answers are checked against, on their own tab; shown only
- * inside the fact-checking pilot, or with the gate's read error.
- */
 function BrandFactsTab({
   facts,
   workspaceId,
+  project,
+}: Readonly<{
+  facts: ReturnType<typeof useBrandFacts>;
+  workspaceId: string;
+  project: Project;
+}>) {
+  const mayEdit = useWorkspaceCapability('write');
+  return (
+    <>
+      <BrandAliasesPanel project={project} mayEdit={mayEdit} />
+      <BrandFactsSection
+        facts={facts}
+        workspaceId={workspaceId}
+        projectId={project.id}
+        mayEdit={mayEdit}
+      />
+    </>
+  );
+}
+
+function BrandFactsSection({
+  facts,
+  workspaceId,
   projectId,
+  mayEdit,
 }: Readonly<{
   facts: ReturnType<typeof useBrandFacts>;
   workspaceId: string;
   projectId: string;
+  mayEdit: boolean;
 }>) {
-  const mayEdit = useWorkspaceCapability('write');
-  if (facts.isPending) return <QueryState kind="loading" label="Loading brand facts…" />;
+  if (facts.isPending)
+    return <StateBlock kind="loading" label="Loading brand facts…" shape={{ kind: 'list' }} />;
+  if (!facts.isError && !facts.data?.enabled) return null;
   return (
-    <Card aria-labelledby="brand-facts">
-      <CardHeader>
-        <CardTitle id="brand-facts">Brand facts</CardTitle>
-        <CardDescription>
-          Statements of record that AI answers about you are checked against. Runs check the facts
-          confirmed when they start.
-        </CardDescription>
-      </CardHeader>
+    <SettingsGroup title="Brand facts">
       {facts.data?.enabled ? (
         <BrandFactsPanel
           workspaceId={workspaceId}
@@ -281,12 +181,13 @@ function BrandFactsTab({
           mayEdit={mayEdit}
         />
       ) : (
-        <QueryState
+        <StateBlock
           kind="error"
           {...readErrorProps(facts)}
+          title="Couldn't load brand facts"
           fallback="Brand facts could not be loaded."
         />
       )}
-    </Card>
+    </SettingsGroup>
   );
 }

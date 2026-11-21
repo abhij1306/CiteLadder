@@ -25,6 +25,9 @@ import {
 } from './discovery-inputs.ts';
 import { websiteIdentity } from '../safe-fetch.ts';
 import { insertProject } from './service.ts';
+import { saveResearchThemes } from './themes.ts';
+
+const snapshotThemes = z.object({ themes: z.array(z.string()).catch([]) }).catch({ themes: [] });
 
 export type DiscoveryRow = Selectable<BrandDiscoveries>;
 const cfg = policy.discovery.constants;
@@ -70,7 +73,7 @@ export async function discoveryRow(db: Database, workspaceId: string, id: string
 export function discoveryCatalog() {
   const industries = policy.discovery.industry_library.industries;
   return {
-    maximum_competitors: discoverySettings().maximum_competitors,
+    maximum_competitors: policy.brand_identity.max_project_competitors,
     industries: Object.keys(industries),
     subindustries: Object.fromEntries(
       Object.entries(industries).map(([name, context]) => [
@@ -80,11 +83,6 @@ export function discoveryCatalog() {
     ),
   };
 }
-/**
- * Discovery spends outbound fetches, model calls and research-provider calls,
- * so a workspace holds a bounded number at once and per day. A replayed
- * idempotency key returns before this and spends nothing.
- */
 async function admitDiscovery(trx: Database, workspaceId: string) {
   const active = await trx
     .selectFrom('brand_discovery_tasks')
@@ -204,14 +202,8 @@ export function createDiscovery(
     return discoveryView(inserted);
   });
 }
-/**
- * A new discovery from a finished one's input, for a failed or degraded run.
- * The finished task is never reset: the new discovery has its own key, task
- * and attempts, and spends a daily admission like any other.
- */
 export async function rerunDiscovery(db: Database, workspaceId: string, id: string, key: string) {
   const source = await discoveryRow(db, workspaceId, id);
-  // A replayed key returns its run even after the source moved on.
   const replay = await db
     .selectFrom('brand_discoveries')
     .selectAll()
@@ -353,7 +345,7 @@ export async function completeDiscovery(
     );
     const snapshot = await trx
       .selectFrom('brand_research_snapshots')
-      .select('id')
+      .select(['id', 'extracted_fields'])
       .where('workspace_id', '=', workspaceId)
       .where('discovery_id', '=', id)
       .orderBy('created_at', 'desc')
@@ -381,6 +373,11 @@ export async function completeDiscovery(
       }),
       sources,
       artifacts,
+    );
+    await saveResearchThemes(
+      trx,
+      { workspaceId, projectId },
+      snapshotThemes.parse(snapshot.extracted_fields).themes,
     );
     await trx
       .insertInto('prompt_sets')

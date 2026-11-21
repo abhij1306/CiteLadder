@@ -1,13 +1,4 @@
-/**
- * Outline data for the CiteLadder lockup, traced from public/citeladder-logo.svg.
- * The wordmark letters are font-unit outlines placed by an x offset on a
- * shared baseline and scale; `accent` letters spell "Cite", `ink` letters
- * spell "Ladder". Keep in step with the SVG asset (JSON-LD and docs use it).
- * Shared so the app's `LogoMark` and the API's PDF documents draw one drawing.
- */
-
 export const LOGO_VIEWBOX_WIDTH = 662.356616;
-/** The speech-bubble mark alone, the left edge of the lockup. */
 export const LOGO_MARK_WIDTH = 98;
 export const LOGO_GLYPH_BASELINE = 87.65;
 export const LOGO_GLYPH_SCALE = 0.052002762431;

@@ -1,34 +1,43 @@
 import { describe, expect, it } from 'vitest';
 import { aggregateRun, promptTrend, type AggregateExecution } from '../src/analysis/aggregate.ts';
 import { scoringConfig, scoreExecution } from '../src/analysis/scoring.ts';
+import { firstNamed, winCounts, winTally } from '../src/analysis/win-rate.ts';
 const config = scoringConfig({
   brand_name: 'Acme',
   owned_domains: ['acme.example'],
-  competitors: [{ name: 'Rival' }],
+  competitors: [{ name: 'Rival', aliases: ['Contender'] }],
 });
 function execution(
   answerText: string,
   citations: Record<string, unknown>[] = [],
   queryTextAvailable = true,
   queries: string[] = [],
+  theme = 'Shoes',
 ): AggregateExecution {
+  const score = scoreExecution({
+    config,
+    answerText,
+    promptText: 'Which shoes?',
+    promptNamesBrand: false,
+    citations,
+    searchEvents: queries.map((query) => ({ query })),
+    searchUsed: true,
+    queryTextAvailable,
+  });
   return {
     prompt_index: 0,
     prompt_text_snapshot: 'Which shoes?',
-    prompt_theme_snapshot: 'Shoes',
+    prompt_theme_snapshot: theme,
     cohort: 'core',
     logical_engine: 'chatgpt',
-    score: scoreExecution({
-      config,
-      answerText,
-      promptText: 'Which shoes?',
-      citations,
-      searchEvents: queries.map((query) => ({ query })),
-      searchUsed: true,
-      queryTextAvailable,
-    }),
+    score,
     citations,
     usage: {},
+    first_named: firstNamed({
+      brandName: config.brandName,
+      brandOffset: score.brand_first_offset,
+      competitorOffsets: score.competitor_first_offsets,
+    }),
   };
 }
 describe('versioned audit aggregates', () => {
@@ -73,12 +82,45 @@ describe('versioned audit aggregates', () => {
       cost: { provider_reported_cost_usd: null },
     });
   });
+  it('names first only the tracked roster, through aliases, and counts wins over answers naming one', () => {
+    const answers = [
+      execution('Zeta, then Acme, then Rival'),
+      execution('Contender beats Acme'),
+      execution('Zeta only', [], true, [], 'Boots'),
+      execution('Nothing tracked', [], true, [], 'Boots'),
+    ];
+    expect(answers.map((answer) => answer.first_named)).toEqual([
+      { kind: 'brand', name: 'Acme' },
+      { kind: 'competitor', name: 'Rival' },
+      { kind: 'none' },
+      { kind: 'none' },
+    ]);
+    const metrics = aggregateRun(answers, config);
+    expect(metrics.win_tally).toEqual({ answers: 2, first: { Acme: 1, Rival: 1 } });
+    expect(winCounts(metrics.win_tally, 'Acme')).toEqual({
+      win_count: 1,
+      win_answers: 2,
+      win_rate: 0.5,
+    });
+    expect(winCounts(aggregateRun(answers.slice(2), config).win_tally, 'Acme')).toEqual({
+      win_count: 0,
+      win_answers: 0,
+      win_rate: null,
+    });
+    expect(winCounts(metrics.win_tally, 'Nobody')).toEqual({
+      win_count: 0,
+      win_answers: 2,
+      win_rate: 0,
+    });
+    const shadow = winTally([{ kind: 'competitor', name: 'constructor' }], 'Acme');
+    expect(shadow).toEqual({ answers: 1, first: { constructor: 1 } });
+    expect(winCounts(metrics.win_tally, 'constructor')).toMatchObject({ win_count: 0 });
+  });
   it('averages search queries over the answers that exposed them, unknown when none did', () => {
     const metrics = aggregateRun(
       [
         execution('Acme', [], true, ['best shoes', 'acme shoes review', 'shoe sale']),
         execution('Acme', [], true, ['best shoes']),
-        // Its queries were hidden: unknown, not zero queries.
         execution('Acme', [], false),
       ],
       config,

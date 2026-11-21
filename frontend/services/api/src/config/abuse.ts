@@ -24,6 +24,8 @@ const defaults = {
   brand_logo_refresh_window_seconds: 3600,
   client_error_client_limit: 20,
   client_error_window_seconds: 600,
+  csp_report_client_limit: 20,
+  csp_report_window_seconds: 600,
   active_audits_per_workspace: 3,
   audit_tasks_per_workspace_daily: 1500,
   active_agent_runs_per_workspace: 5,
@@ -89,7 +91,6 @@ const daily = (operation: string, limit: SettingSpec): Budget => ({
   windowSeconds: DAY_SECONDS,
 });
 
-/** Every fixed-window usage budget, by name. */
 export const budgets = {
   agent_provider_call: {
     operation: 'agent.provider_call',
@@ -163,7 +164,6 @@ export const budgets = {
   crawl_log_batches: {
     operation: 'crawl_logs.batch',
     subject: 'crawl_source',
-    // The crawl-log owner keeps these numbers; read them when the budget resolves.
     get limit() {
       return crawlLogs.batches_per_source_per_hour;
     },

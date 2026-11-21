@@ -1,7 +1,7 @@
-/** Immutable observed architecture and root-anchored findings from persisted evidence. */
 import { randomUUID } from 'node:crypto';
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
+import { timeOrderedId } from '../db/ids.ts';
 import { record } from '../db/json.ts';
 import { canonicalUrl } from './url-identity.ts';
 import { buildArchitecture, type ArchitecturePage } from './architecture-model.ts';
@@ -74,6 +74,7 @@ async function architecturePages(db: Database, crawl: Crawl) {
         .selectFrom('site_rule_evaluations')
         .select(['id', 'analysis_id', 'outcome'])
         .where('workspace_id', '=', crawl.workspace_id)
+        .where('analysis_id', 'in', [...new Set(owners.values())])
         .where('id', 'in', [...owners.keys()])
         .where('rule_id', '=', 'technical.indexable')
         .execute()
@@ -129,7 +130,7 @@ async function persistRules(
     const row = await db
       .insertInto('site_rule_evaluations')
       .values({
-        id: randomUUID(),
+        id: timeOrderedId(),
         workspace_id: crawl.workspace_id,
         analysis_id: root.analysisId,
         source_artifact_id: root.artifactId,
@@ -162,7 +163,7 @@ async function persistRules(
     await db
       .insertInto('site_issues')
       .values({
-        id: randomUUID(),
+        id: timeOrderedId(),
         workspace_id: crawl.workspace_id,
         project_id: crawl.project_id,
         crawl_id: crawl.id,
@@ -180,8 +181,6 @@ async function persistRules(
         remediation: rule.remediation,
         analyzer_version: crawl.analyzer_version || versions.analyzer,
         rule_version: rule.rule_version,
-        // A finding of the crawl's own architecture is current by definition
-        // (`issue-currency.ts`).
         is_current: true,
         created_at: now,
       })
@@ -244,9 +243,7 @@ export async function persistArchitecture(db: Database, crawl: Crawl) {
   // The snapshot was published first (architecture reads its coverage); its
   // issue counts now take in the site-level findings.
   await addArchitectureIssues(db, crawl);
-  // The findings are written current, so the persisted catalog takes them in now.
   await persistIssueCatalog(db, crawl);
-  // The root page's issue states take in the site-level findings judged on it.
   await landIssueStates(db, crawl);
   return 1;
 }

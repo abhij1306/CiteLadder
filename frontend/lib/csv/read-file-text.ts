@@ -14,14 +14,6 @@ function readBytes(file: File): Promise<ArrayBuffer> {
   });
 }
 
-/**
- * Read an uploaded import file (a CSV or a product feed) as UTF-8 text.
- *
- * Decoding is strict: a byte sequence that is not UTF-8 refuses the whole file
- * instead of becoming U+FFFD, so `Café` saved as Windows-1252 is never
- * imported as `Caf�`. A UTF-8 byte-order mark is dropped. Both refusals carry
- * the sentence the import shows.
- */
 export async function readCsvFileText(file: File): Promise<string> {
   let bytes: ArrayBuffer;
   try {

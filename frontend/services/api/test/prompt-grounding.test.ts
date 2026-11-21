@@ -45,7 +45,6 @@ async function project() {
 }
 type Project = Awaited<ReturnType<typeof project>>;
 
-/** One query snapshot with its per-day rows, as Search Console import leaves it. */
 async function searchConsole(
   p: Project,
   windowEnd: Date,
@@ -107,7 +106,6 @@ async function searchConsole(
   return ids;
 }
 
-/** One Search Intelligence dataset with keyword rows. */
 async function keywordResearch(
   p: Project,
   options: { kind: string; language: string; status: string },
@@ -179,10 +177,8 @@ const load = (p: Project, workspaceId = p.workspaceId) =>
     competitors: [{ aliases: ['Rival'], rule: undefined }],
   });
 
-/** Persisted Search Console and keyword rows a grounded project starts from. */
 async function groundedProject() {
   const p = await project();
-  // An older snapshot is superseded by the latest one and never read.
   await searchConsole(p, isoDay(30), [
     { query: 'running shoes for wide feet', impressions: 1000, daysAgo: 31 },
   ]);
@@ -211,7 +207,6 @@ async function groundedProject() {
   await keywordResearch(p, { kind: 'shared_keywords', language: 'de', status: 'published' }, [
     { keyword: 'running shoes damen laufen', volume: 9000 },
   ]);
-  // A user override confirming a short question as non-branded.
   const whichOverride = randomUUID();
   await db
     .insertInto('branded_query_overrides')
@@ -248,7 +243,6 @@ describe('observed queries at the PostgreSQL boundary', () => {
         text: 'which shoes',
         topic_id: p.topicId,
         weight: 15,
-        // The user's override admitted it; its identity travels with the search.
         classifier_version: 'override-test',
         override_id: whichOverride,
       },
@@ -262,7 +256,6 @@ describe('observed queries at the PostgreSQL boundary', () => {
         override_id: null,
       },
     ]);
-    // The same rows are invisible from another workspace.
     const other = await fixtures.tenant();
     tenants.push(other);
     expect((await load(p, other.workspaceId)).map((row) => row.text)).toEqual([]);
@@ -317,7 +310,6 @@ describe('seed queries for the Prompt Builder', () => {
           ],
         },
         {
-          // The keyword Search Console already supplied is read once, from Search Console.
           source: 'search_intelligence',
           queries: [{ id: trail, text: 'trail running shoes waterproof', topic_id: p.topicId }],
         },
@@ -360,7 +352,6 @@ describe('seed queries for the Prompt Builder', () => {
     await searchConsole(p, isoDay(1), [
       { query: 'acme running shoes', impressions: 50, daysAgo: 2 },
     ]);
-    // Connected, but nothing usable: the source is listed with no queries.
     expect(await readSeedQueries(db, p.workspaceId, p.projectId)).toEqual({
       sources: [{ source: 'search_console', queries: [] }],
     });
@@ -372,7 +363,6 @@ describe('seed queries for the Prompt Builder', () => {
   });
 });
 
-/** Echo dependencies that record each draft request the model received. */
 function recordingGateway() {
   const requests: DraftRequest[] = [];
   return {
@@ -381,7 +371,6 @@ function recordingGateway() {
   };
 }
 
-/** A candidate's or run's observed-search ref, with the classification that admitted it. */
 const ref = (
   source: string,
   id: unknown,
@@ -403,7 +392,6 @@ describe('grounded generation', () => {
     const planned = 2 * generationSetting('overgenerate_factor');
     expect(requests[0]!.system).toContain('buyer_search_examples');
     expect(requests[0]!.slots[0]).toMatchObject({
-      // Closest to the "Running shoes" cell first; the loader's ranking breaks ties.
       buyer_search_examples: [
         'best running shoes for flat feet',
         'trail running shoes waterproof',

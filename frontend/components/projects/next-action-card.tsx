@@ -1,80 +1,34 @@
-import { ArrowRight } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { ProjectLink } from '@/components/ui/project-link';
 
-import { Badge } from '@/components/ui/badge';
+import { ActionButton, ACTIONS } from '@/components/ui/actions';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardEyebrow, CardHeader, CardTitle } from '@/components/ui/card';
 import { DisplayTime } from '@/components/ui/display-time';
 import { Icon } from '@/components/ui/icon';
-import { Inline, Stack } from '@/components/ui/layout';
 import { textRole } from '@/components/ui/typography';
-import { pluralCount, readableUrl } from '@/lib/format';
-import { severityLabel, severityPriority } from '@/lib/site-health/issues';
+import { ArrowRight } from '@/lib/icons';
+import { pluralCount } from '@/lib/format';
 import type { CommandCenter } from '@citeladder/contracts';
 
-const RECOMMENDED = 'Action recommended';
+import { ActionFacts } from './dashboard-primitives';
+import { WidgetFrame } from './widget-frame';
 
-/**
- * Every step the server can name; steps that are not a call to act say what
- * they are. The button names where it goes, never a bare "Continue".
- */
-const NEXT_ACTION_COPY: Record<
-  CommandCenter['next_action']['kind'],
-  { status: string; link: string; reason: string | null }
-> = {
-  // The Action's title and evidence already say why it is next.
-  opportunity: { status: RECOMMENDED, link: 'Open the Action', reason: null },
-  connect: {
-    status: RECOMMENDED,
-    link: 'Open Integrations',
-    reason: 'Search Console or GA4 data sharpens which Actions matter.',
-  },
-  crawl: {
-    status: RECOMMENDED,
-    link: 'Open Site Health',
-    reason: 'A crawl finds the page issues behind later Actions.',
-  },
-  configure_prompts: {
-    status: RECOMMENDED,
-    link: 'Choose prompts',
-    reason: 'Track the questions buyers ask to start measuring.',
-  },
-  audit: {
-    status: RECOMMENDED,
-    link: 'Open Runs',
-    reason: 'A run measures how answer engines cite you.',
-  },
-  audit_running: { status: 'In progress', link: 'View progress', reason: null },
-  monitor: {
-    status: 'Up to date',
-    link: 'View trends',
-    reason: 'The next run shows whether visibility moves.',
-  },
+const NEXT_ACTION_LINK: Record<CommandCenter['next_action']['kind'], string> = {
+  opportunity: ACTIONS.openAction.label,
+  connect: 'Open Integrations',
+  crawl: 'Open Site health',
+  configure_prompts: ACTIONS.addPrompts.label,
+  audit: 'Open Runs',
+  audit_running: 'View progress',
+  monitor: 'View trends',
 };
 
-/**
- * The persisted facts behind the step, from what the Overview already reads:
- * the Action's target and evidence, the prompts a run would measure, or the
- * limitation the loop recorded. Null when there is nothing to add.
- */
 function nextActionEvidence(data: CommandCenter): ReactNode {
   const step = data.next_action;
   switch (step.kind) {
     case 'opportunity': {
       const action = data.actions.find((item) => item.id === step.opportunity_id);
-      if (!action) return null;
-      return (
-        <Inline>
-          <Badge variant="priority" value={severityPriority(action.severity)}>
-            {severityLabel(action.severity)}
-          </Badge>
-          <span className={textRole('caption', 'min-w-0 truncate')}>
-            {action.target_label ? readableUrl(action.target_label) : 'Project-wide'} ·{' '}
-            {pluralCount(action.evidence_summary.count, 'evidence item')}
-          </span>
-        </Inline>
-      );
+      return action ? <ActionFacts action={action} /> : null;
     }
     case 'audit':
     case 'audit_running':
@@ -105,31 +59,24 @@ function captionOrNull(text: string | undefined) {
 }
 
 export function NextAction({ data }: Readonly<{ data: CommandCenter }>) {
-  const copy = NEXT_ACTION_COPY[data.next_action.kind];
-  // An opportunity whose Action is not created yet links to the Actions list.
-  const link =
-    data.next_action.kind === 'opportunity' && data.next_action.href === '/agent/actions'
-      ? 'Open Actions'
-      : copy.link;
+  const step = data.next_action;
+  const listOnly = step.kind === 'opportunity' && step.href === '/actions';
   return (
-    <Card aria-labelledby="next-action" className="text-ink h-full">
-      <CardHeader actions={<span className={textRole('label')}>{copy.status}</span>}>
-        <CardEyebrow>Next action</CardEyebrow>
-        <CardTitle id="next-action">{data.next_action.title}</CardTitle>
-      </CardHeader>
-      {/* The reason, its evidence and the button are blocks: 12 apart. */}
-      <Stack as={CardContent} gap="workspace">
-        {copy.reason ? <p className={textRole('body')}>{copy.reason}</p> : null}
-        {nextActionEvidence(data)}
-        <div>
-          <Button asChild variant="primary">
-            <ProjectLink href={data.next_action.href}>
-              {link}
+    <WidgetFrame id="next-action" title="Next action">
+      <p className={textRole('label')}>{step.title}</p>
+      {nextActionEvidence(data)}
+      <div>
+        {step.kind === 'opportunity' && !listOnly ? (
+          <ActionButton action="openAction" href={step.href} />
+        ) : (
+          <Button asChild variant="secondary">
+            <ProjectLink href={step.href}>
+              {listOnly ? 'Open Actions' : NEXT_ACTION_LINK[step.kind]}
               <Icon icon={ArrowRight} />
             </ProjectLink>
           </Button>
-        </div>
-      </Stack>
-    </Card>
+        )}
+      </div>
+    </WidgetFrame>
   );
 }

@@ -1,12 +1,3 @@
-/**
- * Everything one cited URL's own page shows, from persisted rows only.
- *
- * Keyed by the URL the
- * engines reported, so a citation whose page identity was never resolved
- * still has a page. `brands` is co-occurrence (named in answers that cited
- * this URL), never presence on the page; `first_seen` is the first sighting
- * within the selection, never the page's age.
- */
 import type { visibilitySourceUrlSchema } from '@citeladder/contracts/visibility-evidence';
 import { sql } from 'kysely';
 import type { z } from 'zod';
@@ -21,7 +12,6 @@ import { earnedPageActions } from '../opportunities/earned-page-actions.ts';
 import { authorizedSelection, evidenceScope, observedAt, type RunSelection } from './selection.ts';
 import { compareText } from '../text-order.ts';
 
-// A detail page shows what a person can take in; its tables do not page.
 const limits = {
   prompts: policy.visibility.source_url_max_prompts,
   brands: policy.visibility.source_url_max_brands,
@@ -109,7 +99,6 @@ async function promptRows(db: Database, cited: Cited): Promise<SourceUrlDetail['
   }));
 }
 
-/** Names recorded in the cited answers, with the answers that named each. */
 async function mentionCounts(
   db: Database,
   workspaceId: string,
@@ -143,11 +132,6 @@ async function mentionCounts(
   return rows.map((row) => ({ name: row.name, responses: Number(row.responses) }));
 }
 
-/**
- * Brands and competitors named in the answers that cited this URL: the
- * strongest link the rows support, since a mention is recorded against the
- * response, never against the citation beside it.
- */
 async function brands(
   db: Database,
   selection: RunSelection,
@@ -171,15 +155,6 @@ async function brands(
   });
 }
 
-/**
- * What this project knows about the page itself: whether and when it was
- * read, what kind of page it is and how that was established, who is named on
- * it with the quoted line, and the open Action to get listed on it.
- *
- * Presence comes from the latest SUCCESSFUL reading only, so a later failed
- * attempt never erases what was learned, and a page nobody read carries no
- * verdicts at all. One bounded read by page identity; it never fetches.
- */
 async function pageSection(
   db: Database,
   selection: RunSelection,
@@ -231,39 +206,40 @@ export async function getSourceUrlDetail(
 ): Promise<SourceUrlDetail> {
   const selection = await authorizedSelection(db, requested);
   const scope = scopeOf(db, selection);
-  const denominator = await db
-    .selectFrom(scope)
-    .select(sql<string>`count(distinct scope.analysis_id)`.as('responses'))
-    .executeTakeFirstOrThrow();
   const cited = citedOf(db, scope, selection.workspaceId, url);
-  const overview = await db
-    .selectFrom(cited)
-    .select([
-      sql<string>`count(distinct cited.analysis_id)`.as('retrievals'),
-      utcText(sql`min(cited.observed_at)`).as('first_seen'),
-      utcText(sql`max(cited.observed_at)`).as('last_seen'),
-      sql<string>`count(distinct cited.prompt_key)`.as('prompts'),
-    ])
-    .executeTakeFirstOrThrow();
   const matching = db
     .selectFrom('citations as citation')
     .innerJoin(scope, 'scope.analysis_id', 'citation.analysis_id')
     .where('citation.workspace_id', '=', selection.workspaceId)
     .where('citation.url', '=', url);
-  // The page identity these citations resolved to rides on the count.
-  const { citations, url_hash: urlHash } = await matching
-    .select([
-      sql<string>`count(citation.id)`.as('citations'),
-      sql<string | null>`max(citation.url_hash)`.as('url_hash'),
-    ])
-    .executeTakeFirstOrThrow();
-  // The title the engines reported, most recent non-empty first.
-  const title = await matching
-    .where('citation.title', '!=', '')
-    .select('citation.title')
-    .orderBy('scope.observed_at', 'desc')
-    .limit(1)
-    .executeTakeFirst();
+  const [denominator, overview, counted, title] = await Promise.all([
+    db
+      .selectFrom(scope)
+      .select(sql<string>`count(distinct scope.analysis_id)`.as('responses'))
+      .executeTakeFirstOrThrow(),
+    db
+      .selectFrom(cited)
+      .select([
+        sql<string>`count(distinct cited.analysis_id)`.as('retrievals'),
+        utcText(sql`min(cited.observed_at)`).as('first_seen'),
+        utcText(sql`max(cited.observed_at)`).as('last_seen'),
+        sql<string>`count(distinct cited.prompt_key)`.as('prompts'),
+      ])
+      .executeTakeFirstOrThrow(),
+    matching
+      .select([
+        sql<string>`count(citation.id)`.as('citations'),
+        sql<string | null>`max(citation.url_hash)`.as('url_hash'),
+      ])
+      .executeTakeFirstOrThrow(),
+    matching
+      .where('citation.title', '!=', '')
+      .select('citation.title')
+      .orderBy('scope.observed_at', 'desc')
+      .limit(1)
+      .executeTakeFirst(),
+  ]);
+  const { citations, url_hash: urlHash } = counted;
   const retrievals = Number(overview.retrievals);
   return {
     url,
@@ -271,7 +247,6 @@ export async function getSourceUrlDetail(
     retrievals,
     citations: Number(citations),
     responses: Number(denominator.responses),
-    // Per response the URL was RETRIEVED in, as the URL table's column is.
     citation_rate: retrievals ? Number(citations) / retrievals : null,
     prompts: Number(overview.prompts),
     first_seen: wireUtcOrNull(overview.first_seen),

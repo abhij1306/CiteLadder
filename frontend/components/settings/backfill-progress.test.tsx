@@ -45,7 +45,6 @@ describe('BackfillProgress', () => {
     mockProgress(progress({ state: 'not_started', total_windows: 0, completed_windows: 0 }));
     renderWithProviders(<BackfillProgress connectionId={CONNECTION} />);
 
-    // Give the query a chance to resolve before asserting the absence.
     await expect(screen.findByText(/History/)).rejects.toThrow();
   });
 
@@ -61,7 +60,7 @@ describe('BackfillProgress', () => {
     );
     renderWithProviders(<BackfillProgress connectionId={CONNECTION} />);
 
-    expect(await screen.findByText('Importing — 6 of 14 windows')).toBeInTheDocument();
+    expect(await screen.findByText('Importing: 6 of 14 windows')).toBeInTheDocument();
   });
 
   it('shows the covered date range once the import completes', async () => {
@@ -73,8 +72,6 @@ describe('BackfillProgress', () => {
   });
 
   it('names the failed windows instead of implying complete coverage', async () => {
-    // A partial import must not present its covered range as the whole
-    // history: the failed windows are a hole in it.
     mockProgress(progress({ state: 'partial', completed_windows: 12, failed_windows: 2 }));
     renderWithProviders(<BackfillProgress connectionId={CONNECTION} />);
 
@@ -82,8 +79,6 @@ describe('BackfillProgress', () => {
   });
 
   it('distinguishes a completed import that measured nothing', async () => {
-    // Every window succeeded and the provider returned no rows: that is an
-    // observed empty history, not a missing one.
     mockProgress(progress({ covered_from: null, covered_through: null }));
     renderWithProviders(<BackfillProgress connectionId={CONNECTION} />);
 

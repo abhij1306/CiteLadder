@@ -88,7 +88,6 @@ describe('packaged Agent model inputs', () => {
       expect((await loadSkillCatalog(temporary)).version).not.toBe(first.version);
       await write((file) => (file.workflows[0].skill_id = 'missing_skill'));
       await expect(loadSkillCatalog(temporary)).rejects.toThrow('unknown skill');
-      // A format only applies to a skill whose output kind has formats.
       await write((file) => {
         const planner = file.workflows.find(
           (workflow: { skill_id: string }) => workflow.skill_id === 'growth_plan',
@@ -106,7 +105,6 @@ describe('packaged Agent model inputs', () => {
     const temporary = await mkdtemp(join(tmpdir(), 'agent-catalog-'));
     try {
       await cp(root, temporary, { recursive: true });
-      // The runtime image supplies this exact alias and has no checkout fallback.
       const first = await loadSkillCatalog(
         agentSettings({ AGENT_SKILLS_DIRECTORY: temporary }).skillsDirectory,
       );

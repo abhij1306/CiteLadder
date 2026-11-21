@@ -73,7 +73,6 @@ async function siteUrl(owner: Tenant, url: string) {
     .execute();
   return id;
 }
-/** A live or superseded opportunity for `targetKey`, joined to a new Action. */
 async function promoted(targetKey: string, superseded: boolean) {
   const actionId = randomUUID(),
     now = new Date();
@@ -147,7 +146,6 @@ describe('demand projections and admission', () => {
     await promoted(`demand:${signal.identity_hash}`, true);
     const live = await promoted(`demand:${signal.identity_hash}`, false);
     const linked = (await request('demand/latest')).body.signals;
-    // Only the promoted signal links, and to its live opportunity's Action.
     expect(linked.filter((r) => r.action_id !== null).map((r) => [r.id, r.action_id])).toEqual([
       [signal.id, live],
     ]);
@@ -200,7 +198,6 @@ describe('demand projections and admission', () => {
       metrics: { impressions: 40, clicks: 0, position: 6.5 },
     });
     await refreshTrafficSnapshot(await task(db, t, 'traffic_snapshot_refresh'), context);
-    // The Demand window ends at the latest reported Search Console day.
     await demand(['2026-06-28', '2026-07-25']);
     const latest = (await request('demand/latest')).body;
     expect(
@@ -303,7 +300,6 @@ describe('demand projections and admission', () => {
       .where('status', '=', 'queued')
       .execute();
     expect(pending).toHaveLength(1);
-    // Capacity is per project, and automatic refreshes never hold it.
     const second = { ...t, projectId: await seedProject(db, t.workspaceId) };
     await demand(WINDOW, second);
     await enqueue(db, {
@@ -499,7 +495,6 @@ describe('demand projections and admission', () => {
         property_ref: 'properties/123456789',
         provider: 'gsc',
         dataset: seed.dataset,
-        // The alphabetically first row is the oldest; the last has most impressions.
         date: offset + i === 0 ? WINDOW[0] : WINDOW[1],
         dimension_key: `q${String(offset + i).padStart(5, '0')} | https://example.test/page | ${WINDOW[1]}`,
         metrics: JSON.stringify({ impressions: offset + i === last ? 1000 : 10, clicks: 0 }),
@@ -523,6 +518,5 @@ describe('demand projections and admission', () => {
       .where('normalized_query', 'in', ['q00000', `q${String(last).padStart(5, '0')}`])
       .execute();
     expect(kept.map((r) => r.normalized_query)).toEqual([`q${String(last).padStart(5, '0')}`]);
-    // Seeds the full row cap; parallel suites need more than the default budget.
   }, 30_000);
 });

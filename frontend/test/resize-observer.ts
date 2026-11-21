@@ -1,11 +1,3 @@
-/**
- * A drivable ResizeObserver for jsdom, which has none and lays nothing out.
- *
- * Radix only needs the observer contract, but a component that reacts to a
- * size change (a chat following its newest message) is untestable unless a
- * test can say "this element changed size": `emitResize` calls back every
- * observer watching that element, as a browser would after layout.
- */
 class ResizeObserverStub {
   static readonly instances = new Set<ResizeObserverStub>();
 
@@ -46,7 +38,6 @@ export function installResizeObserver() {
   globalThis.ResizeObserver ??= ResizeObserverStub as unknown as typeof ResizeObserver;
 }
 
-/** Reports a size change of `target` to every observer watching it. */
 export function emitResize(target: Element) {
   for (const observer of ResizeObserverStub.instances) observer.emit(target);
 }

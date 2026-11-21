@@ -1,13 +1,14 @@
 import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { useEffect, useState } from 'react';
+import { Profiler, useEffect, useState } from 'react';
 import { Route, Routes, useParams } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vite-plus/test';
 
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { AgentPanelProvider, useAgentPanelSeed } from '@/lib/agent/panel-context';
 import { refreshAgentChat } from '@/lib/api/agent';
+import { AGENT_PASTE_ATTACHMENT_MIN_CHARS } from '@/lib/config/agent';
 import { mswServer } from '@/test/msw-server';
 import { actionsPage } from '@/test/fixtures/actions';
 import { makeProject } from '@/test/fixtures/project';
@@ -39,6 +40,7 @@ const DETAIL = {
     id: CHAT,
     project_id: PROJECT,
     action_id: null,
+    origin: 'chat',
     target_label: null,
     title: 'Missing meta description',
     turn_count: 1,
@@ -77,10 +79,13 @@ const DETAIL = {
   outputs: [],
 };
 
-/** Lets a test change the screen's context, as a background refetch would. */
 const screenPrompt = { set: (_prompt: string) => {} };
 
-/** A Dashboard screen offering the typed page it is showing. */
+const issueRenders = { count: 0 };
+const countIssueRender = () => {
+  issueRenders.count += 1;
+};
+
 function IssueScreen() {
   const [prompt, setPrompt] = useState('Fix the missing meta description.');
   useEffect(() => {
@@ -100,7 +105,14 @@ function renderShell(path: string) {
       <TooltipProvider>
         <AgentPanelTrigger />
         <Routes>
-          <Route path="/site" element={<IssueScreen />} />
+          <Route
+            path="/site"
+            element={
+              <Profiler id="issue-screen" onRender={countIssueRender}>
+                <IssueScreen />
+              </Profiler>
+            }
+          />
           <Route path="/agent/chats/:chatId" element={<ChatLanding />} />
         </Routes>
         <AgentPanel />
@@ -126,7 +138,10 @@ beforeEach(() =>
 afterEach(() => mswServer.resetHandlers());
 afterAll(() => mswServer.close());
 
-const EMPTY_CATALOG = { skills: [], limits: { mentions_max: 5 } };
+const EMPTY_CATALOG = {
+  skills: [],
+  limits: { mentions_max: 5, attachments_max: 3, attachment_max_chars: 40000 },
+};
 
 describe('AgentPanel', () => {
   it('starts a chat from the screen context and continues it in the Agent workspace', async () => {
@@ -142,8 +157,11 @@ describe('AgentPanel', () => {
     const user = userEvent.setup();
     renderShell('/site');
 
-    await user.click(await screen.findByRole('button', { name: 'Open agent' }));
+    const trigger = await screen.findByRole('button', { name: 'Ask agent' });
+    const rendersBeforeOpen = issueRenders.count;
+    await user.click(trigger);
     const panel = await screen.findByRole('dialog', { name: 'Agent' });
+    expect(issueRenders.count).toBe(rendersBeforeOpen);
     expect(within(panel).getByLabelText('Message the agent')).toHaveValue(
       'Fix the missing meta description.',
     );
@@ -159,6 +177,12 @@ describe('AgentPanel', () => {
         context: { target_site_url_id: PAGE },
       },
     ]);
+    expect(within(panel).getByRole('button', { name: 'Edit last request' })).toBeVisible();
+    await user.click(within(panel).getByLabelText('Reply to the agent'));
+    await user.paste('y'.repeat(AGENT_PASTE_ATTACHMENT_MIN_CHARS));
+    expect(
+      within(panel).getByRole('button', { name: 'Replace draft with last request' }),
+    ).toBeVisible();
 
     await user.click(within(panel).getByRole('link', { name: 'Open in Agent' }));
     expect(await screen.findByText(`Workspace chat ${CHAT}`)).toBeInTheDocument();
@@ -170,7 +194,7 @@ describe('AgentPanel', () => {
     const user = userEvent.setup();
     renderShell('/site');
 
-    await user.click(await screen.findByRole('button', { name: 'Open agent' }));
+    await user.click(await screen.findByRole('button', { name: 'Ask agent' }));
     const message = within(await screen.findByRole('dialog', { name: 'Agent' })).getByLabelText(
       'Message the agent',
     );
@@ -185,7 +209,7 @@ describe('AgentPanel', () => {
     renderShell(`/agent/chats/${CHAT}`);
 
     expect(await screen.findByText(`Workspace chat ${CHAT}`)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Open agent' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Ask agent' })).not.toBeInTheDocument();
   });
 
   it('follows the drawer thread in its own region until the reader scrolls up', async () => {
@@ -199,7 +223,7 @@ describe('AgentPanel', () => {
     );
     const user = userEvent.setup();
     const { queryClient } = renderShell('/site');
-    await user.click(await screen.findByRole('button', { name: 'Open agent' }));
+    await user.click(await screen.findByRole('button', { name: 'Ask agent' }));
     const panel = await screen.findByRole('dialog', { name: 'Agent' });
     await user.click(within(panel).getByRole('button', { name: 'Send' }));
     await within(panel).findByLabelText('Reply to the agent');
@@ -220,7 +244,7 @@ describe('AgentPanel', () => {
           ],
         };
         await act(() => refreshAgentChat(queryClient, CHAT));
-        await within(panel).findByText('More detail.');
+        await within(panel).findByText('More detail.', { selector: 'article p' });
       },
     });
   });

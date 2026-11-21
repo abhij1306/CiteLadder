@@ -1,26 +1,24 @@
 import type { ReactNode } from 'react';
 
 import { Button } from '@/components/ui/button';
-import { Callout } from '@/components/ui/callout';
-import { MutationNotice } from '@/components/ui/mutation-notice';
-import { Dot } from '@/components/ui/icon';
 import { Inline, Stack } from '@/components/ui/layout';
-import { QueryState } from '@/components/ui/query-state';
-import { InlineFigure, textRole } from '@/components/ui/typography';
-import { UnavailableValue } from '@/components/ui/unavailable-value';
-import type { PageSummary, SiteCrawl } from '@citeladder/contracts';
-import { formatCount } from '@/lib/format';
+import { Spinner } from '@/components/ui/spinner';
+import { Absence } from '@/components/ui/absence';
+import type { SiteCrawl } from '@citeladder/contracts';
+import { useDisplayTimeZone } from '@/lib/display-timezone';
+import { endSentence, formatCount, formatStripTimestamp } from '@/lib/format';
 import { ICONS } from '@/lib/icons';
 import { CrawlStatusBadge } from '@/components/site-health/crawl-status-badge';
 import { crawlFailureCopy, dashboardRunNotice } from '@/lib/site-health/run-notice';
 import {
   canShowDiscoveredTotal,
   discoveryProgressLabel,
-  endSentence,
-  isDiscoveryProvisional,
   isDiscoveryTerminal,
   type SiteHealthPhase,
 } from '@/lib/site-health/status';
+import { Notice } from '@/components/ui/notice';
+import { Section } from '@/components/ui/section';
+import { StateBlock } from '@/components/ui/state-block';
 
 /**
  * Always-mounted status row of the canonical Site Health screen.
@@ -37,27 +35,14 @@ export function StatusStrip({
   phase,
   cancelPending,
   startPending,
-  pages,
-  selectedTotal,
-  selectedError,
   onRerun,
 }: Readonly<{
   crawl: SiteCrawl | null;
   phase: SiteHealthPhase;
   cancelPending: boolean;
-  /** Starts a new crawl from a failed one's notice; omitted when not allowed. */
   onRerun?: () => void;
-  /** A fresh crawl create is in flight — freeze current content behind a notice. */
   startPending: boolean;
-  /** Bounded monitored-page window (observed "running" rows only, never totals). */
-  pages: PageSummary[];
-  /** This project's active monitored count; null until loaded. */
-  selectedTotal: number | null;
-  /** True when the monitored-count fetch failed (counts fall back, noted here). */
-  selectedError: boolean;
 }>) {
-  // The wrapper (and its test id) stays mounted in every phase — only the
-  // CONTENT below changes. The screen regression tests assert this stability.
   return (
     <div className="grid empty:hidden" data-testid="status-strip">
       <StripContent
@@ -65,9 +50,6 @@ export function StatusStrip({
         phase={phase}
         cancelPending={cancelPending}
         startPending={startPending}
-        pages={pages}
-        selectedTotal={selectedTotal}
-        selectedError={selectedError}
         onRerun={onRerun}
       />
     </div>
@@ -79,46 +61,22 @@ function StripContent({
   phase,
   cancelPending,
   startPending,
-  pages,
-  selectedTotal,
-  selectedError,
   onRerun,
 }: Readonly<{
   crawl: SiteCrawl | null;
   phase: SiteHealthPhase;
   cancelPending: boolean;
   startPending: boolean;
-  pages: PageSummary[];
-  selectedTotal: number | null;
-  selectedError: boolean;
   onRerun?: () => void;
 }>) {
   if (startPending) {
-    return (
-      <Callout tone="info">
-        {crawl
-          ? 'Starting a fresh crawl — current results stay visible until the new run completes.'
-          : 'Starting crawl — pages will appear below as they are found.'}
-      </Callout>
-    );
+    return <Notice tone="info">{crawl ? 'Starting a fresh crawl.' : 'Starting crawl.'}</Notice>;
   }
 
-  // The phase inputs have not all settled: say nothing rather than narrate a
-  // state that is about to be corrected. (The screen holds its skeleton for
-  // this beat, so it is not normally reached from there.)
   if (phase === 'resolving') return null;
 
   if (!crawl || phase === 'empty') {
-    // Direct component callers retain an empty-state fallback. The canonical
-    // layout owns the actionable first-crawl placeholder.
-    return (
-      <QueryState
-        kind="empty"
-        icon={ICONS.siteHealth}
-        heading="No crawl yet"
-        description="Discover and analyze your site's pages for AI search optimization. Start a crawl to see your pages, scores, and issues here — this screen updates in place as the crawl progresses."
-      />
-    );
+    return <StateBlock kind="empty" icon={ICONS.siteHealth} heading="No crawl yet" />;
   }
 
   if (phase === 'discovering') {
@@ -126,22 +84,13 @@ function StripContent({
   }
 
   if (phase === 'analyzing') {
-    return (
-      <AnalysisStrip
-        crawl={crawl}
-        cancelPending={cancelPending}
-        pages={pages}
-        selectedTotal={selectedTotal}
-        selectedError={selectedError}
-      />
-    );
+    return <AnalysisStrip crawl={crawl} cancelPending={cancelPending} />;
   }
 
   if (phase === 'terminal') return <TerminalNotice crawl={crawl} onRerun={onRerun} />;
   return <DashboardNotice crawl={crawl} />;
 }
 
-/** Why a terminal crawl has no score: its own reason wherever there is one. */
 function terminalMessage(
   status: SiteCrawl['status'],
   failure: ReturnType<typeof crawlFailureCopy> | null,
@@ -154,10 +103,10 @@ function terminalMessage(
 function TerminalNotice({ crawl, onRerun }: Readonly<{ crawl: SiteCrawl; onRerun?: () => void }>) {
   const failure = crawl.status === 'failed' ? crawlFailureCopy(crawl) : null;
   const message = terminalMessage(crawl.status, failure);
-  // A failed crawl is recovered by running it again, offered on the notice.
   if (failure)
     return (
-      <MutationNotice
+      <Notice
+        kind="mutation"
         notice={{ message, retryable: false }}
         recovery={
           onRerun ? (
@@ -169,23 +118,21 @@ function TerminalNotice({ crawl, onRerun }: Readonly<{ crawl: SiteCrawl; onRerun
       />
     );
   return (
-    <Callout tone="info">
+    <Notice tone="info">
       <RunNotice crawl={crawl} message={message} />
-    </Callout>
+    </Notice>
   );
 }
 
 function DashboardNotice({ crawl }: Readonly<{ crawl: SiteCrawl }>) {
+  const timeZone = useDisplayTimeZone();
   const notice = dashboardRunNotice(crawl);
-  const analyzed = crawl.counters.analyzed || crawl.analyzed_count;
+  const ranAt = crawl.completed_at ?? crawl.started_at ?? crawl.created_at;
   return (
     <ProgressRow
       crawl={crawl}
-      narration={notice?.message ?? 'Latest crawl results'}
-      counts={[
-        { label: 'Pages discovered', value: crawl.visible_url_count },
-        { label: 'Pages analyzed', value: analyzed },
-      ]}
+      narration={notice?.message ?? `Latest crawl · ${formatStripTimestamp(ranAt, timeZone)}`}
+      counts={[]}
     />
   );
 }
@@ -213,44 +160,43 @@ function ProgressRow({
 }: Readonly<{
   crawl: SiteCrawl;
   narration: string;
-  counts: ReadonlyArray<{ label: string; value: number | null; className?: string }>;
-  /** Show the live pulse — work is ongoing but not reflected in the counters. */
+  counts: readonly ProgressCount[];
   active?: boolean;
   children?: ReactNode;
 }>) {
   return (
-    <Stack>
-      <Inline gap="meta" className="justify-between">
-        <Inline gap="compact">
-          <CrawlStatusBadge crawl={crawl} />
-          <Inline as="span" className="type-body">
-            {active ? <Dot data-testid="activity-pulse" className="activity-dot bg-info" /> : null}
-            {/* The live region is the TEXT, not the row: announcing the whole
-                  row would re-read every counter on each poll. */}
-            <span className="truncate" aria-live="polite">
+    <Section aria-label="Crawl status">
+      <Stack>
+        <Inline gap="meta" className="justify-between">
+          <Inline gap="item" className="min-w-0">
+            <CrawlStatusBadge crawl={crawl} />
+            {active ? (
+              <span data-testid="activity-pulse" className="inline-flex">
+                <Spinner />
+              </span>
+            ) : null}
+            <span className="type-body min-w-0" aria-live="polite">
               {narration}
             </span>
           </Inline>
+          <Inline as="dl" gap="meta" className="empty:hidden">
+            {counts.map((count) => (
+              <Inline key={count.label} gap="item">
+                <dt className="type-body text-ink-2">{count.label}</dt>
+                <dd className="type-body text-ink tabular-nums">
+                  {count.value === null ? (
+                    <Absence state="not_measured" />
+                  ) : (
+                    formatCount(count.value)
+                  )}
+                </dd>
+              </Inline>
+            ))}
+          </Inline>
         </Inline>
-        <Inline as="dl" gap="meta">
-          {counts.map((count) => (
-            <Inline key={count.label} className="type-body">
-              <dt className="type-label">{count.label}</dt>
-              <dd>
-                {count.value === null ? (
-                  <UnavailableValue state="not_measured" />
-                ) : (
-                  <InlineFigure className={textRole('emphasis', count.className)}>
-                    {formatCount(count.value)}
-                  </InlineFigure>
-                )}
-              </dd>
-            </Inline>
-          ))}
-        </Inline>
-      </Inline>
-      {children}
-    </Stack>
+        {children}
+      </Stack>
+    </Section>
   );
 }
 
@@ -261,21 +207,15 @@ function DiscoveryStrip({
   crawl: SiteCrawl;
   cancelPending: boolean;
 }>) {
-  const provisional = isDiscoveryProvisional(crawl);
   const showTotal = canShowDiscoveredTotal(crawl);
   let narration: string;
   if (cancelPending) {
-    narration = 'Stopping crawl — finishing the page in flight';
-  } else if (provisional) {
-    narration = `${discoveryProgressLabel(crawl)} — scanning continues in the background`;
+    narration = 'Stopping crawl…';
   } else {
     narration = discoveryProgressLabel(crawl);
   }
 
-  const counts: Array<{ label: string; value: number | null }> = [
-    { label: 'Pages discovered', value: crawl.visible_url_count },
-    { label: 'Pages analyzed', value: crawl.counters.analyzed },
-  ];
+  const counts: ProgressCount[] = [];
   if (showTotal && crawl.total_url_count !== null) {
     counts.push({ label: 'Total discovered', value: crawl.total_url_count });
   }
@@ -288,74 +228,52 @@ function DiscoveryStrip({
 function AnalysisStrip({
   crawl,
   cancelPending,
-  pages,
-  selectedTotal,
-  selectedError,
-}: Readonly<{
-  crawl: SiteCrawl;
-  cancelPending: boolean;
-  pages: PageSummary[];
-  selectedTotal: number | null;
-  selectedError: boolean;
-}>) {
-  const summary = crawl.score_summary;
-  const selected =
-    crawl.counters.selected || summary?.selected_count || selectedTotal || pages.length;
-  const narration = analysisNarration(crawl, cancelPending);
-
+}: Readonly<{ crawl: SiteCrawl; cancelPending: boolean }>) {
   return (
     <ProgressRow
       crawl={crawl}
-      narration={narration}
-      // Background re-discovery can leave the counters still; the pulse is
-      // what distinguishes "working" from "stuck".
+      narration={analysisNarration(crawl, cancelPending)}
       active={!cancelPending && crawl.counters.activity.state !== 'stalled'}
-      counts={analysisCounts(crawl, selected)}
-    >
-      {selectedError ? (
-        <Callout tone="warning">
-          Could not load the monitored-page count — progress totals may be approximate until it
-          refreshes.
-        </Callout>
-      ) : null}
-    </ProgressRow>
+      counts={analysisCounts(crawl)}
+    />
   );
 }
 
-type ProgressCount = { label: string; value: number | null; className?: string };
+type ProgressCount = { label: string; value: number | null };
 
 function analysisNarration(crawl: SiteCrawl, cancelPending: boolean): string {
-  if (cancelPending) return 'Cancelling — finishing the page in flight and stopping';
+  if (cancelPending) return 'Cancelling…';
   if (crawl.counters.activity.state === 'waiting') {
     return crawl.counters.activity.reason === 'host_gate'
-      ? 'Waiting for the site host gate while the worker lease stays healthy'
-      : 'Waiting for the next persisted retry window';
+      ? 'Waiting for the site host'
+      : 'Waiting to retry';
   }
-  if (crawl.counters.activity.state === 'stalled')
-    return 'Worker lease expired — recovery is pending';
+  if (crawl.counters.activity.state === 'stalled') return 'Stalled. Recovery is pending.';
   return !crawl.sample_mode && !isDiscoveryTerminal(crawl.discovery_status)
-    ? 'Auditing monitored pages while discovery re-scans the site in the background'
-    : 'Auditing monitored pages for Web Fundamentals and AEO issues';
+    ? 'Auditing monitored pages; discovery is re-scanning'
+    : 'Auditing monitored pages';
 }
 
-function analysisCounts(crawl: SiteCrawl, selected: number): ProgressCount[] {
+function analysisCounts(crawl: SiteCrawl): ProgressCount[] {
   const { counters } = crawl;
-  const fixed: ProgressCount[] = [
-    { label: 'Pages discovered', value: crawl.visible_url_count },
-    { label: 'Pages selected', value: selected },
-  ];
+  const fixed: ProgressCount[] = [];
   const robots = counters.failure_breakdown.robots_denied;
   if (robots > 0) {
-    fixed.push({ label: 'Blocked by robots.txt', value: robots, className: 'text-warning' });
+    fixed.push({ label: 'Blocked by robots.txt', value: robots });
   }
   return [
     ...fixed,
     ...(['http_4xx', 'http_5xx', 'timeout'] as const)
       .filter((code) => counters.failure_breakdown[code] > 0)
       .map((code) => ({
-        label: code === 'timeout' ? 'Timeouts' : code.replace('_', ' ').toUpperCase(),
+        label: FAILURE_LABELS[code],
         value: counters.failure_breakdown[code],
-        className: 'text-negative',
       })),
   ];
 }
+
+const FAILURE_LABELS = {
+  http_4xx: 'HTTP 4xx',
+  http_5xx: 'HTTP 5xx',
+  timeout: 'Timeouts',
+} as const;

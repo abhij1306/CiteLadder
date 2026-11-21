@@ -1,22 +1,14 @@
-/**
- * The Opportunity families a refresh reads. Each names the source identity
- * its hits depend on, produces its hits from persisted evidence, and says
- * whether its source was present and which of its identity fields age out;
- * the refresh resolves the shared sources once and iterates this list, so a
- * new family is one entry here, never another branch in the refresh.
- */
 import { sql } from 'kysely';
 import {
   detectBrandAbsentHighValuePrompt,
+  detectIssueGroups,
   detectOwnedPageNotCited,
-  detectSiteIssueOpportunities,
 } from '../analysis/opportunities/detectors.ts';
 import type { DetectorHit } from '../analysis/opportunities/evidence.ts';
 import {
   buildSourceProjection,
   emptySourceProjection,
 } from '../analysis/opportunities/source-mix.ts';
-import { policy } from '../config.ts';
 import { sourcePageVocabulary } from '../config/source-pages.ts';
 import type { Database } from '../db/database.ts';
 import { foldedRerunId } from '../site-health/reads/crawl.ts';
@@ -24,12 +16,9 @@ import { contentGapHits, contentGapSource, type ContentGapSource } from './conte
 import { earnedPageHits } from './earned-page-hits.ts';
 import { internalLinkHits, internalLinkRunId } from './internal-link-hits.ts';
 import { stampSourceMix, type SourceIdentity } from './refresh-compute.ts';
-import {
-  confirmedDeclineHits,
-  loadSiteEvidence,
-  loadVisibilityEvidence,
-} from './refresh-evidence.ts';
+import { confirmedDeclineHits, loadVisibilityEvidence } from './refresh-evidence.ts';
 import { changeHits, commerceHits, demandHits } from './refresh-hits.ts';
+import { loadSiteEvidence } from './refresh-site-evidence.ts';
 import { searchGapHits, searchGapSource, type SearchGapSource } from './search-gap-hits.ts';
 import {
   currentDemandSnapshot,
@@ -44,17 +33,11 @@ import {
   type Scope,
 } from './sources.ts';
 
-const o = policy.opportunity.opportunities;
-
-/** The sources one refresh reads, resolved once and shared by every family. */
 export type Sources = {
-  /** The instant the sources were resolved; windowed reads end here. */
   at: Date;
   audit: AuditSource | null;
   commerceAuditId: string | null;
-  /** The project's newest match pass: product metrics move with every pass. */
   commerceMatchPassId: string | null;
-  /** The catalog products' fields: catalog edits move catalog and product findings. */
   commerceCatalogRevision: string | null;
   crawl: CrawlSource | null;
   demand: DemandSource | null;
@@ -63,28 +46,16 @@ export type Sources = {
 };
 type Found = {
   hits: DetectorHit[];
-  /** Evidence a load cap left out, carried onto the snapshot. */
   limitations: string[];
-  /** The brand run's citation mix; only a usable brand run sets it. */
   sourceMix?: Record<string, unknown>;
 };
 type Family = {
-  /** The source identity fields this family's hits are read from. */
   identity(db: Database, scope: Scope, sources: Sources): Promise<Partial<SourceIdentity>>;
   hits(db: Database, scope: Scope, sources: Sources, identity: SourceIdentity): Promise<Found>;
-  /** Whether this refresh had a usable source for the family. */
   present(sources: Sources, found: Found): boolean;
-  /**
-   * Identity fields of a source that ages out by design: a snapshot that read
-   * one is superseded once it is gone, even with no other source present.
-   */
   agesOut?: readonly (keyof SourceIdentity)[];
 };
 
-/**
- * The sources a refresh would read now, without loading their evidence. `at`
- * is the one instant a refresh judges dataset age by, so both resolutions agree.
- */
 export async function resolveSources(db: Database, scope: Scope, at: Date): Promise<Sources> {
   return {
     at,
@@ -99,11 +70,6 @@ export async function resolveSources(db: Database, scope: Scope, at: Date): Prom
   };
 }
 
-/**
- * The source-page state earned-page hits read: the newest inspected reading
- * (older readings are immutable) and the latest change to any page's state,
- * which a failed or blocked inspection moves without a new reading.
- */
 async function sourcePagesRevision(db: Database, scope: Scope) {
   const { rows } = await sql<{ reading: string | null; pages: string | null }>`
     select
@@ -132,7 +98,6 @@ const demand: Family = {
   present: (sources) => sources.demand !== null,
 };
 
-/** The brand run: prompt gaps, cited pages to get listed on, and confirmed declines. */
 const visibility: Family = {
   identity: async (db, scope, { audit }) => ({
     audit_id: audit?.id ?? null,
@@ -145,7 +110,6 @@ const visibility: Family = {
       scope.workspaceId,
       audit,
     );
-    // A run without its metric snapshot is not usable yet.
     if (metricId === null) return none();
     let hits = [
       ...detectBrandAbsentHighValuePrompt(evidence),
@@ -160,21 +124,14 @@ const visibility: Family = {
     ];
     const sourceMix: Record<string, unknown> = buildSourceProjection(evidence.analyses, gaps);
     stampSourceMix(audit.id, evidence.prompt_snapshots, gaps, sourceMix);
-    // Page-keyed, over the FULL eligible answer set rather than the gap prompts.
     hits.push(...(await earnedPageHits(db, scope, audit, evidence)));
     hits = hits.map((hit) => ({ ...hit, source_metric_ids: [metricId] }));
     hits.push(...(await confirmedDeclineHits(db, scope.workspaceId, audit.id)));
     return { hits, limitations, sourceMix };
   },
-  // Only a brand run with its metric snapshot is usable.
   present: (_sources, found) => found.sourceMix !== undefined,
 };
 
-/**
- * Commerce reads the per-product metrics over every matched answer (brand and
- * Commerce runs alike), the catalog's own fields and its latest run's shelf,
- * so brand and Commerce Actions never replace each other.
- */
 const commerce: Family = {
   identity: async (
     _db,
@@ -192,34 +149,26 @@ const commerce: Family = {
   present: (sources) => sources.commerceAuditId !== null || sources.commerceMatchPassId !== null,
 };
 
-/** The crawl: Site Health findings, contextual links and page changes. */
 const site: Family = {
   identity: async (db, scope, { crawl }) => ({
     site_crawl_id: crawl?.id ?? null,
-    // A page rerun landing in the crawl moves its evidence (SH-B9).
     site_rerun_id: crawl ? await foldedRerunId(db, crawl) : null,
     internal_link_run_id: crawl ? await internalLinkRunId(db, scope, crawl.id) : null,
   }),
   async hits(db, scope, { crawl }, identity) {
     if (crawl === null) return none();
-    const evidence = await loadSiteEvidence(db, scope.workspaceId, crawl);
     return {
       hits: [
-        ...detectSiteIssueOpportunities(evidence),
+        ...detectIssueGroups(await loadSiteEvidence(db, crawl)),
         ...(await internalLinkHits(db, scope, identity.internal_link_run_id)),
         ...(await changeHits(db, scope.workspaceId, crawl)),
       ],
-      limitations: evidence.truncated
-        ? [
-            `Only the first ${o.RECOMPUTE_MAX_ISSUES} Site Health findings were ranked; later ones are not shown.`,
-          ]
-        : [],
+      limitations: [],
     };
   },
   present: (sources) => sources.crawl !== null,
 };
 
-/** Keyword gaps: the reviewed datasets, while recent enough. */
 const searchGaps: Family = {
   identity: async (_db, _scope, { gaps }) => ({ search_gap_revision: gaps?.revision ?? null }),
   hits: (db, scope, { gaps, demand: snapshot, crawl }) =>
@@ -228,7 +177,6 @@ const searchGaps: Family = {
   agesOut: ['search_gap_revision'],
 };
 
-/** Content angles: the latest succeeded run, while its newest audit is recent enough. */
 const contentGaps: Family = {
   identity: async (_db, _scope, { contentGaps: source }) => ({
     content_angle_run_id: source.run?.id ?? null,
@@ -256,7 +204,6 @@ const EMPTY_IDENTITY: SourceIdentity = {
   content_angle_run_id: null,
 };
 
-/** Every family's identity fields, read in order on the caller's connection. */
 export async function sourceIdentity(
   db: Database,
   scope: Scope,
@@ -267,15 +214,10 @@ export async function sourceIdentity(
   return identity;
 }
 
-/** Whether the snapshot whose source identity is `read` read a source that ages out. */
 export function readAgingSource(read: Record<string, unknown>): boolean {
   return FAMILIES.some((family) => family.agesOut?.some((field) => Boolean(read[field])));
 }
 
-/**
- * Every family's hits and limitations, the brand run's citation mix, the
- * brand run itself when it was usable, and whether any family had a source.
- */
 export async function collectFamilies(
   db: Database,
   scope: Scope,

@@ -1,11 +1,3 @@
-/**
- * Crawl events as a JSON replay or a Server-Sent Events tail.
- *
- * Both resume after a client's last event id; an id that is not an event of
- * this crawl yields nothing rather than replaying the whole history, and one
- * that is not a UUID is refused before either is read. Without
- * count disclosure every payload drops its total-bearing keys.
- */
 import { siteCrawlEventSchema } from '@citeladder/contracts/site-health';
 import { sql } from 'kysely';
 import type { z } from 'zod';
@@ -19,7 +11,6 @@ import { siteReadSettings } from '../runtime.ts';
 import { countDisclosure, isTerminal, loadCrawl, type Crawl } from './crawl.ts';
 
 const COUNT_BEARING = new Set<string>(policy.site_health.reads.event_count_bearing_keys);
-// Polls after the crawl turns terminal, so its final events still arrive.
 const TERMINAL_GRACE_POLLS = policy.site_health.reads.terminal_grace_polls;
 
 type EventRow = {
@@ -68,11 +59,6 @@ export async function eventReplay(
   return events.map((event) => eventView(event, countDisclosure(crawl)));
 }
 
-/**
- * A crawl's events as a tail. Each poll reloads the crawl in the workspace,
- * so a crawl that disappears ends the stream, and the next page is disclosed
- * as the crawl now allows.
- */
 export function crawlEventTail(
   db: Database,
   workspaceId: string,

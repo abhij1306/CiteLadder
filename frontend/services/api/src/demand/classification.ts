@@ -7,7 +7,6 @@ import { normalizeQuery as foldQuery } from '../traffic/normalization.ts';
 import { compareText } from '../text-order.ts';
 import { overrideBody } from '../routes/demand-contracts.ts';
 
-/** The three cohorts a query can belong to; an override row is parsed into one. */
 const queryClassification = overrideBody.shape.classification;
 export type QueryClassification = z.infer<typeof queryClassification>;
 

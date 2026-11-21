@@ -1,21 +1,9 @@
-import { Badge } from '@/components/ui/badge';
+import { StatusMark } from '@/components/ui/status-mark';
 import { Passage } from '@/components/ui/passage';
 import { textRole } from '@/components/ui/typography';
 
-/** The minimum an entity must carry to be shown as found on a page. */
 export type QuotedEntity = { entity_name: string; passages: readonly string[] };
 
-/**
- * The names found ON a page, each beside the line that proves it.
- *
- * One component because it enforces one rule: a name never appears here
- * without its quote. Two copies meant that rule was upheld in two places and
- * could stop being upheld in one of them.
- *
- * What is deliberately NOT here is the looser set of names that merely
- * appeared in an answer citing the page. Those are a different fact, are
- * labelled as such by their caller, and never scored anything.
- */
 export function OnPageEntities({
   heading,
   entities,
@@ -30,12 +18,12 @@ export function OnPageEntities({
   if (!quoted.length) return null;
   return (
     <div className="grid gap-2">
-      <p className={textRole('label')}>{heading}</p>
+      <p className={textRole('body', 'text-ink-2')}>{heading}</p>
       <div className="flex flex-wrap gap-2">
         {quoted.map((entity) => (
-          <Badge key={entity.entity_name} variant="classification" value="competitor">
+          <StatusMark key={entity.entity_name} variant="classification" value="competitor">
             {entity.entity_name}
-          </Badge>
+          </StatusMark>
         ))}
       </div>
       {quoted.map((entity) =>

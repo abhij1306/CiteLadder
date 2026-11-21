@@ -16,7 +16,6 @@ const G = policy.prompts.generation;
 export const generationSetting = (name: keyof typeof policy.prompts.generation_settings) =>
   Number(resolveSettingSpec(policy.prompts.generation_settings[name], process.env));
 
-/** Personas become the run's audience facets, bounded by policy. */
 const generationDistribution = promptGenerationDistributionRequestSchema
   .extend({
     personas: z
@@ -25,7 +24,6 @@ const generationDistribution = promptGenerationDistributionRequestSchema
       .default([]),
   })
   .refine(distributionWithinRun, { message: DISTRIBUTION_EXCEEDS_RUN });
-/** Prompt cohorts a run can plan, core first so it wins ties. */
 export const generationCohorts = promptGenerationCohortSchema.options;
 
 export const generationInput = promptGenerateRequestSchema.extend({
@@ -34,7 +32,6 @@ export const generationInput = promptGenerateRequestSchema.extend({
     .int()
     .min(1)
     .default(() => generationSetting('default_count')),
-  /** A short note for this run only; reference data for drafting, never a business fact. */
   run_context: z.string().trim().max(G.run_context_max_chars).nullish(),
   distribution: generationDistribution.nullish(),
   seed_query_ids: z.array(z.uuid()).max(G.seed_query_ids_max).default([]),
@@ -47,10 +44,6 @@ export const wantedTopics = (input: GenerationInput) => [
   ...new Set([...input.topic_ids, ...(input.topic_id ? [input.topic_id] : [])]),
 ];
 
-/**
- * The cohort shares a run plans: a distribution's shares, else the whole run
- * in the requested cohort. Core takes what the branded shares leave.
- */
 export function cohortShares(
   input: Pick<GenerationInput, 'cohort' | 'distribution'>,
 ): Record<GenerationCohort, number> {
@@ -68,7 +61,6 @@ export function cohortShares(
   };
 }
 
-/** Everything a request asked for that changes the run, in one canonical shape. */
 export function requestKey(input: GenerationInput) {
   return JSON.stringify({
     count: input.count,
@@ -83,7 +75,6 @@ export function requestKey(input: GenerationInput) {
   });
 }
 
-/** The request's own shape, checked before any read: no topics are needed. */
 export function validateRequest(input: GenerationInput) {
   if (input.count > generationSetting('max_count'))
     throw generationInvalid('Requested count exceeds generation limit');
@@ -95,7 +86,6 @@ export function validateRequest(input: GenerationInput) {
     throw generationInvalid('Seed queries need their search data source');
 }
 
-/** The request's shape plus every selected topic belonging to the project's `topics`. */
 export function validateSelection(input: GenerationInput, topics: readonly { id: string }[]) {
   validateRequest(input);
   if (wantedTopics(input).some((id) => !topics.some((topic) => topic.id === id)))

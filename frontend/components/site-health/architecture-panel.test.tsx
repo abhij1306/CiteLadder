@@ -34,7 +34,6 @@ function architecture(overrides: Record<string, unknown> = {}) {
         page_count: 2,
         median_depth: 1,
         indexable_count: 2,
-        duplicate_metadata_count: 1,
         orphan_count: 1,
       },
       {
@@ -42,7 +41,6 @@ function architecture(overrides: Record<string, unknown> = {}) {
         page_count: 1,
         median_depth: 0,
         indexable_count: 1,
-        duplicate_metadata_count: 0,
         orphan_count: 0,
       },
     ],
@@ -116,8 +114,7 @@ describe('Architecture panel', () => {
 
     expect(await screen.findByRole('heading', { name: 'Page kinds' })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Observed hierarchy pages' })).toBeInTheDocument();
-    // Persisted summaries, not recomputed ones.
-    expect(screen.getByText('67%')).toBeInTheDocument();
+    expect(screen.getByText('66.7%')).toBeInTheDocument();
     expect(screen.getByText('5')).toBeInTheDocument();
     expect(screen.getByText('8 including menus')).toBeInTheDocument();
   });
@@ -144,9 +141,30 @@ describe('Architecture panel', () => {
     const row = (url: string) => within(tree).getByRole('link', { name: url }).parentElement!;
     expect(row('https://acme.test/shop/bags')).toHaveTextContent('Breadcrumb');
     const bootsRow = row('https://acme.test/shop/boots');
-    expect(bootsRow.textContent).toBe('https://acme.test/shop/bootsProduct');
-    // The home page is the root, not a page missing its parent.
-    expect(row('https://acme.test/').textContent).toBe('https://acme.test/Homepage');
+    expect(bootsRow.textContent).toBe('/shop/bootsProduct');
+    expect(row('https://acme.test/').textContent).toBe('/Homepage');
+  });
+
+  it('shows the first rows of a long hierarchy and expands the rest in place', async () => {
+    const [home] = architecture().nodes;
+    const pages = Array.from({ length: 11 }, (_, index) => ({
+      ...home,
+      site_url_id: `66666666-6666-4666-8666-${String(index).padStart(12, '0')}`,
+      url: `https://acme.test/p/${String(index).padStart(2, '0')}`,
+      page_kind: 'product',
+      parent_site_url_id: HOME,
+      parent_source: 'url_parent',
+      depth_from_home: 1,
+    }));
+    stubArchitecture({ nodes: [home, ...pages] });
+    renderWithProviders(<ArchitecturePanel projectId={PROJECT} crawlId={CRAWL} />);
+
+    const tree = await screen.findByRole('region', { name: 'Observed hierarchy pages' });
+    expect(within(tree).getAllByRole('link')).toHaveLength(10);
+    expect(within(tree).queryByRole('link', { name: 'https://acme.test/p/10' })).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Show all 12' }));
+    expect(within(tree).getAllByRole('link')).toHaveLength(12);
+    expect(screen.queryByRole('button', { name: /Show all/ })).toBeNull();
   });
 
   it('reveals all URLs assigned to a page kind in the row it controls', async () => {
@@ -182,11 +200,7 @@ describe('Architecture panel', () => {
     const orphans = screen.getAllByText('Orphaned pages')[0]!.closest('div');
     expect(within(orphans!).getByText('1')).toBeInTheDocument();
     expect(screen.queryByText(/withheld/i)).toBeNull();
-    // The scope note is what keeps the number honest: it is a claim about the
-    // pages this crawl fetched, not about the whole site.
-    expect(
-      screen.getAllByText('not linked from any page this crawl fetched').length,
-    ).toBeGreaterThan(0);
+    expect(screen.getAllByText('within this crawl').length).toBeGreaterThan(0);
   });
 
   it('renders an observed zero', async () => {
@@ -220,8 +234,6 @@ describe('Architecture panel', () => {
     stubArchitecture();
     renderWithProviders(<ArchitecturePanel projectId={PROJECT} crawlId={CRAWL} />);
 
-    // The card shows the number only; the evidence lives behind it. The
-    // control is named by what it DOES — "1" alone is not a reason to press it.
     const orphanCount = await screen.findByRole('button', { name: 'View 1 orphaned page' });
     expect(screen.queryByText('Boots')).toBeNull();
 
@@ -241,9 +253,9 @@ describe('Architecture panel', () => {
       limitations: ['This crawl has no observed architecture yet.'],
     });
     renderWithProviders(<ArchitecturePanel projectId={PROJECT} crawlId={CRAWL} />);
-    // An informational notice is a polite status, not an alert.
-    expect(await screen.findByRole('status')).toHaveTextContent(
-      'This crawl has no observed architecture yet.',
-    );
+    expect(
+      await screen.findByRole('heading', { name: "Site architecture isn't available yet" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('This crawl has no observed architecture yet.')).toBeInTheDocument();
   });
 });

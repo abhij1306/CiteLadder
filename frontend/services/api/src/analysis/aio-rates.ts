@@ -1,10 +1,3 @@
-/**
- * Published rates for the observed Google AI Overview surface.
- *
- * Two rules run through every rate: failed and pending observations are excluded from every
- * denominator, and an empty denominator is UNAVAILABLE (`value: null`),
- * never 0%. A rate always travels with the denominator it divided by.
- */
 import { policy } from '../config.ts';
 
 const DENOMINATOR_SUCCESSFUL_OBSERVATIONS = 'successful_observations';
@@ -28,7 +21,6 @@ export type AioObservationCounts = {
   excluded: number;
 };
 
-/** One scoped observation: its outcome, overview flag and the answer's signals. */
 export type AioObservationRow = [
   outcome: string,
   aioPresent: boolean | null,
@@ -45,11 +37,6 @@ function rate(numerator: number, denominator: number, kind: string): AioRate {
   };
 }
 
-/**
- * Fold the scoped observation rows once, so the rates cannot drift apart.
- * An overview-present row whose flag disagrees is a persistence bug, and a
- * rate derived from it would publish data known to be wrong: it throws.
- */
 export function countObservations(rows: readonly AioObservationRow[]): AioObservationCounts {
   const counts = {
     successful: 0,
@@ -77,27 +64,22 @@ export function countObservations(rows: readonly AioObservationRow[]): AioObserv
   return counts;
 }
 
-/** How often an overview appears at all: a property of the queries, not the brand. */
 export function triggerRate(counts: AioObservationCounts): AioRate {
   return rate(counts.with_overview, counts.successful, DENOMINATOR_SUCCESSFUL_OBSERVATIONS);
 }
 
-/** Of the overviews shown, how many named the brand (conditional). */
 export function brandMentionRateWhenPresent(counts: AioObservationCounts): AioRate {
   return rate(counts.brand_mentioned, counts.with_overview, DENOMINATOR_OBSERVATIONS_WITH_AIO);
 }
 
-/** Of every successful observation, how many named the brand (unconditional). */
 export function overallBrandVisibility(counts: AioObservationCounts): AioRate {
   return rate(counts.brand_mentioned, counts.successful, DENOMINATOR_SUCCESSFUL_OBSERVATIONS);
 }
 
-/** Of the overviews shown, how many cited an owned domain (conditional). */
 export function ownedCitationRateWhenPresent(counts: AioObservationCounts): AioRate {
   return rate(counts.owned_citation, counts.with_overview, DENOMINATOR_OBSERVATIONS_WITH_AIO);
 }
 
-/** One competitor over the overviews shown, comparable with the brand's rate. */
 export function competitorMentionRate(counts: AioObservationCounts, mentions: number): AioRate {
   return rate(mentions, counts.with_overview, DENOMINATOR_OBSERVATIONS_WITH_AIO);
 }

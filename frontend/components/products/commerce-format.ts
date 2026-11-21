@@ -1,12 +1,7 @@
 import type { CompetitorCandidate } from '@citeladder/contracts/commerce-suite';
 
-import type { StatusValue } from '@/components/ui/badge';
+import type { StatusValue } from '@/components/ui/status-mark';
 
-/**
- * Discovery status as a sentence, not a status string dropped into one.
- * Interpolating the raw value produced "Discovery for this category is
- * succeeded", and `unavailable` read as success to anyone skimming.
- */
 const FAILURES: Record<string, (kind: string) => string> = {
   unusable_target: (kind) => `This ${kind} needs a clearer name before competitors can be found.`,
   provider_unavailable: () =>
@@ -23,7 +18,6 @@ export function discoveryMessage(status: string, kind: string, errorCode: string
   return `Finding competitors for this ${kind}…`;
 }
 
-/** The candidate's domain — what a person recognises as "who is this?". */
 export function competitorHost(url: string): string {
   try {
     return new URL(url).hostname.replace(/^www\./, '');

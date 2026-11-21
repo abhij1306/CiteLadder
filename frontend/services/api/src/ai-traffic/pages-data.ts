@@ -1,4 +1,3 @@
-/** Each population reaches one row per path hash before the cross-signal join. */
 import { sql, type RawBuilder } from 'kysely';
 import type { Database } from '../db/database.ts';
 import type { CrawlScope } from '../crawl-logs/state.ts';
@@ -23,7 +22,6 @@ export type PageOptions = CrawlReadOptions & {
   pattern?: string | null;
   after?: string[];
   dataset_limit?: number;
-  /** Aggregate each row's source ids (`crawl_ids`, `landing_ids`, `citation_ids`, `audit_ids`). */
   provenance?: boolean;
 };
 export const pageSorts = {
@@ -72,7 +70,6 @@ function pageCursor(sortValue: RawBuilder<unknown>, ascending: boolean, after: s
   if (ascending) return sql`(${sortValue},url_hash)>(${sortAfter},${hashAfter})`;
   return sql`(${sortValue},url_hash)<(${Number(sortAfter)},${hashAfter})`;
 }
-/** A Pages sort key; an unknown one is refused. */
 export function pageSortKey(sort?: string | null): keyof typeof pageSorts {
   if (sort === null || sort === undefined) return 'requests_desc';
   if (!isPageSort(sort)) throw new ApiError(422, 'Invalid Pages sort');
@@ -81,26 +78,23 @@ export function pageSortKey(sort?: string | null): keyof typeof pageSorts {
 function isPageSort(sort: string): sort is keyof typeof pageSorts {
   return Object.hasOwn(pageSorts, sort);
 }
-/**
- * The joined rows for a page, `dataset_limit` (else one past the page size)
- * after the keyset position, in sort order. Provenance id arrays aggregate
- * only for `provenance`, the persisted insight derivation; reads leave them null.
- */
 export async function pageDataset(db: Database, scope: CrawlScope, input: PageOptions = {}) {
-  const { options, crawl, filtered } = await pageSelection(db, scope, input);
+  const { options, crawl, filtered, formatted, format } = await pageSelection(db, scope, input);
   const sort = pageSortKey(options.sort);
   const ascending = sort === 'url_asc',
     column = sql.ref(pageSorts[sort]);
   const sortValue = ascending ? column : sql`coalesce(${column},-1)`;
   const cursor = pageCursor(sortValue, ascending, options.after ?? []);
-  const rows = await sql<JoinedPage>`select * from (${filtered}) f where ${cursor}
-    order by ${sortValue} ${sql.raw(ascending ? 'asc' : 'desc')},url_hash ${sql.raw(ascending ? 'asc' : 'desc')}
-    limit ${options.dataset_limit ?? (options.limit ?? crawlLogs.default_page_size) + 1}`.execute(
-    db,
-  );
+  const order = sql`order by ${sortValue} ${sql.raw(ascending ? 'asc' : 'desc')},url_hash ${sql.raw(ascending ? 'asc' : 'desc')}`;
+  const page = sql`select * from (${filtered}) f where ${cursor} ${order}
+    limit ${options.dataset_limit ?? (options.limit ?? crawlLogs.default_page_size) + 1}`;
+  const rows = await (
+    formatted
+      ? sql<JoinedPage>`${page}`
+      : sql<JoinedPage>`select * from (${format(page)}) p ${order}`
+  ).execute(db);
   return { rows: rows.rows, crawl };
 }
-/** How many rows the filters select across the whole window; an export counts before it reads. */
 export async function pageCount(db: Database, scope: CrawlScope, input: PageOptions = {}) {
   const { filtered } = await pageSelection(db, scope, input);
   const result = await sql<{
@@ -124,19 +118,18 @@ async function pageSelection(db: Database, scope: CrawlScope, input: PageOptions
   const rowConditions = [sql`canonical_url is not null`];
   if (options.url_hash) rowConditions.push(sql`url_hash=${options.url_hash}`);
   if (options.url_hashes) rowConditions.push(sql`url_hash=any(${options.url_hashes}::text[])`);
-  if (options.folder) rowConditions.push(sql`folder=${options.folder}`);
-  if (options.resource_class) rowConditions.push(sql`resource_class=${options.resource_class}`);
-  const rowFilter = sql.join(rowConditions, sql` and `);
-  const path = sql`regexp_replace(canonical_url,'^https?://[^/]+','')`;
+  const formattedConditions = [],
+    and = sql` and `;
+  if (options.folder) formattedConditions.push(sql`folder=${options.folder}`);
+  if (options.resource_class)
+    formattedConditions.push(sql`resource_class=${options.resource_class}`);
   const resources = sql`case ${sql.join(
     crawlers.resource_rules.map(
       (rule) =>
         sql`when ${sql.join(
           [
-            ...rule.paths.map((p) => sql`lower(${path})=${p.toLowerCase()}`),
-            ...rule.extensions.map(
-              (e) => sql`right(lower(${path}),${e.length})=${e.toLowerCase()}`,
-            ),
+            ...rule.paths.map((p) => sql`u.lower_path=${p.toLowerCase()}`),
+            ...rule.extensions.map((e) => sql`right(u.lower_path,${e.length})=${e.toLowerCase()}`),
           ],
           sql` or `,
         )} then ${rule.resource_class}`,
@@ -157,12 +150,12 @@ async function pageSelection(db: Database, scope: CrawlScope, input: PageOptions
       (select url_hash,status_code,sum(requests)::integer n from bot_activity_daily where ${owned} and ${days}
         and identity='exact' and verification='verified' and status_code>=400
         and ${botFilter} group by url_hash,status_code) e group by url_hash),
+    landing_flags as (select url_hash,jsonb_agg(distinct flag) as analytics_quality
+      from ai_referral_landing_daily,jsonb_array_elements_text(analytics_quality) flag where ${owned} and ${days} group by url_hash),
     landing as (select url_hash,min(canonical_url) as canonical_url,min(display_path) as display_path,min(folder) as folder,min(resource_class) as resource_class,sum(sessions)::integer as sessions,sum(key_events) as key_events,
       jsonb_agg(distinct reporting_timezone) as referral_timezones,${rollupIds} as landing_ids,
-      (select coalesce(jsonb_agg(distinct flag),'[]') from ai_referral_landing_daily q,
-        jsonb_array_elements_text(q.analytics_quality) flag where q.workspace_id=${scope.workspaceId}::uuid
-        and q.project_id=${scope.projectId}::uuid and q.url_hash=l.url_hash and q.reporting_date between ${w.start}::date and ${w.end}::date) as analytics_quality
-      from ai_referral_landing_daily l where ${owned} and ${days} group by url_hash),
+      coalesce(lf.analytics_quality,'[]') as analytics_quality
+      from ai_referral_landing_daily l left join landing_flags lf using(url_hash) where ${owned} and ${days} group by url_hash,lf.analytics_quality),
     citation_runs as (${citationRuns(db, scope, windowBounds(w, options)).select('m.owned_citation_pages')}),
     citation as (select p.url_hash,min(p.canonical_url) as canonical_url,count(*)::integer as citations,${citationIds} as citation_ids,${auditIds} as audit_ids
       from citation_runs r cross join lateral jsonb_to_recordset(r.owned_citation_pages) as p(url_hash text,canonical_url text,citation_ids jsonb)
@@ -184,12 +177,26 @@ async function pageSelection(db: Database, scope: CrawlScope, input: PageOptions
       l.sessions,l.key_events,l.analytics_quality,l.referral_timezones,l.landing_ids,c.citations,c.citation_ids,c.audit_ids,f.findings,e.verified_errors
     from keys k left join bot b using(url_hash) left join landing l using(url_hash) left join citation c using(url_hash)
       left join inventory i using(url_hash) left join finding f using(url_hash) left join errors e using(url_hash))
-    ,formatted as (select *,coalesce(stored_display_path,${path}) as display_path,
-      coalesce(stored_folder,
-        '/'||array_to_string((string_to_array(trim(both '/' from ${path}),'/'))[1:${crawlLogs.folder_depth}],'/')) as folder,
-      coalesce(stored_resource_class,${resources}) as resource_class from joined)
-    select * from formatted where ${rowFilter}`;
-  return { options, crawl, filtered };
+    select * from joined where ${sql.join(rowConditions, and)}`;
+  // Deriving a row's path, folder and resource class costs a regex per row,
+  // and the inventory alone can hold tens of thousands of paths: a read
+  // formats only its page unless a folder or resource filter needs them all.
+  // `offset 0` keeps the path one evaluation instead of one per rule.
+  const format = (rows: RawBuilder<unknown>) => sql`select r.*,
+      coalesce(r.stored_display_path,u.path) as display_path,
+      coalesce(r.stored_folder,
+        '/'||array_to_string((string_to_array(trim(both '/' from u.path),'/'))[1:${crawlLogs.folder_depth}],'/')) as folder,
+      coalesce(r.stored_resource_class,${resources}) as resource_class
+    from (${rows}) r cross join lateral (select v.path,lower(v.path) as lower_path from
+      (select regexp_replace(r.canonical_url,'^https?://[^/]+','') as path offset 0) v) u`;
+  if (!formattedConditions.length) return { options, crawl, filtered, formatted: false, format };
+  return {
+    options,
+    crawl,
+    filtered: sql`select * from (${format(filtered)}) x where ${sql.join(formattedConditions, and)}`,
+    formatted: true,
+    format,
+  };
 }
 export function aiBots(includeTraining = false) {
   return crawlers.bots

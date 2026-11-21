@@ -18,7 +18,6 @@ type SiteWorkerOptions = NonNullable<ConstructorParameters<typeof SiteHealthWork
 
 const isPlain = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
-/** `value` laid over `base`, object by object; anything else replaces. */
 function overlay(base: unknown, value: unknown): unknown {
   if (!isPlain(base) || !isPlain(value)) return value;
   const keys = new Set([...Object.keys(base), ...Object.keys(value)]);
@@ -26,10 +25,6 @@ function overlay(base: unknown, value: unknown): unknown {
     [...keys].map((key) => [key, key in value ? overlay(base[key], value[key]) : base[key]]),
   );
 }
-/**
- * Page facts as the extractor persists them for an empty HTML page, with
- * `override` laid over them: every field a reader expects is present.
- */
 export function storedFacts(override: Record<string, unknown> = {}): Record<string, unknown> {
   const empty = extractPageFacts(Buffer.from('<html><body></body></html>'), {
     finalUrl: 'https://example.test/',
@@ -38,7 +33,6 @@ export function storedFacts(override: Record<string, unknown> = {}): Record<stri
   });
   return overlay(empty, override) as Record<string, unknown>;
 }
-/** Page facts the extractor persists for an English page whose body is `body`. */
 export const bodyFacts = (body: string) =>
   extractPageFacts(Buffer.from(`<html lang="en"><body>${body}</body></html>`), {
     finalUrl: 'https://example.test/',
@@ -74,7 +68,6 @@ export class SiteFixtures extends VisibilityFixtures {
     const seed = { ...tenant, root, profileId, crawlId: '' };
     return { ...seed, crawlId: await this.sibling(seed, { status }) };
   }
-  /** Another crawl of the seed's project; `values` override the completed defaults. */
   async sibling(seed: SiteSeed, values: Partial<Insertable<SiteCrawls>> = {}) {
     const crawlId = randomUUID();
     const now = new Date();
@@ -148,11 +141,6 @@ export class SiteFixtures extends VisibilityFixtures {
       .execute();
     return id;
   }
-  /**
-   * A fetch of `from` as the crawler persists it: one attempt row per call,
-   * a 301 answered by `to` (whose final call links the artifact), or, with no
-   * `to`, a fetch abandoned at the redirect limit.
-   */
   async redirect(seed: SiteSeed, from: string, to?: string) {
     const requested = canonicalIdentity(from, seed.root).url;
     const final = to ? canonicalIdentity(to, seed.root).url : null;
@@ -235,7 +223,6 @@ export class SiteFixtures extends VisibilityFixtures {
       taskScope: { workspaceId: seed.workspaceId, crawlId: seed.crawlId },
     });
   }
-  /** Claims exactly task `id` for `worker`, without executing it. */
   async claim(worker: SiteHealthWorker, seed: SiteSeed, kind: string, id: string) {
     const [task] = await worker.queue.claim({
       owner: worker.owner,
@@ -371,8 +358,49 @@ export class SiteFixtures extends VisibilityFixtures {
     return { id, artifactId, taskId, analysisId };
   }
 
-  /** Make exactly these URLs the project's active monitored set, as a crawl's admission would. */
-  /** Make exactly these pages the project's tracked set, in this fill order. */
+  async otherProject(seed: SiteSeed) {
+    const id = await this.project(seed.workspaceId);
+    await this.siteDb
+      .updateTable('projects')
+      .set({ website_url: seed.root })
+      .where('id', '=', id)
+      .execute();
+    const profileId = randomUUID();
+    const now = new Date();
+    await this.siteDb
+      .insertInto('site_health_profiles')
+      .values({
+        id: profileId,
+        workspace_id: seed.workspaceId,
+        project_id: id,
+        root_url: seed.root,
+        root_host: 'example.test',
+        registrable_domain: 'example.test',
+        selection_version: 0,
+        created_at: now,
+        updated_at: now,
+      })
+      .execute();
+    const other = { ...seed, projectId: id, profileId };
+    return { ...other, crawlId: await this.sibling(other) };
+  }
+
+  async sitemapEntry(seed: SiteSeed, page: { siteUrlId: string; url: string }, lastmod?: string) {
+    await this.siteDb
+      .insertInto('site_sitemap_entries')
+      .values({
+        id: randomUUID(),
+        workspace_id: seed.workspaceId,
+        project_id: seed.projectId,
+        crawl_id: seed.crawlId,
+        site_url_id: page.siteUrlId,
+        listed_url: page.url,
+        lastmod: lastmod ?? null,
+        created_at: new Date(),
+      })
+      .execute();
+  }
+
   async monitor(seed: SiteSeed, siteUrlIds: string[]) {
     const now = new Date();
     await this.siteDb
@@ -410,7 +438,6 @@ export class SiteFixtures extends VisibilityFixtures {
       .execute();
   }
 
-  /** A monitored page with its queued analyze task, under a runtime entitled to analyze. */
   async analyzable(
     seed: SiteSeed,
     path: string,
@@ -490,7 +517,6 @@ export class SiteFixtures extends VisibilityFixtures {
       .execute();
     return { siteUrlId, taskId, url: identity.url, hash: identity.hash };
   }
-  /** A discover task for the URL hash, in `status`, with a discover artifact when it succeeded. */
   async discover(
     seed: SiteSeed,
     urlHash: string,
@@ -615,7 +641,6 @@ export class SiteFixtures extends VisibilityFixtures {
       .execute();
     return id;
   }
-  /** The issue a failing `evaluation` of the page raises, as the analyze task writes it. */
   async issue(
     seed: SiteSeed,
     page: { id: string; analysisId: string; artifactId: string },
@@ -694,11 +719,10 @@ export type Served = {
   contentType?: string;
   onFetch?: () => Promise<void>;
 };
-/**
- * A recorded site (keyed by path) behind the real acquirer: robots and pacing
- * run through the gate, every hop is authorized, and each call is reported
- * like the transport does. `requests` collects the paths actually sent.
- */
+const servedKey = (pages: Record<string, Served>, { host, pathname, searchParams }: URL) =>
+  [host + pathname, ...[...searchParams.keys()].map((k) => `${pathname}?${k}`)].find(
+    (key) => key in pages,
+  ) ?? pathname;
 export function recordedSite(
   pages: Record<string, Served>,
   requests: string[] = [],
@@ -707,11 +731,11 @@ export function recordedSite(
     let url = new URL(value);
     for (let hop = 0; hop <= options.redirects; hop++) {
       const target = url;
-      const served = pages[target.pathname];
+      const key = servedKey(pages, target);
+      const served = pages[key];
       const send = async () => {
-        // Match the real transport: gate first, authorization immediately before send.
         await options.authorize?.(target);
-        requests.push(target.pathname);
+        requests.push(key);
         await served?.onFetch?.();
         const status = served?.status ?? (served ? 200 : 404);
         const body = Buffer.from(served?.body ?? '');
@@ -730,7 +754,6 @@ export function recordedSite(
         ? await options.gate(target, send, AbortSignal.timeout(5000))
         : await send();
       const contentType = served?.contentType ?? 'text/html';
-      // Match the real transport: a 2xx of a media type the caller did not accept is refused.
       const acceptable =
         options.contentTypes.includes(contentType) || options.contentTypes.includes('*');
       if (!response.redirect && response.status >= 200 && response.status < 300 && !acceptable)

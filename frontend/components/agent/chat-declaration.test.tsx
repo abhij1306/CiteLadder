@@ -41,77 +41,92 @@ beforeAll(() => mswServer.listen({ onUnhandledFrame: 'error' }));
 afterEach(() => mswServer.resetHandlers());
 afterAll(() => mswServer.close());
 
+const ACTION = '88888888-8888-4888-8888-888888888888';
+
+function actionApi(loaded: Promise<void> = Promise.resolve()) {
+  const posted: unknown[] = [];
+  const declaration = {
+    id: '99999999-9999-4999-8999-999999999999',
+    action_id: ACTION,
+    output_revision_id: REV1,
+    member_opportunity_ids: [],
+    opportunity_snapshot_id: RUN,
+    resolved_before_snapshot_id: null,
+    target_site_url_ids: [],
+    target_external_url: null,
+    declared_implemented_at: NOW,
+    expected_checks: [],
+    state: 'declared',
+    limitations: [],
+    verification_events: [],
+    legs: [
+      {
+        leg: 'next_crawl',
+        state: 'not_scheduled',
+        due_at: null,
+        last_evidence_at: null,
+        source_id: null,
+      },
+    ],
+    checks: [],
+    measured_until: NOW,
+    created_at: NOW,
+  };
+  const action = () => ({
+    id: ACTION,
+    project_id: PROJECT,
+    target_kind: 'page',
+    target_label: 'https://acme.test/pricing',
+    target_url: 'https://acme.test/pricing',
+    target_prompt_id: null,
+    origin: 'evidence',
+    status: posted.length ? 'done' : 'in_progress',
+    measurement: posted.length ? 'measuring' : null,
+    priority_score: 40,
+    priority_band: 'high',
+    families: ['site_health'],
+    approach: 'fix_technical',
+    group: 'fix_site',
+    goal: 'read_site',
+    grouping: 'seo',
+    skill_id: 'technical_health',
+    member_count: 1,
+    declarable_member_count: 1,
+    handoff: { context: 'action', message: 'Work on https://acme.test/pricing.' },
+    evidence_cleared_at: null,
+    created_at: NOW,
+    updated_at: NOW,
+    diagnosis: {},
+    members: [],
+    member_measurement: {},
+    declarable_since: '2026-01-01T00:00:00Z',
+    declaration: posted.length ? declaration : null,
+  });
+  return {
+    posted,
+    handlers: [
+      http.get(`/api/v1/actions/${ACTION}`, async () => {
+        await loaded;
+        return HttpResponse.json(action());
+      }),
+      http.post(`/api/v1/actions/${ACTION}/declaration`, async ({ request }) => {
+        posted.push(await request.json());
+        return HttpResponse.json(declaration, { status: 201 });
+      }),
+    ],
+  };
+}
+
 describe('ChatScreen implementation declaration', () => {
   it('declares the revision on screen implemented and shows what it waits for', async () => {
-    const ACTION = '88888888-8888-4888-8888-888888888888';
     const attached = detail(revision(REV1, 1, 'agent', 'Body.'));
     attached.chat.action_id = ACTION as never;
     attached.outputs[0]!.action_id = ACTION;
-    const declaration = {
-      id: '99999999-9999-4999-8999-999999999999',
-      action_id: ACTION,
-      output_revision_id: REV1,
-      member_opportunity_ids: [],
-      opportunity_snapshot_id: RUN,
-      resolved_before_snapshot_id: null,
-      target_site_url_ids: [],
-      target_external_url: null,
-      declared_implemented_at: NOW,
-      expected_checks: [],
-      state: 'declared',
-      limitations: [],
-      verification_events: [],
-      legs: [
-        {
-          leg: 'next_crawl',
-          state: 'not_scheduled',
-          due_at: null,
-          last_evidence_at: null,
-          source_id: null,
-        },
-      ],
-      checks: [],
-      measured_until: NOW,
-      created_at: NOW,
-    };
-    let declared: typeof declaration | null = null;
-    const posted: unknown[] = [];
-    const action = () => ({
-      id: ACTION,
-      project_id: PROJECT,
-      target_kind: 'page',
-      target_label: 'https://acme.test/pricing',
-      target_url: 'https://acme.test/pricing',
-      target_prompt_id: null,
-      origin: 'evidence',
-      status: declared ? 'implemented' : 'in_progress',
-      priority_score: 40,
-      priority_band: 'high',
-      families: ['site_health'],
-      approach: 'fix_technical',
-      group: 'fix_site',
-      skill_id: 'technical_health',
-      member_count: 1,
-      declarable_member_count: 1,
-      handoff: { context: 'action', message: 'Work on https://acme.test/pricing.' },
-      evidence_cleared_at: null,
-      created_at: NOW,
-      updated_at: NOW,
-      diagnosis: {},
-      members: [],
-      member_measurement: {},
-      declarable_since: '2026-01-01T00:00:00Z',
-      declaration: declared,
-    });
+    const { posted, handlers } = actionApi();
     mswServer.use(
       http.get('/api/v1/agent/skills', () => HttpResponse.json(skills)),
       http.get(`/api/v1/agent/chats/${CHAT}`, () => HttpResponse.json(attached)),
-      http.get(`/api/v1/actions/${ACTION}`, () => HttpResponse.json(action())),
-      http.post(`/api/v1/actions/${ACTION}/declaration`, async ({ request }) => {
-        posted.push(await request.json());
-        declared = declaration;
-        return HttpResponse.json(declaration, { status: 201 });
-      }),
+      ...handlers,
     );
     const user = userEvent.setup();
     renderChat();
@@ -121,8 +136,7 @@ describe('ChatScreen implementation declaration', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Mark implemented' });
     await user.click(within(dialog).getByRole('button', { name: 'Declare implemented' }));
 
-    expect(await within(pane).findByText(/Crawls run when you start one/)).toBeVisible();
-    // The dialog's trigger is gone; focus lands on what replaced it.
+    expect(await within(pane).findByText(/Measured on your next crawl/)).toBeVisible();
     expect(within(pane).getByRole('heading', { name: 'Measurement' })).toHaveFocus();
     expect(
       within(pane).queryByRole('button', { name: 'Mark implemented' }),
@@ -132,6 +146,60 @@ describe('ChatScreen implementation declaration', () => {
         output_revision_id: REV1,
         declared_implemented_at: expect.any(String),
         deployment_reference: null,
+      },
+    ]);
+  });
+
+  it('declares a proposal from its card through the declaration API, then shows the stored declaration', async () => {
+    const proposed = detail(revision(REV1, 1, 'agent', 'Body.'));
+    proposed.messages[1]!.proposals = [
+      {
+        kind: 'declaration',
+        action_id: ACTION,
+        revision: null,
+        go_live_day: '2026-09-24',
+        deployment_reference: 'PR 12',
+      },
+    ];
+    const projected = {
+      ...proposed,
+      actions: [{ id: ACTION, target_label: 'https://acme.test/pricing', status: 'in_progress' }],
+    };
+    let load = () => {};
+    const loaded = new Promise<void>((resolve) => {
+      load = resolve;
+    });
+    const { posted, handlers } = actionApi(loaded);
+    mswServer.use(
+      http.get('/api/v1/agent/skills', () => HttpResponse.json(skills)),
+      http.get(`/api/v1/agent/chats/${CHAT}`, () => HttpResponse.json(projected)),
+      ...handlers,
+    );
+    const user = userEvent.setup();
+    renderChat();
+
+    const card = await screen.findByRole('region', {
+      name: 'Mark https://acme.test/pricing implemented?',
+    });
+    expect(card).toHaveTextContent('Work done outside CiteLadder, live since 2026-09-24');
+    expect(within(card).queryByRole('button', { name: 'Mark implemented' })).toBeNull();
+    load();
+    await user.click(await within(card).findByRole('button', { name: 'Mark implemented' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Mark implemented' });
+    expect(within(dialog).getByRole('textbox', { name: 'What shipped it?' })).toHaveValue('PR 12');
+    await user.click(within(dialog).getByRole('button', { name: 'Declare implemented' }));
+
+    expect(
+      await screen.findByRole('region', {
+        name: 'https://acme.test/pricing is marked implemented',
+      }),
+    ).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Mark implemented' })).not.toBeInTheDocument();
+    expect(posted).toEqual([
+      {
+        output_revision_id: null,
+        declared_implemented_at: new Date(2026, 8, 24, 12).toISOString(),
+        deployment_reference: 'PR 12',
       },
     ]);
   });
@@ -166,11 +234,14 @@ describe('ChatScreen implementation declaration', () => {
           target_prompt_id: null,
           origin: 'evidence',
           status: 'in_progress',
+          measurement: null,
           priority_score: 40,
           priority_band: 'high',
           families: ['site_health'],
           approach: 'fix_technical',
           group: 'fix_site',
+          goal: 'read_site',
+          grouping: 'seo',
           skill_id: 'technical_health',
           member_count: 1,
           declarable_member_count: 1,

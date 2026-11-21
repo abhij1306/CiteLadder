@@ -2,11 +2,6 @@ import { Drawer } from '@/components/ui/drawer';
 import type { TrafficTableScope } from '@/lib/api/ai-traffic';
 import { TrafficPages } from './pages-view';
 
-/**
- * The paths one crawler requested, in a drawer over the Crawlers table. The
- * table pages in place like every other cursor table: its rows and pager stay
- * while the next page loads.
- */
 export function CrawlerPages({
   botId,
   onClose,
@@ -21,7 +16,6 @@ export function CrawlerPages({
         if (!open) onClose();
       }}
       title="Observed crawler pages"
-      description="Joinable path observations for the selected crawler."
     >
       {botId ? (
         <TrafficPages

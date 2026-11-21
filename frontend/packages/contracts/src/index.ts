@@ -7,6 +7,7 @@ export * from './site-health.ts';
 export * from './visibility-trends.ts';
 export * from './visibility-evidence.ts';
 export * from './visibility-perception.ts';
+export * from './visibility-prompt-answers.ts';
 export * from './fact-checking.ts';
 export * from './visibility-ads.ts';
 export * from './source-pages.ts';

@@ -1,8 +1,6 @@
-/** Commerce admission, acquisition and buyer-prompt policy. */
 export const commerce = {
   importer_version: 'commerce-catalog-importer-1',
   projector_version: 'commerce-projector-1',
-  /** In-app product edits (commerce improvement PR 7): the edit version and its bounds. */
   edit: {
     version: 'commerce-product-edit-1',
     description_max_chars: 10_000,
@@ -95,14 +93,8 @@ export const commerce = {
     version: 'commerce-buyer-prompts-1',
     min: 2,
     max: 10,
-    /** Prompts per hero product: the only per-product generation. */
     default: 3,
-    /** A retried generation names its first attempt with this key and is replayed. */
     idempotency_key_max_chars: 128,
-    /**
-     * A category's matrix: buyer contexts × intent stages, one prompt per cell,
-     * plus branded comparisons so branded stay at most `branded_share` of the batch.
-     */
     matrix: {
       contexts: 3,
       stages: ['consideration', 'decision'],
@@ -129,24 +121,12 @@ export const commerce = {
     product_limit: 12,
     term_limit: 8,
   },
-  /**
-   * Catalog matching in every answer (CM1). A new catalog revision re-matches
-   * the successful answers of the last `backfill_days`, `batch_size` answers
-   * per transaction. Crawl projection's revision requests coalesce: one
-   * revision `projection_delay_seconds` after the first projected page that
-   * finds none queued, so a long crawl records at most one per interval.
-   */
   answer_matching: {
     backfill_days: 30,
     batch_size: 25,
     projection_delay_seconds: 120,
   },
-  /** Products the catalog read lists, first by name, beside the full count. */
   catalog_product_limit: 5000,
-  /**
-   * The Products table read: windows a reader may choose (days, no deltas:
-   * CM8), page size, and how many merchant domains a row carries.
-   */
   products: {
     window_days: [7, 30, 90],
     default_window_days: 30,
@@ -154,34 +134,17 @@ export const commerce = {
     max_page_size: 200,
     merchant_limit: 5,
     search_max_chars: 200,
-    /**
-     * The product detail read: rows per ranked list (competing products,
-     * merchants, sources, fan-out queries), prompts, and newest answers.
-     */
     detail: { list_limit: 10, prompt_limit: 50, answer_limit: 50 },
   },
-  /**
-   * The Shopping overview (`/products/overview`), over the Products table's
-   * windows: how many brands and products each ranking lists, how many catalog
-   * products the most and least visible lists show, and the merchant and
-   * fan-out query lists' lengths.
-   */
   overview: {
     ranking_limit: 10,
     extremes_limit: 5,
     merchant_limit: 10,
     fanout_query_limit: 10,
   },
-  /** A catalog import's file size, its products and the row outcomes a result returns. */
   import_max_bytes: 2000000,
   import_max_rows: 10000,
   import_error_limit: 100,
-  /**
-   * Catalog sources (CM3): category path depth, how many Shopify tags become
-   * categories per product, variants kept per product, and the Shopify
-   * storefront fetch (`/products.json`, `page_size` products a page, at most
-   * `max_pages` pages and `max_total_bytes` in all, through the safe fetcher).
-   */
   catalog_sources: {
     category_depth_max: 6,
     tag_category_limit: 5,
@@ -193,7 +156,6 @@ export const commerce = {
       page_max_bytes: 5000000,
       max_total_bytes: 20000000,
       timeout_seconds: 15,
-      /** The whole storefront fetch; the browser waits this long plus overhead. */
       deadline_seconds: 120,
       redirects: 3,
       content_types: ['application/json'],
@@ -230,7 +192,6 @@ export const commerceShelf = {
   result_limit: 8,
   match_min_chars: 3,
   attribute_min_chars: 4,
-  /** A product matched by its brand plus a distinctive attribute, not an identifier. */
   brand_attribute_match_confidence: 0.9,
   excluded_paths: ['/blog/', '/news/', '/article/', '/search'],
   non_pdp_hosts: ['reddit.com', 'youtube.com', 'youtu.be', 'medium.com'],

@@ -1,12 +1,12 @@
 import type { ComponentPropsWithRef } from 'react';
 
 import { parseAbsoluteHttpUrl } from '@/lib/safe-http-url';
+import { cn } from '@/lib/utils';
 
 type ExternalHttpLinkProps = Omit<ComponentPropsWithRef<'a'>, 'href' | 'target' | 'rel'> & {
   href: string | null | undefined;
 };
 
-/** Render API supplied HTTP(S) destinations as links, or readable plain text. */
 export function ExternalHttpLink({
   href,
   children,
@@ -17,7 +17,7 @@ export function ExternalHttpLink({
     const { className, title } = anchorProps;
     return (
       <span
-        className={className}
+        className={cn(className, 'no-underline')}
         title={title}
         aria-label={anchorProps['aria-label']}
         aria-describedby={anchorProps['aria-describedby']}
@@ -27,7 +27,16 @@ export function ExternalHttpLink({
     );
   }
   return (
-    <a {...anchorProps} href={url.toString()} target="_blank" rel="noopener noreferrer">
+    <a
+      {...anchorProps}
+      className={cn(
+        'underline underline-offset-2 [:root:not([data-public-surface])_&]:decoration-transparent [:root:not([data-public-surface])_&]:hover:decoration-current [:root:not([data-public-surface])_&]:focus-visible:decoration-current',
+        anchorProps.className,
+      )}
+      href={url.toString()}
+      target="_blank"
+      rel="noopener noreferrer"
+    >
       {children}
     </a>
   );

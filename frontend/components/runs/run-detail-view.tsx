@@ -1,17 +1,15 @@
 import type { DataTableState } from '@/components/ui/data-table';
-import { Stack } from '@/components/ui/layout';
-import { QueryState } from '@/components/ui/query-state';
-import { readErrorProps, type RetryableRead } from '@/components/ui/read-error';
 import { ExecutionsTable } from '@/components/runs/executions-table';
-import { ProgressPanel } from '@/components/runs/progress-panel';
+import { ProgressPanel, ProgressSkeleton } from '@/components/runs/progress-panel';
 import { ICONS } from '@/lib/icons';
 import type { MutationNotice } from '@/lib/api/mutation-notice';
 import type { Audit, Execution } from '@citeladder/contracts';
+import { readErrorProps, type RetryableRead } from '@/components/ui/notice';
+import { StateBlock } from '@/components/ui/state-block';
 
 type RunDetailViewProps = {
   audit: Audit | undefined;
   auditLoading: boolean;
-  /** The audit read: its failure, and the retry of exactly that read. */
   auditRead: RetryableRead;
   executions: Execution[] | undefined;
   executionsLoading: boolean;
@@ -36,16 +34,15 @@ function AuditSection({
 }: Readonly<RunDetailViewProps>) {
   if (auditRead.error && !audit) {
     return (
-      <QueryState
+      <StateBlock
         kind="error"
         {...readErrorProps(auditRead)}
-        fallback="Something went wrong. Please try again."
+        title="Couldn't load this run"
+        fallback="Check your connection and try again."
       />
     );
   }
-  if (auditLoading || !audit) {
-    return <QueryState kind="loading" label="Loading run…" />;
-  }
+  if (auditLoading || !audit) return <ProgressSkeleton />;
   return (
     <ProgressPanel
       audit={audit}
@@ -58,7 +55,6 @@ function AuditSection({
   );
 }
 
-/** What the executions table shows instead of rows, if anything. */
 function executionsState({
   executions,
   executionsLoading,
@@ -70,7 +66,8 @@ function executionsState({
     return {
       kind: 'error',
       ...readErrorProps(executionsRead),
-      fallback: 'Could not load executions.',
+      title: "Couldn't load the executions",
+      fallback: 'Check your connection and try again.',
     };
   }
   if (executionsLoading || !executions) return { kind: 'loading', label: 'Loading executions…' };
@@ -80,21 +77,23 @@ function executionsState({
       headingLevel: 3,
       icon: ICONS.runs,
       heading: 'No executions yet',
-      description: 'They appear as the run is planned and processed.',
     };
   }
   return undefined;
 }
 
 export function RunDetailView(props: Readonly<RunDetailViewProps>) {
+  if (props.auditRead.error && !props.audit && !props.executions)
+    return <AuditSection {...props} />;
+  if (!props.audit && !props.auditRead.error) return <AuditSection {...props} />;
   return (
-    <Stack gap="workspace">
+    <>
       <AuditSection {...props} />
       <ExecutionsTable
         executions={props.executions ?? []}
         state={executionsState(props)}
         onSelectEvidence={props.onSelectEvidence}
       />
-    </Stack>
+    </>
   );
 }

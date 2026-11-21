@@ -6,18 +6,13 @@ import {
   type ToolCall,
 } from '../models/conversation.ts';
 import { authorize } from './access.ts';
+import { runBuiltin } from './builtin-calls.ts';
 import {
   isBuiltin,
   agentToolList,
-  editDocument,
-  loadSkill,
   methodology,
-  saveDocument,
-  suggestEdits,
   EDIT_DOCUMENT,
-  LOAD_SKILL,
   SAVE_DOCUMENT,
-  SUGGEST_EDITS,
 } from './builtin-tools.ts';
 import { offeredRuleIds } from '../page-documents/content-rules.ts';
 import { pageStates, saveSuggestions } from './suggest-edits.ts';
@@ -40,8 +35,15 @@ import {
   type AttachTarget,
 } from './outputs.ts';
 import { lockRun, terminalize } from './queue.ts';
-import { appendMessage, appendRecoveryReply, getChat, touchChat } from './messages.ts';
-import { readSources, scrubRecordRefs, uniqueSources, uniqueWeb, writtenIds } from './sources.ts';
+import { appendMessage, appendRecoveryReply, getChat, touchChat, turnRequest } from './messages.ts';
+import {
+  readSources,
+  scrubRecordRefs,
+  stepTarget,
+  uniqueSources,
+  uniqueWeb,
+  writtenIds,
+} from './sources.ts';
 import { documentEmitter, type TurnEvents } from './stream.ts';
 import {
   chatTranscripts,
@@ -88,7 +90,6 @@ export type RuntimeDependencies = {
   attachTarget: AttachTarget;
 };
 export type Turn = Awaited<ReturnType<AgentRuntime['load']>>;
-/** What the turn had built when it stopped. */
 type Progress = {
   summary?: PromptSummary;
   open?: { turn: Turn; model: AgentModel; state: TurnState };
@@ -102,7 +103,6 @@ const result = (call: ToolCall, text: string, error: boolean): ConversationBlock
   ...(error ? { is_error: true } : {}),
 });
 
-/** Executes exactly one already-owned turn, fenced at every durable boundary. */
 export class AgentRuntime {
   readonly db: Database;
   readonly deps: RuntimeDependencies;
@@ -123,7 +123,6 @@ export class AgentRuntime {
         userId: run.user_id,
       };
       await authorize(trx, scope);
-      // A turn queued before the Agent changed is asked again, not misreported as a model fault.
       if (
         run.skill_catalog_version !== this.deps.catalog.version ||
         run.registry_version !== this.deps.tools.version ||
@@ -133,21 +132,7 @@ export class AgentRuntime {
         throw new AgentError('skills_changed');
       const chat = await getChat(trx, scope, run.chat_id, true);
       const documents = await chatDocuments(trx, chat);
-      const request = await trx
-        .selectFrom('agent_messages')
-        .select('content')
-        .where('workspace_id', '=', scope.workspaceId)
-        .where('chat_id', '=', chat.id)
-        .where('id', '=', run.user_message_id)
-        .executeTakeFirstOrThrow();
-      // The chat's turn limit bounds its messages.
-      const written = await trx
-        .selectFrom('agent_messages')
-        .select('content')
-        .where('workspace_id', '=', scope.workspaceId)
-        .where('chat_id', '=', chat.id)
-        .where('role', '=', 'user')
-        .execute();
+      const { request, written } = await turnRequest(trx, chat, run.user_message_id);
       const manifest = manifestSchema.parse(run.context_manifest);
       return {
         run,
@@ -155,27 +140,20 @@ export class AgentRuntime {
         chat,
         documents,
         latest: latestDocument(documents),
-        request: request.content,
+        request,
         personIds: writtenIds(
-          ...written.map((message) => message.content),
+          ...written,
           ...documents.flatMap(({ revision }) => [revision.title, revision.body]),
         ),
         manifest,
         pages: await pageStates(trx, scope.workspaceId, pageDocuments(documents)),
-        // The content rules this turn's context offered; suggest_edits accepts only these.
         rules: offeredRuleIds({ sections: manifest.package.sections, action: manifest.action }),
-        // Fixed for the turn: computed once, not on every call.
         context: suppliedManifest(manifest, budget.context_package_max_chars),
         transcripts: await chatTranscripts(trx, scope, chat.id),
         budget,
       };
     });
   }
-  /**
-   * `events` listens to this execution only; persisted state never depends on it.
-   * A stopped turn is left for its caller to end, with the documents it staged
-   * when it can still save them.
-   */
   async execute(
     lease: Lease,
     signal?: AbortSignal,
@@ -186,10 +164,8 @@ export class AgentRuntime {
     try {
       await this.turn(lease, latest, signal, events);
     } catch (error) {
-      // A stopped turn is ended by its caller; a lost lease by recovery.
       if (signal?.aborted) return this.stopped(lease, latest);
       if (error instanceof AgentError && error.code === 'lease') return undefined;
-      // Provider failures were already retried within the call; the turn ends with its reply.
       const code = failureCode(error);
       logLaneFailure(
         AGENT_LANE.table,
@@ -217,7 +193,6 @@ export class AgentRuntime {
       },
     };
   }
-  /** The turn's state with its opening message, and the earlier turns it replays. */
   private opened(turn: Turn, model: AgentModel, latest: Progress) {
     const { budget } = turn;
     const { kept, dropped } = replayed(turn.transcripts, model.adapter, budget);
@@ -251,7 +226,6 @@ export class AgentRuntime {
     };
     return { state, kept };
   }
-  /** The last replayed turn's final response, which the first call continues. */
   private async replayedResponseId(turn: Turn, kept: ReturnType<typeof replayed>['kept']) {
     const lastKept = kept.at(-1);
     return lastKept ? lastResponseId(this.db, turn.scope, lastKept.runId) : null;
@@ -263,7 +237,6 @@ export class AgentRuntime {
     const model = await this.deps.modelFor(turn.run);
     const { state, kept } = this.opened(turn, model, latest);
     const history = kept.flatMap((item) => item.messages);
-    // The cached prefix: built once per turn from the catalog and the run's frozen bounds.
     const system = systemPrefix(this.deps.catalog);
     const tools = agentToolList(this.deps.tools, this.deps.catalog, budget);
     let effort = budget.reasoning_effort;
@@ -282,7 +255,6 @@ export class AgentRuntime {
       const response = await this.callModel(lease, ordinal, model, request, signal, events).catch(
         unlessClosable(state),
       );
-      // Finished work is kept: a document already staged commits with a fixed reply (B60).
       if (!response)
         return this.finish(lease, turn, model, state, UNAVAILABLE_REPLY, latest.summary, true);
       previousResponseId = response.response_id || previousResponseId;
@@ -310,12 +282,10 @@ export class AgentRuntime {
         events,
       );
       state.messages.push(resultsMessage(budget, state, { ordinal, last, results }));
-      // At the cap the final call's tool calls were refused; its text is the reply.
       if (last) return this.finish(lease, turn, model, state, response.text, latest.summary);
     }
     throw new AgentError('stopped_at_limit');
   }
-  /** One model call, after rechecking that the workspace may still run the Agent. */
   private async callModel(
     lease: Lease,
     ordinal: number,
@@ -342,7 +312,6 @@ export class AgentRuntime {
         : {}),
     });
     signal?.throwIfAborted();
-    // Neither is repaired by asking again: the same input is too long or refused again.
     if (result.stop === 'context_window') throw new AgentError('context_too_long');
     if (result.stop === 'refusal') throw new AgentError('model_refused');
     return result;
@@ -360,12 +329,12 @@ export class AgentRuntime {
     signal?: AbortSignal,
     events?: TurnEvents,
   ) {
-    const saved = new Set<number>();
     let parallel = 0;
     const pending = calls.map((call, index) => {
       const callId = (call.id || `call_${index}`).slice(0, 64);
+      const target = isBuiltin(call.name) ? null : stepTarget(call.input);
       const tool = (status: Parameters<NonNullable<TurnEvents['tool']>>[0]['status']) =>
-        events?.tool?.({ ordinal, call_id: callId, tool: call.name, status });
+        events?.tool?.({ ordinal, call_id: callId, tool: call.name, status, target });
       tool('started');
       if (last) {
         tool('refused');
@@ -373,17 +342,19 @@ export class AgentRuntime {
           result(call, 'The turn has reached its last step. Answer without this call.', true),
         );
       }
-      if (isBuiltin(call.name)) {
-        const outcome = this.builtin(turn, state, call, saved);
-        if (call.name === SAVE_DOCUMENT && outcome.ok && outcome.document)
-          saved.add(outcome.document);
-        // An edit's input is not the document, so the edited text is shown once applied.
-        const edited = outcome.document ? state.staged.get(outcome.document) : undefined;
-        if (call.name === EDIT_DOCUMENT && outcome.ok && edited)
-          events?.document?.({ ordinal, title: edited.payload.title, body: edited.payload.body });
-        tool(outcome.ok ? 'completed' : 'refused');
-        return Promise.resolve(result(call, outcome.text, !outcome.ok));
-      }
+      if (isBuiltin(call.name))
+        return runBuiltin(this.db, this.deps.catalog, { turn, state, call }).then((outcome) => {
+          const edited = outcome.document ? state.staged.get(outcome.document) : undefined;
+          if (call.name === EDIT_DOCUMENT && outcome.ok && edited)
+            events?.document?.({
+              ordinal,
+              title: edited.payload.title,
+              from: 0,
+              text: edited.payload.body,
+            });
+          tool(outcome.ok ? 'completed' : 'refused');
+          return result(call, outcome.text, !outcome.ok);
+        });
       const limit = readLimit(turn.budget, state.toolsUsed, parallel);
       if (!limit && this.deps.tools.has(call.name)) {
         state.toolsUsed++;
@@ -398,28 +369,6 @@ export class AgentRuntime {
     });
     return Promise.all(pending);
   }
-  private builtin(turn: Turn, state: TurnState, call: ToolCall, saved: ReadonlySet<number>) {
-    const { catalog } = this.deps;
-    if (call.name === LOAD_SKILL) {
-      const before = state.skill;
-      const outcome = loadSkill(catalog, state, call.input, turn.budget);
-      if (outcome.ok && state.skill && before?.id !== state.skill.id)
-        state.steps.push({ kind: 'skill', skill_id: state.skill.id });
-      return outcome;
-    }
-    if (call.name === SUGGEST_EDITS) {
-      const outcome = suggestEdits(catalog, state, call.input, turn.budget);
-      if (outcome.ok) state.steps.push({ kind: 'suggestion' });
-      return outcome;
-    }
-    // A document is saved whole once per response, so a later save never silently wins.
-    const outcome =
-      call.name === EDIT_DOCUMENT
-        ? editDocument(catalog, state, call.input, turn.budget)
-        : saveDocument(catalog, state, call.input, turn.budget, saved);
-    if (outcome.ok) state.steps.push({ kind: 'document' });
-    return outcome;
-  }
   private async read(
     lease: Lease,
     turn: Turn,
@@ -430,7 +379,6 @@ export class AgentRuntime {
     signal?: AbortSignal,
   ) {
     const started = performance.now();
-    // The model receipt just rechecked the lease; the result is fenced again on record.
     const outcome =
       limit ??
       (await this.deps.tools.execute(
@@ -455,6 +403,7 @@ export class AgentRuntime {
       tool: call.name,
       status: outcome.status,
       call_id: call.id,
+      target: stepTarget(call.input),
     });
     state.read.push(...readSources(outcome.received));
     return outcome;
@@ -494,11 +443,6 @@ export class AgentRuntime {
         .execute();
     });
   }
-  /**
-   * The reply, the staged document and the transcript commit together, or not
-   * at all. A `closing` reply is one the model did not write; it ends the
-   * transcript as its answer, so a later turn replays a well-formed chat.
-   */
   private finish(
     lease: Lease,
     turn: Turn,
@@ -544,13 +488,13 @@ export class AgentRuntime {
         evidence: sources,
         webSources: web,
         steps,
+        proposals: state.proposals,
         skillId: skill?.id,
         skillSource: source,
       });
       for (const [number, document] of staged) {
         const saved = turn.documents.find(({ output }) => output.number === number);
-        // A revision keeps its predecessor's sources and adds this turn's.
-        await saveAgentOutput(
+        await /* NOSONAR -- One transaction connection: outputs save in order. */ saveAgentOutput(
           trx,
           chat,
           {
@@ -569,7 +513,6 @@ export class AgentRuntime {
           this.deps.attachTarget,
         );
       }
-      // Suggestions anchor to each page's latest revision, so they follow the documents.
       await saveSuggestions(trx, chat, state.suggestions, {
         runId: run.id,
         messageId: message.id,

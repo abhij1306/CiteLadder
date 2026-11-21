@@ -181,7 +181,6 @@ export async function buildVerificationResult(
   postAuditId: string | null,
 ) {
   const ctx = { db, declaration, scope: new WorkspaceScope(declaration.workspace_id) };
-  // No snapshot existed at go-live: the baseline is unavailable, not empty.
   const baseline = declaration.opportunity_snapshot_id
     ? await ctx.scope
         .selectFrom(db, 'opportunity_snapshots')

@@ -20,7 +20,6 @@ const input = {
 };
 const signal = () => new AbortController().signal;
 
-/** A metered model gateway whose one answer is `topics`, or a provider failure. */
 function gateway(topics: { name: string; offerings: string[] }[] | 'fail') {
   const fetch = vi.fn<typeof globalThis.fetch>(async () =>
     topics === 'fail'
@@ -110,7 +109,6 @@ describe('topic proposals', () => {
       ]),
       signal(),
     );
-    // The model's repeat, then the two offerings it left uncovered, cleaned to the same topic.
     expect(result.dropped).toEqual([
       { name: 'Golf practice nets', reason: 'existing' },
       { name: 'Golf practice net', reason: 'existing' },

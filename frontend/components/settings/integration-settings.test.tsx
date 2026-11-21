@@ -20,7 +20,6 @@ import { makeProject } from '@/test/fixtures/project';
 import { DISPLAY_TIME_ZONE_COOKIE } from '@/lib/display-timezone';
 import { roles } from '@/services/api/src/config/workspaces.json';
 
-// Callback routes are mounted at their actual query-bearing React Router locations.
 let search = '';
 const replaceState = vi.spyOn(window.history, 'replaceState');
 // Connect/Reconnect hard-navigates to the OAuth start 302 endpoint through the
@@ -43,7 +42,6 @@ const activeProject = makeProject({
   name: 'Example.com',
   brand_name: 'Example',
 });
-/** The capabilities the reader's role publishes; an Owner's unless a test says otherwise. */
 const granted = vi.hoisted(() => ({ role: 'owner' as 'owner' | 'member' }));
 vi.mock('@/lib/project/project-context', () => ({
   useWorkspaceCapability: (capability: string) =>
@@ -129,13 +127,6 @@ function mockList(items: Record<string, unknown>[]) {
   mswServer.use(http.get('/api/v1/integrations', () => HttpResponse.json(items)));
 }
 
-/**
- * Every connection reports ONE active mapping by default.
- *
- * The card reads the mapping — not `account_ref` — to decide whether a
- * property is selected, because the two drift apart (mappings cascade with
- * their project while `account_ref` survives on the connection).
- */
 function mockMappings() {
   mswServer.use(
     http.get('/api/v1/integrations/:connectionId/mappings', ({ params }) => {
@@ -145,7 +136,6 @@ function mockMappings() {
       );
       return HttpResponse.json([
         {
-          // A real uuid: the mapping schema is strict and validates the shape.
           id: MAPPING_ID,
           workspace_id: WS,
           connection_id: connectionId,
@@ -182,7 +172,6 @@ describe('IntegrationSettings — empty state + OAuth navigation', () => {
     renderSettings();
 
     expect(await screen.findByText('No integrations connected')).toBeInTheDocument();
-    expect(screen.getByText(/Search Console and Analytics 4/)).toBeInTheDocument();
 
     await ue.click(screen.getByRole('button', { name: 'Connect Google' }));
     expect(assignMock).toHaveBeenCalledWith(
@@ -211,8 +200,6 @@ describe('IntegrationSettings — grant cards', () => {
     const googleCard = await screen.findByTestId('grant-card-google');
     expect(within(googleCard).getByText('Google Search Console')).toBeInTheDocument();
     expect(within(googleCard).getByText('Google Analytics 4')).toBeInTheDocument();
-    // The selected property comes from the connection's active MAPPING, which
-    // is a second fetch — hence findBy rather than getBy.
     expect(await within(googleCard).findByText('sc-domain:example.com')).toBeInTheDocument();
     expect(within(googleCard).getByText('properties/123456789')).toBeInTheDocument();
     const lastSynced = googleCard.querySelector('time[datetime="2026-07-23T04:12:00Z"]');
@@ -220,12 +207,16 @@ describe('IntegrationSettings — grant cards', () => {
 
     const msCard = screen.getByTestId('grant-card-microsoft');
     expect(within(msCard).getByText('Bing Webmaster Tools')).toBeInTheDocument();
-    // Needs reauth → plain-worded status and alert + Sync now disabled (grant not connected).
     expect(within(msCard).getByTestId('grant-status-microsoft')).toHaveTextContent(
       'Reconnect needed',
     );
     expect(within(msCard).getByText(/needs you to sign in again/)).toBeInTheDocument();
-    expect(within(msCard).getByText('Connection')).toBeInTheDocument();
+    const msTitle = within(msCard).getByRole('heading', { level: 2 });
+    expect(msTitle).toHaveTextContent('Bing');
+    expect(msTitle.parentElement).toContainElement(
+      within(msCard).getByTestId('grant-status-microsoft'),
+    );
+    expect(within(msCard).queryByText('Connection')).not.toBeInTheDocument();
     expect(within(msCard).queryByText('OAuth grant')).not.toBeInTheDocument();
     expect(
       within(msCard).getByRole('button', { name: 'Sync Bing Webmaster Tools now' }),
@@ -249,6 +240,38 @@ describe('IntegrationSettings — grant cards', () => {
     expect(assignMock).toHaveBeenCalledWith(
       `/api/v1/integrations/workspaces/${WS}/oauth/bing/start`,
     );
+  });
+
+  it('gives a long property id and the sync date their own cut boxes, never one', async () => {
+    const longRef = `sc-domain:${'a'.repeat(100)}.example.com`.padEnd(120, 'x');
+    const longGsc = connection({ account_ref: longRef });
+    mockList([longGsc]);
+    mswServer.use(
+      http.get('/api/v1/integrations/:connectionId/mappings', () =>
+        HttpResponse.json([
+          {
+            id: MAPPING_ID,
+            workspace_id: WS,
+            connection_id: CONN_GSC,
+            provider: 'gsc',
+            property_ref: longRef,
+            project_id: activeProject.id,
+            status: 'active',
+            created_at: '2026-07-20T00:00:00Z',
+            updated_at: '2026-07-20T00:00:00Z',
+          },
+        ]),
+      ),
+    );
+    renderSettings();
+
+    const row = await screen.findByTestId('connection-row-gsc');
+    const property = await within(row).findByText(longRef);
+    const synced = within(row).getByText(/^Last synced/);
+    expect(property.parentElement).toBe(synced.parentElement);
+    expect(property.textContent).toBe(longRef);
+    expect(synced.textContent).toMatch(/^Last synced [A-Z][a-z]{2} \d{1,2}, \d{4}/u);
+    expect(synced.textContent).not.toContain('sc-domain');
   });
 
   it('Reconnect hard-navigates to the family OAuth start endpoint', async () => {
@@ -286,7 +309,8 @@ describe('IntegrationSettings — grant cards', () => {
     renderSettings();
 
     const row = await screen.findByTestId('connection-row-gsc');
-    await ue.click(within(row).getByRole('button', { name: 'Test Google Search Console' }));
+    await ue.click(within(row).getByRole('button', { name: 'Google Search Console actions' }));
+    await ue.click(await screen.findByRole('menuitem', { name: 'Test' }));
     expect(await within(row).findByText('Connection succeeded.')).toBeInTheDocument();
   });
 
@@ -297,13 +321,11 @@ describe('IntegrationSettings — grant cards', () => {
       renderSettings();
 
       const row = await screen.findByTestId('connection-row-gsc');
-      // The chosen property arrives with the mappings read; Sync needs it.
       expect(await within(row).findByText('sc-domain:example.com')).toBeInTheDocument();
       expect(
         within(row).getByRole('button', { name: 'Sync Google Search Console now' }),
       ).toBeEnabled();
-      expect(within(row).queryByRole('button', { name: /^Test / })).toBeNull();
-      expect(within(row).queryByRole('button', { name: /^Remove / })).toBeNull();
+      expect(within(row).queryByRole('button', { name: / actions$/ })).toBeNull();
       const googleCard = screen.getByTestId('grant-card-google');
       expect(within(googleCard).queryByRole('button', { name: 'Reconnect' })).toBeNull();
       expect(within(googleCard).queryByRole('button', { name: /^Disconnect/ })).toBeNull();
@@ -348,7 +370,7 @@ describe('IntegrationSettings — disconnect and remove', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   });
 
-  it("removes only this project's property from a row", async () => {
+  it("folds Change, Test and Remove into the row's More menu, Remove removing only this project's property", async () => {
     const ue = userEvent.setup();
     let removed = '';
     mockList([gscConnection, ga4Connection]);
@@ -361,11 +383,18 @@ describe('IntegrationSettings — disconnect and remove', () => {
     renderSettings();
 
     const row = await screen.findByTestId('connection-row-gsc');
-    await ue.click(
-      await within(row).findByRole('button', {
-        name: 'Remove Google Search Console property from this project',
-      }),
-    );
+    expect(
+      await within(row).findByRole('button', { name: 'Sync Google Search Console now' }),
+    ).toBeInTheDocument();
+    expect(within(row).queryByRole('button', { name: /^(Change|Test|Remove)\b/ })).toBeNull();
+    await ue.click(within(row).getByRole('button', { name: 'Google Search Console actions' }));
+    const menu = await screen.findByRole('menu');
+    expect(
+      within(menu)
+        .getAllByRole('menuitem')
+        .map((item) => item.textContent),
+    ).toEqual(['Change', 'Test', 'Remove']);
+    await ue.click(within(menu).getByRole('menuitem', { name: 'Remove' }));
     await waitFor(() => expect(removed).toBe(MAPPING_ID));
   });
 });
@@ -412,21 +441,14 @@ describe('IntegrationSettings — sync polling', () => {
     const syncName = 'Sync Google Search Console now';
     const syncButton = within(row).getByRole('button', { name: syncName });
     await waitFor(() => expect(listCalls).toBe(1));
-    // Sync is gated on the connection having an active property mapping, so
-    // it only enables once that fetch lands.
     await waitFor(() => expect(syncButton).toBeEnabled());
     await ue.click(syncButton);
-    // A connection can serve several projects, so the sync names this one.
     await waitFor(() => expect(syncBody).toEqual({ project_id: activeProject.id }));
 
-    // The enqueued run is polled and surfaced as a run-status badge; Sync now
-    // stays disabled while the run is non-terminal.
     expect(await within(row).findByText('Running')).toBeInTheDocument();
     expect(within(row).getByText(/2,148 rows · window Jul 16–Jul 22/)).toBeInTheDocument();
     expect(within(row).getByRole('button', { name: syncName })).toBeDisabled();
 
-    // The import finishes while the project's reports are still rebuilding:
-    // Sync now stays disabled so a second click cannot queue a duplicate.
     runStatus = 'succeeded';
     processing = true;
     await queryClient.invalidateQueries({
@@ -436,8 +458,6 @@ describe('IntegrationSettings — sync polling', () => {
     expect(within(row).getByText('2,148 rows imported · updating reports')).toBeInTheDocument();
     expect(within(row).getByRole('button', { name: syncName })).toBeDisabled();
 
-    // Reports rebuilt: the result stays visible, the connections list
-    // refreshes (last_synced_at), and Sync now is available again.
     processing = false;
     await queryClient.invalidateQueries({
       queryKey: queryKeys.integrations.sync(WS, CONN_GSC, SYNC),
@@ -460,10 +480,9 @@ describe('IntegrationSettings — OAuth callback notice (C2)', () => {
     mockList([gscConnection, ga4Connection]);
     renderSettings();
 
-    // A success notice is a polite status; only failures are alerts.
     const notice = await screen.findByRole('status');
     expect(notice).toHaveTextContent('Google connected.');
-    expect(notice.textContent).toMatch(/linked through one Google connection/);
+    expect(notice.textContent).toMatch(/Nothing imports until you choose a property/);
     expect(notice.textContent).not.toMatch(/OAuth|grant/);
     await waitFor(() =>
       expect(replaceState).toHaveBeenCalledWith(null, '', '/settings?tab=integrations'),
@@ -478,7 +497,6 @@ describe('IntegrationSettings — OAuth callback notice (C2)', () => {
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent('Connection failed.');
     expect(alert).not.toHaveTextContent('oauth_exchange_failed');
-    // The empty state still renders beneath the notice.
     expect(await screen.findByText('No integrations connected')).toBeInTheDocument();
     await waitFor(() =>
       expect(replaceState).toHaveBeenCalledWith(null, '', '/settings?tab=integrations'),

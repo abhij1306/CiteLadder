@@ -66,7 +66,6 @@ function brandTerms(context: GenerationContext): string[] {
   ];
 }
 
-/** The project language's words that join alternatives (`disjunction_words`). */
 const disjunctionsOf = (context: GenerationContext) =>
   new Set(G.disjunction_words[baseLanguage(context.context.language_code || 'en')] ?? []);
 
@@ -77,7 +76,6 @@ export type Draft = {
   intent: string;
   buyer_stage: string;
   prompt_intent: string;
-  /** The model's own place label: recorded beside the deterministic check, never used to drop. */
   names_place?: boolean;
   decision?: Record<string, unknown>;
 };
@@ -88,14 +86,11 @@ const generatedRow = z.object({
   buyer_stage: z.string(),
   prompt_intent: z.string(),
   names_place: z.boolean().optional(),
-  // Required of the model (a defaulted field is required in its schema); a
-  // row parsed without one is never dropped for it.
   answer_kind: z.enum(['named_options', 'general_advice']).default('named_options'),
 });
 const generated = z.object({ prompts: z.array(generatedRow) });
 type GeneratedRow = z.input<typeof generatedRow>;
 
-/** The project language's advice frames (`advice_phrases`), as padded word runs. */
 const advicePhrasesOf = (context: GenerationContext) =>
   (G.advice_phrases[baseLanguage(context.context.language_code || 'en')] ?? []).map(
     (phrase) => ` ${words(phrase).join(' ')} `,
@@ -119,13 +114,6 @@ function mergeDrops(into: Drops, from: Drops) {
     countDrop(into, reason as PromptAdmissionDropReason, count);
 }
 
-/**
- * Admit rows in order, recording one reason per dropped row. Planning checks
- * (slot, labels, duplicates) run before content checks, so a row is reported
- * under the first rule it breaks. The near-duplicate check runs last, against
- * tracked prompts, pending candidates and every earlier draft of the run
- * across all topics.
- */
 export function admitDrafts(
   rows: GeneratedRow[],
   slots: Slot[],
@@ -141,8 +129,6 @@ export function admitDrafts(
   ]);
   const near = [...context.prompts, ...pending, ...prior].map((row) => promptTokens(row.text));
   const usedSlots = new Set(prior.map((row) => row.slot.slot_id));
-  // Every observed search the run read, not only the top demand signals: a
-  // draft repeating one is a search, not a question written for an assistant.
   const observed = new Set([
     ...context.context.demand_signals.flatMap((row) =>
       typeof row.observed_query === 'string' ? [promptTextHash(row.observed_query)] : [],
@@ -152,23 +138,15 @@ export function admitDrafts(
   const brands = brandTerms(context);
   const geo = geoTerms(context);
   const disjunctions = disjunctionsOf(context);
-  /** Two alternatives joined into one prompt; comparisons ask "X or Y" by design. */
   const joinsTwoNeeds = (text: string, cohort: GenerationCohort) =>
     cohort !== 'comparison' && words(text).some((word) => disjunctions.has(word));
   const advicePhrases = advicePhrasesOf(context);
-  /**
-   * A core draft whose answer would be general advice, not named options to
-   * buy: the drafter's own label, or an advice frame in the text. Branded
-   * cohorts may ask how the named brand works by design.
-   */
   const seeksAdvice = (row: GeneratedRow, text: string, cohort: GenerationCohort) => {
     if (cohort !== 'core') return false;
     if (row.answer_kind === 'general_advice') return true;
     const padded = ` ${words(text).join(' ')} `;
     return advicePhrases.some((phrase) => padded.includes(phrase));
   };
-  // Names count under the project's matching policy, so a common-word brand
-  // in ordinary language ("target audience") is not a branded draft.
   const brandRule = context.matching[entityKey(context.context.brand_name)];
   const competitors = context.context.competitors.map((row) => ({
     aliases: [row.name, ...row.aliases],
@@ -176,21 +154,17 @@ export function admitDrafts(
   }));
   const namesCompetitor = (text: string) =>
     competitors.some(({ aliases, rule }) => namesEntity(text, aliases, rule));
-  /** Planning checks: the row answers an open slot with labels it allows. */
   const planReason = (
     row: GeneratedRow,
     slot: Slot | undefined,
   ): PromptAdmissionDropReason | null => {
     if (!slot || usedSlots.has(slot.slot_id)) return 'unplanned_slot';
     if (!slot.allowed_prompt_intents.includes(row.prompt_intent)) return 'intent';
-    // Every row keeps to the planned stages, and a core row's intent must suit
-    // the stage the model labelled it with.
     const stages: readonly string[] = G.planned_stages;
     if (!stages.includes(row.buyer_stage)) return 'stage';
     const coherent = G.stage_intents[row.buyer_stage]?.includes(row.prompt_intent);
     return slot.cohort === 'core' && !coherent ? 'intent' : null;
   };
-  /** Identity checks: who the row names, by cohort. */
   const cohortReason = (
     row: GeneratedRow,
     cohort: GenerationCohort,
@@ -306,8 +280,6 @@ async function suggestMaps(
     );
     const places = geoTerms(context);
     const disjunctions = disjunctionsOf(context);
-    // A suggested value is one facet: a comma or an "or" lists several, which
-    // would hand a cell two needs.
     const listsSeveral = (value: string) =>
       value.includes(',') || words(value).some((word) => disjunctions.has(word));
     const banned = [
@@ -369,10 +341,6 @@ async function suggestMaps(
   }
 }
 
-/**
- * Model calls for one request's slots: each planned cohort's batches plus one
- * refill batch. A batch drafts one cohort, so each cohort rounds up apart.
- */
 export function draftCallLimit(input: Pick<GenerationInput, 'count' | 'cohort' | 'distribution'>) {
   const cells = input.count * generationSetting('overgenerate_factor'),
     size = generationSetting('model_batch_size');
@@ -382,13 +350,6 @@ export function draftCallLimit(input: Pick<GenerationInput, 'count' | 'cohort' |
   return Math.max(1, batches) + 1;
 }
 
-/**
- * The run's first batches: each cohort's cells in `ceil(cells / batch size)`
- * batches, every topic's cells together in one batch so the drafter sees its
- * siblings. Topic groups go largest first to the least-loaded batch, so a
- * batch may run a little over the batch size rather than split a topic; only
- * a topic larger than a whole batch is split.
- */
 export function planBatches(slots: readonly Slot[], size: number): Slot[][] {
   return [...Map.groupBy(slots, (slot) => slot.cohort).values()].flatMap((cohortSlots) => {
     const groups = [...Map.groupBy(cohortSlots, (slot) => slot.topic_id).values()].flatMap(
@@ -401,7 +362,6 @@ export function planBatches(slots: readonly Slot[], size: number): Slot[][] {
       { length: Math.ceil(cohortSlots.length / size) },
       () => [],
     );
-    // A stable sort: equal groups keep plan order.
     for (const group of groups.toSorted((a, b) => b.length - a.length)) {
       let lightest: Slot[] | undefined;
       for (const batch of batches)
@@ -412,16 +372,10 @@ export function planBatches(slots: readonly Slot[], size: number): Slot[][] {
   });
 }
 
-/** Why a run stopped before every planned slot had a chance at admission. */
 type Stop = z.infer<typeof promptGenerateResponseSchema.shape.shortfall_reason>;
 const errorCode = (error: ModelError) =>
   error.status ? providerErrorCode(error.status) : error.code;
 
-/**
- * Draft batches with bounded concurrency until every slot is admitted, the call
- * limit is spent, the deadline passes or the provider fails. Admission state is
- * merged in completion order; a failed batch never discards admitted drafts.
- */
 async function draftBatches(
   context: GenerationContext,
   input: GenerationInput,
@@ -438,8 +392,6 @@ async function draftBatches(
     drops: Drops = {},
     dropRecords: AdmissionDrop[] = [];
   const inFlight = new Set<string>();
-  // The brief and tracked texts are fixed for the run: earlier drafts are not
-  // fed back, so a first batch's register cannot set the whole run's.
   const brief = generationBrief(context, input);
   const tracked = context.prompts
     .map((row) => row.text)
@@ -450,8 +402,6 @@ async function draftBatches(
     crashed = false,
     cut = false;
   const planned = planBatches(slots, batchSize);
-  // After the planned batches, a refill takes one cohort's open slots, whole
-  // topics together, up to the batch size.
   const nextBatch = () => {
     const first = planned.shift();
     if (first) return first;
@@ -488,7 +438,6 @@ async function draftBatches(
       mergeDrops(drops, result.drops);
       dropRecords.push(...result.dropRecords);
     } catch (error) {
-      // A batch cut at the deadline is a shortfall, not a provider failure.
       if (deadline.aborted) cut = true;
       else if (!(error instanceof ModelError)) throw error;
       else if (error.code === 'parse') parseError = true;
@@ -498,8 +447,6 @@ async function draftBatches(
       }
     }
   };
-  // Each worker drafts one batch, then takes the next; a defect in one stops
-  // the others from starting more provider calls.
   const worker = async (): Promise<void> => {
     if (failure || crashed || calls >= limit) return;
     const batch = nextBatch();
@@ -528,12 +475,6 @@ async function draftBatches(
   return { drafts, drops, dropRecords, models, stop, reference: brief as unknown };
 }
 
-/**
- * Which of the project's searches grounded the run's plan: counts by source
- * and the exact searches attached to slots, with the classification that
- * admitted each. `searches_read` is every search admission checked copies
- * against. Never query text or volume.
- */
 function groundingSummary(context: GenerationContext, slots: readonly Slot[]) {
   const used = new Map(
     slots.flatMap((slot) => slot.grounding ?? []).map((search) => [search.id, search]),

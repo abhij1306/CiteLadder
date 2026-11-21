@@ -1,4 +1,3 @@
-/** The Site Health internal-link analytics kinds. */
 import type { AnalyticsKinds } from '../queue/executor.ts';
 import { compensateInternalLinks, internalLinkJudge } from './internal-link-judgments.ts';
 import { publishInternalLinks } from './internal-link-publish.ts';

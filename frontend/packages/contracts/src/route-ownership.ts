@@ -1,4 +1,3 @@
-/** The API's route families; the route gate checks every operation declares exactly one. */
 export const ROUTE_FAMILIES = [
   'actions',
   'agent',
@@ -18,6 +17,7 @@ export const ROUTE_FAMILIES = [
   'opportunities',
   'performance',
   'performance-sync',
+  'probes',
   'readiness',
   'projects',
   'overview',

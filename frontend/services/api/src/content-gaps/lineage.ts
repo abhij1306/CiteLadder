@@ -1,9 +1,3 @@
-/**
- * Angle identity across reclustering (content optimization section 2): a new
- * angle inherits the lineage of the previous run's angle in the same topic
- * whose member URLs it overlaps most, when that Jaccard overlap reaches the
- * minimum. Pure.
- */
 import { jaccard } from '../lists.ts';
 import { compareText } from '../text-order.ts';
 
@@ -14,11 +8,6 @@ export type PreviousAngle = {
 };
 export type NewAngle = { key: string; topicId: string | null; memberUrls: readonly string[] };
 
-/**
- * Each new angle's inherited lineage ID, or null for a new lineage. Per topic,
- * the highest-overlap pairs are taken first, one-to-one; ties go to the lower
- * lineage ID, then the lower new-angle key.
- */
 export function assignLineages(
   previousAngles: readonly PreviousAngle[],
   newAngles: readonly NewAngle[],

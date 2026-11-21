@@ -15,11 +15,10 @@
  * count. Dependency-free, so it runs without an install.
  */
 import { readdirSync, readFileSync } from 'node:fs';
-import { join, relative, sep } from 'node:path';
+import { join, relative } from 'node:path';
 
 const KYSELY_WRITE =
   /\b(?:insertInto|updateTable|deleteFrom|mergeInto)\s*\(\s*(?:(['"])([^'"]*)\1)?/gu;
-// A table name, or (group 2) the placeholder `lexSource` puts where a template interpolates one.
 const IDENTIFIER = String.raw`(?:(?:public\.)?"?([a-z_][a-z0-9_]*)"?|(\?))`;
 const SQL_WRITES = [
   new RegExp(String.raw`\binsert\s+into\s+${IDENTIFIER}`, 'giu'),
@@ -30,7 +29,6 @@ const SQL_WRITES = [
     'giu',
   ),
 ];
-// After these characters a `/` starts a regular expression, not a division.
 const REGEX_PRECEDERS = new Set('(,=:[!&|?{};+-*%<>~^');
 const compare = (left, right) => (left < right ? -1 : Number(left > right));
 const REGEX_KEYWORDS = /\b(?:return|typeof|case|do|else|in|of|void|yield|await)$/u;
@@ -56,18 +54,12 @@ function startsRegex(code) {
   return before === '' || REGEX_PRECEDERS.has(before.at(-1)) || REGEX_KEYWORDS.test(before);
 }
 
-/**
- * Split a TypeScript module into its code (comments removed, literals kept)
- * and the text of its string and template literals. A template's parts join
- * with a placeholder, so a statement split by `${…}` still reads as one.
- */
 export function lexSource(source) {
   const state = { source, index: 0, depth: 0, code: '', strings: [], templates: [] };
   while (state.index < source.length) lexToken(state);
   return { code: state.code, strings: state.strings };
 }
 
-/** The end of the comment starting at `index`, or -1 when none starts there. */
 function commentEnd(source, index) {
   if (source.startsWith('//', index)) {
     const end = source.indexOf('\n', index);
@@ -89,7 +81,6 @@ function lexToken(state) {
   else if (char === '`') {
     state.code += '`';
     state.index += 1;
-    // Each open template: its text so far and the `${` brace depth it resumes at.
     state.templates.push({ text: '', resumeDepth: -1 });
     lexTemplate(state);
   } else if (char === '/' && startsRegex(state.code)) {
@@ -117,7 +108,6 @@ function lexQuoted(state, quote) {
   state.index = end + 1;
 }
 
-/** Read the open template's text up to its end or its next `${`. */
 function lexTemplate(state) {
   const { source } = state;
   const template = state.templates.at(-1);
@@ -142,7 +132,6 @@ function lexTemplate(state) {
   }
 }
 
-/** The tables a module writes, and whether it writes a table it computes. */
 export function moduleWrites(source, knownTables) {
   const { code, strings } = lexSource(source);
   const tables = new Set();
@@ -152,23 +141,27 @@ export function moduleWrites(source, knownTables) {
       dynamic = true;
       continue;
     }
-    // `'projects as p'` names `projects`.
     const table = match[2]
       .trim()
       .split(/\s/u)[0]
       .replace(/^public\./u, '');
     if (knownTables.has(table)) tables.add(table);
   }
+  if (sqlWrites(strings, knownTables, tables)) dynamic = true;
+  return { tables: [...tables].sort(compare), dynamic };
+}
+
+function sqlWrites(strings, knownTables, tables) {
+  let dynamic = false;
   for (const text of strings)
     for (const pattern of SQL_WRITES)
       for (const match of text.matchAll(pattern)) {
         if (match[2]) dynamic = true;
         else if (knownTables.has(match[1].toLowerCase())) tables.add(match[1].toLowerCase());
       }
-  return { tables: [...tables].sort(compare), dynamic };
+  return dynamic;
 }
 
-/** The table names of the generated schema's `DB` interface. */
 export function schemaTables(schemaSource) {
   const body = /export interface DB \{([^}]*)\}/u.exec(schemaSource)?.[1];
   if (!body) throw new Error('the generated schema declares no DB interface');
@@ -176,7 +169,6 @@ export function schemaTables(schemaSource) {
   return new Set(names.filter(Boolean));
 }
 
-/** Every table's writer modules and the dynamic writers, as the allowlist records them. */
 export function collectWriters(modules, knownTables) {
   const tables = {};
   const dynamic = [];
@@ -194,7 +186,6 @@ export function collectWriters(modules, knownTables) {
   return { format_version: 1, tables: sortedTables, dynamic_writers: dynamic };
 }
 
-/** The shipped API modules (`src/`, `scripts/`), keyed by their path below the package. */
 export function apiModules(apiRoot) {
   const modules = new Map();
   for (const directory of ['src', 'scripts']) {
@@ -203,7 +194,7 @@ export function apiModules(apiRoot) {
       if (!entry.isFile() || !/\.[cm]?[jt]s$/u.test(entry.name) || entry.name.endsWith('.d.ts'))
         continue;
       const path = join(entry.parentPath, entry.name);
-      modules.set(relative(apiRoot, path).split(sep).join('/'), readFileSync(path, 'utf8'));
+      modules.set(relative(apiRoot, path), readFileSync(path, 'utf8'));
     }
   }
   return modules;
@@ -233,7 +224,6 @@ function pairs(allowlist) {
   ]);
 }
 
-/** Writes the allowlist does not name, and listed writers that no longer write. */
 export function writerFailures(observed, allowlist) {
   const actual = pairs(observed);
   const allowed = pairs(allowlist);
@@ -243,7 +233,6 @@ export function writerFailures(observed, allowlist) {
   ];
 }
 
-/** The allowlist only tightens: no table gains writers, a new table has one. */
 export function allowlistDiffFailures(base, current) {
   const failures = [];
   for (const [table, paths] of Object.entries(current.tables)) {

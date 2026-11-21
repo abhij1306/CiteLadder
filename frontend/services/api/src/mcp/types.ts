@@ -12,10 +12,8 @@ export type McpPrincipal = {
   grantId: string;
   workspaceIds: string[];
   tokenHash: string;
-  /** The grant holds `citeladder:write`; each change still needs the live role. */
   canWrite: boolean;
 };
-/** Internal evidence readers use live membership, pinned to one project. */
 export type EvidencePrincipal =
   | McpPrincipal
   | {
@@ -26,22 +24,15 @@ export type EvidencePrincipal =
     };
 export type Evidence = Record<string, unknown>;
 export type ReadScope = { workspaceId: string; projectId: string };
-/** An authorized project read: `origin` builds app links, empty for in-app reads. */
 export type ProjectRead = { db: Database; scope: ReadScope; origin: string };
-/** A caller-caused argument problem the model can correct. */
 export class McpInputError extends Error {}
 
-/** A selection that cannot be served says which of its three reasons applies. */
 const SELECTION_MISSING: Readonly<Record<AnalysisMissing, string>> = {
   not_found: 'Selected measurement is unavailable',
   not_measured: 'Nothing has been measured for this selection yet',
   metrics_pending: "The selected run's results are still being prepared",
 };
 
-/**
- * The message a caller can act on, or null for a server failure whose detail
- * stays in the log. Owners signal caller mistakes with their own 4xx errors.
- */
 export function callerMessage(error: unknown): string | null {
   if (
     error instanceof McpInputError ||

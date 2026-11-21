@@ -62,10 +62,6 @@ describe('siteScoreSummarySchema by_page_kind (v2 P1)', () => {
   };
 
   it('accepts the expanded page-kind vocabulary (how_to, listicle, alternative)', () => {
-    // The classifier vocabulary (how_to, listicle, alternative) shipped
-    // without the frontend zod enum catching up, so any completed cohort
-    // containing one of these kinds failed the dashboard parse and took the
-    // whole screen down.
     const parsed = strictValidate(
       siteCrawlSchema,
       {

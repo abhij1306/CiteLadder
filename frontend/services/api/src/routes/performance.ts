@@ -30,16 +30,13 @@ const projectPath = { project_id: { scalar: { kind: 'uuid' }, required: true } }
 const date = { scalar: { kind: 'date' } } as const;
 const string = { scalar: { kind: 'str' } } as const;
 const uuid = { scalar: { kind: 'uuid' } } as const;
-/** Every route here reads the path project inside the active workspace. */
 const family = { family: 'performance', authorize: 'active-project' } as const;
 const { statuses } = policy.task_queue;
-/** Terminal range tasks that a new request may replace. */
 const retryable = new Set<string>([statuses.failed, statuses.cancelled]);
 function taskResponse(task: { id: string; status: string; payload: unknown }) {
   const payload = record(task.payload);
   return {
     task_id: task.id,
-    // The column is plain text; a value outside the queue lifecycle is a defect, not a status.
     status: performanceRangeTaskStatusSchema.parse(task.status),
     window_start: scalarText(payload.window_start ?? ''),
     window_end: scalarText(payload.window_end ?? ''),
@@ -135,7 +132,6 @@ export const performanceRoutes = [
     response: performanceTablePageSchema.extend({ dimension: z.string() }),
     async handle({ c, db }, { path, query }) {
       const workspace = c.get('workspace');
-      // Keyed by persisted snapshot IDs, so the browser revalidates instead of refetching.
       return revalidatable(
         c,
         await getPerformanceTable(db, {
@@ -170,9 +166,6 @@ export const performanceRoutes = [
           .select(['id', 'status', 'payload'])
           .where('project_id', '=', path.project_id)
           .where('task_kind', '=', kind);
-      // A repeat of the same range dedupes to its latest task. After that task
-      // failed or was cancelled, the next request keys on it, so the range can
-      // be projected again while concurrent retries still dedupe.
       const previous = await tasks()
         .where(sql<boolean>`payload->>'window_start' = ${from} and payload->>'window_end' = ${to}`)
         .orderBy('created_at', 'desc')

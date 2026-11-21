@@ -1,4 +1,3 @@
-/** Characters browsers may reinterpret or strip while parsing a destination. */
 export function hasUnsafeUrlCharacters(value: string): boolean {
   return Array.from(value).some((character) => {
     const code = character.codePointAt(0)!;
@@ -6,7 +5,6 @@ export function hasUnsafeUrlCharacters(value: string): boolean {
   });
 }
 
-/** Parse untrusted absolute HTTP(S) links once; callers choose their display string. */
 export function parseAbsoluteHttpUrl(value: string | null | undefined): URL | null {
   if (!value || hasUnsafeUrlCharacters(value)) return null;
   const trimmed = value.trim();

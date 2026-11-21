@@ -1,11 +1,3 @@
-/**
- * Which roster judged a persisted source-page reading, and the passages it
- * quoted.
- *
- * Inspection stamps `roster_version` on every presence: the names, aliases and
- * mention rules it matched with, and the detector version. A reading counts
- * only against the roster in force now (`judgedUnderCurrentRoster`).
- */
 import { createHash } from 'node:crypto';
 import { sql, type RawBuilder } from 'kysely';
 
@@ -22,7 +14,6 @@ import { WorkspaceScope } from '../db/workspace-scope.ts';
 const sorted = (value: unknown): string[] =>
   Array.isArray(value) ? value.map(String).sort(compareIdentityText) : [];
 
-/** A stable fingerprint of the brand, competitors and mention rules an audit measured. */
 export function projectRoster(configuration: unknown): string {
   const config = record(configuration);
   const competitors = (Array.isArray(config.competitors) ? config.competitors : [])
@@ -45,7 +36,6 @@ export function projectRoster(configuration: unknown): string {
   return `roster-${digest.slice(0, 32)}`;
 }
 
-/** The quoted windows behind one verdict, resolved from its snapshot. */
 function passageTexts(passages: unknown, refs: unknown): string[] {
   const rows = Array.isArray(passages) ? passages : [];
   const indexes = Array.isArray(refs) ? refs : [];
@@ -76,13 +66,6 @@ export type ReadingPresence = {
   passage_refs: unknown;
 };
 
-/**
- * Whether the reading `snapshotId` names was judged against the roster in
- * force: the roster the project's newest inspection matched with. A roster
- * change (a competitor removed, an alias added) reaches every page at once,
- * so no reader judges a page on names the project no longer tracks (BE-604);
- * the page counts again once it is read under the new roster.
- */
 export function judgedUnderCurrentRoster(scope: Scope, snapshotId: RawBuilder<unknown>) {
   return sql<boolean>`exists (
     select 1 from source_page_entity_presences judged
@@ -123,7 +106,6 @@ export async function latestReadings(db: Database, scope: Scope, pageIds: string
   return latest;
 }
 
-/** The verdicts each reading recorded, brand first, by snapshot. */
 export async function readingPresences(db: Database, scope: Scope, snapshotIds: string[]) {
   const grouped = new Map<string, ReadingPresence[]>();
   if (!snapshotIds.length) return grouped;
@@ -149,7 +131,6 @@ export async function readingPresences(db: Database, scope: Scope, snapshotIds: 
   return grouped;
 }
 
-/** One reading's verdicts with the quoted windows behind each. */
 export const pageEntities = (reading: Reading, rows: ReadingPresence[]) =>
   rows.map((row) => ({
     entity_kind: row.entity_kind,
@@ -160,5 +141,4 @@ export const pageEntities = (reading: Reading, rows: ReadingPresence[]) =>
     passages: passageTexts(reading.evidence_passages, row.passage_refs),
   }));
 
-/** When a reading was taken, as the API renders a timestamp. */
 export const readAt = (reading: Reading) => wireUtc(reading.fetched_text);

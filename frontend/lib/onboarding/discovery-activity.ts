@@ -1,4 +1,4 @@
-import type { Step, StepStatus } from '@/components/ui/step-list';
+import type { TrailStep, RungStatus } from '@/components/ui/rung-trail';
 import type { BrandDiscovery } from '@/lib/api/brand-discoveries';
 import { BRAND_DISCOVERY_POLL_MS } from '@/lib/config/operational';
 import { pollWhileActive } from '@/lib/jobs/poll';
@@ -6,11 +6,6 @@ import { pollWhileActive } from '@/lib/jobs/poll';
 type DiscoveryPhase = BrandDiscovery['progress']['phase'];
 type DiscoveryStatus = BrandDiscovery['status'];
 
-/**
- * Every discovery status: whether the research still runs on its own (the
- * screen polls it and the execution feed stays open) and whether it finished
- * with a result (every step reads as done).
- */
 const DISCOVERY_STATES = {
   queued: { active: true, complete: false },
   running: { active: true, complete: false },
@@ -22,7 +17,6 @@ const DISCOVERY_STATES = {
 export const isDiscoveryActive = (status: DiscoveryStatus | undefined): boolean =>
   status !== undefined && DISCOVERY_STATES[status].active;
 
-/** The discovery poll cadence: while the research is still running. */
 export const pollDiscovery = (status: DiscoveryStatus | undefined) =>
   pollWhileActive(DISCOVERY_STATES, BRAND_DISCOVERY_POLL_MS, status);
 
@@ -51,7 +45,7 @@ function countDetail(
   return `${count} ${noun} ${action}`;
 }
 
-function stepStatus(index: number, current: number): StepStatus {
+function stepStatus(index: number, current: number): RungStatus {
   if (index < current) return 'done';
   if (index > current) return 'pending';
   return 'running';
@@ -63,11 +57,7 @@ function openingLabel(discovery: BrandDiscovery | undefined, current: number): s
   return current > 0 ? 'Opened your website' : 'Opening your website';
 }
 
-/**
- * Convert persisted discovery facts into customer language. Unknown backend
- * details never become a copy fallback; adding a phase must be handled here.
- */
-export function discoveryActivity(discovery: BrandDiscovery | undefined): Step[] {
+export function discoveryActivity(discovery: BrandDiscovery | undefined): TrailStep[] {
   const current = currentStep(discovery);
   const progress = discovery?.progress;
   const labels = [

@@ -10,6 +10,8 @@ import {
   agentRevisionsPageSchema,
   agentRunSchema,
   agentRunStepSchema,
+  agentStepSchema,
+  type AgentChatOrigin,
 } from '@citeladder/contracts/agent';
 import type { Database } from '../db/database.ts';
 import { jsonObject } from '../db/json.ts';
@@ -20,12 +22,34 @@ import { active } from './queue.ts';
 import { workspaceChat } from './messages.ts';
 import { manifestSchema } from './context.ts';
 import { pageFetchView } from '../page-documents/reads.ts';
+import { statusView } from '../opportunities/action-status.ts';
 import { openTargetChoice } from './target-adapter.ts';
+import { stepTarget } from './sources.ts';
 
 const iso = (date: Date | null) => date?.toISOString() ?? null;
+// First present reference wins; `action_id` can be attached after the chat started, so it ranks last.
+const ORIGIN_REFS: readonly [AgentChatOrigin, readonly string[]][] = [
+  ['site_health', ['issue_group_reference', 'site_facts_reference', 'site_health_reference']],
+  [
+    'page',
+    ['target_url', 'target_site_url_id', 'page_snapshot_reference', 'url_actions_reference'],
+  ],
+  ['recommendation', ['opportunity_id']],
+  ['demand', ['demand_signal_id']],
+  ['keyword_research', ['search_intelligence_reference']],
+  ['prompts', ['prompt_reference']],
+  ['objection', ['objection_group_id']],
+];
+export function chatOrigin(chat: Pick<Chat, 'context_refs' | 'action_id'>): AgentChatOrigin {
+  const refs = jsonObject(chat.context_refs, 'agent_chats.context_refs');
+  const found = ORIGIN_REFS.find(([, keys]) => keys.some((key) => refs[key] != null));
+  if (found) return found[0];
+  return chat.action_id ? 'action' : 'chat';
+}
 function summary(chat: Chat, outputKind: string | null, label: string | null, running: boolean) {
   return agentChatSummarySchema.parse({
     ...chat,
+    origin: chatOrigin(chat),
     running,
     target_label: label,
     output_kind: outputKind,
@@ -55,6 +79,9 @@ export function revisionView(revision: {
     created_at: iso(revision.created_at),
   });
 }
+function messageSteps(steps: unknown) {
+  return z.array(agentStepSchema).parse(steps);
+}
 function modelStepStatus(outcome: string, latest: boolean) {
   if (outcome === 'dispatched') return 'working';
   if (outcome !== 'completed') return outcome;
@@ -64,13 +91,12 @@ function pendingStepStatus(outcome: string, live: boolean, latest: boolean) {
   if (live) return modelStepStatus(outcome, latest);
   return outcome === 'dispatched' ? 'interrupted' : modelStepStatus(outcome, false);
 }
-/** Each model call, followed by the reads its response made, in the order they finished. */
 export async function progress(db: Database, run: Run) {
   if (run.attempt_count < 1) return [];
   const [models, tools] = await Promise.all([
     db
       .selectFrom('agent_model_attempts')
-      .select(['id', 'ordinal', 'run_attempt', 'outcome'])
+      .select(['ordinal', 'run_attempt', 'outcome'])
       .where('workspace_id', '=', run.workspace_id)
       .where('run_id', '=', run.id)
       .orderBy('run_attempt')
@@ -78,15 +104,7 @@ export async function progress(db: Database, run: Run) {
       .execute(),
     db
       .selectFrom('agent_tool_attempts')
-      .select([
-        'id',
-        'ordinal',
-        'run_attempt',
-        'call_id',
-        'tool_name',
-        'status',
-        'registry_version',
-      ])
+      .select(['id', 'ordinal', 'run_attempt', 'call_id', 'tool_name', 'status', 'input'])
       .where('workspace_id', '=', run.workspace_id)
       .where('run_id', '=', run.id)
       .orderBy('run_attempt')
@@ -96,12 +114,6 @@ export async function progress(db: Database, run: Run) {
       .execute(),
   ]);
   const live = active.includes(run.status);
-  const versions = {
-    runtime_version: run.runtime_version,
-    protocol_version: run.protocol_version,
-    skill_catalog_version: run.skill_catalog_version,
-    projection_version: agentPolicy.progress_version,
-  };
   return models.flatMap((model, index) => [
     agentRunStepSchema.parse({
       ordinal: model.ordinal,
@@ -112,11 +124,8 @@ export async function progress(db: Database, run: Run) {
       ),
       tool: null,
       call_id: null,
-      model_attempt_id: model.id,
-      tool_attempt_id: null,
       run_attempt: model.run_attempt,
-      registry_version: run.registry_version,
-      ...versions,
+      target: null,
     }),
     ...tools
       .filter((tool) => tool.run_attempt === model.run_attempt && tool.ordinal === model.ordinal)
@@ -126,11 +135,8 @@ export async function progress(db: Database, run: Run) {
           status: tool.status,
           tool: tool.tool_name,
           call_id: tool.call_id,
-          model_attempt_id: model.id,
-          tool_attempt_id: tool.id,
           run_attempt: tool.run_attempt,
-          registry_version: tool.registry_version,
-          ...versions,
+          target: stepTarget(tool.input),
         }),
       ),
   ]);
@@ -144,30 +150,64 @@ async function chatIn(db: Database, workspace: Pick<Scope, 'workspaceId'>, chatI
   const chat = await workspaceChat(db, workspace.workspaceId, chatId);
   return { chat, scope: { workspaceId: chat.workspace_id, projectId: chat.project_id } };
 }
+
+const ACTION_REF =
+  /^citeladder:\/\/action\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/u;
+
+async function referencedActions(
+  db: Database,
+  scope: Pick<Scope, 'workspaceId' | 'projectId'>,
+  thread: readonly Pick<
+    z.infer<typeof agentMessageSchema>,
+    'evidence_refs' | 'mentions' | 'proposals'
+  >[],
+) {
+  const ids = new Set<string>();
+  for (const message of thread) {
+    for (const ref of message.evidence_refs) {
+      const id = ACTION_REF.exec(ref)?.[1];
+      if (id) ids.add(id);
+    }
+    for (const mention of message.mentions) if (mention.kind === 'action') ids.add(mention.id);
+    for (const proposal of message.proposals) ids.add(proposal.action_id);
+  }
+  if (!ids.size) return [];
+  const rows = await db
+    .selectFrom('actions')
+    .select(['id', 'target_label', 'effective_status as status'])
+    .where('workspace_id', '=', scope.workspaceId)
+    .where('project_id', '=', scope.projectId)
+    .where('id', 'in', [...ids])
+    .orderBy('id')
+    .execute();
+  return rows.map((row) => ({ ...row, status: statusView(row.status).status }));
+}
+
 export async function readChat(
   db: Database,
   workspace: Pick<Scope, 'workspaceId'>,
   chatId: string,
 ) {
   const { chat, scope } = await chatIn(db, workspace, chatId);
-  const messages = await db
-    .selectFrom('agent_messages')
-    .selectAll()
-    .where('workspace_id', '=', scope.workspaceId)
-    .where('chat_id', '=', chat.id)
-    .orderBy('sequence')
-    .execute();
-  const run = await db
-    .selectFrom('agent_runs')
-    .selectAll()
-    .where('workspace_id', '=', scope.workspaceId)
-    .where('chat_id', '=', chat.id)
-    .orderBy('created_at', 'desc')
-    .orderBy('id', 'desc')
-    .limit(1)
-    .executeTakeFirst();
-  const documents = await chatDocuments(db, chat);
-  // Each document's latest generating reply, where the thread places it.
+  const [messages, run, documents] = await Promise.all([
+    db
+      .selectFrom('agent_messages')
+      .selectAll()
+      .where('workspace_id', '=', scope.workspaceId)
+      .where('chat_id', '=', chat.id)
+      .orderBy('sequence')
+      .execute(),
+    db
+      .selectFrom('agent_runs')
+      .selectAll()
+      .where('workspace_id', '=', scope.workspaceId)
+      .where('chat_id', '=', chat.id)
+      .orderBy('created_at', 'desc')
+      .orderBy('id', 'desc')
+      .limit(1)
+      .executeTakeFirst(),
+    chatDocuments(db, chat),
+  ]);
   const generated = documents.length
     ? await db
         .selectFrom('agent_output_revisions')
@@ -212,6 +252,15 @@ export async function readChat(
         .where('id', '=', chat.action_id)
         .executeTakeFirst()
     : undefined;
+  const thread = messages.map((message) =>
+    agentMessageSchema.parse({
+      ...message,
+      created_at: iso(message.created_at),
+      evidence_refs: revisionRefs(message.evidence_refs),
+      web_sources: revisionWebSources(message.web_sources),
+      steps: messageSteps(message.steps),
+    }),
+  );
   return agentChatDetailSchema.parse({
     chat: summary(
       chat,
@@ -241,14 +290,8 @@ export async function readChat(
           : {}),
       },
     },
-    messages: messages.map((message) =>
-      agentMessageSchema.parse({
-        ...message,
-        created_at: iso(message.created_at),
-        evidence_refs: revisionRefs(message.evidence_refs),
-        web_sources: revisionWebSources(message.web_sources),
-      }),
-    ),
+    messages: thread,
+    actions: await referencedActions(db, scope, thread),
     latest_run: run ? runView(run, await progress(db, run)) : null,
     page_fetch: await pageFetchView(db, chat),
     outputs: documents.map(({ output, revision }) =>
@@ -265,7 +308,6 @@ export async function readChat(
   });
 }
 const cursorSchema = z.object({ at: z.iso.datetime({ offset: true }), id: z.uuid() });
-/** One document's revisions, newest first; a document outside the chat has none. */
 export async function listRevisions(
   db: Database,
   workspace: Pick<Scope, 'workspaceId'>,
@@ -292,7 +334,6 @@ export async function listRevisions(
     items: revisions.map((revision) => revisionView(revision)),
   });
 }
-/** The project's open chats; the caller has authorized the project (`authorize: 'active-project'`). */
 export async function listChats(
   db: Database,
   scope: Pick<Scope, 'workspaceId' | 'projectId'>,
@@ -314,7 +355,6 @@ export async function listChats(
     )
     .selectAll('chat')
     .select('action.target_label')
-    // The kind of the document the chat most recently changed.
     .select((eb) =>
       eb
         .selectFrom('agent_outputs as output')

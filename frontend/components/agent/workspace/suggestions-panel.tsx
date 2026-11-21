@@ -1,17 +1,18 @@
 import { useMutation } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
+import { JUMP_LINK } from '@/components/agent/jump-link';
 
 import { GapEvidence, type GapMember } from '@/components/agent/content-gap-evidence';
-import { Badge } from '@/components/ui/badge';
+import { StatusMark } from '@/components/ui/status-mark';
 import { Button } from '@/components/ui/button';
-import { Callout, type CalloutTone } from '@/components/ui/callout';
 import { Disclosure } from '@/components/ui/disclosure';
+import { Icon } from '@/components/ui/icon';
 import { Inline, Stack } from '@/components/ui/layout';
-import { panelClasses } from '@/components/ui/panel';
 import { Pressable } from '@/components/ui/pressable';
 import { SegmentedControl } from '@/components/ui/tabs';
 import { TextLink } from '@/components/ui/text-link';
 import { textRole } from '@/components/ui/typography';
+import { X } from '@/lib/icons';
 import { agentWriteFailure, isOutputConflict } from '@/lib/agent/errors';
 import { groupByPassage } from '@/lib/agent/page-workspace';
 import {
@@ -28,13 +29,14 @@ import {
 } from '@/lib/api/agent';
 import { pluralCount } from '@/lib/format';
 import { useWorkspaceCapability } from '@/lib/project/project-context';
+import { Notice, type NoticeTone } from '@/components/ui/notice';
+import { wellClasses } from '@/components/ui/slip';
+import { DraftSheet, type DraftState } from '@/components/ui/draft-sheet';
 
 type Filter = 'open' | 'applied' | 'dismissed';
-type Notice = { tone: CalloutTone; message: string };
-/** A reference Add to context writes into the composer. */
+type Notice = { tone: NoticeTone; message: string };
 export type ContextReference = Readonly<{ quote: string; request: string }>;
 
-/** The card of a suggestion, so a highlight can bring it into view. */
 const suggestionCardId = (id: string) => `suggestion-${id}`;
 
 function failureNotice(error: unknown, action: string): Notice {
@@ -49,7 +51,6 @@ function changeNotice(outcome: string, reason: string | null): Notice | null {
   return outcome === 'reverted' ? { tone: 'info', message: REVERTED } : null;
 }
 
-/** Apply all's counts as one sentence: what landed, and what was left and why. */
 function appliedNotice(result: {
   applied: number;
   left_to_choose: number;
@@ -72,14 +73,12 @@ function appliedNotice(result: {
   return { tone: result.applied > 0 ? 'positive' : 'info', message: parts.join(' ') };
 }
 
-/** The text a suggestion was made on: a passage's quote or a field's value then. */
 function originalText(suggestion: AgentSuggestion): string | null {
   const { anchor } = suggestion;
   if (anchor.kind === 'span') return anchor.quote.exact;
   return anchor.kind === 'field' ? anchor.expected : null;
 }
 
-/** Add to context on a suggestion that needs a fact: its question and the text it is about. */
 function suggestionReference(suggestion: AgentSuggestion): ContextReference {
   const original = originalText(suggestion);
   return {
@@ -93,12 +92,12 @@ function suggestionReference(suggestion: AgentSuggestion): ContextReference {
 function SuggestionText({ suggestion }: Readonly<{ suggestion: AgentSuggestion }>) {
   const original = originalText(suggestion);
   if (suggestion.readiness === 'needs_input')
-    return <span className={textRole('itemTitle')}>{suggestion.needs_input}</span>;
+    return <span className={textRole('body')}>{suggestion.needs_input}</span>;
   if (suggestion.replacement === null)
-    return <span className={textRole('itemTitle')}>{suggestion.rationale}</span>;
+    return <span className={textRole('body')}>{suggestion.rationale}</span>;
   return (
     <Stack as="span" gap="tight">
-      <span className={textRole('itemTitle', '[overflow-wrap:anywhere]')}>
+      <span className={textRole('body', '[overflow-wrap:anywhere]')}>
         {suggestion.replacement || 'Remove this text.'}
       </span>
       {original ? (
@@ -112,13 +111,11 @@ function SuggestionText({ suggestion }: Readonly<{ suggestion: AgentSuggestion }
 
 type Guidance = NonNullable<AgentSuggestion['guidance']>;
 
-/** A heuristic or a search policy says so beside the category; a recommendation needs no label. */
 function StrengthBadge({ guidance }: Readonly<{ guidance: Guidance | null }>) {
   const badge = guidance ? suggestionStrengthCopy(guidance.strength).badge : null;
-  return badge ? <Badge tone="neutral">{badge}</Badge> : null;
+  return badge ? <StatusMark tone="neutral">{badge}</StatusMark> : null;
 }
 
-/** Where the suggestion's rule comes from, linked, worded as an option unless it is a policy. */
 function RuleSource({ guidance }: Readonly<{ guidance: Guidance | null }>) {
   if (!guidance) return null;
   return (
@@ -177,11 +174,12 @@ function Actions({
         </Button>
       ) : null}
       <Button
-        variant="ghost"
+        variant="quiet"
         disabled={disabled}
         aria-describedby={textId}
         onClick={() => onChange(suggestion, 'dismiss')}
       >
+        <Icon icon={X} />
         Dismiss
       </Button>
     </Inline>
@@ -198,7 +196,6 @@ function SuggestionCard({
   CardActions & {
     suggestion: AgentSuggestion;
     selected: boolean;
-    /** Whether the reader's role may act on the suggestion at all. */
     canChange: boolean;
     onShow: (id: string) => void;
   }
@@ -211,23 +208,26 @@ function SuggestionCard({
     </span>
   );
   return (
-    <Stack
+    <DraftSheet
       as="li"
       id={suggestionCardId(suggestion.id)}
       aria-current={selected || undefined}
-      gap="item"
-      className={panelClasses('suggestion-card')}
+      state={SUGGESTION_STATE[suggestion.status]}
+      marker={suggestion.status === 'stale' ? 'Out of date' : undefined}
+      className="suggestion-card"
     >
       <Inline className="flex-wrap">
-        <Badge tone={suggestion.readiness === 'needs_input' ? 'warning' : 'info'}>
+        <StatusMark tone={suggestion.readiness === 'needs_input' ? 'warning' : 'info'}>
           {suggestionCategoryLabel(suggestion.category)}
-        </Badge>
+        </StatusMark>
         <StrengthBadge guidance={suggestion.guidance} />
-        {suggestion.readiness === 'needs_input' ? <Badge tone="warning">Needs input</Badge> : null}
-        {suggestion.choose_one ? <Badge tone="neutral">Choose one</Badge> : null}
+        {suggestion.readiness === 'needs_input' ? (
+          <StatusMark tone="warning">Needs input</StatusMark>
+        ) : null}
+        {suggestion.choose_one ? <StatusMark tone="neutral">Choose one</StatusMark> : null}
       </Inline>
       {inPage ? (
-        <Pressable className="hover:text-accent-ink" onClick={() => onShow(suggestion.id)}>
+        <Pressable className={`${JUMP_LINK} text-start`} onClick={() => onShow(suggestion.id)}>
           <span className="sr-only">Show in the page: </span>
           {text}
         </Pressable>
@@ -239,36 +239,37 @@ function SuggestionCard({
       ) : null}
       <RuleSource guidance={suggestion.guidance} />
       {suggestion.choose_one ? (
-        <p className={textRole('caption')}>
-          It overlaps another suggestion, so Apply all leaves it for you to choose.
-        </p>
+        <p className={textRole('caption')}>Overlaps another suggestion. Apply all skips it.</p>
       ) : null}
       {canChange ? <Actions suggestion={suggestion} textId={textId} {...actions} /> : null}
-    </Stack>
+    </DraftSheet>
   );
 }
+
+const SUGGESTION_STATE: Readonly<Record<AgentSuggestion['status'], DraftState>> = {
+  open: 'draft',
+  applied: 'accepted',
+  dismissed: 'declined',
+  stale: 'declined',
+};
 
 function CoverageGaps({
   gaps,
   onAddToContext,
 }: Readonly<{
   gaps: readonly GapMember[];
-  /** Hands a gap to the composer; omitted for a role that may not ask the agent. */
   onAddToContext?: (reference: ContextReference) => void;
 }>) {
   if (gaps.length === 0) return null;
   return (
     <Stack as="section" gap="compact" aria-labelledby="coverage-gaps">
-      <h3 id="coverage-gaps" className={textRole('itemTitle')}>
+      <h3 id="coverage-gaps" className={textRole('subheading')}>
         Coverage gaps
       </h3>
-      <p className={textRole('caption')}>
-        Topics AI answers cite other pages for, from this Action’s evidence.
-      </p>
       <Stack as="ul" gap="compact">
         {gaps.map(({ id, evidence }) => (
-          <Stack as="li" key={id} gap="item" className={panelClasses()}>
-            <p className={textRole('itemTitle')}>{evidence.angle_label}</p>
+          <Stack as="li" key={id} gap="item" className={wellClasses()}>
+            <p className={textRole('body')}>{evidence.angle_label}</p>
             <Disclosure title="Evidence">
               <GapEvidence evidence={evidence} />
             </Disclosure>
@@ -294,7 +295,6 @@ function CoverageGaps({
   );
 }
 
-/** Changes to the page document; any answer reads the page and its suggestions again. */
 function useSuggestionChanges(
   workspaceId: string,
   document: { chatId: string; outputId: string; baseRevisionId: string },
@@ -338,7 +338,6 @@ function useSuggestionChanges(
   };
 }
 
-/** Apply all and Dismiss all, while any suggestion is open for review. */
 function BulkActions({
   open,
   ready,
@@ -346,7 +345,6 @@ function BulkActions({
   changes,
 }: Readonly<{
   open: number;
-  /** Whether any open suggestion can be applied as it stands. */
   ready: boolean;
   disabled: boolean;
   changes: Pick<ReturnType<typeof useSuggestionChanges>, 'applyAll' | 'dismissAll'>;
@@ -357,7 +355,8 @@ function BulkActions({
       <Button variant="secondary" disabled={disabled || !ready} onClick={changes.applyAll}>
         Apply all
       </Button>
-      <Button variant="ghost" disabled={disabled} onClick={changes.dismissAll}>
+      <Button variant="quiet" disabled={disabled} onClick={changes.dismissAll}>
+        <Icon icon={X} />
         Dismiss all
       </Button>
     </Inline>
@@ -365,17 +364,11 @@ function BulkActions({
 }
 
 const EMPTY: Readonly<Record<Filter, string>> = {
-  open: 'Nothing to review. Ask the agent below for suggestions on the page.',
+  open: 'Nothing to review.',
   applied: 'No suggestions applied yet.',
   dismissed: 'No suggestions dismissed.',
 };
 
-/**
- * The Suggestions tab: To review / Applied / Dismissed, cards grouped by the
- * passage they sit in, then Apply all and Dismiss all, then the Action's
- * coverage gaps. Every change names the revision on screen; a page that moved
- * on is read again and said so, and a refusal shows the server's reason.
- */
 export function SuggestionsPanel({
   workspaceId,
   target,
@@ -388,13 +381,9 @@ export function SuggestionsPanel({
   onAddToContext,
 }: Readonly<{
   workspaceId: string;
-  /** The page document and the revision on screen, which every change names. */
   target: { chatId: string; outputId: string; baseRevisionId: string };
-  /** The suggestions against the revision on screen. */
   page: AgentSuggestionsPage;
-  /** That revision's body: the passages the suggestions sit in. */
   body: string;
-  /** Why changes are paused (a running turn, unsaved edits), or null. */
   locked: string | null;
   gaps: readonly GapMember[];
   selectedId: string | null;
@@ -404,10 +393,7 @@ export function SuggestionsPanel({
   const [filter, setFilter] = useState<Filter>('open');
   const [shownSelection, setShownSelection] = useState(selectedId);
   const changes = useSuggestionChanges(workspaceId, target);
-  // Changing the page, or asking the agent to, is a run; a role without it
-  // reads the suggestions with no control to act on them.
   const canChange = useWorkspaceCapability('run');
-  // A highlight pressed in the page opens its card, which is always To review.
   if (selectedId !== shownSelection) {
     setShownSelection(selectedId);
     if (selectedId) setFilter('open');
@@ -433,10 +419,10 @@ export function SuggestionsPanel({
         ]}
       />
       {locked ? <p className={textRole('caption')}>{locked}</p> : null}
-      {changes.notice ? (
-        <Callout tone={changes.notice.tone}>{changes.notice.message}</Callout>
+      {changes.notice ? <Notice tone={changes.notice.tone}>{changes.notice.message}</Notice> : null}
+      {items.length === 0 ? (
+        <p className={textRole('body', 'text-ink-2')}>{EMPTY[filter]}</p>
       ) : null}
-      {items.length === 0 ? <p className={textRole('body')}>{EMPTY[filter]}</p> : null}
       {groupByPassage(items, body).map((group) => (
         <Stack as="section" key={group.key} gap="item" aria-label={`Passage: ${group.label}`}>
           <p className={textRole('caption', '[overflow-wrap:anywhere]')}>{group.label}</p>
@@ -461,8 +447,7 @@ export function SuggestionsPanel({
       ) : null}
       {counts.stale > 0 ? (
         <p className={textRole('caption')}>
-          {pluralCount(counts.stale, 'suggestion')} no longer fit the page after later edits, so{' '}
-          {counts.stale === 1 ? 'it is' : 'they are'} not shown.
+          {pluralCount(counts.stale, 'suggestion')} hidden: no longer fit the page.
         </p>
       ) : null}
       <CoverageGaps gaps={gaps} onAddToContext={canChange ? onAddToContext : undefined} />

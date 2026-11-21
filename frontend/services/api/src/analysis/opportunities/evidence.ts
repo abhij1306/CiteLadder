@@ -1,4 +1,3 @@
-/** Frozen persisted evidence shared by the PR7 detector foundation. */
 import type { OpportunityEvidence } from '@citeladder/contracts/opportunity-evidence';
 import type { TargetRef } from './targets.ts';
 
@@ -38,29 +37,15 @@ export type VisibilityEvidence = {
 };
 export type SiteEvidence = {
   crawl_id: string;
-  /** Whether the issue load hit its cap. */
-  truncated: boolean;
-  issues: {
-    issue_id: string;
-    rule_id: string;
-    severity: string;
-    category: string;
-    site_url_id: string;
-    evidence: Record<string, unknown> | null;
-    finding_class: string;
-  }[];
-  urls: { site_url_id: string; normalized_url: string }[];
-  /**
-   * Issue-family defects (`SITE_ISSUE_FAMILY`), loaded apart from `issues` and
-   * never under its cap: each rule's exact affected page count and its first
-   * `COHORT_PAGES_MAX` owned pages in URL order, with their issues.
-   */
   families: {
     rule_id: string;
+    finding_class: string;
     severity: string;
     category: string;
     page_count: number;
-    pages: { site_url_id: string; url: string; issue_ids: string[] }[];
+    whole_site: boolean;
+    issue_ids: string[];
+    pages: { site_url_id: string; url: string }[];
   }[];
   coverage: Record<string, unknown>;
   limitations: string[];
@@ -68,18 +53,13 @@ export type SiteEvidence = {
 export type DetectorHit = {
   rule_id: string;
   target: TargetRef;
-  /** The rule's evidence, shaped by `opportunityEvidenceSchemas`. */
   evidence: OpportunityEvidence;
   source_analysis_ids: string[];
   source_issue_ids: string[];
   source_metric_ids: string[];
   value_factor: number;
   gap_factor: number;
-  /**
-   * The severity and title this finding carries instead of its rule's: an
-   * issue family's are its own Site Health rule's. Absent for every other hit.
-   */
-  finding?: Readonly<{ severity: string; title: string }>;
+  finding?: Readonly<{ severity: string; title: string; remediation: string }>;
 };
 type PageEntityEvidence = {
   entity_kind: string;
@@ -96,7 +76,6 @@ export type SourcePageEvidence = {
   page_format: string;
   page_format_method: string | null;
   source_class: string | null;
-  /** The latest successful reading; a later failed read does not discard it. */
   snapshot_id: string | null;
   read_at: string | null;
   extracted_chars: number;
@@ -104,7 +83,6 @@ export type SourcePageEvidence = {
   entities: PageEntityEvidence[];
   recurrence_count: number;
   answer_count: number;
-  /** Tracked prompts whose answers in this audit cited the page. */
   prompts: { prompt_id: string; text: string }[];
   themes: string[];
   analysis_ids: string[];

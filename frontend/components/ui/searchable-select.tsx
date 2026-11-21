@@ -8,7 +8,6 @@ export type SearchableSelectOption = { value: string; label: string; detail?: st
 
 type SelectOptionRenderer = (option: SearchableSelectOption) => ReactNode;
 
-/** An editable combobox for locally filtered or server-backed options. */
 export function SearchableSelect({
   id,
   ariaLabel,
@@ -21,8 +20,6 @@ export function SearchableSelect({
   onChange,
   renderLeading,
   renderOptionEnd,
-  unknownValueFallback,
-  inputClassName,
   'aria-describedby': ariaDescribedBy,
   'aria-invalid': ariaInvalid,
   'aria-required': ariaRequired,
@@ -38,8 +35,6 @@ export function SearchableSelect({
   onChange: (value: string) => void;
   renderLeading?: SelectOptionRenderer;
   renderOptionEnd?: SelectOptionRenderer;
-  unknownValueFallback?: (value: string) => string;
-  inputClassName?: string;
   'aria-describedby'?: string;
   'aria-invalid'?: boolean;
   'aria-required'?: boolean;
@@ -51,12 +46,10 @@ export function SearchableSelect({
   const [highlight, setHighlight] = useState(0);
 
   const selected = options.find((option) => option.value === value);
-  const text = inputText(query, selected?.label, unknownValueFallback, value);
+  const text = inputText(query, selected?.label, value);
   const needle = (query ?? '').trim().toLowerCase();
   const filtered = needle ? options.filter((option) => matches(option, needle)) : options;
   const showList = open && filtered.length > 0;
-  // Options can shrink under an in-flight search after the highlight moved, so
-  // every read clamps to the list actually rendered rather than the stale index.
   const activeIndex = Math.min(highlight, filtered.length - 1);
   const activeOption = filtered[activeIndex];
 
@@ -103,7 +96,7 @@ export function SearchableSelect({
         value={text}
         disabled={disabled}
         placeholder={placeholder}
-        className={cn(renderLeading && selected && 'pl-10', inputClassName)}
+        className={cn(renderLeading && selected && 'pl-10')}
         onFocus={() => {
           setOpen(true);
           setQuery('');
@@ -147,38 +140,43 @@ export function SearchableSelect({
           role="listbox"
           aria-label={ariaLabel}
           data-open="true"
-          className={cn(MENU_PANEL, 'absolute mt-1 max-h-74 w-full min-w-60 overflow-auto')}
+          className={cn(
+            MENU_PANEL,
+            'absolute mt-1 max-h-74 w-full min-w-60 overflow-auto [--popup-origin:top]',
+          )}
         >
           {filtered.map((option, index) => (
-            <li
-              key={option.value}
-              // By position, not value: a value may hold characters that are
-              // not valid in an id reference (spaces, for one).
-              id={`${listId}-${index}`}
-              // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role, jsx-a11y/no-noninteractive-element-to-interactive-role -- ARIA listbox options keep focus on the editable input.
-              role="option"
-              aria-selected={option.value === value}
-              className={menuItemClasses({
-                className: cn(
-                  'grid h-auto min-h-8 gap-x-3 py-1.5',
-                  optionGridClass(Boolean(renderLeading), Boolean(renderOptionEnd)),
-                  index === activeIndex && 'not-aria-selected:overlay-hover',
-                ),
-              })}
-              onMouseDown={(event) => {
-                event.preventDefault();
-                commit(option);
-              }}
-              onMouseEnter={() => setHighlight(index)}
-            >
-              {renderLeading ? renderLeading(option) : null}
-              <span className="grid min-w-0 gap-0.5">
-                <span className="truncate">{option.label}</span>
-                {option.detail ? (
-                  <span className="text-ink-muted truncate">{option.detail}</span>
-                ) : null}
-              </span>
-              {renderOptionEnd ? renderOptionEnd(option) : null}
+            <li key={option.value} role="none">
+              <button
+                type="button"
+                // By position, not value: a value may hold characters that are
+                // not valid in an id reference (spaces, for one).
+                id={`${listId}-${index}`}
+                // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- ARIA listbox options keep focus on the editable input.
+                role="option"
+                tabIndex={-1}
+                aria-selected={option.value === value}
+                className={menuItemClasses({
+                  className: cn(
+                    'grid h-auto min-h-8 w-full gap-x-3 py-1.5 text-left',
+                    optionGridClass(Boolean(renderLeading), Boolean(renderOptionEnd)),
+                    index === activeIndex && 'not-aria-selected:overlay-hover',
+                  ),
+                })}
+                // Focus stays in the field; the choice commits on release (WCAG 2.5.2).
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => commit(option)}
+                onMouseEnter={() => setHighlight(index)}
+              >
+                {renderLeading ? renderLeading(option) : null}
+                <span className="grid min-w-0 gap-0.5">
+                  <span className="truncate">{option.label}</span>
+                  {option.detail ? (
+                    <span className="text-ink-2 truncate">{option.detail}</span>
+                  ) : null}
+                </span>
+                {renderOptionEnd ? renderOptionEnd(option) : null}
+              </button>
             </li>
           ))}
         </ul>
@@ -205,13 +203,6 @@ function optionGridClass(hasLeading: boolean, hasEnd: boolean) {
   return 'grid-cols-[minmax(0,1fr)]';
 }
 
-function inputText(
-  query: string | null,
-  selectedLabel: string | undefined,
-  unknownValueFallback: ((value: string) => string) | undefined,
-  value: string,
-) {
-  if (query !== null) return query;
-  if (selectedLabel) return selectedLabel;
-  return unknownValueFallback ? unknownValueFallback(value) : value;
+function inputText(query: string | null, selectedLabel: string | undefined, value: string) {
+  return query ?? (selectedLabel || value);
 }

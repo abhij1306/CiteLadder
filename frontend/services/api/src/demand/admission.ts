@@ -24,7 +24,7 @@ export async function enqueueManualDemand(
     .limit(1)
     .executeTakeFirst();
   if (!saved)
-    throw new ApiError(422, 'Refresh a saved Search Demand window', {
+    throw new ApiError(422, 'Refresh a saved Demand window', {
       code: 'demand_window_not_saved',
     });
   const revision = await demandSourceRevision(db, scope);
@@ -52,7 +52,7 @@ export async function enqueueManualDemand(
   if (Number(active.count) > policy.demand.DEMAND_MANUAL_ACTIVE_PER_PROJECT)
     throw new ApiError(
       429,
-      'A Search Demand refresh is already pending for this project. Retry after it finishes.',
+      'A Demand refresh is already pending for this project. Retry after it finishes.',
       { headers: { 'Retry-After': String(activeJobRetrySeconds()) } },
     );
   return id;

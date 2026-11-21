@@ -50,7 +50,6 @@ export function decodedBody(body: Buffer, encoding: string | undefined) {
     throw new ApiError(422, 'Invalid compressed or UTF-8 log batch');
   }
 }
-/** The receipt this source already stored under an idempotency key, if any. */
 function storedReceipt(db: Database, source: Selectable<CrawlLogSources>, key: string) {
   return db
     .selectFrom('crawl_log_batches')
@@ -60,7 +59,6 @@ function storedReceipt(db: Database, source: Selectable<CrawlLogSources>, key: s
     .where('idempotency_key', '=', key)
     .executeTakeFirst();
 }
-/** A receipt as its sender is answered: an unsupported format is refused with its missing fields. */
 export function answeredReceipt(receipt: Selectable<CrawlLogBatches>) {
   if (receipt.status === 'unsupported_format')
     throw new ApiError(
@@ -72,11 +70,6 @@ export function answeredReceipt(receipt: Selectable<CrawlLogBatches>) {
     );
   return receipt;
 }
-/**
- * Spend one batch attempt, or return the receipt already stored under `key`.
- * A retried key spends no quota, so its caller answers from that receipt
- * without reading or decoding the body again.
- */
 export async function batchQuota(
   db: Database,
   source: Selectable<CrawlLogSources>,
@@ -88,11 +81,6 @@ export async function batchQuota(
   await receivedBytesCeiling(db, source, now);
   await spendBudget(db, budget('crawl_log_batches'), source.id, { at: now });
 }
-/**
- * Refuse a project whose receipts already hold `received_bytes_per_project_per_day`
- * decompressed bytes on its current reporting day, until the next day starts.
- * One diagnostic receipt per source and day records the refusal.
- */
 async function receivedBytesCeiling(db: Database, source: Selectable<CrawlLogSources>, now: Date) {
   const { reporting_timezone: tz } = await withReportingTimezone(
     db,
@@ -119,10 +107,6 @@ async function receivedBytesCeiling(db: Database, source: Selectable<CrawlLogSou
     headers: { 'Retry-After': String(Math.max(1, usage.retry_after)) },
   });
 }
-/**
- * A refusal the sender only sees as a status code, kept as a zero-line receipt.
- * Keyed per source, kind and the project's reporting day, so retries add no rows.
- */
 export async function diagnosticReceipt(
   db: Database,
   source: Selectable<CrawlLogSources>,
@@ -187,13 +171,9 @@ export async function ingest(
     tokenHash?: string;
     actorId?: string;
     quotaChecked?: boolean;
-    /** The caller already refused an unavailable workspace (`authorizeToken`). */
     accessChecked?: boolean;
-    /** Records an adaptor could not decode into lines; counted as rejected lines. */
     rejectedRecords?: number;
-    /** Decompressed bytes the sender delivered, when more than this batch's lines. */
     receivedBytes?: number;
-    /** A pull found its subscription empty; only a heartbeat can be a drain. */
     drained?: boolean;
   },
 ) {
@@ -211,7 +191,6 @@ export async function ingest(
     unsupported: formatError,
   } = decodeBatch(source, body, options.encoding, Boolean(options.uploadId));
   let unsupported = formatError;
-  // Only batches with lines to verify need the IP range snapshots.
   const snapshots =
     lines.length && !validation && !unsupported
       ? await db

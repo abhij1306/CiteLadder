@@ -1,10 +1,3 @@
-/**
- * Readings of a `keyword_presence` check: whether the project now appears for a
- * search a competitor ranked for. Search Console impressions in a window after
- * go-live answer it; so does an owned ranking in a later Search Intelligence
- * dataset, but only when the provider checked the search after go-live. Not
- * appearing yet is `waiting`, never a failure, and no reading is unknown.
- */
 import { sql } from 'kysely';
 import type { KeywordPresenceCheck } from '@citeladder/contracts/opportunities';
 import { lexicalTokens } from '../analysis/lexical.ts';
@@ -31,7 +24,6 @@ type Reader = {
   result: Evaluation;
 };
 
-/** Search Console impressions for the search in a window that starts after go-live. */
 export async function keywordTrafficOutcome(
   r: Reader,
   snapshotId: string,
@@ -70,23 +62,17 @@ function providerInstant(value: unknown): number | null {
   return Number.isFinite(time) ? time : null;
 }
 
-/**
- * A search's identity regardless of case, punctuation and word order: how keyword
- * gaps merge rows, so a later row for the same search is found the same way.
- */
 export function searchTerms(keyword: string) {
   const normalized = normalizeQuery(keyword);
   const tokens = [...lexicalTokens(normalized)].sort(compareText);
   return { key: tokens.join(' ') || normalized, tokens };
 }
 
-/** Where each dataset kind records the project's own rank for a search. */
 export const OWNED_RANK: Record<string, 'rank_group' | 'owned_rank_group'> = {
   ranking_keywords: 'rank_group',
   shared_keywords: 'owned_rank_group',
 };
 
-/** A later Search Intelligence dataset for the same website and market. */
 export async function keywordDatasetOutcome(
   r: Reader,
   datasetId: string,
@@ -110,7 +96,6 @@ export async function keywordDatasetOutcome(
     return null;
   const { keyword } = check;
   const { key, tokens } = searchTerms(keyword);
-  // Narrow by the longest term in SQL; the term set decides in code.
   const probe = tokens.reduce(
     (longest, term) => (term.length > longest.length ? term : longest),
     '',
@@ -142,7 +127,6 @@ export async function keywordDatasetOutcome(
         ? outcome(r.reading, 'met')
         : outcome(r.reading, 'unavailable', 'provider_serp_predates_change');
     }
-    // A complete ranking list without the search says "not yet"; a cut one says nothing.
     return dataset.dataset_kind === 'ranking_keywords' &&
       dataset.coverage === 'complete' &&
       !dataset.truncated

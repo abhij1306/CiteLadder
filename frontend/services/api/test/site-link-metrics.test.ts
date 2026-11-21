@@ -5,7 +5,7 @@ import { siteWorkerSettings } from '../src/site-health/runtime.ts';
 import { SITE_HEALTH_LANE, TaskQueue } from '../src/queue/task-queue.ts';
 import { record } from '../src/db/json.ts';
 import { pageDetail, pages } from '../src/site-health/reads/pages.ts';
-import { testDatabase } from './support.ts';
+import { testConfig, testDatabase } from './support.ts';
 import { SiteFixtures } from './site-health-fixtures.ts';
 
 const anchor = (url: string, region = 'main', rel = '', text = '') => ({
@@ -236,7 +236,6 @@ it("reads a crawl's link metrics at the formula the crawl wrote, not the current
     .execute();
   await fixtures.task(seed);
   expect(await fixtures.worker(seed, { owner: 'pinned', settings }).runOnce()).toBe(1);
-  // A later release changes the formula; this crawl's rows stay what it measured.
   await db
     .updateTable('site_page_link_metrics')
     .set({ formula_version: 'historical' })
@@ -388,4 +387,41 @@ it('requeues database contention without spending a page attempt and fences expi
     .where('id', '=', id)
     .execute();
   expect(await worker.queue.heartbeat(id, 'expired', seed.workspaceId)).toBe(false);
+});
+it('leaves a task whose row a cancel still holds to lease recovery instead of failing the pass', async () => {
+  const seed = await fixtures.crawl();
+  const id = await fixtures.task(seed);
+  const impatient = testDatabase(testConfig({ DB_LOCK_TIMEOUT_MS: '100' }));
+  const worker = new SiteHealthWorker(impatient, {
+    settings,
+    taskScope: { workspaceId: seed.workspaceId, crawlId: seed.crawlId },
+    executors: { link_metrics: async () => {} },
+  });
+  const claimed = await fixtures.claim(worker, seed, 'link_metrics', id);
+  const held = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const holder = db.transaction().execute(async (trx) => {
+    await trx
+      .selectFrom('site_crawl_tasks')
+      .select('id')
+      .where('id', '=', id)
+      .forUpdate()
+      .execute();
+    held.resolve();
+    await release.promise;
+  });
+  await held.promise;
+  try {
+    await worker.execute(claimed);
+  } finally {
+    release.resolve();
+    await holder;
+    await impatient.destroy();
+  }
+  const task = await db
+    .selectFrom('site_crawl_tasks')
+    .select(['status', 'lease_owner'])
+    .where('id', '=', id)
+    .executeTakeFirstOrThrow();
+  expect(task).toEqual({ status: 'running', lease_owner: worker.owner });
 });

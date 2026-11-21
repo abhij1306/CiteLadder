@@ -1,9 +1,3 @@
-/**
- * Record references (`citeladder://<kind>/<id>`) as a reader sees them: a
- * labelled source and, where the product has one, the screen that shows it
- * (the contracts' record-kind table). The references come from persisted
- * replies and revisions; this never resolves or fetches a record.
- */
 import { isRecordKind, RECORD_KINDS, recordScreen } from '@citeladder/contracts/record-kinds';
 
 const FALLBACK_LABEL = 'CiteLadder record';
@@ -17,12 +11,6 @@ function parse(ref: string): { kind: string; id: string } {
   return { kind, id };
 }
 
-/**
- * One record behind an Action, dated. `observed`: a reading CiteLadder took
- * (a crawl, a visibility run, a Search Console window). `inferred`: a finding a
- * rule derived from readings. `at` is the persisted time the record carries;
- * null when none was stored, never a guess.
- */
 export type DatedEvidence = {
   key: string;
   label: string;
@@ -33,7 +21,6 @@ export type DatedEvidence = {
 
 type ActionEvidenceSource = {
   members: readonly { id: string; title: string; updated_at: string }[];
-  cohort: { crawl_id: string; crawl_completed_at: string | null } | null;
   declaration: {
     checks: readonly {
       observed_at: string | null;
@@ -43,7 +30,6 @@ type ActionEvidenceSource = {
   } | null;
 };
 
-/** A reading's record: its kind's label and screen, or the generic label for an unknown kind. */
 function reading(kind: string, id: string, at: string | null): DatedEvidence {
   const known = isRecordKind(kind);
   return {
@@ -55,11 +41,6 @@ function reading(kind: string, id: string, at: string | null): DatedEvidence {
   };
 }
 
-/**
- * The records behind an Action as its read returned them: each finding, the
- * crawl an issue family was read from, and each reading a declared check
- * took. Dates are the read's persisted timestamps; nothing is resolved here.
- */
 export function actionEvidence(action: ActionEvidenceSource): DatedEvidence[] {
   const records = new Map<string, DatedEvidence>();
   for (const member of action.members)
@@ -70,10 +51,6 @@ export function actionEvidence(action: ActionEvidenceSource): DatedEvidence[] {
       basis: 'inferred',
       href: null,
     });
-  if (action.cohort) {
-    const crawl = reading('site_crawl', action.cohort.crawl_id, action.cohort.crawl_completed_at);
-    records.set(crawl.key, crawl);
-  }
   for (const check of action.declaration?.checks ?? []) {
     if (!check.source_kind || !check.source_id) continue;
     const found = reading(check.source_kind, check.source_id, check.observed_at);
@@ -82,10 +59,18 @@ export function actionEvidence(action: ActionEvidenceSource): DatedEvidence[] {
   return [...records.values()];
 }
 
-/**
- * References grouped by kind, in first-cited order. A group links to its
- * screen; a single record links to its own page when its id alone builds one.
- */
+export function citedActions<T extends { id: string }>(
+  refs: readonly string[],
+  actions: readonly T[],
+): T[] {
+  const byId = new Map(actions.map((action) => [action.id, action]));
+  return [...new Set(refs)].flatMap((ref) => {
+    const { kind, id } = parse(ref);
+    const action = kind === 'action' ? byId.get(id) : undefined;
+    return action ? [action] : [];
+  });
+}
+
 export function groupEvidence(refs: readonly string[]): EvidenceGroup[] {
   const groups = new Map<string, { kind: string; ids: string[] }>();
   for (const ref of new Set(refs)) {

@@ -101,8 +101,6 @@ describe('AI Traffic opening requests', () => {
     await waitFor(() =>
       expect(asked.sort()).toEqual(['insights ?range=30d', 'overview ?range=30d']),
     );
-    // The loading frame draws the tab row, but no view is selected until
-    // availability is known.
     expect(screen.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'false');
     expect(screen.queryByText('Referral coverage is partial')).not.toBeInTheDocument();
 
@@ -110,5 +108,24 @@ describe('AI Traffic opening requests', () => {
     expect(await screen.findByText('Referral coverage is partial')).toBeVisible();
     expect(screen.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true');
     expect(asked.sort()).toEqual(['insights ?range=30d', 'overview ?range=30d']);
+  });
+
+  it('settles on a failed availability read instead of reading it again forever', async () => {
+    let reads = 0;
+    mswServer.use(
+      http.get(root + '/crawl-logs/sources', () => {
+        reads += 1;
+        return HttpResponse.json({ error: { message: 'not found' } }, { status: 404 });
+      }),
+      http.get('/api/v1/integrations', () => HttpResponse.json([])),
+      http.get(root + '/ai-traffic/overview', () => HttpResponse.json(overview)),
+      http.get(root + '/ai-traffic/insights', () => HttpResponse.json(insights)),
+    );
+    renderWithProviders(<AiTrafficScreen />, { projectSelection: { activeProject: project } });
+
+    await waitFor(() => expect(reads).toBe(2));
+    expect(await screen.findByText('Referral coverage is partial')).toBeVisible();
+    expect(screen.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true');
+    expect(reads).toBe(2);
   });
 });

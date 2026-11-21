@@ -1,15 +1,3 @@
-/**
- * The analytics worker: claims the kinds the analytics kind registry
- * (`workers/analytics-kinds.ts`) holds and runs each through its executor.
- *
- * Owns the analytics queue lifecycle: the claim
- * commits before any work, a row already terminal at claim time is never
- * dispatched, the lease is marked running and heartbeated while the executor
- * runs, and one locked finalize per dispatch is the only terminal writer. It
- * re-checks owner and status (a lost lease or a terminal row writes nothing)
- * and counts the attempt exactly once. Bounded lease recovery and durable
- * terminal compensation run before every claim, including an empty drain.
- */
 import { randomBytes } from 'node:crypto';
 
 import { ConfigError } from '../config/config-error.ts';
@@ -38,21 +26,14 @@ const logger = getLogger('workers.analytics');
 const { statuses } = policy.task_queue;
 const ERROR_DETAIL_LIMIT = 2000;
 
-/** Kind dispatch: each registered kind's executor. */
 export const EXECUTORS: Readonly<Record<string, Executor>> = Object.fromEntries(
   Object.entries(ANALYTICS_KINDS).map(([kind, { run }]) => [kind, run]),
 );
 
-/** A claimed kind with no executor: a deploy bug, failed without retries. */
 class ExecutorNotWiredError extends Error {}
 
 const detail = (error: Error) => [...String(error.message)].slice(0, ERROR_DETAIL_LIMIT).join('');
 
-/**
- * The wait before retry `attempt` (1-based): the base delay doubled per
- * failed attempt, capped, then jittered into its upper half so retries of a
- * shared outage spread out instead of returning together.
- */
 export function retryDelayMs(
   attempt: number,
   settings: Pick<WorkerSettings, 'retryDelaySeconds' | 'retryMaxDelaySeconds'>,
@@ -116,7 +97,6 @@ export class AnalyticsWorker {
       signal?: AbortSignal;
     } = {},
   ) {
-    // A heartbeat slower than a kind's lease guarantees expiry during healthy work.
     if (
       Object.values(ANALYTICS_LEASE_TTL_SECONDS).some(
         (lease) => settings.heartbeatIntervalSeconds >= lease,
@@ -136,11 +116,9 @@ export class AnalyticsWorker {
     this.owner = options.owner ?? `analytics-worker-ts-${randomBytes(6).toString('hex')}`;
   }
 
-  /** Claim one row of a TypeScript-owned kind and run it; the count run. */
   async runOnce(): Promise<number> {
     if (this.#signal?.aborted) return 0;
     await recoverAnalyticsLeases(this.#db, this.#settings.leaseReclaimBatchSize, this.#scope);
-    // Compensation is secondary: its failure must not block claiming new work.
     await compensateTerminalTasks(this.#db, this.#scope).catch((error: unknown) =>
       logger.exception('analytics_terminal_compensation_failed', error),
     );
@@ -154,7 +132,6 @@ export class AnalyticsWorker {
     return rows.length;
   }
 
-  /** When the earliest claimable task this worker owns becomes due, for the runner lane. */
   nextDue(): Promise<Date | null> {
     return this.#queue.nextDue(this.#kinds());
   }
@@ -163,7 +140,6 @@ export class AnalyticsWorker {
     return this.#scope ? Object.keys(this.#executors) : ANALYTICS_KIND_NAMES;
   }
 
-  /** Drain until a claim returns nothing (tests and one-shot runs). */
   async runUntilIdle(maxBatches = 1000, signal?: AbortSignal): Promise<number> {
     let total = 0;
     const deadline = performance.now() + this.#settings.drainBudgetSeconds * 1000;
@@ -180,16 +156,12 @@ export class AnalyticsWorker {
     const startedAt = performance.now();
     let started = false;
     try {
-      // Cooperative cancel at the boundary: a row that turned terminal between
-      // enqueue and claim is never dispatched.
       if (await this.#queue.isTerminal(claimed.id, claimed.workspace_id)) return;
       if (!(await this.#queue.markRunning(claimed.id, this.owner, claimed.attempt_count))) return;
       started = true;
       await this.#finalize(claimed, await this.#run(claimed), startedAt);
     } catch (error) {
       logger.exception('analytics_task_crashed', error, { task_id: claimed.id });
-      // A failed transition leaves a leased claim for recovery; no executor
-      // attempt or partial publication occurred.
       if (started)
         await this.#finalize(claimed, error as Error, startedAt).catch((settleError: unknown) =>
           logger.exception('analytics_task_settle_failed', settleError, { task_id: claimed.id }),
@@ -197,7 +169,6 @@ export class AnalyticsWorker {
     }
   }
 
-  /** Run the executor under a heartbeat; the error it raised, if any. */
   async #run(claimed: QueueTask): Promise<Error | TaskSettlement | null> {
     const executor = Object.hasOwn(this.#executors, claimed.task_kind)
       ? this.#executors[claimed.task_kind]
@@ -229,7 +200,6 @@ export class AnalyticsWorker {
           }
         },
       });
-      // A completed executor owns its evidence settlement, even at the request deadline.
       return settlement ?? null;
     } catch (error) {
       return error instanceof Error ? error : new Error(String(error));
@@ -238,7 +208,6 @@ export class AnalyticsWorker {
     }
   }
 
-  /** The one locked terminal write per dispatch. */
   async #finalize(
     claimed: QueueTask,
     result: Error | TaskSettlement | null,

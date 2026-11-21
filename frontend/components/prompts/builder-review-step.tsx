@@ -1,7 +1,6 @@
-import { Sparkles } from 'lucide-react';
 import type { ReactNode } from 'react';
 
-import { Badge } from '@/components/ui/badge';
+import { StatusMark } from '@/components/ui/status-mark';
 import { Button } from '@/components/ui/button';
 import { FactList } from '@/components/ui/facts';
 import { Icon } from '@/components/ui/icon';
@@ -9,17 +8,18 @@ import { Inline, Stack } from '@/components/ui/layout';
 import { textRole } from '@/components/ui/typography';
 import type { PromptGenerateRequest } from '@citeladder/contracts/prompt-requests';
 import type { PromptCandidate, Topic } from '@citeladder/contracts';
+import { Sparkles } from '@/lib/icons';
 import {
   moreForSegment,
   moreForTopic,
   segmentCoverage,
   topicCoverage,
   type CoverageRow,
-  type CoverageState,
+  type PlannedCoverage,
 } from '@/lib/prompts/builder-run';
 
 const STATE: Record<
-  CoverageState,
+  PlannedCoverage,
   { label: string; badge: 'success' | 'warning' | 'danger' | 'info' }
 > = {
   on_target: { label: 'On target', badge: 'success' },
@@ -39,11 +39,11 @@ function CoverageValue({
       <span className="tabular-nums">
         {row.actual} of {row.target}
       </span>
-      <Badge variant="status" value={STATE[row.state].badge}>
+      <StatusMark variant="status" value={STATE[row.state].badge}>
         {STATE[row.state].label}
-      </Badge>
+      </StatusMark>
       <Button
-        variant="ghost"
+        variant="quiet"
         onClick={onMore}
         disabled={disabled || !short}
         aria-label={`Generate more for ${row.label}`}
@@ -55,11 +55,6 @@ function CoverageValue({
   );
 }
 
-/**
- * Coverage of the builder's run against what it asked for: drafted
- * suggestions per topic and per segment, each on target, short or empty,
- * with "Generate more" for that one topic or segment.
- */
 export function RunCoverage({
   request,
   topics,
@@ -69,7 +64,6 @@ export function RunCoverage({
 }: Readonly<{
   request: PromptGenerateRequest;
   topics: readonly Topic[];
-  /** Every suggestion this builder session drafted, reviewed or not. */
   drafted: readonly PromptCandidate[];
   disabled: boolean;
   onGenerate: (request: PromptGenerateRequest) => void;
@@ -88,18 +82,17 @@ export function RunCoverage({
   return (
     <Stack gap="workspace">
       <Stack gap="compact">
-        <h3 className={textRole('itemTitle')}>Coverage by topic</h3>
+        <h3 className={textRole('subheading')}>Coverage by topic</h3>
         <FactList layout="spread" facts={facts(byTopic, (row) => moreForTopic(request, row))} />
       </Stack>
       <Stack gap="compact">
-        <h3 className={textRole('itemTitle')}>Coverage by segment</h3>
+        <h3 className={textRole('subheading')}>Coverage by segment</h3>
         <FactList layout="spread" facts={facts(bySegment, (row) => moreForSegment(request, row))} />
       </Stack>
     </Stack>
   );
 }
 
-/** Step 4: the run's outcome, its coverage when the builder made it, then the review list. */
 export function BuilderReviewStep({
   notices,
   coverage,

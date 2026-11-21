@@ -5,17 +5,16 @@ import {
   CHART_DASH,
   CHART_HEIGHT_PX,
   CHART_PLOT_FRAME,
-  CHART_FILL,
-  CHART_STROKE,
-  ChartLegend,
-  ChartTip,
-  ChartTipRow,
+  chartFill,
   chartPath,
+  chartStroke,
   chartTone,
   useChartWidth,
   type ChartHeight,
   type ChartTone,
 } from '@/components/ui/chart';
+import { ChartKey, ChartTable, ChartTipSheet } from '@/components/ui/chart-frame';
+import type { SeriesTone } from '@/components/ui/step-chart-parts';
 import {
   breakConnectors,
   isolatedPoints,
@@ -25,58 +24,24 @@ import {
   type TrendScale,
 } from '@/components/ui/trend-geometry';
 import { LineEndLabels } from '@/components/ui/trend-line-labels';
-import { TrendTable } from '@/components/ui/trend-table';
-import { availabilityLabel } from '@/lib/format';
+import { shownWith } from '@/components/ui/series-data';
+import { formattedText } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
-export type TrendPoint = {
-  /** The point in full ("10 Sep 2026 · run 4"): the tooltip's title and the table's column. */
-  label: string;
-  /** The short form under the axis, when `label` is too long to sit there. */
-  axisLabel?: string;
-  /** Null is unavailable and draws a gap, never a drop to zero. */
-  value: number | null;
-  /** Measured under a changed method: marked across the plot, with its note. */
-  versionChange?: { note: string } | null;
-  /** When the point was measured; with every point stamped the x axis is real time. */
-  timestamp?: number;
-  /** Not comparable with the point before it: every line breaks here. */
-  breakBefore?: boolean;
-};
-
-/** A further line read against the first: a competitor, a second rate, "Other". */
-export type TrendSeries = {
-  label: string;
-  values: readonly (number | null)[];
-  /** The merged remainder, drawn dashed in `data-other` so it never reads as a brand. */
-  other?: boolean;
-};
-
-/**
- * Something that happened at a moment, marked across the plot: drawn only
- * when the x axis is real time and the moment falls inside it. A marker says
- * when, never what it caused.
- */
-export type TrendEvent = { key: string; timestamp: number; label: string };
+export type { TrendEvent, TrendPoint, TrendSeries } from '@/components/ui/step-chart';
+import type { TrendEvent, TrendPoint, TrendSeries } from '@/components/ui/step-chart';
 
 type Line = { name: string; values: readonly (number | null)[]; tone: ChartTone };
 
-const TIP_WIDTH = 216;
+const KEY_TONE: Record<ChartTone, SeriesTone> = {
+  1: 'you',
+  2: 'rival-1',
+  3: 'rival-2',
+  4: 'other',
+  5: 'rival-2',
+};
 const defaultFormat = (value: number) => `${Math.round(value * 100) / 100}`;
 
-/**
- * TrendChart — up to four lines over time in plain SVG: the first (your
- * brand) in `data-1` at 2.75px, then `data-2`, `data-3`, and Other dashed in
- * `data-other`. A legend with each line's latest value, `chart-grid`
- * gridlines, and a crosshair with a tooltip card on hover or on focus with
- * the arrow keys. A visually hidden table carries every value.
- *
- * Width follows the container (the viewBox is measured pixels, so text stays
- * 12px); the height is a chart height role (`md`, 240, by default). A
- * missing value is a gap. A point not comparable with the one before it
- * (`breakBefore`) breaks the solid line; a faint dashed segment bridges the
- * break, so two runs either side of a method change still read as a line.
- */
 export function TrendChart({
   data,
   name,
@@ -89,36 +54,21 @@ export function TrendChart({
   yFormat = defaultFormat,
   format = yFormat,
   legend = true,
-  compact = false,
   eventsLabel,
   directLabels = false,
 }: Readonly<{
-  /** The first line, one entry per point; its labels and timestamps place every line. */
   data: readonly TrendPoint[];
-  /** The first line's name in the legend and table; defaults to `label`. */
   name?: string;
-  /** Up to three further lines on the same points, leader first. */
   series?: readonly TrendSeries[];
   events?: readonly TrendEvent[];
-  /** What the chart shows, e.g. "Mention rate over time". */
   label: string;
-  /** `sm` beside other content, `md` by default, `lg` for a page's primary chart. */
   height?: ChartHeight;
   yMin?: number;
   yMax?: number;
-  /** An axis tick: `42` as `42%`. */
   yFormat?: (value: number) => string;
-  /** A value in the legend, tooltip and table; defaults to `yFormat`. */
   format?: (value: number) => string;
   legend?: boolean;
-  /** Caption-size legend and hover card, where a long roster crowds the card. */
-  compact?: boolean;
-  /** The legend's name for the event markers, e.g. "Marked implemented". */
   eventsLabel?: string;
-  /**
-   * Name each line at its latest point, so lines whose inks sit close (the
-   * comparison greys) are told apart by name rather than by shade alone.
-   */
   directLabels?: boolean;
 }>) {
   const [plotRef, width] = useChartWidth<HTMLDivElement>();
@@ -139,8 +89,7 @@ export function TrendChart({
     values: line.values,
     tone: chartTone(line, index),
   }));
-  const shown = (value: number | null | undefined) =>
-    value === null || value === undefined ? availabilityLabel('not_measured') : format(value);
+  const shown = shownWith(format);
   const scale = trendScale({
     width,
     height,
@@ -165,19 +114,15 @@ export function TrendChart({
   return (
     <div className="flex min-w-0 flex-col gap-4">
       {legend ? (
-        <ChartLegend
-          line
-          compact={compact}
-          markerLabel={events.length ? eventsLabel : undefined}
+        <ChartKey
+          eventsLabel={events.length ? eventsLabel : undefined}
           entries={lines.map((line) => ({
             name: line.name,
-            tone: line.tone,
+            tone: KEY_TONE[line.tone],
             value: shown(line.values.at(-1)),
           }))}
         />
       ) : null}
-      {/* A focusable group: the arrow keys read the points one by one, which
-          no native element does (a <fieldset> is a form group). */}
       {/* oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- the plot is a keyboard-readable group */}
       <div // NOSONAR -- a keyboard-readable plot has no native element
         ref={plotRef}
@@ -208,40 +153,38 @@ export function TrendChart({
           directLabels={directLabels && lines.length > 1}
         />
         {active === null ? null : (
-          <ChartTip
+          <ChartTipSheet
             title={data[active]?.label ?? ''}
             top={scale.padTop}
-            left={tipLeft(scale.x(active), width)}
-          >
-            {lines.map((line) => (
-              <ChartTipRow
-                key={line.name}
-                tone={line.tone}
-                name={line.name}
-                value={shown(line.values[active])}
-                compact={compact}
-              />
-            ))}
-            {data[active]?.versionChange ? (
-              <p className="text-caption text-ink-muted">{data[active].versionChange.note}</p>
-            ) : null}
-          </ChartTip>
+            x={scale.x(active)}
+            frameWidth={width}
+            rows={lines.map((line) => ({
+              name: line.name,
+              tone: KEY_TONE[line.tone],
+              value: shown(line.values[active]),
+            }))}
+            note={data[active]?.versionChange?.note}
+          />
         )}
       </div>
-      <TrendTable
+      <ChartTable
         label={label}
-        data={data}
-        lines={lines}
-        events={placedEvents(data, events, scale).map(({ event }) => event)}
-        shown={shown}
+        columns={data.map((point) => point.label)}
+        rows={lines.map((line) => ({
+          name: line.name,
+          values: data.map((_, index) => formattedText(shown(line.values[index]))),
+        }))}
+        notes={[
+          ...data.flatMap((point) =>
+            point.versionChange
+              ? [`Method changed at ${point.label}: ${point.versionChange.note}`]
+              : [],
+          ),
+          ...placedEvents(data, events, scale).map(({ event }) => event.label),
+        ]}
       />
     </div>
   );
-}
-
-/** Beside the crosshair, flipped to its left where it would run off the plot. */
-function tipLeft(x: number, width: number) {
-  return x + 16 + TIP_WIDTH > width ? x - 16 - TIP_WIDTH : x + 16;
 }
 
 function TrendPlot({
@@ -292,10 +235,10 @@ function TrendPlot({
               y1={y}
               y2={y}
               shapeRendering="crispEdges"
-              className="stroke-chart-grid"
+              className="stroke-rule"
             />
             <text
-              x={scale.padLeft - 10}
+              x={scale.padLeft - 8}
               y={y}
               textAnchor="end"
               dominantBaseline="middle"
@@ -326,7 +269,7 @@ function TrendPlot({
           y2={bottom}
           strokeDasharray="3 3"
           shapeRendering="crispEdges"
-          className="stroke-line-control"
+          className="stroke-control-line"
         />
       )}
       {[...plotted].reverse().map(({ line, points, connectors }) => (
@@ -338,11 +281,8 @@ function TrendPlot({
             strokeDasharray={CHART_DASH[line.tone]}
             strokeLinecap="round"
             strokeLinejoin="round"
-            className={CHART_STROKE[line.tone]}
+            className={chartStroke(line.tone)}
           />
-          {/* Across a break the line goes on faint and dashed: the series
-              reads as one line, and the solid stroke never joins points
-              measured under different conditions. */}
           {connectors.map(([from, to]) => (
             <path
               key={`${from[0]}-${to[0]}`}
@@ -352,11 +292,11 @@ function TrendPlot({
               strokeWidth={1.5}
               strokeDasharray="3 4"
               strokeLinecap="round"
-              className={cn(CHART_STROKE[line.tone], 'opacity-40')}
+              className={cn(chartStroke(line.tone), 'opacity-40')}
             />
           ))}
           {isolatedPoints(points).map(([x, y]) => (
-            <circle key={`${x}-${y}`} cx={x} cy={y} r={2.5} className={CHART_FILL[line.tone]} />
+            <circle key={`${x}-${y}`} cx={x} cy={y} r={2.5} className={chartFill(line.tone)} />
           ))}
         </g>
       ))}
@@ -378,21 +318,10 @@ function TrendPlot({
 
 function TrendDot({ x, y, tone }: Readonly<{ x: number; y: number; tone: ChartTone }>) {
   return (
-    <circle
-      cx={x}
-      cy={y}
-      r={4}
-      strokeWidth={2}
-      className={cn('stroke-surface', CHART_FILL[tone])}
-    />
+    <circle cx={x} cy={y} r={4} strokeWidth={2} className={cn('stroke-surface', chartFill(tone))} />
   );
 }
 
-/**
- * A method change (dashed `warning`, a dot at the top) and an event (dashed
- * `line-control`, a square on the axis) across the plot. An event is placed
- * on the time axis, so it is drawn only when every point is stamped.
- */
 function TrendMarkers({
   data,
   events,
@@ -429,25 +358,24 @@ function TrendMarkers({
             y1={scale.padTop}
             y2={bottom}
             strokeDasharray="2 3"
-            className="stroke-line-control"
+            className="stroke-control-line"
           />
-          <rect x={x - 3} y={bottom - 3} width={6} height={6} className="fill-line-control" />
+          <rect x={x - 3} y={bottom - 3} width={6} height={6} className="fill-control-line" />
         </g>
       ))}
     </>
   );
 }
 
-/** Events inside the plotted time span, at their place on the axis. */
 function placedEvents(
   data: readonly TrendPoint[],
   events: readonly TrendEvent[],
   scale: TrendScale,
 ) {
-  const stamps = data.map((point) => point.timestamp);
-  if (stamps.length < 2 || stamps.includes(undefined)) return [];
-  const first = Math.min(...(stamps as number[]));
-  const span = Math.max(...(stamps as number[])) - first;
+  const stamps = data.flatMap((point) => (point.timestamp === undefined ? [] : [point.timestamp]));
+  if (stamps.length < 2 || stamps.length < data.length) return [];
+  const first = Math.min(...stamps);
+  const span = Math.max(...stamps) - first;
   if (span <= 0) return [];
   return events.flatMap((event) => {
     const offset = event.timestamp - first;

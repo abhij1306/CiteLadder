@@ -18,6 +18,7 @@ const coverage = {
   unavailable: [],
   answers_pending: 0,
   answers_unavailable: 0,
+  edited: 0,
 };
 
 function response(overrides: Partial<AccuracyResponse> = {}): AccuracyResponse {
@@ -42,6 +43,8 @@ function response(overrides: Partial<AccuracyResponse> = {}): AccuracyResponse {
         run_id: RUN,
         execution_id: EXECUTION,
         observed_at: '2026-10-01T00:00:00Z',
+        verdict_id: null,
+        edited: null,
       },
     ],
     cited_alongside: [],
@@ -52,9 +55,9 @@ function response(overrides: Partial<AccuracyResponse> = {}): AccuracyResponse {
 
 describe('AccuracyView', () => {
   it('shows accuracy with its coverage and each contradiction beside the fact it contradicts', () => {
-    render(<AccuracyView data={response()} />);
-    expect(screen.getByText('67%')).toBeInTheDocument();
-    expect(screen.getByText('4 of 5 claims checked · 1 pending')).toBeInTheDocument();
+    render(<AccuracyView allClaims={null} byFact={null} data={response()} />);
+    expect(screen.getByText('66.7%')).toBeInTheDocument();
+    expect(screen.getByText('1 pending')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '“Acme Pro costs $49 per month”' })).toHaveAttribute(
       'href',
       `/runs/${RUN}?execution=${EXECUTION}`,
@@ -62,25 +65,48 @@ describe('AccuracyView', () => {
     expect(screen.getByText('Your fact: Pro costs $59 per month.')).toBeInTheDocument();
   });
 
-  it('counts claims with no fact apart from inconclusive ones, never as one sum', () => {
-    const split = { ...coverage, claims: 10, not_covered: 4, inconclusive: 3 };
-    render(<AccuracyView data={response({ score: { accuracy: 2 / 3, coverage: split } })} />);
+  it('shows the edited count and both unchecked findings on visible lines', () => {
+    const split = { ...coverage, claims: 10, not_covered: 4, inconclusive: 3, edited: 2 };
+    render(
+      <AccuracyView
+        allClaims={null}
+        byFact={null}
+        data={response({ score: { accuracy: 2 / 3, coverage: split } })}
+      />,
+    );
     const checks = within(screen.getByLabelText('Fact checks'));
-    expect(checks.getByText('Not covered')).toBeVisible();
-    expect(checks.getByText('Inconclusive')).toBeVisible();
-    expect(checks.getByText('4')).toBeVisible();
-    expect(checks.getByText('3')).toBeVisible();
-    expect(checks.queryByText('7')).toBeNull();
+    expect(checks.getByText('2 edited')).toBeVisible();
+    expect(checks.getByText('7')).toBeVisible();
+    expect(checks.getByText('3 inconclusive · 4 not covered')).toBeVisible();
+  });
+
+  it('offers the import above a no-facts state', () => {
+    render(
+      <AccuracyView
+        allClaims={null}
+        byFact={null}
+        stateActions={<button type="button">Import facts CSV</button>}
+        data={response({
+          state: 'no_facts',
+          score: { accuracy: null, coverage: { ...coverage, claims: 0 } },
+          contradicted: [],
+        })}
+      />,
+    );
+    expect(screen.getByRole('button', { name: 'Import facts CSV' })).toBeVisible();
+    expect(screen.getByText('No confirmed facts for these runs')).toBeVisible();
   });
 
   it('says in one line that no source was cited alongside a contradiction', () => {
-    render(<AccuracyView data={response()} />);
+    render(<AccuracyView allClaims={null} byFact={null} data={response()} />);
     expect(screen.getByText('No sources cited alongside contradictions.')).toBeVisible();
   });
 
   it('explains a read without a value instead of showing a zero', () => {
     render(
       <AccuracyView
+        allClaims={null}
+        byFact={null}
         data={response({
           state: 'no_facts',
           score: { accuracy: null, coverage: { ...coverage, claims: 0 } },
@@ -89,6 +115,6 @@ describe('AccuracyView', () => {
       />,
     );
     expect(screen.getByText('No confirmed facts for these runs')).toBeInTheDocument();
-    expect(screen.queryByText('0%')).not.toBeInTheDocument();
+    expect(screen.queryByText('0.0%')).not.toBeInTheDocument();
   });
 });

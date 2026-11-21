@@ -1,4 +1,3 @@
-/** The earned-source analytics kind. */
 import type { AnalyticsKinds } from '../queue/executor.ts';
 import { compensateInspection, sourcePageInspector } from './inspector.ts';
 

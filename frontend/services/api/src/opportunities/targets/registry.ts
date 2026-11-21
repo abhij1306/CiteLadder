@@ -1,8 +1,3 @@
-/**
- * Every Action target kind, and the one map from an Opportunity target to the
- * Action it groups into. The refresh, the Agent, declarations and reads ask
- * here; no caller branches on a target kind or builds a group key.
- */
 import { actionTargetKindSchema, type ActionTargetKind } from '@citeladder/contracts/actions';
 
 import type { ActionMember } from '../../analysis/opportunities/actions.ts';
@@ -43,7 +38,6 @@ const TARGETS: { readonly [K in ActionTargetKind]: ActionTargetModule<K> } = {
   issue_family: issueFamilyTarget,
 };
 
-/** A target kind the Agent may name (`AGENT_TARGET_KINDS`). */
 export type AgentTargetKind = (typeof p.AGENT_TARGET_KINDS)[number];
 const NAMED: { readonly [K in AgentTargetKind]: AgentNamedTargetModule<K> } = {
   page: pageTarget,
@@ -54,7 +48,6 @@ const AGENT_KINDS: readonly unknown[] = p.AGENT_TARGET_KINDS;
 export const isAgentTargetKind = (kind: unknown): kind is AgentTargetKind =>
   AGENT_KINDS.includes(kind);
 
-/** The module of a stored Action's kind; the column holds only contract kinds. */
 const moduleOf = (action: Pick<TargetAction, 'target_kind'>): ActionTargetModule =>
   TARGETS[actionTargetKindSchema.parse(action.target_kind)];
 
@@ -76,7 +69,6 @@ function target(
   };
 }
 
-/** The Action a finding groups into: one per page, prompt, query, product, listing or issue family. */
 export function actionTargetOf(
   member: Pick<ActionMember, 'target' | 'label_hint' | 'title'>,
 ): ActionTarget {
@@ -107,12 +99,10 @@ export function actionTargetOf(
         : target(member, key, 'query');
     case 'search_gap': {
       if (ref.url) return page(ref.url);
-      // A keyword gap no existing page covers is a page to create.
       const planned = plannedPageKey(ref.keyword);
       return planned ? target(member, planned, 'planned_page') : target(member, key, 'query');
     }
     case 'planned_page':
-      // The stored key is the group key, so a renamed label keeps its Action.
       return target(member, ref.key, 'planned_page');
     default: {
       const unknownTarget: never = ref;
@@ -121,11 +111,6 @@ export function actionTargetOf(
   }
 }
 
-/**
- * The Action a target the Agent names would be, without creating it: equal
- * keys are one Action. Throws `ActionTargetError` for a kind the Agent cannot
- * name or a target no Action can carry.
- */
 export async function namedTarget(
   db: Database,
   scope: TargetScope,
@@ -145,7 +130,6 @@ export async function namedTarget(
   return { kind, text, ...identity };
 }
 
-/** The pages a declaration of `action` covers, from the members it freezes. */
 export const declarationTargets = (
   db: Database,
   action: TargetAction,
@@ -153,13 +137,11 @@ export const declarationTargets = (
   website: string,
 ) => moduleOf(action).declarationTargets({ db, action, members, website });
 
-/** What an Action's detail read adds for its kind: whether its page is editable, its cohort. */
 export const targetDetail = (
   db: Database,
   action: TargetAction,
   declaredMemberIds: readonly string[],
 ) => moduleOf(action).detail({ db, action, declaredMemberIds });
 
-/** What an Agent chat on `action` is given beyond the row's own fields. */
 export const targetAgentContext = (db: Database, scope: TargetScope, action: TargetAction) =>
   moduleOf(action).agentContext({ db, scope, action });

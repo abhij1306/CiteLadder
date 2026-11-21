@@ -1,4 +1,3 @@
-/** The Commerce analytics kinds. */
 import type { AnalyticsKinds } from '../queue/executor.ts';
 import { matchAnswers } from './answer-matching.ts';
 import { competitorDiscovery } from './discovery.ts';

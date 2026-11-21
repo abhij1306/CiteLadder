@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 
 import { canonicalHash, canonicalJson } from '../src/canonical-json.ts';
 
-/** The six-character `\uXXXX` escape text for one UTF-16 code unit. */
 const u = (hex: string) => `${'\\'}u${hex}`;
 
 describe('canonical JSON', () => {

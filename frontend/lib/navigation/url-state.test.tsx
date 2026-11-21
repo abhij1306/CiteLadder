@@ -1,12 +1,22 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
-import { render, screen, waitFor } from '@testing-library/react';
-import { createMemoryRouter, RouterProvider, useSearchParams } from 'react-router-dom';
+import { act, render, screen, waitFor } from '@testing-library/react';
+import {
+  createBrowserRouter,
+  createMemoryRouter,
+  Outlet,
+  RouterProvider,
+  useSearchParams,
+} from 'react-router-dom';
+
+import { AppScrollRestoration } from '@/components/layout/app-scroll-restoration';
 
 import {
+  batchUrlWrites,
   optionalStringUrlCodec,
   readUrlState,
   setUrlParams,
   setUrlStateRouter,
+  sortUrlCodec,
   stringUrlCodec,
   subscribeToUrlState,
 } from './url-state';
@@ -21,6 +31,18 @@ describe('URL state codecs', () => {
     expect(codec.parse('unknown')).toBe('overview');
     expect(codec.serialize('overview')).toBeNull();
     expect(codec.serialize('issues')).toBe('issues');
+  });
+
+  it('reads a sort as a key with a leading minus for descending, leaving out the default', () => {
+    const codec = sortUrlCodec(['created', 'failed'] as const, {
+      key: 'created',
+      descending: true,
+    });
+    expect(codec.parse('-failed')).toEqual({ key: 'failed', descending: true });
+    expect(codec.parse('failed')).toEqual({ key: 'failed', descending: false });
+    expect(codec.parse('-unknown')).toEqual({ key: 'created', descending: true });
+    expect(codec.serialize({ key: 'created', descending: false })).toBe('created');
+    expect(codec.serialize({ key: 'created', descending: true })).toBeNull();
   });
 
   it('round-trips optional selected IDs', () => {
@@ -60,34 +82,15 @@ describe('URL state codecs', () => {
   });
 });
 
-/**
- * URL-owned filter state and React Router must not each believe they own the
- * address.
- *
- * Writing it with `history.pushState` directly is invisible to the router — it
- * only watches `popstate` — so every consumer of `useSearchParams` kept the
- * previous query after a filter change. The damaging one is the shell's
- * canonical-URL rewrite: it rebuilds the address from what it can see, so the
- * next navigation silently dropped the filters the reader had just set.
- */
 describe('address store', () => {
-  /**
-   * `getSnapshot` reads through, so it can observe a change before the event
-   * announcing it arrives. When one variable served as both "current" and
-   * "last notified", that read satisfied the change check and the subsequent
-   * `popstate` told nobody — leaving every component that had not re-rendered
-   * for its own reasons on the previous query.
-   */
   it('notifies subscribers even when a read has already observed the change', () => {
     window.history.replaceState(null, '', '/issues?severity=low');
     const seen: string[] = [];
     const unsubscribe = subscribeToUrlState(() => seen.push(readUrlState()));
 
-    // A read lands first — a render elsewhere in the tree, say.
     window.history.replaceState(null, '', '/issues?severity=high');
     expect(readUrlState()).toContain('severity=high');
 
-    // The event still has to reach the subscribers.
     window.dispatchEvent(new PopStateEvent('popstate'));
     expect(seen).toEqual([expect.stringContaining('severity=high')]);
 
@@ -100,7 +103,6 @@ describe('address store', () => {
     setUrlParams({ view: 'trends' });
     first();
 
-    // Unwatched, the address moves back without a notice.
     window.history.replaceState(null, '', '/demand');
     const seen: string[] = [];
     const second = subscribeToUrlState(() => seen.push(readUrlState()));
@@ -119,9 +121,6 @@ describe('router registration', () => {
   }
 
   it('makes a filter write visible to useSearchParams in the same tree', async () => {
-    // `setUrlParams` composes the next address from `window.location`, which in
-    // the app IS the router's location. A memory router has its own, so they
-    // are lined up here rather than left to disagree.
     window.history.replaceState(null, '', '/issues?project=p1');
     const router = createMemoryRouter([{ path: '/issues', element: <Probe /> }], {
       initialEntries: ['/issues?project=p1'],
@@ -134,9 +133,95 @@ describe('router registration', () => {
     setUrlParams({ severity: 'medium' });
 
     await waitFor(() => expect(screen.getByTestId('search')).toHaveTextContent('severity=medium'));
-    // The scope the shell owns survives the filter write, rather than being
-    // rebuilt later from a stale read.
     expect(screen.getByTestId('search')).toHaveTextContent('project=p1');
+  });
+
+  it('opens a new visit at the top, restores only on Back, and keeps position on a filter write', async () => {
+    window.history.replaceState(null, '', '/site');
+    const router = createBrowserRouter([
+      {
+        element: (
+          <>
+            <AppScrollRestoration />
+            <main id="main">
+              <Outlet />
+            </main>
+          </>
+        ),
+        children: [
+          { path: '/site', element: <p>site</p> },
+          { path: '/issues', element: <p>issues</p> },
+        ],
+      },
+    ]);
+    setUrlStateRouter(router);
+    render(<RouterProvider router={router} />);
+    const panel = document.getElementById('main')!;
+    let scrollTop = 0;
+    Object.defineProperty(panel, 'scrollTop', {
+      get: () => scrollTop,
+      set: (value: number) => (scrollTop = value),
+    });
+    const scrollPanelTo = (top: number) => {
+      scrollTop = top;
+      panel.dispatchEvent(new Event('scroll'));
+    };
+    const positions: number[] = [];
+
+    scrollPanelTo(600);
+    await act(() => router.navigate('/issues'));
+    positions.push(scrollTop);
+    await act(() => router.navigate('/site'));
+    positions.push(scrollTop);
+    scrollPanelTo(300);
+    await act(async () => setUrlParams({ tab: 'pages' }));
+    positions.push(scrollTop);
+    await act(() => router.navigate(-3));
+    positions.push(scrollTop);
+
+    expect(positions).toEqual([0, 0, 300, 600]);
+    scrollPanelTo(200);
+    await act(() => router.navigate('/issues#%'));
+    expect(scrollTop).toBe(0);
+    router.dispose();
+  });
+
+  it('lands every write of a batch through the router, as one history entry', async () => {
+    window.history.replaceState(null, '', '/issues?project=p1&severity=low&kind=faq');
+    const router = createMemoryRouter([{ path: '/issues', element: <Probe /> }], {
+      initialEntries: ['/issues?project=p1&severity=low&kind=faq'],
+    });
+    setUrlStateRouter(router);
+    const navigate = vi.spyOn(router, 'navigate');
+    render(<RouterProvider router={router} />);
+
+    batchUrlWrites(() => {
+      setUrlParams({ severity: null });
+      setUrlParams({ kind: null });
+    });
+
+    await waitFor(() => expect(screen.getByTestId('search').textContent).toBe('project=p1'));
+    expect(navigate).toHaveBeenCalledOnce();
+    await act(() => router.navigate(-1));
+    expect(screen.getByTestId('search').textContent).toBe('project=p1&severity=low&kind=faq');
+    router.dispose();
+  });
+
+  it('replaces the entry for a batch whose every write replaces', () => {
+    window.history.replaceState(null, '', '/actions?impact=high&source=seo');
+    const push = vi.spyOn(window.history, 'pushState');
+    batchUrlWrites(() => {
+      setUrlParams({ impact: null }, 'replace');
+      setUrlParams({ source: null }, 'replace');
+    });
+    expect(window.location.search).toBe('');
+    expect(push).not.toHaveBeenCalled();
+    batchUrlWrites(() => {
+      setUrlParams({ impact: 'low' }, 'replace');
+      setUrlParams({ source: 'aeo' });
+    });
+    expect(push).toHaveBeenCalledOnce();
+    push.mockRestore();
   });
 
   it('falls back to history when nothing has registered a router', () => {

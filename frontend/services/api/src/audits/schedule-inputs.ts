@@ -9,7 +9,6 @@ const timezones = new Map(
   policy.audit_schedules.timezones.map((name) => [name.toLowerCase(), name]),
 );
 
-/** A pinned IANA name supported by this runtime's scheduler, or null. */
 export function canonicalTimezone(value: string): string | null {
   const name = timezones.get(value.toLowerCase());
   if (!name) return null;
@@ -56,7 +55,6 @@ const fields = {
     .nullable(),
 };
 
-/** Validate after merging a patch with the locked current schedule. */
 export function scheduleIntervalIssue(
   input: { cadence: string; interval_minutes: number | null },
   env: SettingSource = process.env,
@@ -71,22 +69,28 @@ export function scheduleIntervalIssue(
     : 'every_n_minutes requires a configured-minimum interval or higher';
 }
 
-export const scheduleCreate = z
-  .object({
-    ...fields,
-    audit_scope: fields.audit_scope.default('brand'),
-    interval_minutes: fields.interval_minutes.default(null),
-    timezone: fields.timezone.default(policy.audit_schedules.default_timezone),
-    market_ids: fields.market_ids.default([null]),
-    repetitions: fields.repetitions.default(null),
-    benchmark_mode: fields.benchmark_mode.default(null),
-    enabled: fields.enabled.default(true),
-    next_run_at: fields.next_run_at.default(null),
-  })
-  .superRefine((input, context) => {
-    const message = scheduleIntervalIssue(input);
-    if (message) context.addIssue({ code: 'custom', path: ['interval_minutes'], message });
-  });
+const scheduleObject = z.object({
+  ...fields,
+  audit_scope: fields.audit_scope.default('brand'),
+  interval_minutes: fields.interval_minutes.default(null),
+  timezone: fields.timezone.default(policy.audit_schedules.default_timezone),
+  market_ids: fields.market_ids.default([null]),
+  repetitions: fields.repetitions.default(null),
+  benchmark_mode: fields.benchmark_mode.default(null),
+  enabled: fields.enabled.default(true),
+  next_run_at: fields.next_run_at.default(null),
+});
+const intervalCheck = (
+  input: { cadence: string; interval_minutes: number | null },
+  context: z.RefinementCtx,
+) => {
+  const message = scheduleIntervalIssue(input);
+  if (message) context.addIssue({ code: 'custom', path: ['interval_minutes'], message });
+};
+export const scheduleCreate = scheduleObject.superRefine(intervalCheck);
+export const probeScheduleCreate = scheduleObject
+  .extend({ audit_scope: z.literal('probe') })
+  .superRefine(intervalCheck);
 export const scheduleUpdate = z.object(fields).partial();
-export type ScheduleCreate = z.output<typeof scheduleCreate>;
+export type ScheduleCreate = z.output<typeof scheduleCreate> | z.output<typeof probeScheduleCreate>;
 export type ScheduleUpdate = z.output<typeof scheduleUpdate>;

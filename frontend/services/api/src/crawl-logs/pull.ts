@@ -1,13 +1,3 @@
-/**
- * `crawl_log_pull`: drain one verified Google Cloud subscription.
- *
- * Each iteration pulls outside any transaction, admits the batch through
- * `ingest()` in its own transaction, and acknowledges only after that commit.
- * A lost acknowledgement only causes redelivery, which request-ID dedupe
- * absorbs. An empty pull records a drained heartbeat receipt; coverage reads
- * those receipts. A permission or missing-subscription refusal stalls the
- * source until the daily check passes again.
- */
 import type { Selectable } from 'kysely';
 import type { Database } from '../db/database.ts';
 import type { CrawlLogSources } from '../generated/db-schema.ts';
@@ -47,18 +37,15 @@ const verificationDue = (source: Source, now: Date) =>
   source.verification_checked_at.getTime() <
     now.getTime() - settings.verification_interval_hours * 3600000;
 
-/** False when admission is refused for now; the messages wait for a later pull. */
 async function admitted(admit: Promise<unknown>) {
   try {
     await admit;
     return true;
   } catch (error) {
-    // A paused or lapsed plan, the batch quota or the daily volume ceiling.
     if (error instanceof ApiError && [409, 429].includes(error.status)) return false;
     throw error;
   }
 }
-/** One pulled batch admitted and acknowledged; false when the drain must stop here. */
 async function admitBatch(
   db: Database,
   source: Source,
@@ -96,11 +83,6 @@ async function admitBatch(
   return true;
 }
 
-/**
- * Queue a pull for each of the workspace's verified live pull sources that is
- * due: every `pull_interval_seconds`, or daily while a verification failure or
- * lapsed plan holds it. The key coalesces a source's pulls per interval.
- */
 export async function enqueueDuePulls(
   db: Database,
   workspaceId: string,
@@ -177,7 +159,6 @@ export function crawlLogPull(readerFor: () => PubSubReader | null = defaultPubSu
     });
   };
 }
-/** Messages from one pull, or null when the refusal stalled the source. */
 async function pullOnce(db: Database, reader: PubSubReader, source: Source, subscription: string) {
   try {
     return await reader.pull(subscription, settings.pull_max_messages);
@@ -192,7 +173,6 @@ async function pullOnce(db: Database, reader: PubSubReader, source: Source, subs
     throw error;
   }
 }
-/** Pull, admit and acknowledge until the subscription is empty or the iteration bound. */
 async function drain(input: {
   db: Database;
   reader: PubSubReader;

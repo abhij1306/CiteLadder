@@ -1,8 +1,3 @@
-/**
- * The project's monitored set and re-audits of its pages (one page, or an
- * issue's Re-run all). Crawls pick the set;
- * nothing edits it, and no new work enters a running crawl (SH-B4, SH-B13).
- */
 import { ACTIVE_CRAWL_STATUSES } from '@citeladder/contracts/site-health';
 import { notFound } from '../errors.ts';
 import type { Database } from '../db/database.ts';
@@ -12,7 +7,6 @@ import { controls, crawlError } from './planner-policy.ts';
 import { monitoredQuota } from './reads/runtime.ts';
 import { lockTrackedSet } from './tracked-set.ts';
 
-/** The project's monitored set; its route authorizes the path project. */
 export async function monitoredSet(db: Database, workspaceId: string, projectId: string) {
   const rows = await db
     .selectFrom('monitored_site_urls as m')
@@ -68,17 +62,20 @@ async function lockControlScope(db: Database, workspaceId: string, projectId: st
     .forNoKeyUpdate()
     .executeTakeFirst();
   if (!project) throw notFound('Project');
-  const runtime = await admissionRuntime(db, workspaceId);
-  await lockTrackedSet(db, workspaceId, projectId);
-  const crawl = await db
+  const active = db
     .selectFrom('site_crawls')
     .select('id')
     .where('workspace_id', '=', workspaceId)
     .where('project_id', '=', projectId)
     .where('status', 'in', ACTIVE_CRAWL_STATUSES)
-    .orderBy('created_at', 'desc')
-    .forUpdate()
-    .executeTakeFirst();
+    .orderBy('created_at', 'desc');
+  // As createCrawl does: refuse a running crawl before the runtime and membership locks its tasks take.
+  if (await active.executeTakeFirst())
+    crawlError('Project already has an active crawl', 'crawl_already_active', 409);
+  const runtime = await admissionRuntime(db, workspaceId);
+  await lockTrackedSet(db, workspaceId, projectId);
+  // NO KEY UPDATE: a key-share lock (a task or event insert) never waits on it.
+  const crawl = await active.forNoKeyUpdate().executeTakeFirst();
   const profile = await db
     .selectFrom('site_health_profiles')
     .selectAll()
@@ -126,11 +123,6 @@ export async function rerunPage(
   };
 }
 
-/**
- * Re-audit the tracked pages `pick` chooses as one crawl, under the control
- * locks. A running crawl refuses it (SH-B4); `pick` sees the active tracked
- * pages only after that check, so it never decides against a set in flux.
- */
 export async function rerunTrackedPages(
   db: Database,
   workspaceId: string,
@@ -167,7 +159,6 @@ export async function rerunTrackedPages(
   const [first, ...rest] = urls;
   if (!first || urls.length !== chosen.size)
     crawlError('Site URL not found in this project', 'invalid_selection');
-  // A re-audit names no robots choice, so it keeps the project's (`crawlRequest`).
   const { robots, robotsDecision } = controls(await crawlRequest(db, workspaceId, projectId));
   return createPageRerunCrawl(
     db,

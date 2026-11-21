@@ -1,10 +1,3 @@
-/**
- * The contract between the analytics worker and the executors it dispatches.
- *
- * An executor receives the claimed row and performs its kind's projection
- * over persisted rows or bounded acquisition. The worker owns the queue
- * lifecycle around it: run marking, heartbeats and the terminal write.
- */
 import type { Database } from '../db/database.ts';
 import { WorkspaceScope } from '../db/workspace-scope.ts';
 import { parseUuid } from '../http/uuid.ts';
@@ -12,15 +5,12 @@ import type { QueueTask } from './task-queue.ts';
 
 type ExecutorContext = {
   db: Database;
-  /** Throws `TaskCancelledError` once the row turned terminal (cooperative cancel). */
   checkCancelled: (boundary: string) => Promise<void>;
-  /** The attempt budget successor tasks are enqueued with. */
   maxAttempts: number;
 };
 
 export type TaskSettlement = {
   error: Error | null;
-  /** Appends acquired evidence in the worker's fenced terminal transaction. */
   persist: (db: Database) => Promise<void>;
 };
 export type Executor = (
@@ -28,24 +18,15 @@ export type Executor = (
   context: ExecutorContext,
 ) => Promise<void | TaskSettlement>;
 
-/**
- * One analytics task kind as its feature registers it: the executor, the
- * durable compensation a failed (or sweeper-terminalized) row is owed, and a
- * lease override for work that holds an external resource longer than the
- * default lease covers.
- */
 export type AnalyticsKind = {
   run: Executor;
   compensate?: (db: Database, task: QueueTask) => Promise<void>;
   leaseTtlSeconds?: number;
 };
-/** A feature's analytics kinds, keyed by `task_kind`. */
 export type AnalyticsKinds = Readonly<Record<string, AnalyticsKind>>;
 
-/** The claimed row turned terminal mid-run; the worker writes nothing. */
 export class TaskCancelledError extends Error {}
 
-/** A bounded admission/provider outcome that retrying cannot repair. */
 export class TerminalExecutorError extends Error {
   readonly code: string;
   constructor(code: string, message = code) {
@@ -77,7 +58,6 @@ export async function taskProject(db: Database, task: QueueTask): Promise<string
   return id;
 }
 
-/** The payload's `import_artifact_id`; fails the attempt when absent or malformed. */
 export function payloadArtifactId(task: QueueTask): string {
   const raw = payloadField(task, 'import_artifact_id');
   const id = parseUuid(raw);
@@ -85,7 +65,6 @@ export function payloadArtifactId(task: QueueTask): string {
   return id;
 }
 
-/** The payload's inclusive `window_start`/`window_end` as ISO dates. */
 export function payloadWindow(task: QueueTask): { windowStart: string; windowEnd: string } {
   const start = payloadField(task, 'window_start');
   const end = payloadField(task, 'window_end');
