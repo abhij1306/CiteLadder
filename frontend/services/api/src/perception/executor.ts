@@ -11,6 +11,8 @@
  */
 import { randomUUID } from 'node:crypto';
 
+import { sql } from 'kysely';
+
 import { cohortNamesBrand, scoringConfig } from '../analysis/scoring.ts';
 import { policy } from '../config.ts';
 import { meterFor } from '../models/metering.ts';
@@ -40,6 +42,7 @@ import {
 import { entityPassages, packageHash, type PerceptionPackage } from './passages.ts';
 import { untrackedNames, type UntrackedName } from './untracked-names.ts';
 import { listThemes } from '../projects/themes.ts';
+import { categorised } from './categories.ts';
 import { trackedEntities } from '../analysis/entity-assessment.ts';
 import { refreshNamedCandidates } from '../analysis/observed-names.ts';
 import {
@@ -110,17 +113,44 @@ function needsVerification(claims: readonly VerifiedClaim[], factCheck: FrozenFa
   return claims.some((claim) => !claim.low_confidence && topics.has(claim.topic));
 }
 
-function persist(
-  task: QueueTask,
-  projectId: string,
-  subject: Subject,
-  versions: { extractor_version: string; template_version: string },
-  outcome: Outcome,
-  call: ModelCall | null,
-  factCheck: FrozenFactCheck | null,
-) {
+function persist({
+  task,
+  projectId,
+  subject,
+  versions,
+  outcome,
+  call,
+  factCheck,
+  settings,
+}: {
+  task: QueueTask;
+  projectId: string;
+  subject: Subject;
+  versions: { extractor_version: string; template_version: string };
+  outcome: Outcome;
+  call: ModelCall | null;
+  factCheck: FrozenFactCheck | null;
+  settings: Pick<PerceptionPolicy, 'project_themes'>;
+}) {
   return async (db: Database) => {
     const id = randomUUID();
+    const settled = await db
+      .selectFrom('answer_perceptions')
+      .select('id')
+      .where('analysis_id', '=', subject.analysis_id)
+      .where('extractor_version', '=', versions.extractor_version)
+      .executeTakeFirst();
+    if (settled) return;
+    const labelled =
+      outcome.outcome === 'classified'
+        ? await categorised(db, {
+            workspaceId: task.workspace_id,
+            projectId,
+            entities: outcome.entities,
+            drops: outcome.drops,
+            policy: settings,
+          })
+        : { stored: [], drops: {} };
     const inserted = await db
       .insertInto('answer_perceptions')
       .values({
@@ -133,17 +163,17 @@ function persist(
         artifact_id: subject.artifact_id,
         extractor_version: versions.extractor_version,
         template_version: versions.template_version,
-        ...outcomeColumns(outcome, outcome.outcome === 'classified' ? outcome.drops : {}, call),
+        ...outcomeColumns(outcome, labelled.drops, call),
       })
       .onConflict((conflict) => conflict.columns(['analysis_id', 'extractor_version']).doNothing())
       .returning('id')
       .executeTakeFirst();
     if (!inserted || outcome.outcome !== 'classified') return;
-    if (outcome.entities.length)
+    if (labelled.stored.length)
       await db
         .insertInto('entity_sentiments')
         .values(
-          outcome.entities.map((entity) => ({
+          labelled.stored.map(({ entity, aspects }) => ({
             id: randomUUID(),
             workspace_id: task.workspace_id,
             perception_id: id,
@@ -155,7 +185,7 @@ function persist(
             low_confidence: entity.low_confidence,
             model_omitted: entity.model_omitted,
             passage_spans: JSON.stringify(entity.passage_spans),
-            aspects: JSON.stringify(entity.aspects),
+            aspects: JSON.stringify(aspects),
           })),
         )
         .execute();
@@ -213,6 +243,11 @@ function persist(
   };
 }
 
+function passagesCut(pkg: PerceptionPackage): Record<string, number> {
+  const cut = pkg.entities.reduce((sum, entity) => sum + entity.cut_chars, 0);
+  return cut ? { passage_chars_cut: cut } : {};
+}
+
 function classify(
   gateway: ModelGateway,
   input: {
@@ -241,7 +276,12 @@ function classify(
       entities: validated.entities,
       claims: claims.claims,
       names: names.names ?? [],
-      drops: { ...validated.drops, ...claims.drops, ...names.drops },
+      drops: {
+        ...validated.drops,
+        ...claims.drops,
+        ...names.drops,
+        ...passagesCut(pkg),
+      },
     };
   };
   if (!claimsRequest)
@@ -265,7 +305,16 @@ export function answerPerception(
     const factCheck = frozenFactCheck(subject.configuration);
     const settle = (outcome: Outcome, call: ModelCall | null = null) => ({
       error: null,
-      persist: persist(task, projectId, subject, versions, outcome, call, factCheck),
+      persist: persist({
+        task,
+        projectId,
+        subject,
+        versions,
+        outcome,
+        call,
+        factCheck,
+        settings,
+      }),
     });
     const capped = await overCap(db, 'answer_perceptions', {
       workspaceId: task.workspace_id,
@@ -311,18 +360,40 @@ export function answerPerception(
   };
 }
 
+export async function moveAspectsTheme(
+  db: Database,
+  scope: { workspaceId: string; projectId: string; themeId: string; intoId: string },
+) {
+  await sql`
+    update entity_sentiments as es
+    set aspects = (
+      select jsonb_agg(
+        case when aspect->>'theme_id' = ${scope.themeId}
+          then jsonb_set(aspect, '{theme_id}', to_jsonb(${scope.intoId}::text))
+          else aspect end
+        order by position)
+      from jsonb_array_elements(es.aspects) with ordinality as item(aspect, position))
+    from answer_perceptions as perception
+    where perception.id = es.perception_id
+      and perception.workspace_id = es.workspace_id
+      and perception.workspace_id = ${scope.workspaceId}
+      and perception.project_id = ${scope.projectId}
+      and es.aspects @> ${JSON.stringify([{ theme_id: scope.themeId }])}::jsonb`.execute(db);
+}
+
 export async function compensatePerception(db: Database, task: QueueTask) {
   const projectId = await taskProject(db, task);
   const subject = await loadSubject(db, task, projectId);
   const versions = frozenPerceptionVersions(subject.configuration);
   if (!versions) return;
-  await persist(
+  await persist({
     task,
     projectId,
     subject,
     versions,
-    { outcome: 'unavailable', reason: 'task_failed' },
-    null,
-    null,
-  )(db);
+    outcome: { outcome: 'unavailable', reason: 'task_failed' },
+    call: null,
+    factCheck: null,
+    settings: policy.perception,
+  })(db);
 }

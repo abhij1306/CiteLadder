@@ -110,7 +110,14 @@ export const INITIAL_VISIBILITY_PARAMS: ProjectVisibilityParams = {
 export const visibilityApi = {
   getPerception: async (
     projectId: string,
-    params: { audit_id?: string; audit_ids?: string[]; engine?: string; cohort?: string },
+    params: {
+      audit_id?: string;
+      market?: string;
+      engine?: string;
+      cohort?: string;
+      from?: string;
+      to?: string;
+    },
     options?: ApiRequestOptions,
   ) => {
     const result = await apiClient.get(

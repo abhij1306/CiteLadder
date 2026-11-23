@@ -125,7 +125,6 @@ function Controls({
             </span>
           ) : null}
           {status === undefined ? null : (
-            // A block, not a flex row: `truncate` only cuts a block's own inline text.
             <output
               aria-live="polite"
               className="type-caption block min-w-0 shrink truncate *:not-first:ms-2 empty:hidden"
@@ -136,7 +135,7 @@ function Controls({
         </div>
       ) : null}
       {actions ? (
-        <div className="phone:ms-0 phone:justify-start ms-auto flex max-w-full min-w-0 shrink-0 items-center justify-end gap-2">
+        <div className="phone:ms-0 phone:justify-start phone:flex-wrap ms-auto flex max-w-full min-w-0 shrink-0 items-center justify-end gap-2">
           {actions}
         </div>
       ) : null}

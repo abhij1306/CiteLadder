@@ -9,12 +9,6 @@ describe('exportFilename', () => {
       'site-health-pages-abcdef01.csv',
     );
   });
-
-  it('builds a markdown filename (view-agnostic)', () => {
-    expect(exportFilename('abcdef01-2222-4222-8222-222222222222', 'md', 'inventory')).toBe(
-      'site-health-abcdef01.md',
-    );
-  });
 });
 
 describe('saveBlob', () => {

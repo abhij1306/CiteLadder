@@ -240,8 +240,11 @@ const FACTS_BY_RULE: Readonly<
   'search.snippet_access': (evidence) => textList(evidence.directives),
   'aeo.structured_data_present': (evidence) =>
     absent(evidence, { has_json_ld: 'JSON-LD', has_microdata: 'Microdata' }),
-  'aeo.open_graph_present': (evidence) =>
-    absent(evidence, { has_og_title: 'og:title', has_og_description: 'og:description' }),
+  'aeo.open_graph_present': (evidence) => textList(evidence.missing_properties),
+  'aeo.open_graph_url_matches': (evidence) => [
+    `og:url ${text(evidence.open_graph_url)} ≠ canonical ${text(evidence.canonical_url)}`,
+  ],
+  'aeo.twitter_card_present': () => ['<meta name="twitter:card">'],
   'aeo.schema_required_valid': schemaProperties,
   'aeo.schema_recommended_present': schemaProperties,
   'aeo.schema_matches_content': schemaTypeMismatch,
@@ -279,6 +282,10 @@ const FACTS_BY_RULE: Readonly<
     `${String(evidence.invalid_json_ld_count)} unparseable JSON-LD script(s)`,
   ],
   'technical.h1_present': () => ['<h1>'],
+  'technical.single_h1': (evidence) => [`${String(evidence.h1_count)} <h1> headings`],
+  'technical.html_size': (evidence) => [
+    `${String(evidence.decoded_bytes)} bytes (limit ${String(evidence.max_bytes)})`,
+  ],
   'technical.http_redirects_to_https': (evidence) => [
     `${text(evidence.final_url)} answers ${String(evidence.final_status_code)} without redirecting to HTTPS`,
   ],

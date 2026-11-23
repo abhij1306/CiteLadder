@@ -1,18 +1,23 @@
+import { z } from 'zod';
 import { ConfigError } from './config-error.ts';
 import { epochMicros, parseDatetime } from '../http/datetimes.ts';
 
 export type Env = Readonly<Record<string, string | undefined>>;
 
-export type SettingSpec = {
-  env: string[];
-  type: string;
-  default: unknown;
-  values?: unknown[];
-  minimum?: number;
-  exclusive_minimum?: number;
-  maximum?: number;
-  exclusive_maximum?: number;
-};
+export const settingSpecSchema = z.object({
+  env: z.array(z.string()),
+  type: z.string(),
+  default: z.unknown(),
+  values: z.array(z.unknown()).optional(),
+  minimum: z.number().optional(),
+  exclusive_minimum: z.number().optional(),
+  maximum: z.number().optional(),
+  exclusive_maximum: z.number().optional(),
+});
+
+export type SettingSpec = z.infer<typeof settingSpecSchema>;
+
+const settingTypeSchema = z.enum(['int', 'float', 'bool', 'datetime', 'literal', 'str', 'decimal']);
 
 const TRUE_VALUES = new Set(['1', 'on', 't', 'true', 'y', 'yes']);
 const FALSE_VALUES = new Set(['0', 'off', 'f', 'false', 'n', 'no']);
@@ -66,14 +71,19 @@ function parseDatetimeSetting(name: string, raw: string): Date | null {
   if (!raw.trim()) return null;
   const parsed = parseDatetime(raw.trim());
   if (parsed === null) throw new ConfigError(`${name} must be a timestamp`);
-  // A naive timestamp is kept as "present but unusable"; demo access then
-  // fails closed exactly as `demo_access_expired` does for a naive value.
   if (parsed.offsetSeconds === null) return new Date(Number.NaN);
   return new Date(Number(epochMicros(parsed) / 1000n));
 }
 
+function settingType(name: string, spec: SettingSpec) {
+  const parsed = settingTypeSchema.safeParse(spec.type);
+  if (!parsed.success) throw new ConfigError(`${name} has an unknown setting type ${spec.type}`);
+  return parsed.data;
+}
+
 function parseSetting(name: string, spec: SettingSpec, raw: string): unknown {
-  switch (spec.type) {
+  const type = settingType(name, spec);
+  switch (type) {
     case 'int':
       return parseInteger(name, raw, spec);
     case 'float':
@@ -87,14 +97,35 @@ function parseSetting(name: string, spec: SettingSpec, raw: string): unknown {
         throw new ConfigError(`${name} must be one of ${spec.values?.join(', ')}`);
       }
       return raw;
-    default:
+    case 'str':
+    case 'decimal':
       return raw;
+    default: {
+      const unhandled: never = type;
+      return unhandled;
+    }
   }
 }
 
+export type SettingValue<S extends SettingSpec> = S['default'] extends number
+  ? number
+  : S['default'] extends boolean
+    ? boolean
+    : S['default'] extends string
+      ? string
+      : unknown;
+
 function resolveFromEnv(name: string, spec: SettingSpec, env: Env): unknown {
+  settingType(name, spec);
   const raw = envValue(spec, env);
-  return raw === undefined ? spec.default : parseSetting(name, spec, raw);
+  const value = raw === undefined ? spec.default : parseSetting(name, spec, raw);
+  const expected = typeof spec.default;
+  if (
+    (expected === 'number' || expected === 'boolean' || expected === 'string') &&
+    typeof value !== expected
+  )
+    throw new ConfigError(`${name} must be a ${expected}`);
+  return value;
 }
 
 export class Settings {
@@ -108,6 +139,7 @@ export class Settings {
     this.#values = values;
   }
 
+  of<S extends SettingSpec>(spec: S): SettingValue<S>;
   of(spec: SettingSpec): unknown {
     if (!this.#values.has(spec)) {
       throw new ConfigError(`${spec.env[0] ?? 'setting'} is not a catalogued setting`);
@@ -118,10 +150,56 @@ export class Settings {
 
 export type SettingSource = Settings | Env;
 
+export function resolveSpec<S extends SettingSpec>(
+  name: string,
+  spec: S,
+  source: SettingSource,
+): SettingValue<S>;
 export function resolveSpec(name: string, spec: SettingSpec, source: SettingSource): unknown {
   return source instanceof Settings ? source.of(spec) : resolveFromEnv(name, spec, source);
 }
 
+export function resolveSettingSpec<S extends SettingSpec>(
+  spec: S,
+  source: SettingSource,
+): SettingValue<S>;
 export function resolveSettingSpec(spec: SettingSpec, source: SettingSource): unknown {
   return resolveSpec(spec.env[0] ?? 'setting', spec, source);
+}
+
+export function settingValues<T extends Record<string, SettingSpec>>(
+  specs: T,
+  source: SettingSource,
+): { [K in keyof T]: SettingValue<T[K]> };
+export function settingValues(
+  specs: Record<string, SettingSpec>,
+  source: SettingSource,
+): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(specs).map(([name, spec]) => [name, resolveSpec(name, spec, source)]),
+  );
+}
+
+export function dateSetting(spec: SettingSpec, source: SettingSource): Date | null {
+  const value = resolveSettingSpec(spec, source);
+  if (value === null || value instanceof Date) return value;
+  throw new ConfigError(`${spec.env[0] ?? 'setting'} must be a timestamp`);
+}
+
+export function nullableTextSetting(spec: SettingSpec, source: SettingSource): string | null {
+  const value = resolveSettingSpec(spec, source);
+  if (value === null || typeof value === 'string') return value;
+  throw new ConfigError(`${spec.env[0] ?? 'setting'} must be text`);
+}
+
+export function choiceSetting<const T extends string>(
+  spec: SettingSpec & { default: string },
+  source: SettingSource,
+  choices: readonly T[],
+): T {
+  const value = resolveSettingSpec(spec, source);
+  const choice = choices.find((candidate) => candidate === value);
+  if (choice === undefined)
+    throw new ConfigError(`${spec.env[0] ?? 'setting'} must be one of ${choices.join(', ')}`);
+  return choice;
 }

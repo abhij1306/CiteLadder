@@ -6,8 +6,6 @@ import {
   formatDisplayDate,
   formatDisplayTimestamp,
   formatPercent,
-  formatStripDay,
-  formatStripTimestamp,
   isOwnHost,
   ownOrigin,
   readableUrl,
@@ -77,10 +75,6 @@ describe('dates and times', () => {
     expect(formatDisplayTimestamp(at, 'Europe/Paris')).toBe('Nov 14, 2026, 12:33 PM');
     expect(formatDisplayTimestamp(at, 'Not/A_Zone')).toBe('Nov 14, 2026, 11:33 AM');
     expect(formatDisplayTimestamp(at, 'Not/A_Zone')).toBe('Nov 14, 2026, 11:33 AM');
-    expect(formatStripTimestamp(at, 'Asia/Kolkata')).toBe('14 Nov 17:03');
-    expect(formatStripTimestamp('2026-11-18T00:05:00Z', 'Europe/Paris')).toBe('18 Nov 01:05');
-    expect(formatStripTimestamp(at, 'Not/A_Zone')).toBe('14 Nov 11:33');
-    expect(formatStripDay('2026-10-09')).toBe('9 Oct');
   });
 });
 

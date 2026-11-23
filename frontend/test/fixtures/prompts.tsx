@@ -50,6 +50,8 @@ export function makeSet(prompts: Prompt[]): PromptSet {
 export function makeFormLimits(overrides: Partial<PromptFormLimits> = {}): PromptFormLimits {
   return {
     generation_count_max: 50,
+    brand_prompts_max: 10,
+    brand_generation_calls: 4,
     import_rows_max: 500,
     bulk_prompts_max: 500,
     persona_max_chars: 120,

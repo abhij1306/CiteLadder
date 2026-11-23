@@ -8,15 +8,19 @@ import {
 } from '@/lib/ai-traffic/use-crawl-connections';
 import type { crawlSourceSchema } from '@citeladder/contracts/ai-traffic';
 import type { z } from 'zod';
+import { Absence } from '@/components/ui/absence';
 import { ActionButton } from '@/components/ui/actions';
-import { Button } from '@/components/ui/button';
+import { Button, IconButton } from '@/components/ui/button';
+import { Icon } from '@/components/ui/icon';
+import { Menu, MenuContent, MenuItem, MenuTrigger } from '@/components/ui/menu';
 import { StateBlock } from '@/components/ui/state-block';
 import { ConfirmDialog, Dialog, type ConfirmRequest } from '@/components/ui/dialog';
 import { mutationNoticeForError } from '@/lib/api/mutation-notice';
 import { Stack } from '@/components/ui/layout';
 import { DisplayTime } from '@/components/ui/display-time';
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
-import { TableActionsCell, TableCell, TableCellLines, TableRow } from '@/components/ui/table';
+import { ClampText } from '@/components/ui/clamp-text';
+import { TableActionsCell, TableCell, TableRow } from '@/components/ui/table';
 import {
   CrawlLogSetup,
   CrawlLogSetupSubmit,
@@ -32,16 +36,18 @@ import {
 } from '@/lib/ai-traffic/vocabulary';
 import { SinkFilterUpdates } from './gcp-pull-setup';
 import { CRAWL_LOG_SETUPS } from '@/lib/config/crawl-logs';
-import { ICONS } from '@/lib/icons';
+import { ICONS, MoreHorizontal, PlugZap, RotateCcw, Trash2 } from '@/lib/icons';
 import { Notice, readErrorProps } from '@/components/ui/notice';
+import { textRole } from '@/components/ui/typography';
+import { formatCount } from '@/lib/format';
 import { Section, SectionHeader, SectionTitle } from '@/components/ui/section';
 
 const SOURCE_COLUMNS: readonly DataTableColumn[] = [
   { key: 'source', label: 'Source' },
   { key: 'collection', label: 'Collection and sampling', priority: 'low' },
-  { key: 'freshness', label: 'Freshness', width: 'stamp', priority: 'low' },
-  { key: 'diagnostics', label: 'Diagnostics' },
-  { key: 'manage', label: 'Manage', width: 'rowActions' },
+  { key: 'freshness', label: 'Last accepted', width: 'stamp', priority: 'low' },
+  { key: 'diagnostics', label: 'Diagnostics', width: 'name' },
+  { key: 'manage', label: 'Manage', kind: 'actions', width: 'action' },
 ];
 const setupLabel = (setup: string) =>
   CRAWL_LOG_SETUPS.find((option) => option.value === setup)?.label ?? words(setup);
@@ -164,7 +170,6 @@ function Connections({
         {body}
       </Stack>
     );
-  // The body keeps its place in the tree, so an open setup dialog survives the read settling.
   return (
     <Section id="crawl-log-connections" aria-label="Crawl log connections">
       <ConnectionsHead empty={sources.data?.items.length === 0} connect={connect} />
@@ -249,6 +254,18 @@ function StallDetail({ source }: Readonly<{ source: z.infer<typeof crawlSourceSc
     </>
   );
 }
+function diagnosticsText(source: z.infer<typeof crawlSourceSchema>): string {
+  const counts = [
+    [source.rejected_lines, 'rejected'],
+    [source.overlapping_lines, 'overlapping'],
+    [source.unsupported_uploads, 'unsupported uploads'],
+    [source.unsupported_batches, 'unsupported batches'],
+  ] as const;
+  const found = counts.filter(([count]) => count > 0);
+  return found.length
+    ? found.map(([count, word]) => `${formatCount(count)} ${word}`).join(' · ')
+    : 'No problems';
+}
 function SourceDiagnostics({
   items,
   canManage,
@@ -267,70 +284,63 @@ function SourceDiagnostics({
       {items.map((s) => (
         <TableRow key={s.id}>
           <TableCell>
-            <TableCellLines
-              primary={s.host}
-              secondary={
-                <>
-                  {setupLabel(s.setup)} · {words(s.connection)} · {words(s.state)}
-                  <StallDetail source={s} />
-                </>
-              }
-            />
+            <div className="grid min-w-0">
+              <ClampText>{s.host}</ClampText>
+              <ClampText className={textRole('caption')}>
+                {setupLabel(s.setup)} · {words(s.connection)} · {words(s.state)}
+                <StallDetail source={s} />
+              </ClampText>
+            </div>
           </TableCell>
           <TableCell>
-            {collectionPointLabel(s.collection_point)} · {words(s.sampling.kind)}
-            {s.sampling.kind === 'sampled' ? ' ' + s.sampling.rate : ''}
-            {s.sampling.kind === 'filtered' ? ' ' + s.sampling.description : ''}
+            <div className="grid min-w-0">
+              <ClampText>{collectionPointLabel(s.collection_point)}</ClampText>
+              <ClampText className={textRole('caption')}>
+                Sampling: {words(s.sampling.kind)}
+                {s.sampling.kind === 'sampled' ? ' ' + s.sampling.rate : ''}
+                {s.sampling.kind === 'filtered' ? ' ' + s.sampling.description : ''}
+              </ClampText>
+            </div>
           </TableCell>
           <TableCell>
-            <TableCellLines
-              primary={
-                <>
-                  Accepted: <DisplayTime value={s.last_accepted_batch} fallback="Awaiting data" />
-                </>
-              }
-              secondary={
-                <>
-                  Processed:{' '}
-                  <DisplayTime value={s.last_processed_at} fallback="Awaiting processing" />
-                  {s.pull ? (
-                    <>
-                      {' · '}Drained:{' '}
-                      <DisplayTime value={s.pull.last_drained_at} fallback="Not drained yet" />
-                    </>
-                  ) : null}
-                </>
-              }
-            />
+            <div className="grid">
+              <DisplayTime value={s.last_accepted_batch} fallback="Awaiting data" />
+              <span className={textRole('caption')}>
+                Processed <DisplayTime value={s.last_processed_at} fallback="Awaiting processing" />
+                {s.pull ? (
+                  <>
+                    {' · '}Drained{' '}
+                    <DisplayTime value={s.pull.last_drained_at} fallback="Not drained yet" />
+                  </>
+                ) : null}
+              </span>
+            </div>
           </TableCell>
           <TableCell>
-            {s.rejected_lines} rejected · {s.overlapping_lines} overlapping ·{' '}
-            {s.unsupported_uploads} unsupported uploads · {s.unsupported_batches} unsupported
-            batches
+            {s.last_accepted_batch ? diagnosticsText(s) : <Absence state="not_measured" />}
           </TableCell>
           <TableActionsCell>
             {canManage && s.status === 'active' ? (
-              <>
-                {s.kind === 'webhook' ? (
-                  <Button variant="secondary" onClick={() => onRotate(s)}>
-                    Rotate token
-                  </Button>
-                ) : null}
-                {s.kind === 'pull' ? (
-                  <Button
-                    variant="secondary"
-                    onClick={() => onSetup(s.id)}
-                    aria-label={`Set up and verify ${s.host}`}
-                  >
-                    Set up and verify
-                  </Button>
-                ) : null}
-                <ActionButton
-                  action="revoke"
-                  onClick={() => onRevoke(s)}
-                  aria-label={`Revoke ${s.host}`}
-                />
-              </>
+              <Menu>
+                <MenuTrigger asChild>
+                  <IconButton icon={MoreHorizontal} label={`${s.host} actions`} />
+                </MenuTrigger>
+                <MenuContent align="end">
+                  {s.kind === 'webhook' ? (
+                    <MenuItem icon={<Icon icon={RotateCcw} />} onSelect={() => onRotate(s)}>
+                      Rotate token
+                    </MenuItem>
+                  ) : null}
+                  {s.kind === 'pull' ? (
+                    <MenuItem icon={<Icon icon={PlugZap} />} onSelect={() => onSetup(s.id)}>
+                      Set up and verify
+                    </MenuItem>
+                  ) : null}
+                  <MenuItem icon={<Icon icon={Trash2} />} danger onSelect={() => onRevoke(s)}>
+                    Revoke
+                  </MenuItem>
+                </MenuContent>
+              </Menu>
             ) : null}
           </TableActionsCell>
         </TableRow>

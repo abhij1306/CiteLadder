@@ -20,10 +20,7 @@ type Enqueue = {
 };
 
 function defaultTaskMaxAttempts(): number {
-  return resolveSettingSpec(
-    policy.analytics.worker_settings.task_max_attempts,
-    process.env,
-  ) as number;
+  return resolveSettingSpec(policy.analytics.worker_settings.task_max_attempts, process.env);
 }
 
 export function taskKey(kind: string, parts: readonly (string | number)[]): string {

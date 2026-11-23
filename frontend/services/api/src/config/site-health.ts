@@ -14,11 +14,6 @@ import { validateSiteHealthCatalog } from './site-health/validation.ts';
 
 const contentChecks = new Set(Object.keys(reads.reads.content_addressable_check_fields));
 
-/**
- * The persisted classifier version names its full input: the configured base plus
- * a digest of every catalog classification reads, so a pattern edit can never
- * ship under an unchanged version.
- */
 export function classifierVersion(base: string, inputs: unknown) {
   const digest = createHash('sha256').update(JSON.stringify(inputs)).digest('hex').slice(0, 10);
   return `${base}+${digest}`;

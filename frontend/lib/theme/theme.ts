@@ -31,11 +31,6 @@ function storedPreference(): ThemePreference {
   return isExplicit(entry) ? entry : 'system';
 }
 
-/**
- * The cookie's Domain: the parent of a subdomain (`app.citeladder.com` →
- * `citeladder.com`), the host itself for an apex, and none (host-only) for
- * localhost and IP addresses, where a Domain attribute would be rejected.
- */
 export function themeCookieDomain(hostname: string): string | null {
   if (hostname === 'localhost' || /^[\d.]+$/.test(hostname) || hostname.includes(':')) return null;
   const labels = hostname.split('.');

@@ -25,9 +25,6 @@ import { isPageRerun, pageRerunSql } from './page-rerun.ts';
 import { expectedRuleOutcome } from '../opportunities/verification-decisions.ts';
 
 const p = policy.site_health.change_intel;
-// The page limit and the automatic monitor limit derived from it are left out:
-// they follow the fetch budget left at admission, so they vary between
-// otherwise identical crawls, and the comparison reads only pages both analyzed.
 const SCOPE_KEYS = ['discovery_mode', 'sample_mode', 'root_registrable_domain'] as const;
 const RULE_FIELDS = new Map(Object.entries(p.field_rules).map(([field, rule]) => [rule, field]));
 
@@ -285,7 +282,6 @@ function comparisonState(
   return [p.state_available, null];
 }
 function sourceHash(crawlA: Crawl | null, crawlB: Crawl, all: ChangePage[]) {
-  // Fixed-width UUID pairs: joined-string order is tuple order.
   const sources = all
     .map((page) => [page.analysisId, page.artifactId])
     .sort((x, y) => compareText(x.join(), y.join()));
@@ -308,12 +304,11 @@ async function insertObservations(
     after_value: JSON.stringify(item.after_value),
     created_at: now,
   }));
-  // Chunked only to stay under PostgreSQL's 65535 bind-parameter limit.
   const [first] = rows;
   const chunk = first ? Math.floor(65_535 / Object.keys(first).length) : 1;
   for (let start = 0; start < rows.length; start += chunk) {
     const batch = rows.slice(start, start + chunk);
-    await db.insertInto('site_change_observations').values(batch).execute(); // NOSONAR -- One transaction connection runs one statement at a time.
+    await db.insertInto('site_change_observations').values(batch).execute(); // NOSONAR
   }
 }
 
@@ -439,9 +434,6 @@ async function persistChangeSnapshot(db: Database, crawlB: Crawl): Promise<strin
 }
 
 export async function runChangeIntel(db: Database, crawl: Crawl) {
-  // A rerun still hands its page to verification and Opportunities, but it
-  // writes no comparison: against a full crawl it would read as every other
-  // page removed, and it would replace the comparison Changes shows.
   const snapshot = isPageRerun(crawl) ? null : await persistChangeSnapshot(db, crawl);
   await enqueueTerminalAnalyticsRefresh(db, crawl, snapshot);
 }

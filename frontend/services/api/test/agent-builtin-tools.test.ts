@@ -364,7 +364,6 @@ describe('Agent built-in tools', () => {
         })),
       ).toEqual([
         {
-          // The emoji before it is two UTF-16 code units.
           target: { kind: 'span', at: { start: 11, end: 27 }, exact: 'Sizes run small.' },
           replacement: 'Sizes run half a size small.',
           needsInput: null,
@@ -557,12 +556,14 @@ describe('Agent built-in tools', () => {
       ['edit_document', false],
       ['fetch', false],
       ['load_skill', false],
+      ['propose_change', false],
       ['propose_declaration', false],
       ['read_zeta', false],
       ['save_document', true],
+      ['show_view', false],
       ['suggest_edits', false],
     ]);
-    expect(tools[4]!.input_schema).toEqual({
+    expect(tools[5]!.input_schema).toEqual({
       type: 'object',
       properties: { limit: { type: 'integer' } },
       additionalProperties: false,
@@ -633,7 +634,7 @@ describe('propose_declaration on PostgreSQL', () => {
     expect((await propose(seen(scope, links.id), links.id)).text).toMatch(/Internal links/u);
     expect(state.proposals).toEqual([]);
     expect(await propose(seen(stranger, foreign.id), foreign.id)).toMatchObject({ ok: true });
-    expect(state.proposals.map((proposal) => proposal.action_id)).toEqual([foreign.id]);
+    expect(state.proposals).toMatchObject([{ kind: 'declaration', action_id: foreign.id }]);
   });
 
   it('commits a mentioned Action’s proposal on the reply, once, and declares nothing', async () => {

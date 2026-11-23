@@ -42,7 +42,6 @@ export function jaccard<T>(a: ReadonlySet<T>, b: ReadonlySet<T>): number {
   return shared / union;
 }
 
-// Bind parameters per statement stay far below PostgreSQL's 65,535 limit.
 const ID_CHUNK = 5000;
 
 export function chunksOf<T>(items: readonly T[], size: number): T[][] {

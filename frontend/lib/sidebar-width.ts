@@ -60,7 +60,6 @@ function readStored(): number | null {
     const stored = Number(raw);
     return Number.isFinite(stored) && stored > 0 ? clampStored(stored) : null;
   } catch {
-    // Site data blocked: the sidebar still works, unremembered.
     return null;
   }
 }

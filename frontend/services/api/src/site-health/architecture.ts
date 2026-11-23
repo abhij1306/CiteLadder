@@ -175,7 +175,6 @@ async function persistRules(
         dimension: rule.dimension,
         category: rule.category,
         severity: rule.severity,
-        finding_class: rule.finding_class,
         evidence: JSON.stringify(evaluation.evidence),
         description: rule.description,
         remediation: rule.remediation,
@@ -240,10 +239,8 @@ export async function persistArchitecture(db: Database, crawl: Crawl) {
     .executeTakeFirst();
   if (!row) return 0;
   await persistRules(db, crawl, row.id, root, pages, architectureRules(model, pages, coverage));
-  // The snapshot was published first (architecture reads its coverage); its
-  // issue counts now take in the site-level findings.
   await addArchitectureIssues(db, crawl);
-  await persistIssueCatalog(db, crawl);
   await landIssueStates(db, crawl);
+  await persistIssueCatalog(db, crawl);
   return 1;
 }

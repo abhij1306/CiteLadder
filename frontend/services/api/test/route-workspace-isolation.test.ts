@@ -47,6 +47,8 @@ async function chat(owner: SiteSeed) {
       title: 'Isolation',
       context_refs: {},
       turn_count: 0,
+      model: 'claude-haiku-5-5',
+      reasoning_effort: 'medium',
       last_activity_at: now(),
       created_at: now(),
       updated_at: now(),
@@ -310,6 +312,7 @@ it('hides every other-workspace resource from a stranger on every registered rou
     const concrete = path
       .replace(family.slice(family.lastIndexOf('{')), resources.get(family) ?? 'missing-factory')
       .replace('{provider}', 'google')
+      .replace('{index}', '0')
       .replaceAll(/\{[a-z_]+\}/gu, () => randomUUID());
     const write = method !== 'GET' && method !== 'DELETE';
     const response = await app.request(concrete, {

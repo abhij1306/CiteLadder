@@ -118,7 +118,6 @@ function requireRetryableConnection(
     throw new ModelError(timedOut ? 'timeout' : 'connection');
 }
 
-/** No provider body, credential, or customer text enters an error. */
 export async function postModel(
   url: string,
   apiKey: string,

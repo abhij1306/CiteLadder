@@ -29,11 +29,6 @@ export const contentOptimization = {
     source_classes: ['competitor_owned', 'editorial_third_party'],
   },
   model_max_attempts: 2,
-  /**
-   * The one-page fetch an `optimize_page` chat starts with (CO12). It goes
-   * through Site Health's fetcher, so robots, hard exclusions, the operator
-   * stop list and per-host pacing all apply; these bound only this fetch.
-   */
   page_fetch: {
     extractor_version: 'page-document-1',
     outcomes: ['fetched', 'blocked_robots', 'http_error', 'unsupported', 'failed'],
@@ -43,17 +38,7 @@ export const contentOptimization = {
     max_wire_bytes: 5_000_000,
     max_decoded_bytes: 10_000_000,
     snapshot_body_max_bytes: 2_000_000,
-    /**
-     * Fetch outcomes are recorded on the first attempt; a further attempt only
-     * covers a failure to record them. A task that still fails leaves a
-     * `failed` snapshot and a chat notice through its compensation.
-     */
     max_attempts: 2,
-    /**
-     * Site Health rules that are judged from one page's HTML but read the
-     * crawl's sitemap, so the fetch cannot re-judge them; they keep the crawl's
-     * finding (content rules engine, L0).
-     */
     site_context_rule_ids: [
       'technical.sitemap_canonical',
       'technical.sitemap_noindex',
@@ -68,18 +53,12 @@ export const contentOptimization = {
     page_list_max: 50,
     search_max_chars: 200,
   },
-  /**
-   * A page document's caps equal the Agent's document caps, so `edit_document`
-   * can always save a fetched page. A page whose Markdown is longer is
-   * `unsupported` rather than cut.
-   */
   page_document: {
     title_max_chars: agentRuntime.output_title_max_chars,
     body_max_chars: agentRuntime.output_body_max_chars,
     json_ld_max_chars: 20_000,
   },
   suggestions: {
-    /** Characters of context kept on each side of a span's exact quote (W3C TextQuoteSelector). */
     quote_context_chars: 32,
     max_per_call: 20,
     max_per_turn: 60,

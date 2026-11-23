@@ -57,7 +57,7 @@ export async function disconnectConnection(
       .returning('project_id')
       .execute();
     for (const projectId of new Set(retired.map((row) => row.project_id)))
-      await enqueueCoalesced(trx, { ...insightsRefresh, workspaceId, projectId }); // NOSONAR -- One transaction runs one statement at a time.
+      await enqueueCoalesced(trx, { ...insightsRefresh, workspaceId, projectId }); // NOSONAR
     await recordIntegrationEvents(trx, [
       {
         workspaceId,
@@ -177,11 +177,6 @@ export function releaseRevocationClaim(
   });
 }
 
-/**
- * A sync's credentials were refused: the connection's grant needs
- * reauthorization. Only a connected grant moves; a disconnect that committed
- * first keeps its `pending_revocation` so the revoker still revokes it.
- */
 export async function markGrantNeedsReauth(
   trx: Database,
   input: { workspaceId: string; connectionId: string; at: Date },

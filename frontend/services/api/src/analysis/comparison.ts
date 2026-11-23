@@ -2,7 +2,6 @@ import { createHash } from 'node:crypto';
 import { readFrozenConfiguration } from '../audits/frozen-configuration.ts';
 import { record } from '../db/json.ts';
 
-/** Code-point order keeps frozen measurement hashes stable. */
 export function compareIdentityText(left: string, right: string): number {
   const a = Array.from(left, (char) => char.codePointAt(0)!);
   const b = Array.from(right, (char) => char.codePointAt(0)!);
@@ -12,7 +11,6 @@ export function compareIdentityText(left: string, right: string): number {
   return a.length - b.length;
 }
 
-/** json.dumps(sort_keys=True, ensure_ascii=True), for frozen measurement identities. */
 function comparisonJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(comparisonJson).join(', ')}]`;
   if (value && typeof value === 'object')
@@ -71,8 +69,6 @@ export function frozenComparisonKey(
     ...Object.fromEntries(
       required.filter((k) => k !== 'engine_routes' && k !== policyKey).map((k) => [k, config[k]]),
     ),
-    // A matching-policy change changes what a mention is. Audits frozen before
-    // policies existed keep their original key.
     ...(config.entity_matching ? { entity_matching: config.entity_matching } : {}),
     panel: includePanel ? (config.panel_hash ?? null) : null,
     routes: includeEngines

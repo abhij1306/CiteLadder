@@ -52,7 +52,7 @@ export function BingPanel({
         onIntent={(next) => warm({ snapshotId, compareSnapshotId }, next)}
       >
         {BING_DIMENSION_TABS.map((tab) => (
-          <TabPanel key={tab.value} value={tab.value} className="focus-ring">
+          <TabPanel key={tab.value} value={tab.value}>
             {dimension === tab.value ? (
               <DimensionTable
                 projectId={projectId}

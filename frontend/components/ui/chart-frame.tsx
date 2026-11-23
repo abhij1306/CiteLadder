@@ -9,6 +9,7 @@ import {
   type SeriesTone,
 } from '@/components/ui/step-chart-parts';
 import { SHEET_FACE } from '@/components/ui/slip';
+import { InfoHint } from '@/components/ui/info-hint';
 import { textRole } from '@/components/ui/typography';
 import { ABSENCE_MARK, type Formatted, isAbsent } from '@/lib/format';
 import { cn } from '@/lib/utils';
@@ -112,7 +113,6 @@ export function ChartKey({
   );
 }
 
-/** The tooltip's width (`w-54`), its gap from the crosshair and its least inset from the frame. */
 const TIP_WIDTH = 216;
 const TIP_GAP = 16;
 const TIP_INSET = 8;
@@ -209,4 +209,52 @@ export function ChartTable({
       ) : null}
     </div>
   );
+}
+
+const measuredAt = (values: readonly (number | null | undefined)[], index: number) =>
+  values[index] !== null && values[index] !== undefined;
+
+export function breakNote(
+  data: readonly Readonly<{ breakBefore?: boolean }>[],
+  lines: readonly Readonly<{ values: readonly (number | null | undefined)[] }>[],
+  bridged = false,
+): string | null {
+  const gap = lines.some((line) => {
+    const measured = line.values.map((value) => value !== null && value !== undefined);
+    return measured.slice(measured.indexOf(true), measured.lastIndexOf(true)).includes(false);
+  });
+  const breaks = data.flatMap((point, index) => (index > 0 && point.breakBefore ? [index] : []));
+  const bridge = breaks.some((index) =>
+    lines.some((line) => measuredAt(line.values, index - 1) && measuredAt(line.values, index)),
+  );
+  const parts = [
+    gap ? 'A gap is a period with no reading.' : null,
+    bridged && bridge ? 'A dashed line joins runs measured under different conditions.' : null,
+    !bridged && breaks.length
+      ? 'A line starts again where the measurement conditions changed.'
+      : null,
+  ].filter((part) => part !== null);
+  return parts.length ? parts.join(' ') : null;
+}
+
+export function ChartBreakNote({
+  data,
+  lines,
+  placement = 'caption',
+  bridged = false,
+}: Readonly<{
+  data: Parameters<typeof breakNote>[0];
+  lines: Parameters<typeof breakNote>[1];
+  placement?: 'caption' | 'hint';
+  bridged?: boolean;
+}>) {
+  const note = breakNote(data, lines, bridged);
+  if (!note) return null;
+  if (placement === 'hint')
+    return (
+      <span className="self-start">
+        <InfoHint label="About breaks in the line">{note}</InfoHint>
+      </span>
+    );
+  return <p className={textRole('caption')}>{note}</p>;
 }

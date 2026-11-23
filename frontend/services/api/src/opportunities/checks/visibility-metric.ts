@@ -58,7 +58,7 @@ export const visibilityMetricCheck: CheckModule<'visibility_metric'> = {
       for (const promptId of promptsOf(member)) {
         let check = frozen.get(promptId);
         if (!check) {
-          check = await promptCheck(context, promptId); // NOSONAR -- One transaction connection.
+          check = await promptCheck(context, promptId); // NOSONAR
           frozen.set(promptId, check);
         }
         checks.push({ member, check });

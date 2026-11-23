@@ -14,6 +14,7 @@ import { GenerateErrorAlert } from './generation-alerts';
 import type { BuilderTopics } from './use-builder-topics';
 import { Notice } from '@/components/ui/notice';
 import { StateBlock } from '@/components/ui/state-block';
+import { WorkProgress } from '@/components/ui/work-progress';
 
 const TOPIC_NAME_MAX = 255;
 
@@ -107,6 +108,9 @@ export function BuilderTopicsStep({ topics }: Readonly<{ topics: BuilderTopics }
         />
       ) : null}
       {topics.problem ? <Notice tone="warning">{topics.problem}</Notice> : null}
+      {topics.preview.isPending ? (
+        <WorkProgress label="Topic suggestions" narration="Suggesting topics from your offerings" />
+      ) : null}
       {topics.rows.length ? (
         <Stack as="ul" gap="item" aria-label="Topics">
           {topics.rows.map((row) => (
@@ -119,7 +123,8 @@ export function BuilderTopicsStep({ topics }: Readonly<{ topics: BuilderTopics }
             />
           ))}
         </Stack>
-      ) : (
+      ) : null}
+      {topics.rows.length || topics.preview.isPending ? null : (
         <StateBlock
           kind="empty"
           inline

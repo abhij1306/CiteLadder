@@ -123,6 +123,8 @@ test('the prompt builder scrolls inside its pane and never scrolls the panel', a
         prompt_sets: [],
         limits: {
           generation_count_max: 50,
+          brand_prompts_max: 10,
+          brand_generation_calls: 4,
           import_rows_max: 500,
           bulk_prompts_max: 500,
           persona_max_chars: 120,

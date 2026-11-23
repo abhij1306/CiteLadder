@@ -10,10 +10,6 @@ import { cn } from '@/lib/utils';
 
 import { PageFrame } from './page-frame';
 
-/**
- * The one card a page outside the shell draws on the ground: Flow, Setup and
- * the full-page Notice. It lives here because the Notice loads eagerly.
- */
 export const FLOW_CARD = cn(SLIP_FACE, 'p-6');
 
 type NoticeTone = 'info' | 'warning' | 'negative' | 'loading';
@@ -43,7 +39,6 @@ function NoticeBlock({
   children,
   actions,
 }: Omit<NoticeContent, 'heading'> & Readonly<{ heading: string | null }>) {
-  // One loader for a wait that passes through several owners: it hands over without a blank beat.
   if (tone === 'loading')
     return <StateBlock kind="loading" label={heading ?? undefined} shape={{ kind: 'list' }} />;
   const [glyph, ink, word] = TONE[tone];

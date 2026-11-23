@@ -11,7 +11,7 @@ import { verdictOverrideRequestSchema } from '@citeladder/contracts/project-requ
 import { z } from 'zod';
 
 import { policy } from '../config.ts';
-import type { Database } from '../db/database.ts';
+import { inTransaction, type Database } from '../db/database.ts';
 import { chunked } from '../lists.ts';
 import { ApiError, notFound } from '../errors.ts';
 import type { ProjectScope } from '../projects/brand-profile.ts';
@@ -60,11 +60,6 @@ export function editedMark(
   return { model_verdict: model.verdict, note: override.note, at: override.at.toISOString() };
 }
 
-/**
- * Append a person's verdict for one claim verdict of the project. The verdict
- * row is locked so concurrent changes append in order; a claim the checker
- * left out has no model verdict to change.
- */
 export function overrideVerdict(
   db: Database,
   input: {
@@ -75,7 +70,7 @@ export function overrideVerdict(
   },
 ): Promise<VerdictOverride> {
   const { scope } = input;
-  return db.transaction().execute(async (trx) => {
+  return inTransaction(db, async (trx) => {
     const row = await trx
       .selectFrom('claim_verdicts as cv')
       .innerJoin('fact_verifications as fv', (join) =>
@@ -112,7 +107,6 @@ export function overrideVerdict(
         to_verdict: input.change.verdict,
         note: input.change.note,
         created_by_user_id: input.userId,
-        // Strictly after the override it supersedes, even within one clock tick.
         created_at: new Date(Math.max(Date.now(), (current?.at.getTime() ?? 0) + 1)),
       })
       .returning(['to_verdict', 'note', 'created_at'])

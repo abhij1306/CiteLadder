@@ -1,6 +1,11 @@
 import { z } from 'zod';
 
-import { crawlOverallStatusSchema, pageAnalysisStatusSchema, pageKindSchema } from './crawl.ts';
+import {
+  checksRunSchema,
+  crawlOverallStatusSchema,
+  pageAnalysisStatusSchema,
+  pageKindSchema,
+} from './crawl.ts';
 import { analysisSummaryFields } from './inventory.ts';
 import { responseObject, uuid } from './core.ts';
 import {
@@ -29,13 +34,13 @@ const pageFactsSchema = responseObject({
   meta_description: z.string().nullable(),
   canonical_url: z.string().nullable(),
   robots_directives: z.array(z.string()),
-  h1_count: z.number().int(),
-  heading_count: z.number().int(),
-  image_count: z.number().int(),
-  image_missing_alt_count: z.number().int(),
-  word_count: z.number().int(),
-  internal_link_count: z.number().int(),
-  external_link_count: z.number().int(),
+  h1_count: z.number().int().nullable(),
+  heading_count: z.number().int().nullable(),
+  image_count: z.number().int().nullable(),
+  image_missing_alt_count: z.number().int().nullable(),
+  word_count: z.number().int().nullable(),
+  internal_link_count: z.number().int().nullable(),
+  external_link_count: z.number().int().nullable(),
   structured_data_types: z.array(z.string()),
 });
 
@@ -165,6 +170,8 @@ export const pageDetailSchema = responseObject({
   aeo_measurement_coverage: z.number().nullable(),
   aeo_measurement_state: z.enum(['measured', 'limited_evidence', 'not_measured', 'excluded']),
   aeo_measurement_reason: z.string(),
+  web_fundamentals_checks: checksRunSchema.nullable(),
+  aeo_readiness_checks: checksRunSchema.nullable(),
   main_content_indexable: z.boolean().nullable(),
   robots_excluded: z.boolean(),
   issue_count: z.number().int().nullable(),

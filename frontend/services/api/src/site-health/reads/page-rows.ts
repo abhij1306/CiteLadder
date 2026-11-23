@@ -8,11 +8,11 @@ import {
   encodeKeysetCursor,
   InvalidCursorError,
 } from '../../http/keyset-cursor.ts';
-import { containsPattern } from '../../db/like.ts';
 import { parseUuid } from '../../http/uuid.ts';
 import { failedAs } from '../task-outcome.ts';
 import { inventoryCrawlIds, isTerminal, pageAuditsSql, type Crawl } from './crawl.ts';
 import { ROW_TASK, ROW_TASK_ORDER } from './crawl-counters.ts';
+import { pageFilterSql, type PageRowFilters } from './page-filters.ts';
 import { siteLevelRuleOf } from './rules.ts';
 
 const PERSISTED = ['completed', 'partially_completed'];
@@ -50,15 +50,6 @@ export const PAGE_STATUS_FILTERS = [
   'error_or_blocked',
 ] as const;
 
-export type PageRowFilters = {
-  status?: string | null;
-  monitored?: boolean | null;
-  pageKind?: string | null;
-  query?: string | null;
-  siteUrlId?: string;
-  rule?: string | null;
-};
-
 export type PageRow = {
   site_url_id: string;
   crawl_id: string;
@@ -82,6 +73,10 @@ export type PageRow = {
   aeo_measurement_coverage: number | null;
   aeo_measurement_state: string;
   aeo_measurement_reason: string;
+  web_checks_run: number | null;
+  web_checks_total: number | null;
+  aeo_checks_run: number | null;
+  aeo_checks_total: number | null;
   main_content_indexable: boolean | null;
   robots_excluded: boolean;
   finalized_at: Date | null;
@@ -92,6 +87,18 @@ export type PageRow = {
   sort_value: string | number;
 };
 
+export const aeoChecksSql = (
+  dimensions: string,
+  points: 'determinate_points' | 'expected_points',
+) =>
+  sql<number>`(select coalesce(sum((x ->> ${points})::numeric), 0)::int
+    from jsonb_array_elements(case when jsonb_typeof(${sql.ref(dimensions)}) = 'array'
+      then ${sql.ref(dimensions)} else '[]'::jsonb end) x
+    where x ->> 'dimension_applicability' = 'applicable')`;
+
+const checksRun = (run: number | null, total: number | null) =>
+  run === null || total === null ? null : { run, total };
+
 export const measurementFields = (row: PageRow) => ({
   page_kind: row.page_kind,
   web_fundamentals_score: row.web_fundamentals_score,
@@ -101,6 +108,8 @@ export const measurementFields = (row: PageRow) => ({
   aeo_measurement_coverage: row.aeo_measurement_coverage,
   aeo_measurement_state: row.aeo_measurement_state,
   aeo_measurement_reason: row.aeo_measurement_reason,
+  web_fundamentals_checks: checksRun(row.web_checks_run, row.web_checks_total),
+  aeo_readiness_checks: checksRun(row.aeo_checks_run, row.aeo_checks_total),
   main_content_indexable: row.main_content_indexable,
   robots_excluded: row.robots_excluded,
   last_audited: row.finalized_at?.toISOString() ?? null,
@@ -135,11 +144,6 @@ function statusFilter(status: string | null | undefined) {
   return sql`and analysis_status = ${status}`;
 }
 
-/**
- * The latest audits join as one set: a lateral per inventory URL ran the view
- * once per page, past the read timeout on an inventory of tens of thousands
- * (CO-7). One page keeps the lateral.
- */
 function latestAuditsJoin(crawl: Crawl, siteUrlId?: string) {
   return siteUrlId
     ? sql`left join lateral (${pageAuditsSql(crawl, sql.ref('u.id'))}) latest on true`
@@ -171,8 +175,6 @@ export async function pageRows(
   const spec = SORTS[sort];
   const lineage = inventoryCrawlIds(crawl);
   const unmonitoredStatus = isTerminal(crawl) ? 'not_measured' : 'pending';
-  const search = filters.query?.trim().toLowerCase();
-  const pattern = search ? containsPattern(search) : null;
   let keyset = sql``;
   if (after) {
     const value =
@@ -244,18 +246,7 @@ export async function pageRows(
           select 1 from site_url_observations o
           where o.workspace_id = u.workspace_id and o.site_url_id = u.id
             and o.crawl_id = any(${lineage}::uuid[]))
-        ${filters.siteUrlId ? sql`and u.id = ${filters.siteUrlId}` : sql``}
-        ${pattern ? sql`and (lower(u.normalized_url) like ${pattern} or lower(u.display_url) like ${pattern})` : sql``}
-        ${filters.pageKind ? sql`and a.page_kind = ${filters.pageKind}` : sql``}
-        ${
-          filters.rule
-            ? sql`and exists (
-          select 1 from site_issues i
-          where i.workspace_id = u.workspace_id and i.rule_id = ${filters.rule}
-            and ${shownIssueFilter(crawl, 'i', 'a')})`
-            : sql``
-        }
-        ${filters.monitored === false ? sql`and m.site_url_id is null` : sql``}
+        ${pageFilterSql(filters, shownIssueFilter(crawl, 'i', 'a'))}
     ), windowed as (
       select * from keyed
       where true ${statusFilter(filters.status)} ${keyset}
@@ -291,6 +282,12 @@ export async function pageRows(
       coalesce(a.aeo_measurement_state, ${unmeasured}) as aeo_measurement_state,
       coalesce(a.aeo_measurement_reason, case when ${duplicate} then k.error_code else '' end)
         as aeo_measurement_reason,
+      a.technical_determinate_weight::int as web_checks_run,
+      a.technical_expected_weight::int as web_checks_total,
+      case when a.id is null then null else ${aeoChecksSql('a.readiness_dimensions', 'determinate_points')} end
+        as aeo_checks_run,
+      case when a.id is null then null else ${aeoChecksSql('a.readiness_dimensions', 'expected_points')} end
+        as aeo_checks_total,
       a.main_content_indexable,
       coalesce((
         select (f.acquisition_options ->> 'robots_excluded')::boolean
@@ -314,20 +311,17 @@ export async function pageRows(
 }
 
 export async function currentIssueRules(db: Database, crawl: Crawl, analysisIds: string[]) {
-  const result = new Map<string, Record<string, string[]>>();
+  const result = new Map<string, string[]>();
   if (!analysisIds.length) return result;
-  const { rows } = await sql<{ analysis_id: string; finding_class: string; rule_id: string }>`
-    select distinct a.id as analysis_id, i.finding_class, i.rule_id
+  const { rows } = await sql<{ analysis_id: string; rule_id: string }>`
+    select distinct a.id as analysis_id, i.rule_id
     from site_page_analyses a
     join site_issues i on i.workspace_id = a.workspace_id and ${shownIssueFilter(crawl, 'i', 'a')}
     where a.workspace_id = ${crawl.workspace_id} and a.project_id = ${crawl.project_id}
       and a.id = any(${analysisIds}::uuid[])
-    order by a.id, i.finding_class, i.rule_id`.execute(db);
-  for (const row of rows) {
-    const classes = result.get(row.analysis_id) ?? {};
-    classes[row.finding_class] = [...(classes[row.finding_class] ?? []), row.rule_id];
-    result.set(row.analysis_id, classes);
-  }
+    order by a.id, i.rule_id`.execute(db);
+  for (const row of rows)
+    result.set(row.analysis_id, [...(result.get(row.analysis_id) ?? []), row.rule_id]);
   return result;
 }
 

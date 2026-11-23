@@ -122,8 +122,6 @@ export const clientErrorRoutes = [
       return c.body(null, 204);
     },
   }),
-  // The Reporting API delivers content security policy violations here,
-  // without the session cookie, so no reporter is recorded.
   definePostRoute({
     family: 'client-errors',
     authorize: 'public',

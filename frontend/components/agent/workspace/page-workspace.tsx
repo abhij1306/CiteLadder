@@ -305,7 +305,6 @@ function NarrowWorkspace({
           />
         }
       >
-        {/* The page stays mounted, so switching tabs never drops an unsaved edit. */}
         <TabPanel value="page" forceMount className="flex min-h-0 flex-1 flex-col">
           {page}
         </TabPanel>

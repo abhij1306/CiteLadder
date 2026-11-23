@@ -1,27 +1,18 @@
 import {
   performanceDashboardSchema,
   performanceRangeTaskSchema,
-  performanceRangeTaskStatusSchema,
   performanceTablePageSchema,
   projectReadinessSchema,
 } from '@citeladder/contracts/performance';
-import { sql } from 'kysely';
 import { z } from 'zod';
 
-import { policy } from '../config.ts';
 import { loadWorkerSettings } from '../config/analytics.ts';
 import { AnalyticsWorker } from '../workers/analytics-worker.ts';
 import { projectPerformanceRange } from '../traffic/snapshot.ts';
-import { ApiError, notFound } from '../errors.ts';
+import { notFound } from '../errors.ts';
 import { revalidatable } from '../http/revalidate.ts';
-import { enqueueTask, taskKey } from '../queue/enqueue.ts';
-import {
-  clampedCustomWindow,
-  getPerformance,
-  getPerformanceTable,
-} from '../traffic/performance.ts';
-import { record } from '../db/json.ts';
-import { scalarText } from '../text-order.ts';
+import { performanceRangeTask, requestPerformanceRange } from '../traffic/range-request.ts';
+import { getPerformance, getPerformanceTable } from '../traffic/performance.ts';
 import { defineGetRoute, definePostRoute } from './define.ts';
 import { readProjectReadiness } from '../integrations/readiness.ts';
 
@@ -31,18 +22,6 @@ const date = { scalar: { kind: 'date' } } as const;
 const string = { scalar: { kind: 'str' } } as const;
 const uuid = { scalar: { kind: 'uuid' } } as const;
 const family = { family: 'performance', authorize: 'active-project' } as const;
-const { statuses } = policy.task_queue;
-const retryable = new Set<string>([statuses.failed, statuses.cancelled]);
-function taskResponse(task: { id: string; status: string; payload: unknown }) {
-  const payload = record(task.payload);
-  return {
-    task_id: task.id,
-    status: performanceRangeTaskStatusSchema.parse(task.status),
-    window_start: scalarText(payload.window_start ?? ''),
-    window_end: scalarText(payload.window_end ?? ''),
-  };
-}
-
 export const performanceRoutes = [
   definePostRoute({
     ...family,
@@ -69,7 +48,7 @@ export const performanceRoutes = [
       await worker.runOnce();
       const row = await read();
       if (!row) throw notFound('Performance range task');
-      return taskResponse(row);
+      return performanceRangeTask(row);
     },
   }),
   defineGetRoute({
@@ -152,41 +131,11 @@ export const performanceRoutes = [
     },
     response: performanceRangeTaskSchema,
     async handle({ c, db }, { path, query }) {
-      const workspace = c.get('workspace');
-      const scope = { workspaceId: workspace.workspaceId, projectId: path.project_id };
-      const { window, latest } = await clampedCustomWindow(db, scope, query.from, query.to);
-      if (!window) throw new ApiError(422, "'from' and 'to' must be supplied together");
-      const [from, to] = window;
-      if (latest !== null && from > latest)
-        throw new ApiError(422, `'from' is after the latest imported date (${latest})`);
-      const kind = 'performance_range_projection';
-      const tasks = () =>
-        workspace.scope
-          .selectFrom(db, 'analytics_tasks')
-          .select(['id', 'status', 'payload'])
-          .where('project_id', '=', path.project_id)
-          .where('task_kind', '=', kind);
-      const previous = await tasks()
-        .where(sql<boolean>`payload->>'window_start' = ${from} and payload->>'window_end' = ${to}`)
-        .orderBy('created_at', 'desc')
-        .orderBy('id', 'desc')
-        .executeTakeFirst();
-      if (previous && !retryable.has(previous.status)) return taskResponse(previous);
-      const keyParts = previous
-        ? [path.project_id, from, to, 'after', previous.id]
-        : [path.project_id, from, to];
-      await enqueueTask(db, {
-        workspaceId: workspace.workspaceId,
-        projectId: path.project_id,
-        kind,
-        payload: { window_start: from, window_end: to },
-        keyParts,
-      });
-      const row = await tasks()
-        .where('idempotency_key', '=', taskKey(kind, keyParts))
-        .executeTakeFirst();
-      if (!row) throw notFound('Performance range task');
-      return taskResponse(row);
+      return requestPerformanceRange(
+        db,
+        { workspaceId: c.get('workspace').workspaceId, projectId: path.project_id },
+        query,
+      );
     },
   }),
   defineGetRoute({
@@ -204,7 +153,7 @@ export const performanceRoutes = [
         .where('id', '=', path.task_id)
         .executeTakeFirst();
       if (!row) throw notFound('Performance range task');
-      return taskResponse(row);
+      return performanceRangeTask(row);
     },
   }),
 ];

@@ -6,15 +6,28 @@ import { Tooltip } from '@/components/ui/tooltip';
 import { textRole } from '@/components/ui/typography';
 import { humanizeApiError } from '@/lib/api/errors';
 import type { MutationNotice as MutationNoticeData } from '@/lib/api/mutation-notice';
+import { CircleAlert, CircleCheck, Info, TriangleAlert, type IconGlyph } from '@/lib/icons';
 import { cn } from '@/lib/utils';
 
 export type NoticeTone = 'info' | 'positive' | 'warning' | 'negative';
 
-const TONE: Record<NoticeTone, { dot: string; word: string }> = {
-  info: { dot: 'bg-info', word: 'Note' },
-  positive: { dot: 'bg-positive', word: 'Done' },
-  warning: { dot: 'bg-warning', word: 'Warning' },
-  negative: { dot: 'bg-negative', word: 'Error' },
+const TONE: Record<NoticeTone, { glyph: IconGlyph; ink: string; word: string }> = {
+  info: { glyph: Info, ink: 'text-info', word: 'Note' },
+  positive: {
+    glyph: CircleCheck,
+    ink: 'text-positive',
+    word: 'Done',
+  },
+  warning: {
+    glyph: TriangleAlert,
+    ink: 'text-warning',
+    word: 'Warning',
+  },
+  negative: {
+    glyph: CircleAlert,
+    ink: 'text-negative',
+    word: 'Error',
+  },
 };
 
 type MessageNotice = Readonly<{
@@ -94,12 +107,17 @@ function MessageNoticeView({
     <Root
       role={urgent ? 'alert' : undefined}
       data-notice-tone={tone}
-      className={cn(textRole('body'), 'flex flex-wrap items-start gap-2', className)}
+      className={cn(
+        textRole('body'),
+        'flex flex-wrap gap-2',
+        action && title == null ? 'items-center' : 'items-start',
+        className,
+      )}
     >
-      <span aria-hidden className="inline-flex h-5 shrink-0 items-center">
-        <span className={cn('size-1.5 rounded-full', style.dot)} />
+      <span aria-hidden className={cn('inline-flex h-5 shrink-0 items-center', style.ink)}>
+        <style.glyph className="size-4" />
       </span>
-      <div className="flex min-w-0 flex-[1_1_12rem] flex-col gap-1">
+      <div className="flex min-w-0 flex-col gap-1">
         {title != null ? (
           <p className="type-emphasis">
             {word}
@@ -110,12 +128,17 @@ function MessageNoticeView({
         )}
         {children != null ? <div>{children}</div> : null}
       </div>
-      {action ? (
-        <div className="phone:ms-6 phone:basis-[calc(100%-1.5rem)] phone:justify-start ms-auto flex max-w-full shrink-0 flex-wrap items-center justify-end gap-2 self-center">
-          {action}
-        </div>
-      ) : null}
+      <NoticeAction>{action}</NoticeAction>
     </Root>
+  );
+}
+
+function NoticeAction({ children }: Readonly<{ children: ReactNode }>) {
+  if (!children) return null;
+  return (
+    <div className="phone:ms-6 phone:basis-[calc(100%-1.5rem)] phone:justify-start [&_[data-button-variant=quiet]]:text-ink ms-2 flex max-w-full shrink-0 flex-wrap items-center gap-2 self-center">
+      {children}
+    </div>
   );
 }
 

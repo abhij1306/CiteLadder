@@ -9,7 +9,6 @@ export const appResource = {
   mimeType: mcpPolicy.ui_mime_type,
 };
 export async function readAppResource() {
-  // Static build input only. No project, grant, cookies or tokens enter HTML.
   let text: string;
   try {
     text = await readFile(
@@ -18,8 +17,6 @@ export async function readAppResource() {
     );
   } catch (error) {
     if (!(error instanceof Error) || !('code' in error) || error.code !== 'ENOENT') throw error;
-    // Source-run development consumes the workspace build. The image copies
-    // the identical artifact into the API's packaged assets before deploy.
     text = await readFile(
       new URL('../../../../packages/mcp-app/dist/analytics.html', import.meta.url),
       'utf8',

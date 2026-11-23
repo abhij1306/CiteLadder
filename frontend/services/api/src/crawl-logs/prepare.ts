@@ -88,7 +88,6 @@ function prepareLineOrFormatError(line: string, input: Input) {
     throw error;
   }
 }
-/** CPU-only parsing and sanitization; transient input is never persisted here. */
 export function prepareBatch(input: Input) {
   const counts = {
     lines_received: input.lines.length,

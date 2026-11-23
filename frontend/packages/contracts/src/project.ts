@@ -30,6 +30,7 @@ export const promptIntentSchema = z.enum([
   'purchase',
   'service',
   'local',
+  'evaluation',
 ]);
 
 export const buyerStageSchema = z.enum([
@@ -87,7 +88,7 @@ export const topicSchema = responseObject({
 export const projectThemeSchema = responseObject({
   id: uuid(),
   name: z.string(),
-  source: z.enum(['research', 'user']),
+  source: z.enum(['research', 'user', 'model']),
 });
 
 export const promptCandidateSchema = responseObject({
@@ -272,6 +273,8 @@ export const promptSetSchema = responseObject({
 
 export const promptFormLimitsSchema = responseObject({
   generation_count_max: z.number().int(),
+  brand_prompts_max: z.number().int(),
+  brand_generation_calls: z.number().int(),
   import_rows_max: z.number().int(),
   bulk_prompts_max: z.number().int(),
   persona_max_chars: z.number().int(),

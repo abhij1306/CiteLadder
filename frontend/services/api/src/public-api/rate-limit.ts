@@ -1,9 +1,3 @@
-/**
- * The public API's per-key and per-workspace request windows, reported as the
- * IETF draft RateLimit fields (draft-ietf-httpapi-ratelimit-headers):
- * `RateLimit-Policy` names each window's quota (`q`) and length (`w`);
- * `RateLimit` gives what remains (`r`) and the seconds until it resets (`t`).
- */
 import { budget, spendBudgetState, type Budget } from '../abuse/usage.ts';
 import type { Database } from '../db/database.ts';
 import { ApiError } from '../errors.ts';

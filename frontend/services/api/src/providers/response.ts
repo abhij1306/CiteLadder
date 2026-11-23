@@ -21,7 +21,7 @@ export async function boundedJson(
       if (bytes > maxBytes) throw new Error('Provider response exceeds byte budget');
       chunks.push(value);
     }
-    return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;
+    return JSON.parse(Buffer.concat(chunks).toString('utf8'));
   } finally {
     signal.removeEventListener('abort', abort);
     await reader.cancel().catch(() => undefined);

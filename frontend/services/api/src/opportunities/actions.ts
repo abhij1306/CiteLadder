@@ -144,7 +144,6 @@ export function actionItem(row: ActionRow) {
     member_count: jsonList(row.member_opportunity_ids).length,
     declarable_member_count: declarableIds(row).length,
     page_count: cohort?.page_count ?? null,
-    finding_class: cohort ? actionItemSchema.shape.finding_class.parse(cohort.finding_class) : null,
     summary: actionSummary(row, cohort),
     handoff: readHandoff(record(row.diagnosis).handoff, row.target_label),
     evidence_cleared_at: row.evidence_cleared_at?.toISOString() ?? null,

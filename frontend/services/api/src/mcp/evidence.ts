@@ -12,8 +12,9 @@ import { listDifferentiationReports } from '../source-pages/differentiation-read
 import { productDetail } from '../commerce/product-detail.ts';
 import { productMetrics } from '../commerce/products.ts';
 import { catalog } from '../commerce/reads.ts';
-import { readiness, datasetPage } from '../search-intelligence/reads.ts';
+import { readiness, datasetPage, listRuns } from '../search-intelligence/reads.ts';
 import { mcpPolicy } from './config.ts';
+import { noCatalog, shoppingTotals } from './views-work.ts';
 import { appLink } from './links.ts';
 import { decodeCursor, encodeCursor, pagination, reference, unavailable } from './data.ts';
 import { McpInputError, type Evidence, type ProjectRead } from './types.ts';
@@ -93,8 +94,9 @@ export async function differentiationRead({ db, scope }: ProjectRead): Promise<E
 }
 
 export async function shelfRead(
-  { db, scope }: ProjectRead,
+  read: ProjectRead,
   args: Page & {
+    view?: 'products' | 'overview';
     holder_id?: string | null;
     source?: 'catalog' | 'all' | null;
     category_id?: string | null;
@@ -106,12 +108,14 @@ export async function shelfRead(
     throw new McpInputError(
       `window_days is one of ${policy.commerce.products.window_days.join(', ')}`,
     );
+  const { db, scope } = read;
+  if (args.view === 'overview') return shoppingTotals(read, { ...args, window_days: windowDays });
   const executions = { windowDays, engine: null, promptSet: null };
   if (args.holder_id)
     return { state: 'available', ...(await productDetail(db, scope, args.holder_id, executions)) };
   const { product_total, categories, projection } = await catalog(db, scope);
   if (projection.applicability !== 'applicable' && !product_total)
-    return unavailable('no_product_catalog');
+    return noCatalog(projection.applicability);
   const products = await productMetrics(db, scope, {
     ...executions,
     source: args.source ?? 'catalog',
@@ -135,11 +139,19 @@ export function integrationStatus({ db, scope }: ProjectRead): Promise<Evidence>
   return readProjectReadiness(db, scope);
 }
 
+function portfolioCursor(cursor: string, filters: string) {
+  const [key, at, id] = decodeCursor(cursor, 3);
+  if (key !== filters || !at || Number.isNaN(Date.parse(at)) || !parseUuid(id))
+    throw new McpInputError('cursor is invalid for this selection');
+  return { at, id };
+}
+
 export async function promptPortfolio(
   { db, scope }: ProjectRead,
   args: Page & {
     prompt_set_id?: string | null;
     cohort?: string | null;
+    intent?: string | null;
     active_only?: boolean;
   },
 ): Promise<Evidence> {
@@ -171,15 +183,15 @@ export async function promptPortfolio(
   if (args.active_only)
     query = query.where('p.enabled', '=', true).where('p.status', '=', 'active');
   if (args.cohort) query = query.where('p.cohort', '=', args.cohort);
+  if (args.intent) query = query.where('p.intent', '=', args.intent);
   const filters = JSON.stringify([
     args.prompt_set_id ?? null,
     args.cohort ?? null,
+    args.intent ?? null,
     !!args.active_only,
   ]);
   if (args.cursor) {
-    const [key, at, id] = decodeCursor(args.cursor, 3);
-    if (key !== filters || !at || Number.isNaN(Date.parse(at)) || !parseUuid(id))
-      throw new McpInputError('cursor is invalid for this selection');
+    const { at, id } = portfolioCursor(args.cursor, filters);
     query = query.where(sql<boolean>`(p.created_at,p.id) > (${at}::timestamptz,${id}::uuid)`);
   }
   const count = args.limit ?? mcpPolicy.default_list_limit;
@@ -258,6 +270,47 @@ export async function searchIntelligence({ db, scope }: ProjectRead): Promise<Ev
   };
 }
 
+export async function researchRuns({ db, scope }: ProjectRead, args: Page): Promise<Evidence> {
+  let offset = 0;
+  if (args.cursor) {
+    const [key, at] = decodeCursor(args.cursor, 2);
+    offset = Number(at);
+    if (key !== 'research_runs' || !Number.isSafeInteger(offset) || offset < 0)
+      throw new McpInputError('cursor is invalid');
+  }
+  const count = args.limit ?? mcpPolicy.default_list_limit;
+  const runs = await listRuns(
+    db,
+    { workspace: new WorkspaceScope(scope.workspaceId), projectId: scope.projectId },
+    { offset, limit: count + 1, awaitingConfirmation: true },
+  );
+  const items = runs.slice(0, count).map((run) => ({
+    id: run.id,
+    status: run.status,
+    awaiting_confirmation: run.status === 'reviewed' && run.confirmed_at === null,
+    action: run.action,
+    estimated_credits: run.estimated_credits,
+    charged_credits: run.charged_credits,
+    planned_calls: run.planned_calls,
+    completed_calls: run.completed_calls,
+    error_code: run.error_code,
+    expires_at: run.expires_at,
+    confirmed_at: run.confirmed_at,
+    cancelled_at: run.cancelled_at,
+    completed_at: run.completed_at,
+    created_at: run.created_at,
+  }));
+  return {
+    state: 'available',
+    view: 'runs',
+    items,
+    pagination: pagination(
+      items,
+      runs.length > count ? encodeCursor('research_runs', offset + count) : null,
+    ),
+  };
+}
+
 export async function searchDataset(
   { db, scope }: ProjectRead,
   args: Page & { dataset_id: string; sort?: string | null; direction: 'asc' | 'desc' },
@@ -292,7 +345,6 @@ export async function searchDataset(
 
 export async function competitorsAndDomains({ db, scope }: ProjectRead) {
   const workspace = new WorkspaceScope(scope.workspaceId);
-  // Neither table carries a workspace; the owning project scopes them.
   const project = () =>
     workspace.selectFrom(db, 'projects').where('projects.id', '=', scope.projectId);
   const [owned, competitors] = await Promise.all([

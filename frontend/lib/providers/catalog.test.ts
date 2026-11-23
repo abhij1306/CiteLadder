@@ -41,6 +41,7 @@ describe('engine catalogue', () => {
       ['gemini', 'Gemini API'],
       ['claude', 'Claude API'],
       ['google_ai_overview', 'Google AI Overview'],
+      ['google_ai_mode', 'Google AI Mode'],
     ]);
   });
 
@@ -54,11 +55,12 @@ describe('engine catalogue', () => {
       'chatgpt_search',
       'gemini_consumer',
       'google_ai_overview',
+      'google_ai_mode',
     ]);
-    expect(engines.order.filter(engines.isSearchSurface)).toEqual(['google_ai_overview']);
-    expect(engines.modelLabel('chatgpt', 'gpt-6.1-terra')).toBe('gpt-6.1-terra');
-    expect(engines.modelLabel('chatgpt_search', 'chat_gpt-llm-scraper')).toBeNull();
-    expect(engines.modelLabel('uncatalogued', 'some-model')).toBeNull();
+    expect(engines.order.filter(engines.isSearchSurface)).toEqual([
+      'google_ai_overview',
+      'google_ai_mode',
+    ]);
   });
 });
 
@@ -160,7 +162,11 @@ describe('buildProviderGroups', () => {
         group.engines.map((engine) => engine.logical_engine),
       ]),
     ).toEqual([
-      ['dataforseo', 'basic', ['chatgpt_search', 'gemini_consumer', 'google_ai_overview']],
+      [
+        'dataforseo',
+        'basic',
+        ['chatgpt_search', 'gemini_consumer', 'google_ai_overview', 'google_ai_mode'],
+      ],
       ['openai', 'key', ['chatgpt']],
       ['google', 'key', ['gemini']],
       ['anthropic', 'key', ['claude']],
@@ -177,7 +183,11 @@ describe('buildProviderGroups', () => {
     };
     const groups = buildProviderGroups(buildEngineCards(withoutScrapers as never));
 
-    expect(groups.find((group) => group.transport === 'dataforseo')?.engines).toHaveLength(1);
+    expect(
+      groups
+        .find((group) => group.transport === 'dataforseo')
+        ?.engines.map((engine) => engine.logical_engine),
+    ).toEqual(['google_ai_overview', 'google_ai_mode']);
     expect(transportForEngine(groups, 'chatgpt_search')).toBeNull();
   });
 });

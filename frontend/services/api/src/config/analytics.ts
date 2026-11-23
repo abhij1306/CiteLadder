@@ -15,7 +15,7 @@ export type WorkerSettings = {
 
 export function loadWorkerSettings(source: SettingSource = process.env): WorkerSettings {
   const specs = analytics.worker_settings;
-  const setting = (name: keyof typeof specs) => resolveSpec(name, specs[name], source) as number;
+  const setting = <K extends keyof typeof specs>(name: K) => resolveSpec(name, specs[name], source);
   const settings: WorkerSettings = {
     leaseReclaimBatchSize: setting('lease_reclaim_batch_size'),
     drainBudgetSeconds: setting('drain_budget_seconds'),

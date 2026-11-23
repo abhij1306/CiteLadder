@@ -1,9 +1,9 @@
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vite-plus/test';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vite-plus/test';
 import { mswServer } from '@/test/msw-server';
-import { renderWithProviders } from '@/test/render';
+import { projectScope, renderWithProviders } from '@/test/render';
 import { makeProject } from '@/test/fixtures/project';
 import { CrawlLogConnections } from './crawl-log-connections';
 
@@ -11,12 +11,6 @@ const project = makeProject({
   id: '88888888-8888-4888-8888-888888888888',
   workspace_id: '11111111-1111-4111-8111-111111111111',
 });
-vi.mock('@/lib/project/project-context', () => ({
-  useProjectContext: () => ({ activeProject: project, isLoading: false }),
-  useOptionalProjectContext: () => ({ activeProjectId: project.id }),
-  useWorkspaceCapability: () => true,
-  useActiveWorkspaceId: () => project.workspace_id,
-}));
 const root = '/api/v1/projects/' + project.id;
 const id = '99999999-9999-4999-8999-999999999999';
 
@@ -80,8 +74,9 @@ describe('crawl-log token rotation', () => {
       ),
     );
     const user = userEvent.setup();
-    renderWithProviders(<CrawlLogConnections />);
-    await user.click(await screen.findByRole('button', { name: 'Rotate token' }));
+    renderWithProviders(<CrawlLogConnections />, { projectSelection: projectScope(project) });
+    await user.click(await screen.findByRole('button', { name: /actions$/ }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Rotate token' }));
     const dialog = await screen.findByRole('dialog', { name: 'Rotate token' });
     await user.click(within(dialog).getByRole('button', { name: 'Rotate token' }));
     expect(
@@ -107,8 +102,9 @@ describe('crawl-log token rotation', () => {
       }),
     );
     const user = userEvent.setup();
-    renderWithProviders(<CrawlLogConnections />);
-    await user.click(await screen.findByRole('button', { name: 'Rotate token' }));
+    renderWithProviders(<CrawlLogConnections />, { projectSelection: projectScope(project) });
+    await user.click(await screen.findByRole('button', { name: /actions$/ }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Rotate token' }));
     const dialog = await screen.findByRole('dialog', { name: 'Rotate token' });
     await user.click(within(dialog).getByRole('button', { name: 'Rotate token' }));
     expect(await within(dialog).findByText(/rotate the token/i)).toBeVisible();
@@ -154,7 +150,7 @@ describe('sink filter confirmation', () => {
       ),
     );
     const user = userEvent.setup();
-    renderWithProviders(<CrawlLogConnections />);
+    renderWithProviders(<CrawlLogConnections />, { projectSelection: projectScope(project) });
     const first = await screen.findByRole('region', { name: 'Sink filter update for a.acme.com' });
     const second = screen.getByRole('region', { name: 'Sink filter update for b.acme.com' });
     await user.click(within(first).getByRole('button', { name: 'I’ve updated it' }));

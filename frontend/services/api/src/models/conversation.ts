@@ -105,10 +105,6 @@ export function conversationInputBytes(request: ConversationRequest) {
 }
 
 const blockShape = z.object({ type: z.string() }).catchall(z.json());
-/**
- * Content blocks, validated but returned as given: an object schema would
- * rebuild each block with its own key order, and replay must keep the bytes.
- */
 export const blocksSchema = z.array(
   z.custom<ConversationBlock>((value) => blockShape.safeParse(value).success),
 );
@@ -154,11 +150,6 @@ const searchResultSchema = z.object({
     z.object({ error_code: z.string() }).loose(),
   ]),
 });
-/**
- * The web searches in a block list: the calls the model made and the results
- * that came back. With a read in the same response, a call's result arrives
- * at the start of the next response instead, so the two are listed apart.
- */
 export function webSearchBlocks(blocks: readonly ConversationBlock[]) {
   const calls: WebSearchCall[] = [];
   const results: WebSearchResult[] = [];
@@ -197,11 +188,6 @@ export function hasPendingServerTool(blocks: readonly ConversationBlock[]) {
   return blocks.some(pendingServerTool(blocks));
 }
 
-/**
- * The blocks without provider-hosted calls that never got their result, for a
- * response no later call continues. An empty result keeps a placeholder text,
- * since an empty assistant message makes every later replay invalid.
- */
 export function withoutPendingServerTools(blocks: readonly ConversationBlock[]) {
   const pending = pendingServerTool(blocks);
   const kept = blocks.filter((block) => !pending(block));

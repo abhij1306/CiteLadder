@@ -66,7 +66,6 @@ it('sends on Enter but not on the Enter that confirms an IME composition', () =>
   renderWithProviders(<MessageField replacement="@Pricing" onEnter={onEnter} />);
   const field = screen.getByRole('combobox', { name: 'Message' });
   fireEvent.keyDown(field, { key: 'Enter', isComposing: true });
-  // Safari: isComposing is false on the confirming keydown, keyCode is 229.
   fireEvent.keyDown(field, { key: 'Enter', keyCode: 229 });
   expect(onEnter).toHaveBeenCalledTimes(0);
   fireEvent.keyDown(field, { key: 'Enter', keyCode: 13 });

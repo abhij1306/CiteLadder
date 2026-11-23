@@ -59,11 +59,6 @@ function declares(c: Context, media: JsonMedia): boolean {
   return c.req.header('content-type')?.split(';')[0]?.trim().toLowerCase() === media;
 }
 
-/**
- * An optional JSON body: empty or `null` reads as null. A non-empty body must
- * declare `Content-Type: application/json`, so a form or plain-text post that a
- * browser sends without a preflight never reaches a JSON route (415).
- */
 export async function readOptionalBody<T extends z.ZodType>(
   c: Context,
   schema: T,

@@ -1,22 +1,16 @@
 import { screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vite-plus/test';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vite-plus/test';
 
 import { makeProject } from '@/test/fixtures/project';
 import { mswServer } from '@/test/msw-server';
-import { renderWithProviders } from '@/test/render';
+import { projectScope, renderWithProviders } from '@/test/render';
 import { AiTrafficScreen } from './ai-traffic-screen';
 
 const project = makeProject({
   id: '88888888-8888-4888-8888-888888888888',
   workspace_id: '11111111-1111-4111-8111-111111111111',
 });
-vi.mock('@/lib/project/project-context', () => ({
-  useProjectContext: () => ({ activeProject: project, isLoading: false }),
-  useOptionalProjectContext: () => ({ activeProjectId: project.id }),
-  useWorkspaceCapability: () => true,
-  useActiveWorkspaceId: () => project.workspace_id,
-}));
 const root = '/api/v1/projects/' + project.id;
 const overview = {
   crawl: {
@@ -96,7 +90,7 @@ describe('AI Traffic opening requests', () => {
         return HttpResponse.json(insights);
       }),
     );
-    renderWithProviders(<AiTrafficScreen />, { projectSelection: { activeProject: project } });
+    renderWithProviders(<AiTrafficScreen />, { projectSelection: projectScope(project) });
 
     await waitFor(() =>
       expect(asked.sort()).toEqual(['insights ?range=30d', 'overview ?range=30d']),
@@ -121,7 +115,7 @@ describe('AI Traffic opening requests', () => {
       http.get(root + '/ai-traffic/overview', () => HttpResponse.json(overview)),
       http.get(root + '/ai-traffic/insights', () => HttpResponse.json(insights)),
     );
-    renderWithProviders(<AiTrafficScreen />, { projectSelection: { activeProject: project } });
+    renderWithProviders(<AiTrafficScreen />, { projectSelection: projectScope(project) });
 
     await waitFor(() => expect(reads).toBe(2));
     expect(await screen.findByText('Referral coverage is partial')).toBeVisible();

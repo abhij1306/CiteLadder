@@ -39,10 +39,6 @@ export async function runAgentOnce(
       leaseSignal(heartbeat.signal, options.signal),
       options.events,
     );
-    // A caller's stop is answered here: a closed browser keeps a document it
-    // already streamed (B69). A heartbeat that gave up ends the turn as
-    // interrupted now rather than at lease expiry; the fence decides, so a
-    // lease another owner or recovery already took is left alone.
     if (options.signal?.aborted) {
       const code = stoppedCode(options.signal);
       if (code === 'interrupted' && stopped) await stopped.saveDocuments();

@@ -63,7 +63,7 @@ export function scheduleIntervalIssue(
     return input.interval_minutes === null
       ? null
       : 'interval_minutes is only valid for every_n_minutes';
-  const minimum = resolveSettingSpec(policy.audit_schedules.min_interval_minutes, env) as number;
+  const minimum = resolveSettingSpec(policy.audit_schedules.min_interval_minutes, env);
   return input.interval_minutes !== null && input.interval_minutes >= minimum
     ? null
     : 'every_n_minutes requires a configured-minimum interval or higher';

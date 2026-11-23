@@ -3,7 +3,7 @@ id: programmatic_seo
 label: Programmatic SEO pilot
 group: content
 order: 12
-version: 2
+version: 3
 output_kind: plan
 description: Design a small data-backed programmatic SEO pilot with real per-page value, quality gates and a maintenance plan. Use for repeatable page families, not mass keyword-swapped or doorway pages.
 ---
@@ -17,7 +17,7 @@ Decide whether a repeatable family of pages is justified and, if so, specify a s
 ## Where the data is
 
 - `get_project_business_context`: the real products, locations, integrations or datasets behind each page.
-- `read_search_dataset` and `read_performance`: demand for the pattern.
+- `read_search_intelligence`, then `read_search_dataset`, and `read_performance`: demand for the pattern.
 - `read_site_pages`: the pages that already exist.
 
 ## What good looks like

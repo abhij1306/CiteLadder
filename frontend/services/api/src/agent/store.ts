@@ -3,7 +3,7 @@ import { sql } from 'kysely';
 import { z } from 'zod';
 import { fingerprint } from '../crypto-text.ts';
 import { subjectXactLock } from '../db/advisory-lock.ts';
-import type { Database } from '../db/database.ts';
+import { inTransaction, type Database } from '../db/database.ts';
 import { notFound } from '../errors.ts';
 import { jsonObject } from '../db/json.ts';
 import { acceptForAgent } from '../opportunities/action-decisions.ts';
@@ -34,11 +34,18 @@ import { requestedPageUrl } from './page-url.ts';
 import { fetchesPage } from './skills.ts';
 import type { WorkflowCatalog } from './workflows.ts';
 import type { AgentAttachment } from '@citeladder/contracts/agent';
+import { agentReasoningEffortSchema } from '@citeladder/contracts/agent';
+import {
+  newChatChoice,
+  turnChoice,
+  type ModelChoice,
+  type RequestedChoice,
+} from './model-choice.ts';
 
 export type AdmittedModel = Pick<Run, 'requested_model'>;
 /** Admission owns the model configuration check and abuse capacity, in this transaction.
  * It is injected deliberately, with no default. */
-export type Admission = (db: Database, scope: Scope) => Promise<AdmittedModel>;
+export type Admission = (db: Database, scope: Scope, model: string) => Promise<AdmittedModel>;
 /**
  * Creates or reuses the Action a new page chat works on, in the chat's own
  * transaction, so a refused admission leaves no Action behind. Returns its id.
@@ -55,6 +62,7 @@ export type TurnInput = {
   refs?: Record<string, Json>;
   mentionIds?: string[];
   attachments?: AgentAttachment[];
+  choice?: RequestedChoice;
 };
 
 async function requireNoActiveRun(db: Database, chat: Chat) {
@@ -73,7 +81,11 @@ export async function requireIdle(db: Database, chat: Chat) {
     throw new AgentError('agent_run_active');
 }
 
+function choiceIdentity(choice: RequestedChoice = {}) {
+  return { model: choice.model ?? null, effort: choice.effort ?? null };
+}
 function requestIdentity(scope: Scope, input: TurnInput) {
+  const choice = choiceIdentity(input.choice);
   if (input.chatId)
     return {
       op: 'send_message',
@@ -83,6 +95,7 @@ function requestIdentity(scope: Scope, input: TurnInput) {
       workflow: input.workflowId ?? null,
       mentions: input.mentionIds ?? [],
       attachments: input.attachments ?? [],
+      ...choice,
     };
   return {
     op: 'create_chat',
@@ -94,6 +107,7 @@ function requestIdentity(scope: Scope, input: TurnInput) {
     context: input.refs ?? {},
     mentions: input.mentionIds ?? [],
     attachments: input.attachments ?? [],
+    ...choice,
   };
 }
 async function replayedRun(db: Database, scope: Scope, key: string, hash: string) {
@@ -167,7 +181,6 @@ export class AgentStore {
   }
   private async lockWorkspace(trx: Database, scope: Scope) {
     await authorize(trx, scope);
-    // Serialize workspace keys before chat locks.
     await subjectXactLock(trx, `agent-enqueue:${scope.workspaceId}`);
   }
   /**
@@ -209,7 +222,8 @@ export class AgentStore {
       if (chat.archived_at) throw notFound('Chat');
       await requireIdle(trx, chat);
       if (chat.turn_count >= agentPolicy.chat_turn_limit) throw new AgentError('agent_turn_limit');
-      const admitted = await this.dependencies.admission(trx, scope);
+      const choice = await turnChoice(trx, scope, chat, input.choice ?? {});
+      const admitted = await this.dependencies.admission(trx, scope, choice.model);
       const refs = z
         .record(z.string(), z.json())
         .parse(jsonObject(chat.context_refs, 'agent_chats.context_refs'));
@@ -245,6 +259,7 @@ export class AgentStore {
         skill,
         workflow,
         manifest,
+        choice,
         pinnedSkillId: input.skillId === undefined ? chat.pinned_skill_id : input.skillId,
       });
     });
@@ -261,6 +276,7 @@ export class AgentStore {
       skill: Awaited<ReturnType<AgentStore['turnSkill']>>;
       workflow: Workflow | undefined;
       manifest: Manifest;
+      choice: ModelChoice;
       pinnedSkillId: string | null;
     },
   ) {
@@ -285,7 +301,7 @@ export class AgentStore {
             ? { workflow: { id: workflow.id, format_id: workflow.format_id ?? null } }
             : {}),
         },
-        budget: admittedBudget(this.dependencies.timeoutSeconds),
+        budget: admittedBudget(this.dependencies.timeoutSeconds, turn.choice.effort),
         runtime_version: agentPolicy.runtime_version,
         protocol_version: agentPolicy.protocol_version,
         registry_version: this.dependencies.registryVersion,
@@ -318,6 +334,8 @@ export class AgentStore {
       .set({
         turn_count: chat.turn_count + 1,
         pinned_skill_id: turn.pinnedSkillId,
+        model: turn.choice.model,
+        reasoning_effort: turn.choice.effort,
         last_activity_at: now,
         updated_at: now,
       })
@@ -376,7 +394,7 @@ export class AgentStore {
   ) {
     const admitted = this.admitted(scope, raw, chosen);
     const { hash } = admitted;
-    return this.db.transaction().execute(async (trx) => {
+    return inTransaction(this.db, async (trx) => {
       await this.lockWorkspace(trx, scope);
       const replay = await replayedRun(trx, scope, admitted.input.key, hash);
       if (replay) return { chatId: replay.chat_id, run: replay };
@@ -387,7 +405,8 @@ export class AgentStore {
         url: await this.requestedPage(trx, scope, input),
         actionId: input.actionId ?? null,
       });
-      const { requested_model } = await this.dependencies.admission(trx, scope);
+      const choice = newChatChoice(input.choice ?? {});
+      const { requested_model } = await this.dependencies.admission(trx, scope, choice.model);
       const refs = { ...input.refs, target_url: page.url };
       const manifest = await buildManifest(
         trx,
@@ -484,6 +503,10 @@ export class AgentStore {
       key: pageTurnKey(fetch.taskId),
       hash: payload.request_fingerprint,
       admitted: { requested_model: payload.requested_model },
+      choice: {
+        model: chat.model,
+        effort: agentReasoningEffortSchema.parse(chat.reasoning_effort),
+      },
       skill: this.turnSkill(chat, workflow?.skill_id ?? null, manifest.action?.skill_id ?? null),
       workflow,
       manifest,
@@ -504,9 +527,9 @@ export class AgentStore {
     });
   }
   private async createChat(db: Database, scope: Scope, input: TurnInput) {
-    // Work with Agent on a New Action accepts it (owner 2026-11-16).
     if (input.actionId) await acceptForAgent(db, scope, input.actionId, scope.userId);
     const now = new Date();
+    const choice = newChatChoice(input.choice ?? {});
     return db
       .insertInto('agent_chats')
       .values({
@@ -518,6 +541,8 @@ export class AgentStore {
         action_id: input.actionId ?? null,
         context_refs: input.refs ?? {},
         pinned_skill_id: input.skillId ?? null,
+        model: choice.model,
+        reasoning_effort: choice.effort,
         turn_count: 0,
         created_at: now,
         updated_at: now,

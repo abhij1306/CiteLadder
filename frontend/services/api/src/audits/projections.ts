@@ -74,7 +74,7 @@ async function enqueueAuditAnalytics(
   };
   for (const [kind, enqueue] of Object.entries(enqueues)) {
     try {
-      await enqueue(); // NOSONAR -- Each enqueue is independent and logged on its own.
+      await enqueue(); // NOSONAR
     } catch (error) {
       getLogger('workers.audit').warning(`${kind}_enqueue_failed`, {
         audit_id: auditId,

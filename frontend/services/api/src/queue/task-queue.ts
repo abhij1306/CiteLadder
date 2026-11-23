@@ -59,11 +59,6 @@ export type LaneDescriptor<T extends LaneTable = LaneTable> = {
   asyncCommit?: true;
 };
 
-/**
- * A transaction that commits without waiting for the WAL flush. A crash can
- * lose its last fraction of a second, which lease recovery redoes; only for
- * work that lease recovery replays, never billing, ledger or webhook writes.
- */
 export const asyncCommit = <R>(db: Database, run: (trx: Database) => Promise<R>) =>
   db.transaction().execute(async (trx) => {
     await sql`set local synchronous_commit = off`.execute(trx);
@@ -367,7 +362,6 @@ export class TaskQueue<T extends LaneTable = 'analytics_tasks'> {
         claimed.map((task) => task.workspace_id),
         now,
       );
-      // Keep the claim's own order; RETURNING does not promise one.
       const byId = new Map(claimed.map((task) => [task.id, task]));
       const rows = locked.map((task) => byId.get(task.id)!) as unknown as TaskFor<T>[];
       await options.onClaimed?.(trx, rows);

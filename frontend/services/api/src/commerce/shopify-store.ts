@@ -96,7 +96,7 @@ export async function fetchShopifyStore(
   let total = 0;
   for (let page = 1; page <= shopify.max_pages; page++) {
     const url = `https://${host}/products.json?limit=${shopify.page_size}&page=${page}`;
-    const fetched = await fetchPage(url, context); // NOSONAR -- Pages follow one another: each starts on the host the last answered from.
+    const fetched = await fetchPage(url, context); // NOSONAR
     host = fetched.host;
     total += Buffer.byteLength(fetched.body, 'utf8');
     if (total > shopify.max_total_bytes) unavailable('The store catalog exceeds the size limit');

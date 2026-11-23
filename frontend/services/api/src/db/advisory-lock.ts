@@ -18,7 +18,6 @@ function advisoryLockKey(family: LockFamily, id: string): bigint {
   const input = new Uint8Array(20);
   new DataView(input.buffer).setUint32(0, family.namespace);
   input.set(uuidBytes(id), 4);
-  // BLAKE2b personalization is 16 bytes; a shorter `person` is zero-padded.
   const personalization = new Uint8Array(16);
   personalization.set(new TextEncoder().encode(family.person));
   const digest = blake2b(input, { dkLen: 8, personalization });
@@ -34,7 +33,17 @@ export async function advisoryXactLock(
   await sql`select pg_advisory_xact_lock(${key}::bigint)`.execute(db);
 }
 
+function subjectLockKey(subject: string): string {
+  return createHash('sha256').update(subject).digest().readBigInt64BE(0).toString();
+}
+
 export async function subjectXactLock(db: Database, subject: string): Promise<void> {
-  const key = createHash('sha256').update(subject).digest().readBigInt64BE(0).toString();
-  await sql`select pg_advisory_xact_lock(${key}::bigint)`.execute(db);
+  await sql`select pg_advisory_xact_lock(${subjectLockKey(subject)}::bigint)`.execute(db);
+}
+
+export async function subjectTryXactLock(db: Database, subject: string): Promise<boolean> {
+  const { rows } = await sql<{
+    locked: boolean;
+  }>`select pg_try_advisory_xact_lock(${subjectLockKey(subject)}::bigint) as locked`.execute(db);
+  return rows[0]?.locked === true;
 }

@@ -15,7 +15,6 @@ import { asApiErrorCode } from '@citeladder/contracts/error-codes';
 import { z } from 'zod';
 import { insightsRefresh } from '../config/ai-traffic.ts';
 import { enqueueCoalesced } from '../queue/enqueue.ts';
-import type { Database } from '../db/database.ts';
 import { ApiError, notFound } from '../errors.ts';
 import { readBody, readOptionalBody } from '../http/body.ts';
 import { executeInteractiveSyncs } from '../integrations/interactive.ts';
@@ -37,13 +36,13 @@ import {
   siteDomainsOf,
 } from '../integrations/host-scope.ts';
 import {
-  activePropertySync,
   enqueueHistoryBackfill,
   enqueueSyncRun,
   getBackfillProgress,
   listMappings,
   getSyncRun,
 } from '../integrations/sync.ts';
+import { syncProjectPerformance } from '../integrations/performance-sync.ts';
 import { freshAccessToken } from '../integrations/tokens.ts';
 import { getLogger } from '../logging.ts';
 import { budget, spendBudget } from '../abuse/usage.ts';
@@ -82,27 +81,6 @@ function cookieValue(header: string | undefined, name: string): string {
     .map((value) => value.trim())
     .find((value) => value.startsWith(`${name}=`));
   return pair?.slice(name.length + 1) ?? '';
-}
-
-async function onDemandRun(
-  db: Database,
-  workspaceId: string,
-  target: { mapping_id: string; connection_id: string; project_id: string },
-) {
-  try {
-    return await enqueueSyncRun(db, {
-      workspaceId,
-      connectionId: target.connection_id,
-      mappingId: target.mapping_id,
-      projectId: target.project_id,
-      syncKind: 'on_demand',
-    });
-  } catch (error) {
-    if (error instanceof ApiError && error.code === 'sync_target_unresolved') return null;
-    if (error instanceof ApiError && error.code === 'sync_active_window_conflict')
-      return (await activePropertySync(db, workspaceId, target.mapping_id)) ?? 'syncing';
-    throw error;
-  }
 }
 
 function integrationFailure(error: unknown): never {
@@ -154,40 +132,10 @@ export const integrationRoutes = [
     params: { path: { project_id: uuid }, query: {} },
     response: performanceSyncEnqueueResponseSchema,
     async handle({ c, db }, { path }) {
-      const workspaceId = c.get('workspace').workspaceId;
-      const targets = await db
-        .selectFrom('integration_property_mappings as mapping')
-        .innerJoin(
-          'integration_connections as connection',
-          'connection.id',
-          'mapping.connection_id',
-        )
-        .innerJoin('integration_oauth_grants as grant', (join) =>
-          join
-            .onRef('grant.id', '=', 'connection.grant_id')
-            .onRef('grant.workspace_id', '=', 'connection.workspace_id'),
-        )
-        .select(['mapping.id as mapping_id', 'mapping.connection_id', 'mapping.project_id'])
-        .where('mapping.workspace_id', '=', workspaceId)
-        .where('mapping.project_id', '=', path.project_id)
-        .where('mapping.status', '=', 'active')
-        .where('grant.status', '=', 'connected')
-        .where('connection.provider', 'in', ['gsc', 'ga4', 'bing'])
-        .orderBy('mapping.created_at', 'asc')
-        .orderBy('mapping.id', 'asc')
-        .execute();
-      const queued = [];
-      let syncing = 0;
-      for (const target of targets) {
-        const run = await onDemandRun(db, workspaceId, target);
-        if (run === 'syncing') syncing++;
-        else if (run) queued.push(run);
-      }
-      if (queued.length === 0 && syncing > 0)
-        throw new ApiError(409, 'A sync is already running for this project', {
-          code: 'sync_active_window_conflict',
-          details: { error: 'sync_active_window_conflict', enqueued_connection_ids: [] },
-        });
+      const queued = await syncProjectPerformance(db, {
+        workspaceId: c.get('workspace').workspaceId,
+        projectId: path.project_id,
+      });
       return performanceSyncEnqueueResponseSchema.parse(queued);
     },
   }),

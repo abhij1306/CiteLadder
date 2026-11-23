@@ -14,8 +14,6 @@ const {
   business_context_fields: CONTEXT_FIELDS,
 } = policy.prompts.binding;
 const STOPWORDS = new Set(stopwords);
-// ICU word boundaries also split scripts written without spaces (Chinese,
-// Japanese, Thai); for spaced scripts they match the separator split below.
 const WORDS = new Intl.Segmenter(undefined, { granularity: 'word' });
 
 export type BindingFailure = 'off_topic' | 'vocabulary_empty';

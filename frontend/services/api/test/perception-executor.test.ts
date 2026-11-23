@@ -128,15 +128,32 @@ const goodOutput = JSON.stringify({
       label: 'positive',
       confidence: 0.92,
       aspects: [
-        { theme: 'value', polarity: 'positive', quote: 'the best value pick' },
-        { theme: 'pricing', polarity: 'negative', quote: 'Acme costs too much' },
+        {
+          category: 'value',
+          attribute: 'Best value pick',
+          polarity: 'positive',
+          quote: 'the best value pick',
+        },
+        {
+          category: 'Pricing',
+          attribute: 'Too expensive',
+          polarity: 'negative',
+          quote: 'Acme costs too much',
+        },
       ],
     },
     {
       entity_id: 'competitor:rival',
       label: 'negative',
       confidence: 0.8,
-      aspects: [{ theme: 'support', polarity: 'negative', quote: 'Rival support is slow' }],
+      aspects: [
+        {
+          category: 'Support',
+          attribute: 'Slow support',
+          polarity: 'negative',
+          quote: 'Rival support is slow',
+        },
+      ],
     },
   ],
   untracked_businesses: [],
@@ -194,7 +211,7 @@ describe('perception enqueue', () => {
 });
 
 describe('perception executor', () => {
-  it("persists verified quotes with code-point offsets, classifies against the project's own themes and counts what it dropped", async () => {
+  it("persists verified quotes with code-point offsets and attributes, reuses the project's own category, names a new one beside another workspace's and counts what it dropped", async () => {
     const value = randomUUID();
     const theme = (owner: Tenant, id: string, name: string) => ({
       id,
@@ -216,17 +233,33 @@ describe('perception executor', () => {
     const gateway = fakeGateway([goodOutput]);
     await drain(tenant, gateway.factory);
     const sent = JSON.stringify(gateway.fetch.mock.calls);
-    expect(sent).toContain('Allowed themes: Value, Other\\\\n');
+    expect(sent).toContain('Current categories: Value, Other\\\\n');
     expect(await perceptions(tenant.workspaceId)).toEqual([
       {
         analysis_id: analysisId,
         outcome: 'classified',
         outcome_reason: null,
         extractor_version: 'perception-extract-test',
-        drop_counts: { quote_not_found: 1, theme_other: 1 },
+        drop_counts: { quote_not_found: 1 },
         usage: expect.objectContaining({ input_tokens: 100, output_tokens: 20, attempts: 1 }),
         model: 'returned-model',
       },
+    ]);
+    const categories = (owner: Tenant) =>
+      db
+        .selectFrom('project_themes')
+        .select(['id', 'name', 'source'])
+        .where('workspace_id', '=', owner.workspaceId)
+        .orderBy('position')
+        .execute();
+    const saved = await categories(tenant);
+    const support = saved.find((row) => row.name === 'Support')?.id;
+    expect(saved.map((row) => [row.name, row.source])).toEqual([
+      ['Value', 'research'],
+      ['Support', 'model'],
+    ]);
+    expect((await categories(other)).map((row) => [row.name, row.source])).toEqual([
+      ['Support', 'research'],
     ]);
     const entities = await db
       .selectFrom('entity_sentiments')
@@ -242,6 +275,7 @@ describe('perception executor', () => {
         aspects: [
           {
             theme_id: value,
+            attribute: 'Best value pick',
             polarity: 'positive',
             quote: 'the best value pick',
             start: 10,
@@ -255,7 +289,8 @@ describe('perception executor', () => {
         low_confidence: false,
         aspects: [
           {
-            theme_id: null,
+            theme_id: support,
+            attribute: 'Slow support',
             polarity: 'negative',
             quote: 'Rival support is slow',
             start: 31,
@@ -267,6 +302,65 @@ describe('perception executor', () => {
     expect([...ANSWER].slice(10, 29).join('')).toBe('the best value pick');
     const [task] = await queued(tenant.workspaceId);
     expect(task?.status).toBe('succeeded');
+  });
+
+  it('names new categories up to the per-project cap and files the rest under Other', async () => {
+    const output = (categories: string[]) =>
+      JSON.stringify({
+        entities: [
+          {
+            entity_id: 'brand:acme',
+            label: 'positive',
+            confidence: 0.9,
+            aspects: categories.map((category) => ({
+              category,
+              attribute: 'Best value pick',
+              polarity: 'positive',
+              quote: 'the best value pick',
+            })),
+          },
+        ],
+        untracked_businesses: [],
+      });
+    const capped = {
+      ...policy.perception,
+      project_themes: { ...policy.perception.project_themes, model_max: 1 },
+    };
+    const auditId = await fixtures.audit(tenant, { configuration });
+    await analysed(tenant, auditId, ANSWER);
+    await drain(tenant, fakeGateway([output(['Suitability', 'Onboarding'])]).factory, capped);
+    const saved = await db
+      .selectFrom('project_themes')
+      .select(['id', 'name'])
+      .where('workspace_id', '=', tenant.workspaceId)
+      .execute();
+    expect(saved.map((row) => row.name)).toEqual(['Suitability']);
+    const [brand] = await db
+      .selectFrom('entity_sentiments')
+      .select('aspects')
+      .where('workspace_id', '=', tenant.workspaceId)
+      .where('entity_id', '=', 'brand:acme')
+      .execute();
+    expect(brand?.aspects).toEqual([
+      expect.objectContaining({ theme_id: saved[0]!.id }),
+      expect.objectContaining({ theme_id: null }),
+    ]);
+    expect((await perceptions(tenant.workspaceId))[0]?.drop_counts).toEqual({
+      category_limit: 1,
+      missing_entity: 1,
+    });
+  });
+
+  it('records the passage characters the budget cut beside the drops', async () => {
+    const auditId = await fixtures.audit(tenant, { configuration });
+    await analysed(tenant, auditId, ANSWER);
+    await drain(tenant, fakeGateway([goodOutput]).factory, {
+      ...policy.perception,
+      max_passage_chars_per_entity: 20,
+      max_passage_chars_per_brand: 20,
+    });
+    const [perception] = await perceptions(tenant.workspaceId);
+    expect(perception?.drop_counts).toMatchObject({ passage_chars_cut: 66 });
   });
 
   it('settles as unavailable when no gateway model is configured', async () => {

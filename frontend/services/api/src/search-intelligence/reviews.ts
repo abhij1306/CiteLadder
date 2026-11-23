@@ -257,7 +257,6 @@ async function planDatasets(
   return { plan, reused, total, plannedRows };
 }
 
-/** Unpaid resolution precedes the project lock; the quoted plan is then frozen atomically. */
 export async function createReview(
   db: Database,
   scope: Scope,

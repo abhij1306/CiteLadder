@@ -70,9 +70,6 @@ export function CommandPalette({
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
-  // Where focus goes when the palette closes. Radix restores focus to its own
-  // Trigger, but the ⌘K path has no trigger, so without this the caller loses
-  // their place in the page and focus falls back to <body>.
   const returnFocusTo = useRef<HTMLElement | null>(launch?.returnTo ?? null);
 
   const restoreFocus = useCallback(() => {
@@ -107,8 +104,6 @@ export function CommandPalette({
     return () => window.removeEventListener(OPEN_COMMAND_PALETTE_EVENT, listener);
   }, [openFromTrigger]);
 
-  // ⌘K / Ctrl+K toggles from anywhere. Bound on keydown so it beats the
-  // browser's own find-in-page on the platforms that map ⌘K.
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if (!(event.metaKey || event.ctrlKey) || event.key?.toLowerCase() !== 'k') return;
@@ -171,9 +166,6 @@ export function CommandPalette({
 
   const activeIndex = active >= results.length ? 0 : active;
 
-  // Keep the highlighted row visible when moving by keyboard past the fold.
-  // Feature-detected: jsdom does not implement scrollIntoView, and this is
-  // presentation-only — losing it must never break selection.
   useEffect(() => {
     const row = listRef.current?.querySelector('[data-active="true"]');
     if (row instanceof HTMLElement && typeof row.scrollIntoView === 'function') {
@@ -245,7 +237,7 @@ export function CommandPalette({
               aria-activedescendant={
                 results[activeIndex] ? `${listboxId}-${results[activeIndex].id}` : undefined
               }
-              className="type-body text-ink placeholder:text-ink-2 min-w-0 flex-1 self-stretch bg-transparent"
+              className="type-body text-ink placeholder:text-ink-3 min-w-0 flex-1 self-stretch bg-transparent"
             />
             <Kbd>Esc</Kbd>
           </div>
@@ -264,7 +256,7 @@ export function CommandPalette({
             ) : null}
             <div
               id={listboxId}
-              // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- Command results are an active-descendant popup; native select/datalist cannot contain grouped action buttons.
+              // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role
               role="listbox"
               aria-label="Commands"
             >
@@ -273,7 +265,7 @@ export function CommandPalette({
                 return (
                   <div
                     key={section.group}
-                    // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- A listbox may only own options and groups; fieldset is not a permitted child.
+                    // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role
                     role="group"
                     aria-labelledby={headingId}
                     className="[&+&]:mt-2"
@@ -289,7 +281,7 @@ export function CommandPalette({
                           key={command.id}
                           id={`${listboxId}-${command.id}`}
                           type="button"
-                          // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- Focus stays on the palette input while these action options are active descendants.
+                          // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role
                           role="option"
                           tabIndex={-1}
                           aria-selected={isActive}

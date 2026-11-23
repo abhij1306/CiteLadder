@@ -134,14 +134,14 @@ export function competitorSearch(
         transport,
         { meter, feature: FEATURE },
       );
-      const items = await client.search(query, null, p.provider_result_limit, 'commerce');
+      const items = await client.search(query, null, p.provider_result_limit);
       return {
         status: 'succeeded',
         errorCode: '',
         retry: false,
         providerVersion: policy.discovery.constants.keenable_research_version,
         results: items.map((item) => ({
-          url: item.source_url,
+          url: item.url,
           title: item.title,
           content: item.text,
           source_id: item.source_id,

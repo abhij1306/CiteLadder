@@ -1,13 +1,8 @@
 import type { ReactNode } from 'react';
 
 import { choiceFilter, type FilterDefinition } from '@/components/ui/all-filters';
-import { DisplayTime } from '@/components/ui/display-time';
 import type { FilterBarProps } from '@/components/ui/filter-bar';
-import type {
-  SearchIntelligenceDataset,
-  SearchIntelligenceReadiness,
-} from '@/lib/api/search-intelligence';
-import { searchScopeLabel, searchMarketLabel } from '@/lib/config/search-intelligence';
+import { searchScopeLabel } from '@/lib/config/search-intelligence';
 import { CollectionViewControl, collectionFilters } from './search-intelligence-controls';
 import type { SearchCollection } from './search-intelligence-collection-state';
 
@@ -57,16 +52,10 @@ export function savedViewFilters({
 }
 
 export function scopeControls({
-  data,
-  tab,
-  latest,
   savedView,
   collection,
   action,
 }: Readonly<{
-  data: SearchIntelligenceReadiness;
-  tab: string;
-  latest?: SearchIntelligenceDataset;
   savedView: FilterDefinition[];
   collection?: SearchCollection;
   action?: ReactNode;
@@ -74,44 +63,6 @@ export function scopeControls({
   return {
     view: collection ? <CollectionViewControl collection={collection} /> : undefined,
     filters: [...savedView, ...(collection ? collectionFilters(collection) : [])],
-    status: <SavedCaption data={data} tab={tab} latest={latest} />,
     actions: action,
   };
-}
-
-function SavedCaption({
-  data,
-  tab,
-  latest,
-}: Readonly<{
-  data: SearchIntelligenceReadiness;
-  tab: string;
-  latest?: SearchIntelligenceDataset;
-}>) {
-  return (
-    <span>
-      <span>{latest?.target_hostname ?? data.owned_targets[0]?.hostname}</span>
-      {' · '}
-      <span>
-        {tab === 'backlinks' ? 'All referring countries' : savedMarketLabel(latest, data)}
-      </span>
-      {' · '}
-      {latest?.published_at ? (
-        <>
-          Saved <DisplayTime value={latest.published_at} />
-        </>
-      ) : (
-        (latest && 'Save time unavailable') || 'No saved analysis'
-      )}
-    </span>
-  );
-}
-
-function savedMarketLabel(
-  dataset: SearchIntelligenceDataset | undefined,
-  data: SearchIntelligenceReadiness,
-) {
-  const market = dataset ? dataset.location_code : data.preferences.location_code;
-  const language = dataset ? dataset.language_code : data.preferences.language_code;
-  return `${searchMarketLabel(market, data.markets)} · ${language || 'Language not set'}`;
 }

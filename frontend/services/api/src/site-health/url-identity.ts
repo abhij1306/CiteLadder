@@ -5,9 +5,6 @@ import { policy } from '../config.ts';
 import { compareIdentityText } from '../analysis/comparison.ts';
 import { publicUrl } from '../safe-fetch.ts';
 
-// Canonical serialization defines the stored `url_hash` keyspace: unreserved
-// escapes decode, other escapes uppercase, the path re-quotes with its safe
-// set and query pairs encode as `quote_plus`.
 const UNRESERVED = /[A-Za-z0-9\-._~]/u;
 const PATH_SAFE = /[A-Za-z0-9/%:@!$&'()*+,;=~\-._]/u;
 const escapeByte = (char: string) => `%${char.codePointAt(0)!.toString(16).toUpperCase()}`;

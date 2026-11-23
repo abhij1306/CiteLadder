@@ -1,3 +1,4 @@
+import { loadConfig, type ServiceConfig } from '../config.ts';
 import type { SettingSource } from '../config/settings.ts';
 import type { Database } from '../db/database.ts';
 import { gatewaySettings } from '../models/gateway.ts';
@@ -15,7 +16,11 @@ import { AgentRuntime } from './runtime.ts';
 import { readAgentContext } from './context-adapter.ts';
 import { attachAgentTarget } from './target-adapter.ts';
 
-export async function createAgentBindings(db: Database, env: SettingSource = process.env) {
+export async function createAgentBindings(
+  db: Database,
+  env: SettingSource = process.env,
+  config?: ServiceConfig,
+) {
   const settings = agentSettings(env),
     platform = gatewaySettings(env);
   const catalog = await loadSkillCatalog(settings.skillsDirectory),
@@ -29,12 +34,14 @@ export async function createAgentBindings(db: Database, env: SettingSource = pro
     timeoutSeconds: settings.executionTimeoutSeconds,
     reconcile: (trx, run) => models.reconcile(trx, run),
   });
+  let service: ServiceConfig | undefined;
   const runtime = new AgentRuntime(db, {
     catalog,
     tools,
     models,
     attachTarget: attachAgentTarget,
     modelFor: agentModels(platform),
+    config: () => (service ??= config ?? loadConfig()),
   });
   return {
     catalog,

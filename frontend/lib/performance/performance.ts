@@ -115,7 +115,6 @@ export function dashboardParams(
 
 export const INITIAL_DASHBOARD_PARAMS = dashboardParams(INITIAL_SELECTION, INITIAL_GRANULARITY);
 
-/** Year over year shifts back 52 whole weeks — mirrors the backend constant. */
 const YEAR_OVER_YEAR_SHIFT_DAYS = 364;
 
 export function canCompareYearOverYear(coveredDays: number, selectedDays: number): boolean {

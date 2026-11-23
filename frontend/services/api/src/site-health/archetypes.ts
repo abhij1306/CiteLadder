@@ -1,6 +1,7 @@
 import { policy } from '../config.ts';
 import { record } from '../db/json.ts';
 import type { ArchitecturePage } from './architecture-model.ts';
+import { widen } from '../widen.ts';
 
 const p = policy.site_health.archetypes;
 type Structure = { key: string; label: string };
@@ -58,8 +59,8 @@ export function assessArchetype(pages: ArchitecturePage[], coverage: string, raw
     reason,
     business_model: model,
     profile_evidence: evidence,
-    observed: [] as Structure[],
-    not_observed: [] as Structure[],
+    observed: widen<Structure[]>([]),
+    not_observed: widen<Structure[]>([]),
   });
   if (!Object.keys(context).length) return { ...abstain('profile_absent'), profile_evidence: {} };
   if (evidence.knowledge_strength === 'none') return abstain('knowledge_strength_none');

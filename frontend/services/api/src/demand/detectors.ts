@@ -257,11 +257,6 @@ function trendType(prior: number, recent: number) {
   return null;
 }
 
-/**
- * Adjacent-window trends anchored on the latest observed day, not the window
- * end: Search Console reports late, so trailing days without rows are
- * unavailable rather than a coverage gap.
- */
 export function detectTrends(rows: QueryInput[], windowEnd: string): Evaluation {
   const observed = rows.map((r) => r.observed_date).filter((day) => day <= windowEnd);
   const anchor = observed.reduce((a, b) => (b > a ? b : a), '') || windowEnd;

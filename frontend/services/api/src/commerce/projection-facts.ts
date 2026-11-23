@@ -14,7 +14,6 @@ const named = (name: string) => /[\p{L}\p{N}]/u.test(name);
 export const isCategoryName = (name: string) =>
   named(name) && categoryKey(name) !== UNCATEGORIZED_KEY && !indexNames.has(categoryKey(name));
 
-// Private suffixes count: on a shared host (a.myshopify.com) another tenant is another site.
 const site = (url: string) => getDomain(url, { allowPrivateDomains: true });
 
 export function pageIdentity(facts: CatalogFacts, base: string): string | null {
@@ -38,10 +37,6 @@ function finitePrice(value: unknown): number | null {
   return Number.isFinite(number) && number >= 0 && number <= 999999999999.99 ? number : null;
 }
 
-/**
- * The thousands marks locales group with: no-break, thin and narrow no-break
- * spaces (as `Intl.NumberFormat` writes them) and apostrophes (Swiss prices).
- */
 const GROUPING_MARKS = String.fromCodePoint(0xa0, 0x2009, 0x202f, 0x27, 0x2019);
 export const AMOUNT_CHARACTERS = String.raw`\d,.` + GROUPING_MARKS;
 const GROUPING_MARK = new RegExp(`[${GROUPING_MARKS}]`, 'u');
@@ -238,12 +233,6 @@ export function shelfLinks(facts: CatalogFacts, base: string): string[] {
 const CATALOG_MODELS = new Set<string>(policy.discovery.constants.commerce_business_models);
 const KNOWN_MODELS = new Set<string>(policy.discovery.constants.business_models);
 
-/**
- * Whether crawled pages project into the catalog for this brand: `applicable`
- * when its confirmed business model, primary or secondary, sells a catalog;
- * `not_applicable` when a recognized primary model does not; `unknown` when no
- * recognized model is confirmed, which is never reported as not applicable.
- */
 export function catalogApplicability(
   businessContext: unknown,
 ): 'applicable' | 'not_applicable' | 'unknown' {

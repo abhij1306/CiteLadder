@@ -275,7 +275,7 @@ describe('page checklist', () => {
     expect(trust('//privacy.example.test/shop').outcome).toBe('missing');
     expect(trust('//privacy.example.test/about').outcome).toBe('satisfied');
   });
-  it('scores reported web failures on any page kind and still admits an unscored finding', () => {
+  it('scores reported web failures on any page kind', () => {
     const result = analyzePage(
       facts(
         "<html><head><title>Page</title></head><body><main><a href='/missing'>Missing</a></main></body></html>",
@@ -288,12 +288,11 @@ describe('page checklist', () => {
       'technical.title_present',
       'web.accessibility_document_language',
       'web.mobile_viewport',
+      'technical.meta_description_present',
     ])
       expect(rows.get(id)!.score_roles).toContain('web_fundamentals');
     const meta = rows.get('technical.meta_description_present')!;
-    expect(meta.outcome).toBe('missing');
-    expect(meta.score_roles).toEqual([]);
-    expect(createsIssue(meta)).toBe(true);
+    expect([meta.outcome, createsIssue(meta)]).toEqual(['missing', true]);
   });
 
   it.each([
@@ -468,7 +467,7 @@ describe('page checklist', () => {
     expect(rows.get('aeo.answer_first')!.outcome).toBe('missing');
   });
 
-  it('reads robots.txt absence as an advisory only on the site root', () => {
+  it('reads robots.txt absence as a failure only on the site root', () => {
     const robots = (site: unknown) =>
       byRule(evaluatePageRules(site === undefined ? {} : { site })).get(
         'technical.robots_txt_present',
@@ -1118,7 +1117,7 @@ describe('site audit regressions', () => {
   });
 });
 
-describe('unscored visibility checks', () => {
+describe('visibility checks', () => {
   const rule = (ruleId: string, extra: Record<string, unknown>) =>
     byRule(
       evaluatePageRules({
@@ -1183,7 +1182,7 @@ describe('unscored visibility checks', () => {
     expect(outcome(sitemap(false, '/guides/other'))).toEqual(['not_applicable', 'not_in_sitemap']);
     const conflict = sitemap(true, '/guides/other');
     expect(outcome(conflict)).toEqual(['missing', 'sitemap_lists_non_canonical']);
-    expect([createsIssue(conflict), conflict.score_applicability]).toEqual([true, false]);
+    expect([createsIssue(conflict), conflict.score_applicability]).toEqual([true, true]);
   });
 
   it("blocks a noindex page only when the owner's policy says index it", () => {
@@ -1193,7 +1192,6 @@ describe('unscored visibility checks', () => {
       sitemap_member: member,
       indexing_policy: policy,
     });
-    // Shopify lists every collection in its sitemap, including the ones it noindexes on purpose.
     expect(outcome(rule('technical.indexable', facts(true)))).toEqual([
       'not_applicable',
       'intentional_non_indexing',
@@ -1204,7 +1202,7 @@ describe('unscored visibility checks', () => {
     ]);
     const listed = rule('technical.sitemap_noindex', facts(true));
     expect(outcome(listed)).toEqual(['missing', 'sitemap_lists_noindex']);
-    expect([createsIssue(listed), listed.score_applicability]).toEqual([true, false]);
+    expect([createsIssue(listed), listed.score_applicability]).toEqual([true, true]);
     expect(outcome(rule('technical.sitemap_noindex', facts(false)))).toEqual([
       'not_applicable',
       'not_in_sitemap',

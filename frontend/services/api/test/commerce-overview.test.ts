@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { createApp } from '../src/app.ts';
 import { auditRuntime } from '../src/audits/config.ts';
+import { dispatchTool } from '../src/mcp/tools.ts';
 import { importCatalog } from './commerce-support.ts';
 import { auditTenant } from './audit-fixtures.ts';
 import { addCompetitor, recordAnswer } from './commerce-answer-fixtures.ts';
@@ -278,5 +279,41 @@ describe('Shopping overview read', () => {
     });
     expect((await read(foreign, `category=${roadCategory}`)).status).toBe(404);
     expect((await read(t, '', foreign.workspaceId)).status).toBe(404);
+  });
+
+  it('gives MCP the same totals, refusing another project and telling no catalog apart from no answers', async () => {
+    const shelf = (tenant: Tenant, args: Record<string, unknown> = {}) =>
+      dispatchTool(
+        db,
+        { kind: 'member', ...tenant },
+        'read_ai_shelf',
+        { project_id: tenant.projectId, view: 'overview', ...args },
+        '',
+      );
+    expect(await shelf(t)).toMatchObject({
+      state: 'available',
+      view: 'overview',
+      executions: 3,
+      slots: 5,
+      brands: [{ brand: 'Acme', slots: 3, share_of_shelf: 3 / 5 }, { brand: 'Rival' }],
+    });
+    await expect(shelf(foreign, { category_id: roadCategory })).rejects.toThrow(
+      'category_id is not a category of this project',
+    );
+    await expect(shelf(foreign, { project_id: t.projectId })).rejects.toThrow();
+    const bare = await auditTenant(db, fixtures);
+    expect(await shelf(bare)).toEqual({
+      state: 'unavailable',
+      reason: 'no_product_catalog',
+      business_applicability: 'unknown',
+      artifact_refs: [],
+    });
+    await importCatalog(db, { workspaceId: bare.workspaceId, projectId: bare.projectId }, CATALOG);
+    expect(await shelf(bare, { window_days: 7 })).toMatchObject({
+      state: 'available',
+      executions: 0,
+      slots: 0,
+      brands: [{ brand: 'Acme', visibility: null, share_of_shelf: null }],
+    });
   });
 });

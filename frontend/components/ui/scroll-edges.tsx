@@ -6,11 +6,9 @@ type ScrollEdges = Readonly<{ start: boolean; end: boolean }>;
 
 const NO_EDGES: ScrollEdges = { start: false, end: false };
 
-/** One pixel of slack, so sub-pixel layout never shows a cue at rest. */
 function edgesOf(node: HTMLElement): ScrollEdges {
   const hidden = node.scrollWidth - node.clientWidth;
   if (hidden <= 1) return NO_EDGES;
-  // `scrollLeft` runs negative in a right-to-left region.
   const scrolled = Math.abs(node.scrollLeft);
   return { start: scrolled > 1, end: scrolled < hidden - 1 };
 }

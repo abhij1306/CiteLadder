@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { Database } from '../db/database.ts';
 import { createSecretCipher } from '../integrations/fernet.ts';
 import { providerErrorCode } from '../models/http.ts';
+import { isOutOfCredit, OUT_OF_CREDIT_CODE } from './out-of-credit.ts';
 import {
   approvedEndpoint,
   basicAuthorization,
@@ -72,7 +73,11 @@ async function attemptProbe(o: {
   const request = probeRequest(connection.base_url, transport, model, secret, settings, engine);
   const response = await send(request);
   if (response.status < 200 || response.status >= 300)
-    throw new ProbeError(providerErrorCode(response.status));
+    throw new ProbeError(
+      isOutOfCredit(response.status, response.body)
+        ? OUT_OF_CREDIT_CODE
+        : providerErrorCode(response.status),
+    );
   if (transport === 'dataforseo') {
     if (object.parse(response.body).status_code !== providerPolicy.dataforseo.success_status)
       throw new ProbeError('auth_failure');

@@ -4,7 +4,6 @@ import { ownedAuditTask } from '../queue/audit-queue.ts';
 import { searchPolicy } from '../search-surfaces/dataforseo.ts';
 import type { ExecutionContext } from './execution-context.ts';
 
-/** A committed intent is an irreversible handoff to GET/reconciliation, including after a crash. */
 export function commitSubmissionIntent(
   db: Database,
   context: ExecutionContext,

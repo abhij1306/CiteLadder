@@ -11,6 +11,7 @@ import {
 import { TextLink } from '@/components/ui/text-link';
 import { Absence } from '@/components/ui/absence';
 import { ClampText } from '@/components/ui/clamp-text';
+import { Tooltip } from '@/components/ui/tooltip';
 import { Value } from '@/components/ui/value';
 import type {
   CommerceProductPage,
@@ -59,12 +60,27 @@ const COLUMN_WIDTHS: Record<ProductColumnKey, DataTableColumn['width']> = {
 function MetricValue({ cell, text }: Readonly<{ cell: ProductCell; text: boolean }>) {
   let value: ReactNode;
   if (cell.kind === 'missing') value = <MissingValue cell={cell} />;
-  else value = text ? <ClampText>{cell.text}</ClampText> : <Value value={cell.text} />;
+  else value = text ? <FirstOfList text={cell.text} /> : <Value value={cell.text} />;
   if (!cell.note) return value;
   return (
     <span className="inline-flex items-baseline gap-2 whitespace-nowrap">
       {value}
       <span className="text-ink-2 font-sans">{cell.note}</span>
+    </span>
+  );
+}
+
+function FirstOfList({ text }: Readonly<{ text: string }>) {
+  const [first, ...rest] = text.split(', ');
+  if (!rest.length) return <ClampText>{text}</ClampText>;
+  return (
+    <span className="inline-flex items-baseline gap-2 whitespace-nowrap">
+      {first}
+      <Tooltip content={rest.join(', ')}>
+        <button type="button" className="text-ink-2 rounded-mark focus-ring">
+          +{rest.length} more
+        </button>
+      </Tooltip>
     </span>
   );
 }

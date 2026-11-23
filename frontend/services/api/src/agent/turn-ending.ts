@@ -35,11 +35,6 @@ export async function stillAuthorized(db: Database, scope: Parameters<typeof aut
     throw error;
   }
 }
-/**
- * The transcript as saved: no later call continues the turn's last response,
- * so a provider-hosted call it left waiting (a paused or read-beside search on
- * the last call) is dropped, and every later replay pairs each tool use.
- */
 export function savedTranscript(messages: readonly ConversationMessage[]): ConversationMessage[] {
   const last = messages.findLastIndex((message) => message.role === 'assistant');
   return messages.map((message, index) =>

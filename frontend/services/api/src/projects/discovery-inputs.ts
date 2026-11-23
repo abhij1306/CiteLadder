@@ -6,17 +6,11 @@ import { brandDiscoverySchema } from '@citeladder/contracts/visibility';
 import { z } from 'zod';
 
 import { policy } from '../config.ts';
-import { resolveSettingSpec, type SettingSource } from '../config/settings.ts';
+import { settingValues, type SettingSource } from '../config/settings.ts';
 import { categoryInput, competitorInput, marketInput } from './inputs.ts';
 
 export function discoverySettings(env: SettingSource = process.env) {
-  const spec = policy.discovery.settings;
-  const setting = (name: keyof typeof spec) => resolveSettingSpec(spec[name], env);
-  return Object.fromEntries(
-    Object.keys(spec).map((key) => [key, setting(key as keyof typeof spec)]),
-  ) as {
-    [K in keyof typeof spec]: (typeof spec)[K]['default'] extends number ? number : string;
-  };
+  return settingValues(policy.discovery.settings, env);
 }
 export const discoveryCreate = brandDiscoveryCreateRequestSchema.extend({
   industry: z.string().trim().max(255).default(policy.projects.default_industry),

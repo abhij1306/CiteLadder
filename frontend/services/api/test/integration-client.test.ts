@@ -110,8 +110,6 @@ describe('Bing property discovery', () => {
     expect(await client.properties('bing', 'recorded-token')).toEqual([
       { property_ref: 'https://example.com', label: 'https://example.com' },
     ]);
-    // An OAuth bearer token is accepted only on www.bing.com; ssl.bing.com
-    // serves API-key calls and answers a bearer request with HTTP 400.
     expect(requests).toEqual([
       {
         url: 'https://www.bing.com/webmaster/api.svc/json/GetUserSites',

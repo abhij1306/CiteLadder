@@ -1,16 +1,11 @@
 import { budget } from '../abuse/usage.ts';
 import { ConfigError, policy } from '../config.ts';
-import { resolveSettingSpec, type SettingSource } from '../config/settings.ts';
+import { resolveSettingSpec, settingValues, type SettingSource } from '../config/settings.ts';
 import { providerSettings } from '../providers/config.ts';
 import { searchSettings } from '../search-surfaces/dataforseo.ts';
 export const auditPolicy = policy.audits;
 export function auditSettings(env: SettingSource = process.env) {
-  const settings = Object.fromEntries(
-    Object.entries(auditPolicy.settings).map(([name, spec]) => [
-      name,
-      Number(resolveSettingSpec(spec, env)),
-    ]),
-  ) as Record<keyof typeof auditPolicy.settings, number>;
+  const settings = settingValues(auditPolicy.settings, env);
   if (settings.heartbeat_interval_seconds >= settings.lease_ttl_seconds)
     throw new ConfigError('Audit heartbeat interval must be shorter than its lease');
   if (settings.retry_base_delay_seconds > settings.retry_max_delay_seconds)

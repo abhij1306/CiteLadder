@@ -9,13 +9,11 @@ import {
   siteCrawlListPageSchema,
 } from '@citeladder/contracts/site-health';
 import { crawlScheduleUpdateRequestSchema } from '@citeladder/contracts/site-health-requests';
-import { budget, spendBudget } from '../abuse/usage.ts';
 import { ApiError } from '../errors.ts';
 import { readBody } from '../http/body.ts';
 import { InvalidCursorError } from '../http/keyset-cursor.ts';
 import { cancelCrawl, listCrawls } from '../site-health/controls.ts';
-import { createCrawl } from '../site-health/planner.ts';
-import { crawlRequest } from '../site-health/crawl-request.ts';
+import { startCrawl } from '../site-health/crawl-start.ts';
 import { readSchedule, updateSchedule } from '../site-health/schedules.ts';
 import { createCrawlRequest } from '../site-health/planner-policy.ts';
 import { loadCrawl, loadProjectedCrawl, rootFailure } from '../site-health/reads/crawl.ts';
@@ -43,35 +41,18 @@ export const siteHealthCrawlRoutes = [
     capability: 'run',
     async handle({ c, db, config }) {
       const request = await readBody(c, createCrawlRequest);
-      const workspaceId = c.get('workspace').workspaceId;
       const user = c.get('user');
-      let choice: Parameters<typeof crawlRequest>[3] = null;
-      if (request.robots === 'respect') choice = { robots: 'respect' };
-      if (request.robots === 'ignore') {
-        const { email } = await db
-          .selectFrom('users')
-          .select('email')
-          .where('id', '=', user.id)
-          .executeTakeFirstOrThrow();
-        choice = {
-          robots: 'ignore',
-          decision: {
-            user_id: user.id,
-            email,
-            decided_at: new Date().toISOString(),
-          },
-        };
-      }
-      await spendBudget(db, budget('crawl_create', config.settings), workspaceId);
-      const crawl = await db
-        .transaction()
-        .execute(async (trx) =>
-          createCrawl(
-            trx,
-            workspaceId,
-            await crawlRequest(trx, workspaceId, request.project_id, choice),
-          ),
-        );
+      const { email } = await db
+        .selectFrom('users')
+        .select('email')
+        .where('id', '=', user.id)
+        .executeTakeFirstOrThrow();
+      const crawl = await startCrawl(db, config.settings, {
+        workspaceId: c.get('workspace').workspaceId,
+        projectId: request.project_id,
+        robots: request.robots,
+        user: { id: user.id, email },
+      });
       return siteCrawlSchema.parse(await crawlProjection(db, crawl));
     },
   }),

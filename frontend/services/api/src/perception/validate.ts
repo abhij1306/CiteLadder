@@ -1,17 +1,19 @@
 import { factTopicSchema, type FactTopic } from '@citeladder/contracts/fact-checking';
 
 import type { FactCheckPolicy, PerceptionPolicy } from '../config/perception.ts';
-import { idsByName, nameKey } from '../projects/themes.ts';
+import { categoryIds, chooseCategory, cleanAttribute, type CategoryChoice } from './categories.ts';
 import type { ExtractedClaim, Label, PerceptionOutput } from './model.ts';
 import type { PerceptionPackage, Span } from './passages.ts';
 
-export type VerifiedAspect = {
-  theme_id: string | null;
+type Located = {
+  attribute: string | null;
   polarity: 'positive' | 'negative';
   quote: string;
   start: number;
   end: number;
 };
+export type ExtractedAspect = Located & { category: CategoryChoice };
+export type VerifiedAspect = Located & { theme_id: string | null };
 
 export type EntitySentiment = {
   entity_id: string;
@@ -22,7 +24,7 @@ export type EntitySentiment = {
   low_confidence: boolean;
   model_omitted: boolean;
   passage_spans: Span[];
-  aspects: VerifiedAspect[];
+  aspects: ExtractedAspect[];
 };
 
 export type DropReason =
@@ -31,7 +33,10 @@ export type DropReason =
   | 'missing_entity'
   | 'quote_not_found'
   | 'aspect_limit'
-  | 'theme_other'
+  | 'category_invalid'
+  | 'category_limit'
+  | 'category_removed'
+  | 'attribute_invalid'
   | 'claim_no_brand'
   | 'claim_quote_not_found'
   | 'claim_off_topic'
@@ -68,24 +73,32 @@ export function locateQuote(quote: string, spans: readonly Span[]) {
   return null;
 }
 
-function verifiedAspects(
+type Labelling = {
+  categories: ReadonlyMap<string, string>;
+  businesses: readonly string[];
+  policy: Pick<PerceptionPolicy, 'project_themes' | 'attribute_max_words' | 'attribute_max_chars'>;
+};
+
+function extractedAspects(
   aspects: PerceptionOutput['entities'][number]['aspects'],
   spans: readonly Span[],
-  themes: { ids: ReadonlyMap<string, string>; fallback: string },
+  labelling: Labelling,
   drop: (reason: DropReason) => void,
-): VerifiedAspect[] {
+): ExtractedAspect[] {
   return aspects.flatMap((aspect) => {
     const found = locateQuote(aspect.quote, spans);
     if (!found) {
       drop('quote_not_found');
       return [];
     }
-    const key = nameKey(aspect.theme);
-    const themeId = themes.ids.get(key) ?? null;
-    if (themeId === null && key !== themes.fallback) drop('theme_other');
+    const category = chooseCategory(aspect.category, labelling.categories, labelling);
+    if (!category) drop('category_invalid');
+    const attribute = cleanAttribute(aspect.attribute, labelling.policy);
+    if (attribute === null) drop('attribute_invalid');
     return [
       {
-        theme_id: themeId,
+        category: category ?? { kind: 'other' },
+        attribute,
         polarity: aspect.polarity,
         quote: found.text,
         start: found.start,
@@ -98,16 +111,28 @@ function verifiedAspects(
 export function validateOutput(
   pkg: PerceptionPackage,
   output: PerceptionOutput,
-  policy: Pick<PerceptionPolicy, 'min_confidence' | 'max_aspects_per_entity' | 'project_themes'>,
+  policy: Pick<
+    PerceptionPolicy,
+    | 'min_confidence'
+    | 'max_aspects_per_entity'
+    | 'max_aspects_per_brand'
+    | 'project_themes'
+    | 'attribute_max_words'
+    | 'attribute_max_chars'
+  >,
 ) {
   const drops: Partial<Record<DropReason, number>> = {};
   const drop = (reason: DropReason, count = 1) => {
     if (count > 0) drops[reason] = (drops[reason] ?? 0) + count;
   };
   const sent = new Map(pkg.entities.map((entity) => [entity.entity_id, entity]));
-  const themes = {
-    ids: idsByName(pkg.themes),
-    fallback: nameKey(policy.project_themes.fallback),
+  const labelling: Labelling = {
+    categories: categoryIds(pkg.themes),
+    businesses: [
+      ...pkg.entities.map((entity) => entity.name),
+      ...(output.untracked_businesses ?? []),
+    ].filter((name) => name.trim()),
+    policy,
   };
   const results = new Map<string, EntitySentiment>();
   for (const row of output.entities) {
@@ -120,13 +145,10 @@ export function validateOutput(
       drop('duplicate_entity');
       continue;
     }
-    drop('aspect_limit', row.aspects.length - policy.max_aspects_per_entity);
-    const aspects = verifiedAspects(
-      row.aspects.slice(0, policy.max_aspects_per_entity),
-      entity.spans,
-      themes,
-      drop,
-    );
+    const limit =
+      entity.kind === 'brand' ? policy.max_aspects_per_brand : policy.max_aspects_per_entity;
+    drop('aspect_limit', row.aspects.length - limit);
+    const aspects = extractedAspects(row.aspects.slice(0, limit), entity.spans, labelling, drop);
     results.set(row.entity_id, {
       entity_id: entity.entity_id,
       entity_name: entity.name,

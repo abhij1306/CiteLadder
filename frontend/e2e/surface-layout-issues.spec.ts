@@ -9,8 +9,6 @@ const PAGE_SIZE = 25;
 
 const summary = {
   issue_count: 42,
-  defect_issue_type_count: 42,
-  advisory_issue_type_count: 2,
   occurrence_count: 120,
   severity_counts: { high: 4, medium: 20, low: 18 },
   dimension_counts: { technical: 30, aeo: 12 },
@@ -20,7 +18,6 @@ const summary = {
 };
 
 function rowsFor(params: URLSearchParams): number {
-  if (params.get('finding_class') === 'advisory') return 2;
   if (params.get('severity')) return 4;
   if (params.get('page_kind')) return 6;
   if (params.get('section') === 'content') return 9;
@@ -38,12 +35,14 @@ function issue(index: number, params: URLSearchParams) {
     dimension: params.get('section') === 'aeo' ? 'aeo' : 'technical',
     category: 'schema',
     severity: ['high', 'medium', 'low'][index % 3],
-    finding_class: params.get('finding_class') ?? 'defect',
     title: `${params.get('section') ?? 'top'} issue ${index + 1}${index % 4 === 0 ? ' where the structured data names a different organisation than the page footer' : ''}`,
     description: 'What this check looks for.',
     remediation: 'Fix it.',
     remediation_route: 'code',
+    score_roles: ['web_fundamentals'],
     affected_url_count: index % 2 === 0 ? 1200 - index : 3,
+    new_url_count: null,
+    resolved_url_count: null,
     analyzer_version: 'a1',
     rule_version: 'r1',
     created_at: '2026-07-15T00:00:00Z',
@@ -60,16 +59,15 @@ function issuesPage(route: Route) {
     json: {
       items: Array.from({ length: count }, (_, index) => issue(start + index, params)),
       next_cursor: start + count < total ? 'page-2' : null,
-      summary:
-        narrowed || params.get('finding_class') === 'advisory'
-          ? {
-              ...summary,
-              defect_issue_type_count: 4,
-              severity_counts: { high: narrowed ? 1 : 0, medium: 2, low: 1 },
-              affected_url_count: 9,
-              section_counts: { technical: 4, content: 1, aeo: 0 },
-            }
-          : summary,
+      summary: narrowed
+        ? {
+            ...summary,
+            issue_count: 4,
+            severity_counts: { high: narrowed ? 1 : 0, medium: 2, low: 1 },
+            affected_url_count: 9,
+            section_counts: { technical: 4, content: 1, aeo: 0 },
+          }
+        : summary,
     },
   });
 }
@@ -173,15 +171,15 @@ for (const width of [1280, 1600])
     await expect(rows.first()).toContainText('technical issue 1');
     await check('Technical tab');
 
-    await choose(/^Severity/, 'Advisory');
+    await choose(/^Severity/, 'Low');
     await expect(rows.nth(1)).toContainText('technical issue 2');
-    await expect.poll(() => new URL(page.url()).searchParams.get('severity')).toBe('advisory');
-    await check('Severity advisory');
+    await expect.poll(() => new URL(page.url()).searchParams.get('severity')).toBe('low');
+    await check('Severity low');
     await choose(/^Severity/, 'All severities');
     await expect(rows.nth(24)).toContainText('technical issue 25');
     await expect(table.getByText('technical issue 26')).toHaveCount(0);
     await expect(table.getByRole('button', { name: 'Next page' })).toBeEnabled();
-    await check('Severity all after advisory');
+    await check('Severity all after low');
 
     await choose(/^Severity/, 'High');
     await expect.poll(() => new URL(page.url()).searchParams.get('severity')).toBe('high');

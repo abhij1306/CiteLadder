@@ -1,20 +1,38 @@
-import { render, screen } from '@testing-library/react';
-import { MemoryRouter, useLocation } from 'react-router-dom';
+import { screen } from '@testing-library/react';
+import { useLocation } from 'react-router-dom';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vite-plus/test';
+import { describe, expect, it, vi } from 'vite-plus/test';
 
+import { makeProject } from '@/test/fixtures/project';
+import { renderWithProviders, selectionAs, type TestRole } from '@/test/render';
 import { ProjectsScreen } from './projects-screen';
 
-const { selection, capacity } = vi.hoisted(() => ({
-  selection: vi.fn(),
-  capacity: { write: true },
-}));
 const WORKSPACE = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
-vi.mock('@/lib/project/project-context', () => ({
-  useWorkspaceCapability: (capability: string) => capability !== 'write' || capacity.write,
-  useActiveWorkspaceId: () => 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-  useProjectContext: selection,
-}));
+
+function renderProjects({
+  projects,
+  role = 'owner',
+}: {
+  projects: ReturnType<typeof makeProject>[];
+  role?: TestRole;
+}) {
+  return renderWithProviders(
+    <>
+      <ProjectsScreen />
+      <Location />
+    </>,
+    {
+      initialEntries: ['/projects'],
+      projectSelection: { ...selectionAs(role), projects },
+    },
+  );
+}
+
+function Location() {
+  const location = useLocation();
+  return <p data-testid="location">{location.pathname + location.search}</p>;
+}
+
 vi.mock('./dashboard-screen', () => ({
   DashboardScreen: ({ onEditProject }: { onEditProject?: (project: unknown) => void }) => (
     <div>
@@ -25,33 +43,8 @@ vi.mock('./dashboard-screen', () => ({
 }));
 
 describe('ProjectsScreen', () => {
-  beforeEach(() => {
-    selection.mockReturnValue({
-      projects: [{ id: 'first-project' }],
-      projectsSettled: true,
-      activeWorkspaceId: WORKSPACE,
-      isLoading: false,
-    });
-    capacity.write = true;
-  });
-
   it('sends the empty-workspace creation action to the new-project flow', async () => {
-    selection.mockReturnValue({
-      projects: [],
-      projectsSettled: true,
-      activeWorkspaceId: WORKSPACE,
-      isLoading: false,
-    });
-    function Location() {
-      const location = useLocation();
-      return <p data-testid="location">{location.pathname + location.search}</p>;
-    }
-    render(
-      <MemoryRouter initialEntries={['/projects']}>
-        <ProjectsScreen />
-        <Location />
-      </MemoryRouter>,
-    );
+    renderProjects({ projects: [] });
     const button = screen.getByRole('button', { name: 'Add project' });
     expect(button).toBeEnabled();
     await userEvent.setup().click(button);
@@ -61,26 +54,12 @@ describe('ProjectsScreen', () => {
   });
 
   it('offers a Viewer neither project editing nor project creation', () => {
-    capacity.write = false;
-    const view = render(
-      <MemoryRouter initialEntries={['/projects']}>
-        <ProjectsScreen />
-      </MemoryRouter>,
-    );
+    const view = renderProjects({ projects: [makeProject()], role: 'viewer' });
     expect(screen.getByText('Project dashboard')).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Edit project' })).toBeNull();
+    view.unmount();
 
-    selection.mockReturnValue({
-      projects: [],
-      projectsSettled: true,
-      activeWorkspaceId: WORKSPACE,
-      isLoading: false,
-    });
-    view.rerender(
-      <MemoryRouter initialEntries={['/projects']}>
-        <ProjectsScreen />
-      </MemoryRouter>,
-    );
+    renderProjects({ projects: [], role: 'viewer' });
     expect(screen.getByText('No projects yet')).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Add project' })).toBeNull();
   });

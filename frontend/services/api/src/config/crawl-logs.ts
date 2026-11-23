@@ -83,7 +83,6 @@ const schema = z.strictObject({
   ip_range_timeout_seconds: positive,
   ip_range_max_redirects: positive,
   task_max_attempts: positive,
-  /** A pull holds its received batch unacknowledged; its lease outlasts the analytics default. */
   pull_lease_ttl_seconds: positive,
   max_export_rows: positive,
   export_batch_rows: positive,

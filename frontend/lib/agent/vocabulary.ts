@@ -33,7 +33,7 @@ export function goalCountWords(goal: ActionGoal, count: number): string {
 }
 
 export const ACTION_GOAL_HINT: Record<ActionGoal, string> = {
-  read_site: 'Site Health defects and advisories that stop AI reading or trusting your pages.',
+  read_site: 'Site Health issues that stop AI reading or trusting your pages.',
   own_pages: 'Prompts you miss, pages to create or improve, search queries and internal links.',
   mentions: 'Pages AI cites for your prompts that name competitors and not you.',
   wrong_claims: 'Claims AI answers make about your brand that your own pages contradict.',
@@ -58,7 +58,7 @@ export const ACTION_GROUPING_LABEL: Record<ActionGrouping, string> = {
 
 export const IMPACT_LABEL: Record<ActionPriorityBand, string> = {
   high: 'High',
-  medium: 'Moderate',
+  medium: 'Medium',
   low: 'Low',
 };
 
@@ -116,8 +116,6 @@ const TARGET_KIND_LABEL: Record<ActionTargetKind, string> = {
   issue_family: 'Issue across pages',
 };
 
-// Keyed by the contract's kinds, so a kind without a label fails the type check;
-// the contract is imported as a type only, keeping its schemas out of the eager bundle.
 const isTargetKind = (kind: unknown): kind is ActionTargetKind =>
   typeof kind === 'string' && Object.hasOwn(TARGET_KIND_LABEL, kind);
 
@@ -301,7 +299,6 @@ const RUN_ERROR_COPY: Record<string, string> = {
   stopped_at_limit:
     'The agent stopped at its step limit before finishing. Nothing was saved; ask again with a narrower request.',
   access_revoked: 'You no longer have permission to run the agent in this workspace.',
-  model_changed: 'The agent model changed after this request was queued. Send it again.',
   skills_changed: 'The agent was updated after this request was queued. Send it again.',
   output_conflict:
     'The output changed while the agent was working, so its revision was not saved. Ask again to revise the latest version.',

@@ -102,6 +102,11 @@ export const classificationProjectionFields = {
   scored_page_count_by_kind: z.partialRecord(pageKindSchema, z.number().int().nonnegative()),
 } as const;
 
+export const checksRunSchema = responseObject({
+  run: z.number().int().nonnegative(),
+  total: z.number().int().nonnegative(),
+});
+
 export const pageKindScoreSummarySchema = responseObject({
   analyzed_count: z.number().int(),
   web_fundamentals_score: z.number().nullable(),
@@ -111,6 +116,8 @@ export const pageKindScoreSummarySchema = responseObject({
   aeo_measurement_coverage: z.number().nullable(),
   aeo_measurement_state: z.enum(['measured', 'limited_evidence', 'not_measured', 'excluded']),
   aeo_measurement_reason: z.string(),
+  web_fundamentals_checks: checksRunSchema.nullable(),
+  aeo_readiness_checks: checksRunSchema.nullable(),
 });
 
 export const siteScoreSummarySchema = responseObject({
@@ -120,6 +127,8 @@ export const siteScoreSummarySchema = responseObject({
   aeo_readiness_score: z.number().nullable(),
   aeo_measurement_coverage: z.number().nullable(),
   aeo_measurement_state: z.enum(['measured', 'limited_evidence', 'not_measured', 'excluded']),
+  web_fundamentals_checks: checksRunSchema.nullable(),
+  aeo_readiness_checks: checksRunSchema.nullable(),
   search_eligibility: z.enum(['eligible', 'blocked', 'unknown', 'excluded']),
   ...classificationProjectionFields,
   selected_count: z.number().int(),
@@ -164,11 +173,6 @@ const crawlFailureSummarySchema = responseObject({
   target_url: z.string(),
 });
 
-/**
- * How a crawl of the project's own site treats robots.txt exclusions. `ignore`
- * waives only the disallow rules; crawl delay, an unreadable or access-blocked
- * robots.txt, rate limits and suppression still apply.
- */
 export const crawlRobotsHandlingSchema = z.enum(['respect', 'ignore']);
 export type CrawlRobotsHandling = z.infer<typeof crawlRobotsHandlingSchema>;
 

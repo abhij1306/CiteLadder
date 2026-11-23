@@ -2,6 +2,7 @@ import { policy } from '../../config.ts';
 import { canonicalDeclarations, finalizeEvaluation } from './finalize.ts';
 import { analysisPolicy } from './policy.ts';
 import { membership, type RuleEvaluation } from './rules.ts';
+import { widen } from '../../widen.ts';
 
 const reads = policy.site_health.reads;
 const LABELS: Record<string, string> = reads.aeo_dimension_labels;
@@ -85,7 +86,7 @@ function roleResult(rows: RuleEvaluation[]) {
   if (!expected || !determinate)
     return { score: null, coverage: expected ? 0 : null, state, passed, determinate, expected };
   return {
-    score: (100 * passed) / determinate,
+    score: (100 * passed) / expected,
     coverage: determinate / expected,
     state,
     passed,
@@ -107,7 +108,7 @@ function pillar(key: string, rows: RuleEvaluation[]) {
       earned_points: 0,
       determinate_points: 0,
       expected_points: 0,
-      determinate_checkpoint_ids: [] as string[],
+      determinate_checkpoint_ids: widen<string[]>([]),
       reason: 'no_applicable_checks',
       unresolved_count: 0,
     };
@@ -141,15 +142,13 @@ function weightedReadiness(dimensions: ReadinessDimension[]) {
     const weight = WEIGHTS[row.key]!;
     applicableWeight += weight;
     weightedCoverage += (row.coverage ?? 0) * weight;
+    weightedScore += (row.score ?? 0) * weight;
     if (row.dimension_measurement_state !== 'measured') state = 'limited_evidence';
-    if (row.score !== null) {
-      scoredWeight += weight;
-      weightedScore += row.score * weight;
-    }
+    if (row.score !== null) scoredWeight += weight;
   }
   const coverage = applicableWeight ? weightedCoverage / applicableWeight : null;
   if (!scoredWeight) return { score: null, coverage, state: 'not_measured' };
-  return { score: weightedScore / scoredWeight, coverage, state };
+  return { score: weightedScore / applicableWeight, coverage, state };
 }
 
 export function readinessReason(

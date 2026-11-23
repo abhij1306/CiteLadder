@@ -4,6 +4,8 @@ import { prepareAudit } from '../src/audits/freeze.ts';
 import { auditSettings } from '../src/audits/config.ts';
 import { auditInput } from '../src/audits/inputs.ts';
 import { readFrozenConfiguration } from '../src/audits/frozen-configuration.ts';
+import { frozenComparisonKey } from '../src/analysis/comparison.ts';
+import { sharesCellContext } from '../src/visibility/comparison.ts';
 import { createConnection, updateConnection } from '../src/providers/connections.ts';
 import { createConnectionInput, updateConnectionInput } from '../src/providers/inputs.ts';
 import { providerSettings } from '../src/providers/config.ts';
@@ -69,7 +71,7 @@ describe('audit admission freeze', () => {
       repetitions: 2,
       measurement_policy: { retrieval_enabled: true, repetitions: 2 },
       anthropic_max_uses: providers.anthropicMaxUses,
-      openai_max_tool_calls: 1,
+      openai_max_tool_calls: providers.openaiMaxToolCalls,
       prompt_selection: 'set',
     });
     expect(plan.systemInstruction).not.toContain('Acme');
@@ -113,6 +115,41 @@ describe('audit admission freeze', () => {
     expect(damaged.max_run_seconds).toBeUndefined();
     expect(damaged.anthropic_max_uses).toBeUndefined();
     expect(damaged.measurement_policy).toEqual({ max_output_tokens: 900 });
+  });
+  it('never compares a run frozen with the old 800-token, 150 to 250 word answer setup to a new one', async () => {
+    const t = await seed();
+    const plan = await prepareAudit(
+      db,
+      t.workspaceId,
+      auditInput.parse({ project_id: t.projectId, prompt_set_id: t.setId, engines: ['chatgpt'] }),
+      settings,
+      providers,
+      'manual',
+      { search: searchSettings({}) },
+    );
+    const current = JSON.parse(JSON.stringify(plan.configuration));
+    const oldInstruction =
+      'Answer the question directly in 150 to 250 words. Use concise paragraphs or bullets, avoid repetition, and include citations to the most relevant sources when web search is available.';
+    const frozenBefore = {
+      ...current,
+      measurement_policy: {
+        ...current.measurement_policy,
+        max_output_tokens: 800,
+        timeout_seconds: 60,
+        answer_instruction: oldInstruction,
+      },
+      system_instruction: oldInstruction,
+      anthropic_max_uses: 5,
+      openai_max_tool_calls: 1,
+    };
+    const rerun = JSON.parse(JSON.stringify(plan.configuration));
+    expect(frozenComparisonKey(rerun)).toBe(frozenComparisonKey(current));
+    expect(sharesCellContext(rerun, current)).toBe(true);
+    expect(frozenComparisonKey(frozenBefore)).not.toBe(frozenComparisonKey(current));
+    expect(frozenComparisonKey(frozenBefore, 'chatgpt', false)).not.toBe(
+      frozenComparisonKey(current, 'chatgpt', false),
+    );
+    expect(sharesCellContext(frozenBefore, current)).toBe(false);
   });
   it('freezes a common-word brand as needing context', async () => {
     const t = await seed();

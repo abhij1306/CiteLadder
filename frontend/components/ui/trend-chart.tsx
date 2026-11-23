@@ -13,7 +13,7 @@ import {
   type ChartHeight,
   type ChartTone,
 } from '@/components/ui/chart';
-import { ChartKey, ChartTable, ChartTipSheet } from '@/components/ui/chart-frame';
+import { ChartBreakNote, ChartKey, ChartTable, ChartTipSheet } from '@/components/ui/chart-frame';
 import type { SeriesTone } from '@/components/ui/step-chart-parts';
 import {
   breakConnectors,
@@ -123,13 +123,13 @@ export function TrendChart({
           }))}
         />
       ) : null}
-      {/* oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- the plot is a keyboard-readable group */}
-      <div // NOSONAR -- a keyboard-readable plot has no native element
+      {/* oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
+      <div // NOSONAR
         ref={plotRef}
-        // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- no native element reads a plot point by point
+        // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role
         role="group"
-        // oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- the arrow keys need focus on the plot
-        tabIndex={count ? 0 : undefined} // NOSONAR -- the arrow keys need focus on the plot
+        // oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex
+        tabIndex={count ? 0 : undefined} // NOSONAR
         aria-label={`${label}. Use the left and right arrow keys to read each point.`}
         onKeyDown={onKeyDown}
         onMouseMove={(event) =>
@@ -167,6 +167,7 @@ export function TrendChart({
           />
         )}
       </div>
+      <ChartBreakNote data={data} lines={lines} />
       <ChartTable
         label={label}
         columns={data.map((point) => point.label)}

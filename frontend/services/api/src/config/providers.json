@@ -1,5 +1,9 @@
 {
   "scraper_reconciliation_capacity_engine": "llm_scraper_reconciliation",
+  "out_of_credit": {
+    "statuses": [400, 402, 429],
+    "markers": ["insufficient_quota", "billing_error", "credit balance is too low"]
+  },
   "errors": {
     "timeout": "timeout",
     "connection": "connection",
@@ -38,6 +42,14 @@
     },
     {
       "logical_engine": "google_ai_overview",
+      "transport_provider": "dataforseo",
+      "capacity": 1.0,
+      "refill_tokens_per_second": 1.0,
+      "max_cooldown_seconds": 60.0,
+      "max_concurrency": 2
+    },
+    {
+      "logical_engine": "google_ai_mode",
       "transport_provider": "dataforseo",
       "capacity": 1.0,
       "refill_tokens_per_second": 1.0,
@@ -111,12 +123,12 @@
     "anthropic_max_uses": {
       "env": ["PROVIDER_ANTHROPIC_MAX_USES"],
       "type": "int",
-      "default": 5
+      "default": 2
     },
     "openai_max_tool_calls": {
       "env": ["PROVIDER_OPENAI_MAX_TOOL_CALLS"],
       "type": "int",
-      "default": 1,
+      "default": 2,
       "minimum": 0
     },
     "byok_key_grace_days": {
@@ -128,6 +140,12 @@
       "env": ["PROVIDER_MAX_RESPONSE_BYTES"],
       "type": "int",
       "default": 8388608,
+      "exclusive_minimum": 0
+    },
+    "answer_raw_body_max_bytes": {
+      "env": ["PROVIDER_ANSWER_RAW_BODY_MAX_BYTES"],
+      "type": "int",
+      "default": 524288,
       "exclusive_minimum": 0
     }
   },
@@ -196,6 +214,18 @@
       "anthropic_thinking": null,
       "reasoning_pinnable": null,
       "representative_status": "verified",
+      "surface_kind": "search_ai",
+      "market_support": "dataforseo_location"
+    },
+    "google_ai_mode": {
+      "logical_engine": "google_ai_mode",
+      "transport_provider": "dataforseo",
+      "transport_model": "google-ai-mode-serp",
+      "retrieval_enabled": null,
+      "reasoning_effort": null,
+      "anthropic_thinking": null,
+      "reasoning_pinnable": null,
+      "representative_status": "unverified",
       "surface_kind": "search_ai",
       "market_support": "dataforseo_location"
     },
@@ -277,6 +307,15 @@
       "unavailable_reason": null,
       "adapter_shipped": true,
       "grant_key": "provider.google_ai_overview",
+      "issuable": false
+    },
+    {
+      "key": "google_ai_mode",
+      "label": "Google AI Mode",
+      "availability": "available",
+      "unavailable_reason": null,
+      "adapter_shipped": true,
+      "grant_key": "provider.google_ai_mode",
       "issuable": false
     },
     {

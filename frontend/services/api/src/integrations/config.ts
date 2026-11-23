@@ -1,5 +1,11 @@
 import { createHmac } from 'node:crypto';
-import { ConfigError, policy, resolveSettingSpec, type SettingSource } from '../config.ts';
+import {
+  ConfigError,
+  policy,
+  resolveSettingSpec,
+  settingValues,
+  type SettingSource,
+} from '../config.ts';
 import { createSecretCipher } from './fernet.ts';
 
 export const integrationPolicy = policy.integrations;
@@ -11,9 +17,7 @@ export type Dataset = (typeof integrationPolicy.datasets)[keyof typeof integrati
 
 export function integrationSettings(env: SettingSource = process.env) {
   const specs = integrationPolicy.settings;
-  const settings = Object.fromEntries(
-    Object.entries(specs).map(([name, spec]) => [name, resolveSettingSpec(spec, env) as number]),
-  ) as { [Key in keyof typeof specs]: number };
+  const settings = settingValues(specs, env);
   if (settings.heartbeat_interval_seconds >= settings.lease_ttl_seconds) {
     throw new ConfigError('Integration heartbeat must be shorter than the lease');
   }
@@ -36,8 +40,8 @@ export function integrationSettings(env: SettingSource = process.env) {
 }
 
 export function integrationSecrets(env: SettingSource = process.env) {
-  const value = (name: keyof typeof policy.settings) =>
-    resolveSettingSpec(policy.settings[name], env) as string;
+  const value = <K extends keyof typeof policy.settings>(name: K) =>
+    resolveSettingSpec(policy.settings[name], env);
   return {
     cipher: createSecretCipher(value('encryption_key')),
     frontendUrl: value('frontend_url').replace(/\/$/u, ''),
@@ -45,7 +49,7 @@ export function integrationSecrets(env: SettingSource = process.env) {
     stateSigningKey: createHmac('sha256', value('encryption_key'))
       .update('integration-oauth-state')
       .digest('hex'),
-    stateTtl: resolveSettingSpec(integrationPolicy.state_ttl_seconds, env) as number,
+    stateTtl: resolveSettingSpec(integrationPolicy.state_ttl_seconds, env),
     credentials: {
       google_oauth: {
         id: value('integration_google_client_id'),

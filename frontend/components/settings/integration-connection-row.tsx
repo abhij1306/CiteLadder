@@ -95,7 +95,6 @@ function SyncButton({
         Select a property first
       </span>
       <Tooltip content="Select a property first" describe={false} shouldOpen={() => !hasProperty}>
-        {/* A disabled button takes no pointer events, so its wrapper opens the tip. */}
         <span className="inline-flex">{button}</span>
       </Tooltip>
     </>

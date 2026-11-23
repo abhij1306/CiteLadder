@@ -59,7 +59,6 @@ export function unsupported(feature, matrix) {
         (statement) =>
           statement && !statement.flags && !statement.prefix && !statement.alternative_name,
       );
-    // No data is unknown, not absent; only a recorded gap fails.
     if (!statements.length || statements.every((statement) => statement.version_added === null)) {
       continue;
     }

@@ -20,20 +20,19 @@ describe('toIssueParams', () => {
       category: undefined,
       rule: undefined,
       site_url_id: undefined,
-      finding_class: 'defect',
       page_kind: undefined,
     });
   });
 
-  it('lists both classes unless the severity names a defect severity or the advisory level', () => {
-    const wire = (severity: string) => {
-      const params = toIssueParams({ ...emptyIssueFilters, severity });
-      return [params.severity, params.finding_class];
-    };
-    expect(wire('')).toEqual([undefined, undefined]);
-    expect(wire('high')).toEqual(['high', 'defect']);
-    expect(wire('advisory')).toEqual([undefined, 'advisory']);
-    expect(wire('critical')).toEqual([undefined, undefined]);
+  it('sends only the High, Medium and Low severities', () => {
+    const wire = (severity: string) => toIssueParams({ ...emptyIssueFilters, severity }).severity;
+    expect(['', 'high', 'low', 'advisory', 'critical'].map(wire)).toEqual([
+      undefined,
+      'high',
+      'low',
+      undefined,
+      undefined,
+    ]);
   });
 
   it('maps the rule_id filter onto the wire `rule` param', () => {
@@ -92,7 +91,7 @@ describe('issueFilterParams (the URL patch)', () => {
 describe('the severity choice', () => {
   it('reads a known severity, and otherwise "all"', () => {
     expect(issueSeverityChoice({ ...emptyIssueFilters, severity: 'medium' })).toBe('medium');
-    expect(issueSeverityChoice({ ...emptyIssueFilters, severity: 'advisory' })).toBe('advisory');
+    expect(issueSeverityChoice({ ...emptyIssueFilters, severity: 'advisory' })).toBe('all');
     expect(issueSeverityChoice(emptyIssueFilters)).toBe('all');
     expect(issueSeverityChoice({ ...emptyIssueFilters, severity: 'critical' })).toBe('all');
   });

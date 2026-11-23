@@ -169,12 +169,13 @@ describe('Repetitions', () => {
 describe('Consumer engine selection', () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it('defaults once, preserves deselection on refetch, and launches all six independently', async () => {
+  it('defaults once, preserves deselection on refetch, and launches all seven independently', async () => {
     const launch = stubApis(ESTIMATE);
     const engines = [
       'chatgpt_search',
       'gemini_consumer',
       'google_ai_overview',
+      'google_ai_mode',
       'chatgpt',
       'gemini',
       'claude',
@@ -201,6 +202,10 @@ describe('Consumer engine selection', () => {
       'aria-pressed',
       'false',
     );
+    expect(screen.getByRole('button', { name: 'Google AI Mode' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
     fireEvent.click(search);
     await act(async () => {
       await queryClient.invalidateQueries({
@@ -220,7 +225,7 @@ describe('Consumer engine selection', () => {
         { workspaceId: WORKSPACE_ID },
       ),
     );
-    expect(vi.mocked(launch).mock.calls[0]![0].engines).toHaveLength(6);
+    expect(vi.mocked(launch).mock.calls[0]![0].engines).toHaveLength(7);
   });
 });
 

@@ -9,6 +9,7 @@ import {
   persistOverviewFailure,
   persistOverviewObservation,
 } from '../surface-persistence.ts';
+import { serpEngine } from '../../search-surfaces/dataforseo.ts';
 import { observedAdapter, type ObservedSurface } from './dataforseo.ts';
 
 const searchAiSurface: ObservedSurface = {
@@ -17,7 +18,8 @@ const searchAiSurface: ObservedSurface = {
   pollCeiling: true,
   requestSettings: () => ({}),
   async settle(deps, context, payload, taskId) {
-    const result = parseOverview(payload, taskId);
+    const engine = serpEngine(context.task.logical_engine);
+    const result = parseOverview(engine, payload, taskId);
     if (result === 'still_pending') return 'still_pending';
     if (isOverviewObservation(result))
       await persistOverviewObservation(
@@ -25,7 +27,7 @@ const searchAiSurface: ObservedSurface = {
         context.task,
         deps.owner,
         result,
-        await deps.derivation(context, overviewAnswer(result)),
+        await deps.derivation(context, overviewAnswer(engine, result)),
         deps.now(),
       );
     else

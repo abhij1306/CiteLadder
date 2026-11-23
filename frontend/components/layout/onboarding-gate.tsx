@@ -32,9 +32,6 @@ export function OnboardingGate({ children }: Readonly<{ children: ReactNode }>) 
   const { status, errorScope, activeWorkspaceId, activeWorkspace, activeProject, retry } =
     useProjectContext();
 
-  // A role that may not create a project is not offered the affordance. This
-  // reads the effective capability the backend published, not a role name, and
-  // the backend still enforces the denial itself.
   const mayCreate = activeWorkspace?.capabilities.includes('write') ?? false;
   const projectRequired = !isWorkspaceOnlyRoute(pathname);
   const state = resolveGate(status, {

@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { Inbox } from '@/lib/icons';
 import { useState, type ComponentProps } from 'react';
-import { describe, expect, it, vi } from 'vite-plus/test';
+import { describe, expect, it } from 'vite-plus/test';
 
 import { Absence } from './absence';
 import { Button } from './button';
@@ -358,32 +358,6 @@ describe('DataTable', () => {
     const rules = container.querySelector('[data-data-table-frame] style')!.textContent!;
     expect(rules.match(/width:50\.000%/gu)).toHaveLength(2);
     expect(rules).not.toContain('display:none');
-  });
-
-  it('warns in development when no column can absorb the width', () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    render(
-      <DataTable
-        title="Fixed figures"
-        columns={[
-          { key: 'engine', label: 'Engine', width: 'name' },
-          { key: 'share', label: 'Share', kind: 'number' },
-        ]}
-      />,
-    );
-    render(
-      <DataTable
-        title="Flexible figures"
-        columns={[
-          { key: 'engine', label: 'Engine' },
-          { key: 'share', label: 'Share', kind: 'number' },
-        ]}
-      />,
-    );
-    expect(warn.mock.calls.map(([message]) => message)).toEqual([
-      'DataTable "Fixed figures" has no flexible column (width "flex"): its spare width spreads over its figures.',
-    ]);
-    warn.mockRestore();
   });
 
   it('announces the filtered result count in a polite live region', () => {

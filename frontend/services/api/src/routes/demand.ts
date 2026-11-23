@@ -1,10 +1,8 @@
-import { randomUUID } from 'node:crypto';
 import { policy } from '../config.ts';
 import { enqueueManualDemand } from '../demand/admission.ts';
-import { normalizeQuery } from '../demand/classification.ts';
+import { overrideClassification } from '../demand/classification.ts';
 import { latestDemand, queryEvidencePage, queryEvidenceSummary } from '../demand/reads.ts';
 import { readBody } from '../http/body.ts';
-import { RequestValidationError } from '../http/params.ts';
 import { defineGetRoute, definePostRoute } from './define.ts';
 import {
   classificationResponse,
@@ -113,40 +111,12 @@ export const demandRoutes = [
     body: overrideBody,
     response: classificationResponse,
     async handle({ c, db }, { path }) {
-      const body = await readBody(c, overrideBody),
-        w = c.get('workspace');
-      const normalized = normalizeQuery(body.query);
-      if (!normalized)
-        throw new RequestValidationError([
-          {
-            loc: ['query'],
-            type: 'value_error',
-            message: 'Query must contain searchable characters',
-          },
-        ]);
-      const id = randomUUID();
-      await db.transaction().execute((trx) =>
-        trx
-          .insertInto('branded_query_overrides')
-          .values({
-            id,
-            workspace_id: w.workspaceId,
-            project_id: path.project_id,
-            actor_user_id: c.get('user').id,
-            normalized_query: normalized,
-            classification: body.classification,
-            classifier_version: policy.demand.BRANDED_QUERY_CLASSIFIER_VERSION,
-            created_at: new Date(),
-          })
-          .execute(),
+      const w = c.get('workspace');
+      return overrideClassification(
+        db,
+        { workspaceId: w.workspaceId, projectId: path.project_id, userId: c.get('user').id },
+        await readBody(c, overrideBody),
       );
-      return {
-        normalized_query: normalized,
-        classification: body.classification,
-        matched_terms: [],
-        classifier_version: policy.demand.BRANDED_QUERY_CLASSIFIER_VERSION,
-        override_id: id,
-      };
     },
   }),
 ];

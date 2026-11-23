@@ -26,8 +26,6 @@ const latestVisibilityQuery = (project: WidgetProject) =>
 const trendQuery = (project: WidgetProject) =>
   visibilityQueries.trends(widgetScope(project), { cohort: COHORT });
 
-// The overview's own filters, as AI Traffic prefetches them: an unset filter is
-// absent from both the key and the request, so both read one cache entry.
 const trafficOverviewQuery = (project: WidgetProject) =>
   aiTrafficQueries.overview(widgetScope(project), { range: TRAFFIC_RANGES[0].value });
 

@@ -40,7 +40,6 @@ function pullView(s: Source) {
     filter_catalog_version: s.filter_catalog_version,
     filter_confirmed_at: iso(s.filter_confirmed_at),
     filter_current: s.filter_catalog_version === crawlers.catalog_version,
-    // numeric(4,3) arrives as text.
     declared_sample_rate: Number(s.declared_sample_rate),
     last_pull_at: iso(s.last_pull_at),
     last_drained_at: iso(s.last_drained_at),

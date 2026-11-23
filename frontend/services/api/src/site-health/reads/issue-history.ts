@@ -78,7 +78,6 @@ export async function issueHistory(
       dimension: issue.dimension,
       category: issue.category,
       severity: issue.severity,
-      finding_class: issue.finding_class,
       title: ruleTitle(issue.rule_id),
       description: issue.description,
       remediation: issue.remediation,

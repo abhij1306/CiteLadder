@@ -40,8 +40,6 @@ export function TurnFailure({
         )
       }
     >
-      {/* Persisted message text is Markdown (a contact address is a mailto link); the
-          reply renderer keeps only safe URLs. */}
       <ContentMarkdown markdown={latest.content} density="compact" />
     </Notice>
   );

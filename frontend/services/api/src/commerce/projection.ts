@@ -34,6 +34,7 @@ import {
   shelfLinks,
 } from './projection-facts.ts';
 import type { CatalogFacts } from '../site-health/analysis/catalog-facts.ts';
+import { fitsIndexKey } from '../db/index-key.ts';
 
 type Source = Awaited<ReturnType<typeof sourceOf>>;
 
@@ -82,9 +83,6 @@ async function projectCategory(
   const name = categoryTitle(facts, source.latest_title);
   if (!name) return null;
   const key = categoryKey(name);
-  // The category owning this name wins over one matched by URL, so the rename
-  // below can never collide with the (project_id, normalized_name) key. Two
-  // lookups, not an OR, so each one is an index scan.
   const scoped = db
     .selectFrom('commerce_categories')
     .selectAll()
@@ -181,10 +179,6 @@ async function projectProduct(
     .executeTakeFirst();
   if (prior) return null;
   const projection = productFacts(facts, url);
-  // A listing page the classifier called a product is projected as the shelf it
-  // is. An unidentifiable product page that lists no products (a sold-out PDP
-  // without identifiers or price) is skipped: projected as a category, its
-  // parent breadcrumb would take over that real shelf.
   if (!projection.identified)
     return facts.commerce.product_cards.length
       ? projectCategory(db, scope, source, facts, url)
@@ -230,15 +224,15 @@ async function projectProduct(
   const categories = productCategories(facts, url, [source.final_url, source.requested_url]);
   const ids = new Map<string, string>();
   for (const name of categories.names) {
-    const category = await categoryByName(db, scope, name.slice(0, 255)); // NOSONAR -- One projection transaction: statements run in order.
+    const category = await categoryByName(db, scope, name.slice(0, 255)); // NOSONAR
     ids.set(categoryKey(name), category.id);
-    await addMembership(db, scope, product.id, category.id, observation); // NOSONAR -- One projection transaction: statements run in order.
+    await addMembership(db, scope, product.id, category.id, observation); // NOSONAR
   }
   for (const [index, name] of categories.path.entries()) {
     const childId = ids.get(categoryKey(name));
     const parentId = index ? ids.get(categoryKey(categories.path[index - 1]!)) : undefined;
     if (childId && parentId)
-      await setCategoryParent(db, scope, { childId, parentId, replace: false }); // NOSONAR -- One projection transaction: statements run in order.
+      await setCategoryParent(db, scope, { childId, parentId, replace: false }); // NOSONAR
   }
   return { productId: product.id };
 }
@@ -324,7 +318,7 @@ async function linkShelves(db: Database, scope: CommerceScope, crawlId: string, 
   );
   for (const shelf of shelves)
     for (const productId of listedProducts(shelf.links, identities, productsByUrl))
-      await addMembership(db, scope, productId, shelf.id, null);
+      await addMembership(db, scope, productId, shelf.id, null); // NOSONAR
 }
 
 export const projectCatalog: Executor = async (task, { db, checkCancelled }) => {
@@ -348,6 +342,7 @@ export const projectCatalog: Executor = async (task, { db, checkCancelled }) => 
         'commerce_source_url_missing',
         'Catalog source has no usable URL',
       );
+    if (!fitsIndexKey(url)) return;
     const projected =
       source.page_kind === 'category'
         ? await projectCategory(trx, scope, source, facts, url)

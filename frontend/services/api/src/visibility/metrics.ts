@@ -4,6 +4,7 @@ import type { z } from 'zod';
 import { storedWinTally, winCounts } from '../analysis/win-rate.ts';
 import { policy } from '../config.ts';
 import { compareText } from '../text-order.ts';
+import { isRecord } from '../db/json.ts';
 
 export type Metrics = Readonly<Record<string, unknown>>;
 export type MeasurementCounts = z.input<typeof measurementCountsSchema>;
@@ -11,7 +12,7 @@ export type RankingRow = z.input<typeof rankingRowSchema>;
 
 export function metricObject(value: unknown): Metrics {
   if (value === null || value === undefined) return {};
-  if (typeof value === 'object' && !Array.isArray(value)) return value as Metrics;
+  if (isRecord(value)) return value;
   throw new TypeError('stored metric is not an object');
 }
 

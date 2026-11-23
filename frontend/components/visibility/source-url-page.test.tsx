@@ -45,23 +45,25 @@ function page(overrides: Partial<Page> = {}): Page {
 const URL = 'https://review.example/best-crm';
 
 describe('what a cited page means for you', () => {
-  it('names the competitors listed where you are not, with their lines, and opens the Action', () => {
+  it('tables you and the competitors listed where you are not, with their quote, and opens the Action', () => {
     render(<SourceUrlPageCard url={URL} page={page()} loading={false} />);
 
-    const listed = screen.getByText('Listed here').parentElement!;
-    expect(
-      within(listed).getByText('Globex', { selector: '[data-status-tone] span' }),
-    ).toBeVisible();
-    const quote = screen.getByRole('blockquote');
-    expect(quote).toHaveTextContent('Globex leads the list for small teams.');
-    expect(within(quote).getByText('Globex', { selector: 'mark' })).toBeVisible();
+    const table = screen.getByRole('table');
+    const [, you, globex] = within(table).getAllByRole('row');
+    const [name, mentions, quote] = within(you!).getAllByRole('cell');
+    expect(within(name!).getByText('Acme Corp')).toBeVisible();
+    expect([mentions!.textContent, quote!.textContent]).toEqual(['0', '—Not applicable']);
+    expect(within(globex!).getAllByRole('cell')[1]).toHaveTextContent('2');
+    expect(within(globex!).getAllByRole('cell')[2]).toHaveTextContent(
+      'Globex leads the list for small teams.',
+    );
+    expect(within(globex!).getByText('Globex', { selector: 'mark' })).toBeVisible();
+    expect(screen.getByText(/Read .* ago|Read today/)).toBeVisible();
+    expect(screen.queryByText(/characters/)).toBeNull();
     expect(screen.getByRole('link', { name: 'Open the Action' })).toHaveAttribute(
       'href',
       expect.stringContaining(`/actions/${ACTION}`),
     );
-    expect(
-      screen.getByText('Searched 4,200 characters of readable text; no form of the name matched.'),
-    ).toBeVisible();
     const draft = screen.getByRole('link', { name: 'Draft the request' });
     const chat = new globalThis.URL(draft.getAttribute('href')!, 'https://app.test');
     expect({ path: chat.pathname, ...Object.fromEntries(chat.searchParams) }).toEqual({

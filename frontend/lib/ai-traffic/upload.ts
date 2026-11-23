@@ -183,8 +183,6 @@ export async function uploadCrawlFile(input: {
       batch: string[] = [],
       batchBytes = 0;
     const scan: Scan = { first: null, last: null, dates: new Set<string>() };
-    // Lines older than the admission window are neither sent nor counted in the scan span.
-    // The floor is fixed when the upload is created, so a resumed scan batches identically.
     const oldest = new Date(
       Date.parse(upload.created_at) - catalog.max_backdate_days * 86400000,
     ).toISOString();

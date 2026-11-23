@@ -18,11 +18,6 @@ const server = serve(
   (info) => logger.info('api_service_started', { host: config.host, port: info.port }),
 );
 
-/**
- * Open event streams would hold `close` until the platform kills the process,
- * so in-request work is stopped first: open turns settle as interrupted and
- * interactive audits leave their remaining phases to the runner.
- */
 async function shutdown(signal: string): Promise<void> {
   logger.info('api_service_stopping', { signal });
   const settled = await interactiveSlots.drain();

@@ -5,8 +5,6 @@ import { canonicalHash, canonicalJson } from '../src/canonical-json.ts';
 const u = (hex: string) => `${'\\'}u${hex}`;
 
 describe('canonical JSON', () => {
-  // Bytes and hashes recorded from the encoder before it refused non-JSON
-  // values: identity hashes persisted from these shapes must never move.
   it.each([
     [
       {

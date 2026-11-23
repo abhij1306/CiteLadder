@@ -1,5 +1,6 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
+import { useModelPicker, type ModelRequest } from '@/components/agent/model-picker';
 
 import { useComposerCommands } from '@/components/agent/use-composer-commands';
 import { agentWriteFailure } from '@/lib/agent/errors';
@@ -39,6 +40,7 @@ export function useChatDetail(workspaceId: string, chatId: string) {
 
 export type NewChatInput = {
   message: string;
+  choice?: ModelRequest;
   skillId: string | null | undefined;
   workflowId?: string;
   actionId?: string;
@@ -56,6 +58,7 @@ export function useCreateChat(
   const mutation = useMutation(agentMutations.createChat(workspaceId));
   const start = ({
     message,
+    choice,
     skillId,
     workflowId,
     actionId,
@@ -66,6 +69,7 @@ export function useCreateChat(
     const input = {
       message: message.trim(),
       skill_id: skillId,
+      ...choice,
       ...(workflowId ? { workflow_id: workflowId } : {}),
       action_id: actionId,
       context,
@@ -98,8 +102,7 @@ export function useFollowUp(workspaceId: string, detail: AgentChatDetail) {
   const projectId = detail.chat.project_id;
   const commands = useComposerCommands({ workspaceId, projectId });
   const mutation = useMutation(agentMutations.sendMessage({ workspaceId, projectId }));
-  // The composer as it is when a send is accepted, not as it was when sent:
-  // typing during the round trip must survive the acceptance.
+  const model = useModelPicker(detail.model);
   const composer = useRef({ draft, mentions: commands.mentions, pastes: commands.pastes.items });
   useEffect(() => {
     composer.current = { draft, mentions: commands.mentions, pastes: commands.pastes.items };
@@ -121,7 +124,10 @@ export function useFollowUp(workspaceId: string, detail: AgentChatDetail) {
         const submittedPastes = variables.attachments ?? [];
         const unchangedPastes =
           pastes.length === submittedPastes.length &&
-          pastes.every((paste, index) => paste.text === submittedPastes[index]?.text);
+          pastes.every(
+            (paste, index) =>
+              JSON.stringify(paste.attachment) === JSON.stringify(submittedPastes[index]),
+          );
         if (current.trim() === variables.message && unchangedMentions && unchangedPastes) {
           setDraft('');
           commands.clear();
@@ -141,6 +147,7 @@ export function useFollowUp(workspaceId: string, detail: AgentChatDetail) {
     chatId,
     message,
     skillId: skill,
+    ...model.request,
     ...(sent.mentions.length > 0 ? { mentions: sent.mentions } : {}),
     ...(sent.attachments.length > 0 ? { attachments: sent.attachments } : {}),
   });
@@ -175,6 +182,7 @@ export function useFollowUp(workspaceId: string, detail: AgentChatDetail) {
       mutation.isPending || awaitingSaved ? (mutation.variables?.message ?? null) : null,
     skillId,
     setSkillId,
+    model: model.picker,
     lastMessage,
     send,
     commands,

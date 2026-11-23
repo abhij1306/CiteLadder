@@ -6,9 +6,23 @@ import { cursorPageSchema } from './pagination.ts';
 
 export const issueSeveritySchema = z.enum(['critical', 'high', 'medium', 'low', 'info']);
 export const issueDimensionSchema = z.enum(['technical', 'aeo']);
-export const findingClassSchema = z.enum(['defect', 'advisory', 'diagnostic']);
+export const findingClassSchema = z.enum(['defect', 'diagnostic']);
 export const issueSectionSchema = z.enum(['technical', 'content', 'aeo']);
 export const issueSortSchema = z.enum(['severity', 'pages']);
+
+const textValue = <Kind extends string>(kind: Kind) =>
+  responseObject({ kind: z.literal(kind), text: z.string(), length: z.number().int() });
+const countValue = <Kind extends string>(kind: Kind) =>
+  responseObject({ kind: z.literal(kind), count: z.number().int() });
+
+export const issueValueSchema = z.discriminatedUnion('kind', [
+  responseObject({ kind: z.literal('none') }),
+  responseObject({ kind: z.literal('unavailable') }),
+  textValue('title'),
+  textValue('meta_description'),
+  countValue('h1_count'),
+  countValue('word_count'),
+]);
 
 export const issueOccurrenceSchema = responseObject({
   occurrence_id: uuid(),
@@ -23,7 +37,6 @@ export const issueOccurrenceSchema = responseObject({
   dimension: issueDimensionSchema,
   category: z.string(),
   severity: issueSeveritySchema,
-  finding_class: findingClassSchema,
   issue_title: z.string(),
   description: z.string(),
   remediation: z.string(),
@@ -34,6 +47,8 @@ export const issueOccurrenceSchema = responseObject({
   created_at: z.string(),
 });
 
+export const affectedPageSchema = issueOccurrenceSchema.extend({ value: issueValueSchema });
+
 export const siteIssueSchema = responseObject({
   group_id: uuid(),
   crawl_id: uuid(),
@@ -42,12 +57,14 @@ export const siteIssueSchema = responseObject({
   dimension: issueDimensionSchema,
   category: z.string(),
   severity: issueSeveritySchema,
-  finding_class: findingClassSchema,
   title: z.string(),
   description: z.string(),
   remediation: z.string(),
   remediation_route: z.string(),
+  score_roles: z.array(z.string()),
   affected_url_count: z.number().int(),
+  new_url_count: z.number().int().nullable(),
+  resolved_url_count: z.number().int().nullable(),
   analyzer_version: z.string(),
   rule_version: z.string(),
   created_at: z.string(),
@@ -55,8 +72,6 @@ export const siteIssueSchema = responseObject({
 
 export const issuesSummarySchema = responseObject({
   issue_count: z.number().int(),
-  defect_issue_type_count: z.number().int(),
-  advisory_issue_type_count: z.number().int(),
   occurrence_count: z.number().int(),
   severity_counts: z.record(z.string(), z.number().int()),
   dimension_counts: z.record(z.string(), z.number().int()),
@@ -72,12 +87,11 @@ export const siteIssueDetailSchema = responseObject({
   dimension: issueDimensionSchema,
   category: z.string(),
   severity: issueSeveritySchema,
-  finding_class: findingClassSchema,
   title: z.string(),
   description: z.string(),
   remediation: z.string(),
   remediation_route: z.string(),
-  occurrences: z.array(issueOccurrenceSchema),
+  occurrences: z.array(affectedPageSchema),
   occurrence_count: z.number().int(),
   affected_url_count: z.number().int(),
   analyzer_version: z.string(),
@@ -117,7 +131,9 @@ export type IssueSeverity = z.infer<typeof issueSeveritySchema>;
 export type IssueDimension = z.infer<typeof issueDimensionSchema>;
 export type IssueSection = z.infer<typeof issueSectionSchema>;
 export type IssueSort = z.infer<typeof issueSortSchema>;
+export type IssueValue = z.infer<typeof issueValueSchema>;
 export type IssueOccurrence = z.infer<typeof issueOccurrenceSchema>;
+export type AffectedPage = z.infer<typeof affectedPageSchema>;
 export type SiteIssue = z.infer<typeof siteIssueSchema>;
 export type SiteIssueDetail = z.infer<typeof siteIssueDetailSchema>;
 export type SiteIssuesPage = z.infer<typeof siteIssuesPageSchema>;

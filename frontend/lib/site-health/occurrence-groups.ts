@@ -4,14 +4,14 @@ import { evidenceFacts, evidenceLead } from './issue-evidence';
 
 type NonEmpty<T> = [T, ...T[]];
 
-export type OccurrenceEntry =
-  | Readonly<{ kind: 'page'; occurrence: IssueOccurrence }>
+export type OccurrenceEntry<T extends IssueOccurrence = IssueOccurrence> =
+  | Readonly<{ kind: 'page'; occurrence: T }>
   | Readonly<{
       kind: 'shared';
       key: string;
       ruleId: string;
       facts: readonly string[];
-      occurrences: NonEmpty<IssueOccurrence>;
+      occurrences: NonEmpty<T>;
       pageCount: number;
     }>;
 
@@ -30,9 +30,11 @@ function distinctPages(occurrences: readonly IssueOccurrence[]): number {
   return new Set(occurrences.map((occurrence) => occurrence.site_url_id)).size;
 }
 
-export function groupOccurrences(occurrences: readonly IssueOccurrence[]): OccurrenceEntry[] {
-  const buckets = new Map<string, { facts: string[]; members: IssueOccurrence[] }>();
-  const order: Array<{ key: string } | { occurrence: IssueOccurrence }> = [];
+export function groupOccurrences<T extends IssueOccurrence>(
+  occurrences: readonly T[],
+): OccurrenceEntry<T>[] {
+  const buckets = new Map<string, { facts: string[]; members: T[] }>();
+  const order: Array<{ key: string } | { occurrence: T }> = [];
   for (const occurrence of occurrences) {
     const facts = sharedFacts(occurrence);
     if (!facts) {
@@ -48,7 +50,7 @@ export function groupOccurrences(occurrences: readonly IssueOccurrence[]): Occur
       order.push({ key });
     }
   }
-  return order.flatMap((slot): OccurrenceEntry[] => {
+  return order.flatMap((slot): OccurrenceEntry<T>[] => {
     if ('occurrence' in slot) return [{ kind: 'page', occurrence: slot.occurrence }];
     const bucket = buckets.get(slot.key);
     if (!bucket) return [];

@@ -63,9 +63,6 @@
   color: var(--color-ink);
   font-weight: 500;
 }
-.cl-prose em {
-  font-style: italic;
-}
 .cl-prose :not(pre) > code {
   padding: 2px 4px;
   box-decoration-break: clone;

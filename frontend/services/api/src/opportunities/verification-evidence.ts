@@ -38,7 +38,7 @@ export async function evidenceFor(
     if (age > checkWindowDays(kind) * DAY_MS) continue;
     const parsed = expectedCheckSchema.safeParse(raw);
     const found = parsed.success
-      ? await readCheck(ctx, source, parsed.data) // NOSONAR -- One source reads its checks in order on the caller's connection.
+      ? await readCheck(ctx, source, parsed.data) // NOSONAR
       : outcome(ctx.reading, 'unavailable', 'malformed_check');
     if (found) ctx.result.outcomes.set(index, found);
   }

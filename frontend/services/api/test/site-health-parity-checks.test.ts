@@ -104,7 +104,7 @@ describe('direct answers beyond FAQ pages', () => {
   });
 });
 
-describe('headings and length advisories', () => {
+describe('headings and length checks', () => {
   it('flags a page with no H1 at all, not one with several', () => {
     expect(judged('technical.h1_present', 'product', `<main><p>${prose(40)}</p></main>`)).toEqual([
       'missing',
@@ -113,6 +113,75 @@ describe('headings and length advisories', () => {
     expect(judged('technical.h1_present', 'product', `${MAIN}<h1>Second</h1>`)[0]).toBe(
       'satisfied',
     );
+  });
+
+  const SOCIAL =
+    '<meta property="og:title" content="Setup"><meta property="og:description" content="Guide">' +
+    '<meta property="og:image" content="https://example.test/a.png"><meta property="og:type" content="article">' +
+    `<meta property="og:url" content="${URL_}"><link rel="canonical" href="${URL_}">` +
+    '<meta name="twitter:card" content="summary">';
+  const sized = (bytes: number) => ({
+    delivery: { ...extract(MAIN).delivery, decoded_bytes: bytes },
+  });
+  it.each([
+    ['technical.single_h1', `${MAIN}<h1>Second</h1>`, MAIN, ['missing', '']],
+    ['aeo.open_graph_present', MAIN, MAIN, ['missing', '']],
+    ['aeo.twitter_card_present', MAIN, MAIN, ['missing', '']],
+    ['aeo.open_graph_url_matches', MAIN, MAIN, ['missing', 'open_graph_url_differs']],
+    ['technical.html_size', MAIN, MAIN, ['missing', 'html_too_large']],
+  ])('fails %s and passes its twin', (ruleId, failingBody, passingBody, failed) => {
+    const failingHead = {
+      'technical.single_h1': SOCIAL,
+      'aeo.open_graph_present':
+        '<meta property="og:title" content="Setup"><meta property="og:description" content="Guide">',
+      'aeo.twitter_card_present': SOCIAL.replace(
+        '<meta name="twitter:card" content="summary">',
+        '',
+      ),
+      'aeo.open_graph_url_matches': SOCIAL.replace(
+        `content="${URL_}"`,
+        'content="https://example.test/other"',
+      ),
+      'technical.html_size': SOCIAL,
+    }[ruleId];
+    const oversized = ruleId === 'technical.html_size' ? sized(3_000_000) : {};
+    expect(judged(ruleId, 'article', failingBody, failingHead, oversized)).toEqual(failed);
+    expect(judged(ruleId, 'article', passingBody, SOCIAL, sized(40_000))[0]).toBe('satisfied');
+  });
+
+  it('leaves zero H1s to h1_present and an absent og:url or canonical out of scope', () => {
+    const noH1 = `<main><p>${prose(40)}</p></main>`;
+    expect(judged('technical.single_h1', 'article', noH1)).toEqual(['not_applicable', 'no_h1']);
+    expect(judged('aeo.open_graph_url_matches', 'article', MAIN)).toEqual([
+      'not_applicable',
+      'no_open_graph_url',
+    ]);
+    expect(
+      judged(
+        'aeo.open_graph_url_matches',
+        'article',
+        MAIN,
+        `<meta property="og:url" content="${URL_}">`,
+      ),
+    ).toEqual(['not_applicable', 'no_canonical']);
+    expect(
+      judged(
+        'aeo.open_graph_url_matches',
+        'article',
+        MAIN,
+        `<meta property="og:url" content="${URL_}/?utm_source=x"><link rel="canonical" href="${URL_}">`,
+      )[0],
+    ).toBe('satisfied');
+  });
+
+  it('scores a slow first byte', () => {
+    const timed = (ms: number) => ({ delivery: { ...extract(MAIN).delivery, ttfb_ms: ms } });
+    const row = (ms: number) =>
+      evaluatePageRules({ ...extract(MAIN), page_kind: 'article', ...timed(ms) }).find(
+        (item) => item.rule_id === 'technical.ttfb_band',
+      )!;
+    expect([row(1200).outcome, row(1200).score_applicability]).toEqual(['missing', true]);
+    expect(row(200).outcome).toBe('satisfied');
   });
 
   it('holds titles and meta descriptions to the configured length range', () => {

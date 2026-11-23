@@ -47,7 +47,7 @@ const textCodec: UrlCodec<string> = {
 const sectionCodec = stringUrlCodec(['technical', 'content', 'aeo'] as const, 'technical');
 const sortCodec = stringUrlCodec(['severity', 'pages'] as const, 'severity');
 
-const SEVERITY_CLASSES = ['high', 'medium', 'low', 'advisory'] as const;
+const SEVERITY_CLASSES = ['high', 'medium', 'low'] as const;
 
 export type IssueSeverityChoice = 'all' | (typeof SEVERITY_CLASSES)[number];
 
@@ -56,7 +56,6 @@ const SEVERITY_CHOICE_LABELS: Readonly<Record<IssueSeverityChoice, string>> = {
   high: 'High',
   medium: 'Medium',
   low: 'Low',
-  advisory: 'Advisory',
 };
 
 function isSeverityClass(value: string): value is (typeof SEVERITY_CLASSES)[number] {
@@ -75,9 +74,8 @@ export function issueSeverityChange(key: IssueSeverityChoice): Pick<IssueFilters
   return { severity: key === 'all' ? '' : key };
 }
 
-function severityParams(severity: string): Pick<IssuesParams, 'severity' | 'finding_class'> {
-  if (severity === 'advisory') return { finding_class: 'advisory' };
-  return isSeverityClass(severity) ? { severity, finding_class: 'defect' } : {};
+function severityParams(severity: string): Pick<IssuesParams, 'severity'> {
+  return isSeverityClass(severity) ? { severity } : {};
 }
 
 export function toIssueParams(
@@ -147,11 +145,6 @@ export function useIssueFilters() {
     [section, sort, query, severity, category, rule, siteUrlId, pageKind],
   );
 
-  /**
-   * Apply a filter change: back to page one, no selection, no occurrence
-   * stack. A deep link's one-rule filter (`rule=`, from an Overview row) ends
-   * with any other change: kept, it silently held every count at one issue.
-   */
   const updateFilters = useCallback(
     (change: Partial<IssueFilters>) => {
       const next = { ...filters, rule_id: '', ...change };

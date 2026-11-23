@@ -81,7 +81,7 @@ export async function siteSnapshot(
   } satisfies McpSiteSnapshot & Evidence;
 }
 
-async function selectCrawl({ db, scope }: ProjectRead, crawlId: string | null | undefined) {
+export async function selectCrawl({ db, scope }: ProjectRead, crawlId: string | null | undefined) {
   if (!crawlId)
     return (await currentSiteCrawl(db, scope.workspaceId, scope.projectId)) ?? undefined;
   const crawl = await new WorkspaceScope(scope.workspaceId)
@@ -229,11 +229,6 @@ export async function siteLinks(
   };
 }
 
-/**
- * A URL without its query string or fragment. Every page URL these reads hand
- * the model passes through it: a query or fragment can carry a token, session
- * or email. Pages that differ only by query stay apart by `site_url_id`.
- */
 export function withoutQuery(url: string) {
   const end = url.search(/[?#]/u);
   return end < 0 ? url : url.slice(0, end);
@@ -339,11 +334,6 @@ export async function familySnippet(
 }
 const referenceSnippetList = z.array(referenceSnippetSchema);
 
-/**
- * Where a page cursor resumes. The cursor carries only the last page's id, never
- * its URL (a readable cursor would hand the model the query string); the URL
- * the page order resumes after is read back from the project's own page.
- */
 async function pageCursor({ db, scope }: ProjectRead, cursor: string, filterKey: string) {
   const [fingerprint, id] = decodeCursor(cursor, 2);
   const siteUrlId = parseUuid(id);
@@ -424,7 +414,7 @@ export async function sitePages(
       ? {}
       : { aeo_measurement_state: row.aeo_measurement_state }),
     issue_count: row.issue_count,
-    issue_rules: (row.analysis_id && rules.get(row.analysis_id)) || {},
+    issue_rules: (row.analysis_id && rules.get(row.analysis_id)) || [],
     ...(args.rule_id && row.analysis_id && evidence.has(row.analysis_id)
       ? { rule_evidence: ruleEvidenceSummary(evidence.get(row.analysis_id)) }
       : {}),

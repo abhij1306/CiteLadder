@@ -14,6 +14,7 @@ import type { Executor } from '../queue/executor.ts';
 import { payloadString, taskProject } from '../queue/executor.ts';
 import { enqueueTask } from '../queue/enqueue.ts';
 import type { LinkCandidate } from './internal-link-candidates.ts';
+import { widen } from '../widen.ts';
 
 const probability = z.number().min(0).max(1);
 const noul = z.object({ type: z.literal('noul'), noul: probability });
@@ -54,7 +55,7 @@ function emptyDiagnostics(candidates: number) {
     pending: 0,
     unavailable: 0,
     below_threshold: 0,
-    reasons: {} as Record<string, number>,
+    reasons: widen<Record<string, number>>({}),
     elapsed_seconds: 0,
   };
 }

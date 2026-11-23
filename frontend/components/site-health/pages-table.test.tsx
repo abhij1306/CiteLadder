@@ -43,10 +43,13 @@ describe('PagesTable', () => {
     renderPages(<PagesTable pages={[page()]} crawlId={CRAWL} />);
     expect(screen.getAllByRole('columnheader').map((head) => head.textContent)).toEqual([
       'Page',
+      'Status',
       'Type',
       'Issues',
       'Web fundamentals',
       'AEO readiness',
+      'Depth',
+      'Inlinks',
       'Last audit',
     ]);
     const link = screen.getByRole('link', { name: /^View Homepage, / });
@@ -54,7 +57,7 @@ describe('PagesTable', () => {
     expect(link).toHaveAttribute('href', `/site/crawls/${CRAWL}/pages/${UUID}`);
   });
 
-  it('shows the status badge beside the title only while analysis is not completed', () => {
+  it('shows each page’s analysis status in its Status column', () => {
     renderPages(
       <PagesTable
         crawlId={CRAWL}
@@ -67,7 +70,8 @@ describe('PagesTable', () => {
     const done = screen.getByRole('row', { name: /Fine page/ });
     const queued = screen.getByRole('row', { name: /Queued page/ });
     expect(within(queued).getByText('Pending')).toBeInTheDocument();
-    expect(within(done).queryByText('Completed')).not.toBeInTheDocument();
+    expect(within(done).getByText('Completed')).toBeInTheDocument();
+    expect(within(done).queryByText('Pending')).not.toBeInTheDocument();
   });
 
   it('marks only a page fetched despite a robots.txt exclusion', () => {
@@ -107,6 +111,36 @@ describe('PagesTable', () => {
     expect(within(row!).getByRole('cell', { name: '46' })).toBeInTheDocument();
     expect(within(row!).queryByText('Limited evidence')).not.toBeInTheDocument();
     expect(within(row!).queryByText(/confidence/i)).not.toBeInTheDocument();
+  });
+
+  it('tells a page not reached from home apart from one without link metrics', () => {
+    renderPages(
+      <PagesTable
+        crawlId={CRAWL}
+        pages={[
+          page({ title: 'Linked page', inbound_count: 4, depth_from_home: 2 }),
+          page({
+            site_url_id: SOURCE_CRAWL,
+            title: 'Orphan page',
+            inbound_count: 0,
+            depth_from_home: null,
+          }),
+          page({
+            site_url_id: CRAWL,
+            title: 'Unmeasured page',
+            inbound_count: null,
+            depth_from_home: null,
+          }),
+        ]}
+      />,
+    );
+    const depthOf = (title: RegExp) => {
+      const cells = within(screen.getByRole('row', { name: title })).getAllByRole('cell');
+      return cells[6]!.textContent;
+    };
+    expect(depthOf(/Linked page/)).toBe('2');
+    expect(depthOf(/Orphan page/)).toBe('Not reached');
+    expect(depthOf(/Unmeasured page/)).toContain('Not measured');
   });
 
   it('renders the not-measured state for an unclassified page (null page_kind)', () => {

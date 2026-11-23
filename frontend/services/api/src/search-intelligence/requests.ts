@@ -82,8 +82,41 @@ function backlinkPayload(o: RequestOptions): Record<string, unknown> {
   };
 }
 
+function comparisonPayload(
+  { target, comparison }: RequestOptions,
+  overlap: 'missing' | 'shared',
+): Record<string, unknown> {
+  if (!comparison) throw new Error('Comparison target is required');
+  const comparisonPages = { '1': `${comparison.origin}/*` };
+  const targetPages = `${target.origin}/*`;
+  const common = { include_subdomains: false, item_types: ['organic'] };
+  return overlap === 'missing'
+    ? {
+        ...common,
+        pages: comparisonPages,
+        intersection_mode: 'union',
+        exclude_pages: [targetPages],
+      }
+    : {
+        ...common,
+        pages: { ...comparisonPages, '2': targetPages },
+        intersection_mode: 'intersect',
+      };
+}
+
+function backlinkHistoryPayload({ scope, target, dateFrom, dateTo }: RequestOptions) {
+  if (scope !== 'domain_subdomains' || !dateFrom || !dateTo)
+    throw new Error('History requires a bounded broad scope');
+  return {
+    target: target.registrable_domain,
+    date_from: dateFrom,
+    date_to: dateTo,
+    rank_scale: 'one_hundred',
+  };
+}
+
 function datasetPayload(o: RequestOptions): Record<string, unknown> {
-  const { kind, target, comparison, scope } = o;
+  const { kind, target, scope } = o;
   const common = {
     location_code: o.location,
     language_code: o.language,
@@ -108,19 +141,9 @@ function datasetPayload(o: RequestOptions): Record<string, unknown> {
         filters: ['ranked_serp_element.serp_item.domain', '=', target.hostname],
       };
     case 'missing_keywords':
+      return { ...common, ...comparisonPayload(o, 'missing') };
     case 'shared_keywords':
-      if (!comparison) throw new Error('Comparison target is required');
-      return {
-        ...common,
-        pages: {
-          '1': `${comparison.origin}/*`,
-          ...(kind === 'shared_keywords' ? { '2': `${target.origin}/*` } : {}),
-        },
-        intersection_mode: kind === 'missing_keywords' ? 'union' : 'intersect',
-        include_subdomains: false,
-        item_types: ['organic'],
-        ...(kind === 'missing_keywords' ? { exclude_pages: [`${target.origin}/*`] } : {}),
-      };
+      return { ...common, ...comparisonPayload(o, 'shared') };
     case 'keyword_suggestions':
       return {
         ...common,
@@ -145,16 +168,16 @@ function datasetPayload(o: RequestOptions): Record<string, unknown> {
           : {}),
       };
     case 'backlink_history':
-      if (scope !== 'domain_subdomains' || !o.dateFrom || !o.dateTo)
-        throw new Error('History requires a bounded broad scope');
-      return {
-        target: target.registrable_domain,
-        date_from: o.dateFrom,
-        date_to: o.dateTo,
-        rank_scale: 'one_hundred',
-      };
-    default:
+      return backlinkHistoryPayload(o);
+    case 'backlink_summary':
+    case 'referring_domains':
+    case 'destination_pages':
+    case 'backlinks':
       return backlinkPayload(o);
+    default: {
+      const unhandled: never = kind;
+      return unhandled;
+    }
   }
 }
 

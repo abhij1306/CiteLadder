@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { normalizeDomain } from '../analysis/domains.ts';
 import { policy } from '../config.ts';
 import type { NonEmpty } from '../lists.ts';
+import { widen } from '../widen.ts';
 
 const { referrals } = policy;
 
@@ -40,7 +41,7 @@ export function sanitizeReferralUrl(url: string | null): string {
     parsed.password = '';
     parsed.hash = '';
     const kept = [...parsed.searchParams]
-      .map(([name, value]) => [name.toLowerCase(), value] as [string, string])
+      .map(([name, value]) => widen<[string, string]>([name.toLowerCase(), value]))
       .filter(([name]) => paramAllowed(name));
     parsed.search = new URLSearchParams(kept).toString();
     return parsed.href;

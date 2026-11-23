@@ -16,6 +16,7 @@ import {
   selectedRuns,
   type RunSelection,
 } from '../visibility/selection.ts';
+import { widen } from '../widen.ts';
 
 const p = policy.content_optimization;
 
@@ -54,7 +55,6 @@ export type Limitation =
 
 export type Anchor = {
   auditId: string;
-  /** UTC text with microseconds (`utcText`), so the anchor itself is never cut out. */
   windowStart: string;
   windowEnd: string;
 };
@@ -152,9 +152,9 @@ function commonTitle(titles: string[]): string {
 }
 
 const isGapSource = (row: { classification: string; source_class: string | null }) =>
-  (p.gap_sources.classifications as readonly string[]).includes(row.classification) ||
+  widen<readonly string[]>(p.gap_sources.classifications).includes(row.classification) ||
   (row.source_class !== null &&
-    (p.gap_sources.source_classes as readonly string[]).includes(row.source_class));
+    widen<readonly string[]>(p.gap_sources.source_classes).includes(row.source_class));
 
 const windowSelection = (scope: Scope, auditIds: string[] | null): RunSelection => ({
   ...scope,
@@ -177,11 +177,6 @@ async function windowAuditIds(db: Database, scope: Scope, anchor: Anchor) {
   return rows.map((row) => row.id);
 }
 
-/**
- * The window's citations from answers to tracked prompts only (AS5): an answer
- * whose snapshot names no prompt, or whose prompt the library no longer has,
- * is not read, so every angle has at least one prompt.
- */
 function citationRows(db: Database, scope: Scope, auditIds: string[]) {
   return chunked(auditIds, (chunk) =>
     evidenceScope(db, windowSelection(scope, chunk))

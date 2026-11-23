@@ -1,4 +1,3 @@
-/** Context's tabs in row order. Data only: the route manifest loads it in Node. */
 export const CONTEXT_TABS = [
   { value: 'facts', label: 'Company' },
   { value: 'themes', label: 'Themes' },

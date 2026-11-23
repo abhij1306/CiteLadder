@@ -1,6 +1,6 @@
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
-import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
-import { Annotation, Compartment, EditorState, type Extension } from '@codemirror/state';
+import { markdownKeymap, markdownLanguage, pasteURLAsLink } from '@codemirror/lang-markdown';
+import { Annotation, Compartment, EditorState, Prec, type Extension } from '@codemirror/state';
 import { EditorView, keymap, type ViewUpdate } from '@codemirror/view';
 import { useEffect, useImperativeHandle, useRef, type Ref } from 'react';
 
@@ -100,7 +100,9 @@ export function PageEditor({
         extensions: [
           history(),
           keymap.of([...defaultKeymap, ...historyKeymap]),
-          markdown({ base: markdownLanguage }),
+          markdownLanguage,
+          Prec.high(keymap.of(markdownKeymap)),
+          pasteURLAsLink,
           EditorView.lineWrapping,
           EditorView.contentAttributes.of({ 'aria-label': initial.current.label }),
           readOnlyMode.current.of(access(initial.current.readOnly)),

@@ -5,7 +5,6 @@ import type { AppEnv } from '../src/context.ts';
 import type { Database } from '../src/db/database.ts';
 import { registerMcpRoutes } from '../src/mcp/server.ts';
 import { authenticateMcp } from '../src/mcp/token-auth.ts';
-import { admitToolCall, admitWriteCall } from '../src/mcp/registration.ts';
 import { dispatchTool } from '../src/mcp/tools.ts';
 import { ApiError } from '../src/errors.ts';
 import { appResource } from '../src/mcp/app-resource.ts';
@@ -26,7 +25,7 @@ vi.mock('../src/mcp/app-resource.ts', async (importOriginal) => ({
 
 vi.mock('../src/mcp/token-auth.ts', () => ({ authenticateMcp: vi.fn() }));
 // Budgets are PostgreSQL counters.
-vi.mock('../src/mcp/registration.ts', () => ({ admitToolCall: vi.fn(), admitWriteCall: vi.fn() }));
+vi.mock('../src/mcp/registration.ts', () => ({ admitToolCall: vi.fn() }));
 // The real catalogue and argument validation; only the database reads are stubbed.
 vi.mock('../src/mcp/tools.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../src/mcp/tools.ts')>();
@@ -97,7 +96,6 @@ beforeEach(() => {
     grantId: 'grant',
     workspaceIds: ['workspace'],
     tokenHash: 'hash',
-    canWrite: false,
   });
   vi.mocked(dispatchTool).mockResolvedValue({ projects: [{ id: 'project' }] });
 });
@@ -142,7 +140,6 @@ describe('hosted MCP transport', () => {
         ),
       );
       expect(loaded.result.contents).toEqual([expect.objectContaining({ uri: appResource.uri })]);
-      // 2026-07-28 validators require CacheableResult on reads; 2025-11-25 has no such fields.
       expect([loaded.result.ttlMs, loaded.result.cacheScope]).toEqual(
         modern ? [3_600_000, 'public'] : [undefined, undefined],
       );
@@ -158,12 +155,13 @@ describe('hosted MCP transport', () => {
       ).status,
     ).toBe(401);
   });
-  it('lists and accepts changes only for a grant holding write, each with its own hints', async () => {
+  it('lists only read tools, none naming a change kind, and refuses a change tool', async () => {
     const list = async () =>
       (await rpc(await app().request('https://protocol.example.test/mcp', request('tools/list'))))
         .result.tools as { name: string; annotations: Record<string, boolean> }[];
     const readOnly = await list();
     expect(readOnly.some((tool) => tool.name === 'confirm_change')).toBe(false);
+    expect(readOnly.some((tool) => tool.name === 'list_projects')).toBe(true);
     expect(readOnly.find((tool) => tool.name === 'list_projects')?.annotations).toEqual({
       readOnlyHint: true,
       destructiveHint: false,
@@ -177,46 +175,6 @@ describe('hosted MCP transport', () => {
       ),
     );
     expect(refused.error.code).toBe(-32602);
-
-    vi.mocked(authenticateMcp).mockResolvedValue({
-      userId: 'user',
-      grantId: 'grant',
-      workspaceIds: ['workspace'],
-      tokenHash: 'hash',
-      canWrite: true,
-    });
-    const hints = Object.fromEntries((await list()).map((tool) => [tool.name, tool.annotations]));
-    expect(hints.prepare_update_prompts).toEqual({
-      readOnlyHint: false,
-      destructiveHint: true,
-      idempotentHint: true,
-      openWorldHint: false,
-    });
-    expect(hints.create_topic).toMatchObject({ readOnlyHint: false, destructiveHint: false });
-    expect(hints.cancel_audit).toMatchObject({ readOnlyHint: false, destructiveHint: true });
-  });
-  it('refuses a change over its budget as a tool error with the retry time', async () => {
-    vi.mocked(authenticateMcp).mockResolvedValue({
-      userId: 'user',
-      grantId: 'grant',
-      workspaceIds: ['workspace'],
-      tokenHash: 'hash',
-      canWrite: true,
-    });
-    vi.mocked(admitWriteCall).mockRejectedValueOnce(
-      new ApiError(429, 'Too many changes', { headers: { 'retry-after': '17' } }),
-    );
-    const refused = await rpc(
-      await app().request(
-        'https://protocol.example.test/mcp',
-        request('tools/call', { name: 'confirm_change', arguments: { confirmation_token: 'x' } }),
-      ),
-    );
-    expect(refused.result).toMatchObject({
-      isError: true,
-      content: [{ type: 'text', text: 'Too many changes; retry in 17 seconds' }],
-    });
-    expect(admitToolCall).toHaveBeenCalledWith(db, 'grant', 'user');
   });
   it('serves legacy initialize and independently accepts modern per-request discovery and tools', async () => {
     const service = app();
@@ -287,6 +245,60 @@ describe('hosted MCP transport', () => {
     reverse.body = JSON.stringify(message);
     expect((await service.request('https://protocol.example.test/mcp', reverse)).status).toBe(400);
     expect(dispatchTool).not.toHaveBeenCalled();
+  });
+  it.each([
+    ['a non-2.0 version', { jsonrpc: '1.0', id: 1, method: 'tools/list' }, -32600],
+    ['a missing method', { jsonrpc: '2.0', id: 1 }, -32600],
+    ['a null id', { jsonrpc: '2.0', id: null, method: 'tools/list' }, -32600],
+    ['a fractional id', { jsonrpc: '2.0', id: 1.5, method: 'tools/list' }, -32600],
+    ['an unsafe integer id', { jsonrpc: '2.0', id: 2 ** 53, method: 'tools/list' }, -32600],
+    ['array params', { jsonrpc: '2.0', id: 1, method: 'tools/list', params: [] }, -32600],
+    [
+      'array tool arguments',
+      { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'x', arguments: [] } },
+      -32602,
+    ],
+    [
+      'a numeric tool name',
+      { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 7 } },
+      -32602,
+    ],
+    [
+      'a prompt project that is not a UUID',
+      {
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'prompts/get',
+        params: { name: 'business_health_review', arguments: { project_id: 'nope' } },
+      },
+      -32602,
+    ],
+  ])('refuses %s with its JSON-RPC error code', async (_case, body, code) => {
+    const base = request('tools/list');
+    const response = await app().request('https://protocol.example.test/mcp', {
+      ...base,
+      body: JSON.stringify(body),
+    });
+    expect([response.status, (await rpc(response)).error.code]).toEqual([400, code]);
+    expect(dispatchTool).not.toHaveBeenCalled();
+  });
+  it('accepts a valid prompt and refuses modern calls whose client metadata is malformed', async () => {
+    const service = app();
+    const project = '0b6f5c3e-8a43-4c2e-9d55-6a3f2f7c1e10';
+    const prompt = await service.request(
+      'https://protocol.example.test/mcp',
+      request('prompts/get', {
+        name: 'business_health_review',
+        arguments: { project_id: project },
+      }),
+    );
+    expect(JSON.stringify((await rpc(prompt)).result)).toContain(`Review project ${project}`);
+    const malformed = request('tools/list', {}, true);
+    const message = JSON.parse(malformed.body);
+    message.params._meta['io.modelcontextprotocol/clientInfo'] = { name: 'test', version: 1 };
+    malformed.body = JSON.stringify(message);
+    const response = await service.request('https://protocol.example.test/mcp', malformed);
+    expect([response.status, (await rpc(response)).error.code]).toEqual([400, -32602]);
   });
   it('revalidates bearer admission on each request', async () => {
     const service = app();

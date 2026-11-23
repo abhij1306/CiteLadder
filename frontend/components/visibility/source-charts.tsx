@@ -93,6 +93,7 @@ function SourceMark({ source }: Readonly<{ source: string }>) {
       name={host ?? source}
       websiteUrl={host ? `https://${host}` : null}
       placement="inline"
+      entity="site"
     />
   );
 }

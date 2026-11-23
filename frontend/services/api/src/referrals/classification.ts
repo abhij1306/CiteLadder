@@ -20,7 +20,6 @@ export type ReferralSignals = {
 
 const ENGINES: Readonly<Record<string, string>> = referrals.source_to_logical_engine;
 
-// The rule literals are ASCII, where lowercasing and case folding agree.
 const normalize = (value: string | null | undefined) => (value ?? '').trim().toLowerCase();
 
 function match(

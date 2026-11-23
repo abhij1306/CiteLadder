@@ -48,27 +48,14 @@ export function getBootstrapReadTimeoutMs(): number {
   return Number.isSafeInteger(parsed) ? parsed : DEFAULT_BOOTSTRAP_READ_TIMEOUT_MS;
 }
 
-/**
- * Commerce buyer-prompt generation performs one structured model call. Keep
- * its browser request alive for the backend model gateway's 180-second bound
- * plus response/persistence overhead instead of applying the ordinary
- * 30-second API limit.
- */
 export const COMMERCE_BUYER_PROMPT_REQUEST_TIMEOUT_MS = 195_000;
 
-/**
- * Staging a Shopify store import fetches its product pages first, bounded by
- * the API's 120-second storefront deadline; the browser waits for that plus
- * parsing and storage instead of the ordinary 30-second limit.
- */
 export const COMMERCE_STORE_IMPORT_REQUEST_TIMEOUT_MS = 135_000;
 
 export const PROMPT_GENERATION_REQUEST_TIMEOUT_MS = 240_000;
 
 export const ONBOARDING_COMPLETION_REQUEST_TIMEOUT_MS = 60_000;
-// Interactive research owns a 180-second server budget, plus response overhead.
 export const ONBOARDING_RESEARCH_REQUEST_TIMEOUT_MS = 195_000;
-// Interactive link analysis has a 180-second server bound plus settlement overhead.
 export const SITE_HEALTH_EXECUTION_REQUEST_TIMEOUT_MS = 195_000;
 export const INTERACTIVE_EXECUTION_REQUEST_TIMEOUT_MS = 255_000;
 
@@ -80,12 +67,6 @@ export const QUERY_NETWORK_ERROR_RETRIES = 2;
 
 export const WORKSPACE_LOADING_STALL_MS = 8_000;
 
-/**
- * How long a first-load placeholder hides its spinner so a wait short enough
- * to go unnoticed passes without one. The visual reveal is the mirrored
- * `citeladder-loading-appear` animation delay in globals.css; this constant
- * holds the accessible `status` announcement to the same beat.
- */
 export const LOADING_INDICATOR_DELAY_MS = 300;
 
 export const CLIENT_ERROR_REPORTS_PER_SESSION = 10;

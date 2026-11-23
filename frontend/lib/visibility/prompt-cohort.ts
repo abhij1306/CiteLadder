@@ -29,7 +29,5 @@ export function writeStoredCohort(projectId: string | null, cohort: PromptCohort
   if (projectId === null || typeof window === 'undefined') return;
   try {
     window.localStorage.setItem(storageKey(projectId), cohort);
-  } catch {
-    // Private mode or quota: the choice stays in the URL for this visit.
-  }
+  } catch {}
 }

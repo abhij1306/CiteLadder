@@ -84,7 +84,6 @@ const editorView = () =>
   EditorView.findFromDOM(screen.getByRole('textbox', { name: 'Page content (Markdown)' }))!;
 const highlight = (id: string) =>
   document.querySelector<HTMLElement>(`mark[data-suggestion-id="${id}"]`);
-/** A tab or filter's name with its count, "Applied (1)" (jsdom drops the space). */
 const counted = (label: string, count: number) => new RegExp(`^${label} ?\\(${count}\\)$`);
 const conflict = (code: string, message: string) =>
   HttpResponse.json({ error: { code, message } }, { status: 409 });

@@ -1,7 +1,10 @@
 import { analyticsAppPath } from '@citeladder/contracts/mcp-app';
 import type { Database } from '../db/database.ts';
 import { listMarkets } from '../projects/markets.ts';
+import { currentInstructions } from '../agent/instructions.ts';
 import { readBrandMemory } from '../projects/brand-profile.ts';
+import { readBusinessMap } from '../projects/business-map.ts';
+import { listThemes } from '../projects/themes.ts';
 import { authorizeProject, unavailable } from './data.ts';
 import {
   actionsRead,
@@ -15,6 +18,7 @@ import { visibilityOverview } from './evidence-analytics.ts';
 import { crawlability, siteSnapshot } from './evidence-site.ts';
 import { crawlLogsRead, performanceRead, referrals } from './evidence-traffic.ts';
 import { appLink } from './links.ts';
+import { projectExport } from './views-exports.ts';
 import { mcpPolicy } from './config.ts';
 import type { Evidence, EvidencePrincipal, ProjectRead } from './types.ts';
 
@@ -35,6 +39,21 @@ const sections: Record<string, (read: ProjectRead) => Promise<Evidence>> = {
 
 export const overviewSections: [string, ...string[]] = ['profile', ...Object.keys(sections)];
 
+async function brandProfile({ db, scope }: ProjectRead) {
+  const [memory, themes, instructions] = await Promise.all([
+    readBrandMemory(db, scope),
+    listThemes(db, scope),
+    currentInstructions(db, scope),
+  ]);
+  return {
+    profile: memory
+      ? { ...memory, business_map: await readBusinessMap(db, scope) }
+      : unavailable('no_brand_profile'),
+    themes: themes.map(({ id, name }) => ({ id, name })),
+    agent_instructions: instructions,
+  };
+}
+
 export async function businessContext(
   db: Database,
   principal: EvidencePrincipal,
@@ -47,7 +66,7 @@ export async function businessContext(
   const wanted = new Set(selected);
   const [markets, profile, entities, ...results] = await Promise.all([
     listMarkets(db, read.scope),
-    wanted.has('profile') ? readBrandMemory(db, read.scope) : null,
+    wanted.has('profile') ? brandProfile(read) : null,
     wanted.has('profile') ? competitorsAndDomains(read) : null,
     ...Object.entries(sections)
       .filter(([name]) => wanted.has(name))
@@ -72,10 +91,9 @@ export async function businessContext(
         is_default,
       })),
       link: appLink(origin, analyticsAppPath('overview'), project.id),
+      report_pdf: projectExport(read, '/overview/report.pdf'),
     },
-    ...(wanted.has('profile')
-      ? { profile: profile ?? unavailable('no_brand_profile'), ...entities }
-      : {}),
+    ...(wanted.has('profile') ? { ...profile, ...entities } : {}),
     ...Object.fromEntries(results),
   };
 }

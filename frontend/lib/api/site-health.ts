@@ -82,15 +82,22 @@ export type InventoryParams = {
 
 export type CrawlListParams = { project_id: string; limit?: number; cursor?: string };
 export type PagesSort = 'status' | 'url' | 'inbound' | 'main_content_inbound' | 'depth';
-export type PagesParams = {
-  cursor?: string;
-  limit?: number;
+export type PageScoreRole = 'web_fundamentals' | 'aeo_readiness';
+export type PageFilterParams = {
   status?: string;
   monitored?: boolean;
   page_kind?: string;
   query?: string;
   sort?: PagesSort;
+  rule?: string;
+  with_issues?: boolean;
+  indexable?: boolean;
+  min_depth?: number;
+  max_depth?: number;
+  score_role?: PageScoreRole;
+  max_score?: number;
 };
+export type PagesParams = PageFilterParams & { cursor?: string; limit?: number };
 export type ChangesPageRequest = Parameters<typeof queryKeys.siteHealth.changes>[1];
 export type IssuesParams = {
   cursor?: string;
@@ -101,11 +108,15 @@ export type IssuesParams = {
   dimension?: string;
   rule?: string;
   site_url_id?: string;
-  finding_class?: 'defect' | 'advisory';
   page_kind?: string;
   section?: IssueSection;
   sort?: IssueSort;
 };
+
+export type IssueExportParams = Omit<IssuesParams, 'cursor' | 'limit'>;
+export type ExportFilters = PageFilterParams | IssueExportParams | { group_id: string };
+export type ExportFormat = 'csv' | 'md';
+export type ExportView = 'pages' | 'issues' | 'issue';
 
 export type IssueDetailParams = Pick<IssuesParams, 'cursor' | 'limit' | 'page_kind'>;
 export type IssueHistoryParams = Pick<IssuesParams, 'cursor' | 'limit'>;
@@ -296,10 +307,12 @@ export const siteHealthApi = {
   eventsUrl: (crawlId: string) => `${API_BASE_URL}/site-crawls/${crawlId}/events?stream=true`,
   exportUrl: (
     crawlId: string,
-    format: 'csv' | 'md',
-    view?: 'inventory' | 'pages' | 'issues' | 'architecture',
-  ) => {
-    const base = `${API_BASE_URL}/site-crawls/${crawlId}/export.${format}`;
-    return view ? `${base}?view=${view}` : base;
-  },
+    format: ExportFormat,
+    view: ExportView,
+    filters: ExportFilters = {},
+  ) =>
+    withQuery(
+      `${API_BASE_URL}/site-crawls/${crawlId}/export.${format}`,
+      definedQuery({ view, ...filters }),
+    ),
 };

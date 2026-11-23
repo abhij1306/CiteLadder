@@ -298,11 +298,6 @@ function absoluteUrl(value: string, baseUrl: string) {
   }
 }
 
-/**
- * A property's value as the microdata model reads it, after an explicit
- * `content`, which schema.org consumers accept on any element. A URL
- * property's value is absolute, so the page binds by its own URL.
- */
 function microdataValue(node: HtmlElement, baseUrl: string) {
   const content = attribute(node, 'content').trim();
   if (content) return content;

@@ -18,8 +18,6 @@ export function useCatalogProjection(
     enabled: catalogInFlight,
     refetchInterval: ACTIVE_RUN_POLL_MS,
   });
-  // A poll only runs once the catalog is cached, so one landing in the same
-  // millisecond is still the later read.
   const newer = poll.data !== undefined && poll.dataUpdatedAt >= catalog.dataUpdatedAt;
   const terminalized = catalogInFlight && newer && poll.data?.in_flight === 0;
   const pollReadAt = poll.dataUpdatedAt;

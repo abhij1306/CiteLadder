@@ -43,7 +43,6 @@ export function verifyBot(
       crawlLogs.ip_range_contemporaneous_hours * 3600000
         ? 'contemporaneous'
         : 'later_snapshot';
-    // Ranges change over time: only a contemporaneous snapshot can fail a request.
     if (!matches)
       return basis === 'contemporaneous'
         ? result('failed_verification', 'ip_outside_ranges')

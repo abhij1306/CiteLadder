@@ -45,6 +45,7 @@ describe('Source usage chart', () => {
           dimension: 'domain',
           granularity: 'day',
           buckets,
+          bucket_responses: buckets.map(() => 2),
           series: [line('example.test', [0.5], buckets)],
         }}
       />,
@@ -63,6 +64,7 @@ describe('Source usage chart', () => {
           dimension: 'domain',
           granularity: 'day',
           buckets,
+          bucket_responses: buckets.map(() => 2),
           series: [
             line('a.test', [0.5, 0.4, null], buckets),
             line('b.test', [0.3, 0.2, null], buckets),
@@ -91,6 +93,7 @@ describe('Source usage chart', () => {
           dimension: 'domain',
           granularity: 'day',
           buckets,
+          bucket_responses: buckets.map(() => 2),
           series: ['a.test', 'b.test', 'c.test', 'd.test'].map((key) => line(key, [0.1], buckets)),
         }}
       />,

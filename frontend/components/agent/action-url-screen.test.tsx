@@ -35,7 +35,6 @@ const item = (id: string, label: string, status: Action['status']): Action => ({
   member_count: 1,
   declarable_member_count: 1,
   page_count: 3,
-  finding_class: 'defect',
   summary: null,
   handoff: { context: 'action', message: 'Fix it.' },
   evidence_cleared_at: null,

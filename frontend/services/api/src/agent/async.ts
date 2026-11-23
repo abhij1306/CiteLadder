@@ -1,8 +1,6 @@
 import type { KyselyPlugin } from 'kysely';
 import type { Database } from '../db/database.ts';
 
-/** Bound injected adapters even if they ignore cancellation. Late work cannot
- * escape the persistence fences; adapters must honor the signal to stop I/O. */
 export async function abortable<T>(work: () => Promise<T>, signal: AbortSignal): Promise<T> {
   signal.throwIfAborted();
   let abort: () => void = () => {};

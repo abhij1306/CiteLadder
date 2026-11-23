@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { afterAll, afterEach, beforeAll, expect, it, vi } from 'vite-plus/test';
 import { mswServer } from '@/test/msw-server';
-import { renderWithProviders } from '@/test/render';
+import { projectScope, renderWithProviders } from '@/test/render';
 import { makeProject } from '@/test/fixtures/project';
 import { TabsRoot } from '@/components/ui/tabs';
 import { TrafficActivity, TrafficCrawlers } from './traffic-views';
@@ -14,20 +14,10 @@ const project = makeProject({
   workspace_id: '11111111-1111-4111-8111-111111111111',
   website_url: 'https://www.example.test',
 });
-const capability = vi.hoisted(() => ({ manage: true }));
-vi.mock('@/lib/project/project-context', () => ({
-  useProjectContext: () => ({ activeProject: project, isLoading: false }),
-  useOptionalProjectContext: () => ({ activeProjectId: project.id }),
-  useWorkspaceCapability: (name: string) => name !== 'manage_credentials' || capability.manage,
-  useActiveWorkspaceId: () => project.workspace_id,
-}));
 const root = '/api/v1/projects/' + project.id;
 
 beforeAll(() => mswServer.listen({ onUnhandledFrame: 'error' }));
-afterEach(() => {
-  mswServer.resetHandlers();
-  capability.manage = true;
-});
+afterEach(() => mswServer.resetHandlers());
 afterAll(() => mswServer.close());
 
 const catalog = {
@@ -65,7 +55,7 @@ it('says the crawler catalog failed inside the activity table instead of showing
     <TabsRoot value="activity" onValueChange={() => {}}>
       <TrafficActivity {...scope} />
     </TabsRoot>,
-    { projectSelection: { activeProject: project } },
+    { projectSelection: projectScope(project) },
   );
   const table = await screen.findByRole('region', { name: 'Retained automated request activity' });
   expect(await within(table).findByRole('alert')).toHaveTextContent('Not Found');
@@ -142,9 +132,10 @@ function serveNoSources(tab: 'crawlers' | 'activity') {
 }
 
 it('does not let a role that may not manage credentials connect crawl logs', async () => {
-  capability.manage = false;
   serveNoSources('crawlers');
-  const view = renderWithProviders(<TrafficSetupState ga4Missing={false} crawlAvailable />);
+  const view = renderWithProviders(<TrafficSetupState ga4Missing={false} crawlAvailable />, {
+    projectSelection: projectScope(project, 'member'),
+  });
   expect(await screen.findByRole('button', { name: 'Connect crawl logs' })).toBeDisabled();
   view.rerender(<TrafficSetupState ga4Missing crawlAvailable />);
   expect(screen.getByRole('button', { name: 'Connect crawl logs' })).toBeDisabled();
@@ -156,7 +147,9 @@ it.each([
 ])('connects crawl logs from the setup state (GA4 missing: $ga4Missing)', async (input) => {
   serveNoSources('crawlers');
   const user = userEvent.setup();
-  renderWithProviders(<TrafficSetupState ga4Missing={input.ga4Missing} crawlAvailable />);
+  renderWithProviders(<TrafficSetupState ga4Missing={input.ga4Missing} crawlAvailable />, {
+    projectSelection: projectScope(project),
+  });
   expect(screen.getByRole('heading', { name: input.heading })).toBeVisible();
   const ga4 = screen.queryByRole('link', { name: 'Connect Google Analytics 4' });
   if (input.ga4Missing) expect(ga4?.getAttribute('href')).toMatch(/tab=referrals/);
@@ -185,7 +178,7 @@ it.each(['crawlers', 'activity'] as const)(
     );
     const user = userEvent.setup();
     const view = renderWithProviders(table({ range: '30d' }), {
-      projectSelection: { activeProject: project },
+      projectSelection: projectScope(project),
     });
     expect(await screen.findByText(/No matching requests/)).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Clear filters' })).not.toBeInTheDocument();

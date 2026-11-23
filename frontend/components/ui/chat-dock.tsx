@@ -1,4 +1,11 @@
-import { useEffect, useState, type FormEvent, type ReactNode, type RefObject } from 'react';
+import {
+  useEffect,
+  useState,
+  type DragEvent,
+  type FormEvent,
+  type ReactNode,
+  type RefObject,
+} from 'react';
 
 import { IconButton } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
@@ -73,6 +80,7 @@ export function ComposerFrame({
   field,
   tools,
   submit,
+  onFiles,
 }: Readonly<{
   onSubmit: () => void;
   chips?: ReactNode;
@@ -80,13 +88,34 @@ export function ComposerFrame({
   field: ReactNode;
   tools?: ReactNode;
   submit: ReactNode;
+  onFiles?: (files: File[]) => void;
 }>) {
+  const [dragging, setDragging] = useState(false);
+  const carriesFiles = (event: DragEvent) =>
+    Boolean(onFiles) && event.dataTransfer.types.includes('Files');
   return (
-    <form
+    // oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
+    <form // NOSONAR
+      data-dragging={dragging || undefined}
       className={cn(
-        'focus-frame max-w-thread mx-auto grid w-full gap-1 rounded-card p-2 transition-[border-color,box-shadow] duration-[var(--motion-fast)]',
+        'focus-frame max-w-thread mx-auto grid w-full gap-1 rounded-card p-2 transition-[border-color,box-shadow] duration-[var(--motion-fast)] data-[dragging]:border-focus',
         FIELD_EDGE,
       )}
+      onDragOver={(event) => {
+        if (!carriesFiles(event)) return;
+        event.preventDefault();
+        setDragging(true);
+      }}
+      onDragLeave={(event) => {
+        const next = event.relatedTarget;
+        if (!(next instanceof Node && event.currentTarget.contains(next))) setDragging(false);
+      }}
+      onDrop={(event) => {
+        if (!carriesFiles(event)) return;
+        event.preventDefault();
+        setDragging(false);
+        onFiles?.([...event.dataTransfer.files]);
+      }}
       onSubmit={(event: FormEvent) => {
         event.preventDefault();
         onSubmit();
@@ -98,7 +127,7 @@ export function ComposerFrame({
         </ul>
       ) : null}
       {field}
-      <div className="flex min-h-[var(--control-md)] flex-wrap items-center gap-2">
+      <div className="flex min-h-[var(--control-md)] flex-wrap items-start gap-2">
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">{tools}</div>
         <div className="ms-auto shrink-0">{submit}</div>
       </div>
@@ -185,11 +214,12 @@ function ChipTag({
 
 export function PastedTextChip({
   text,
+  name,
   onRemove,
-}: Readonly<{ text: string; onRemove?: () => void }>) {
+}: Readonly<{ text: string; name?: string; onRemove?: () => void }>) {
   const [open, setOpen] = useState(false);
   const lines = text.split('\n').length;
-  const label = `Pasted text, ${lines} ${lines === 1 ? 'line' : 'lines'}`;
+  const label = `${name ?? 'Pasted text'}, ${lines} ${lines === 1 ? 'line' : 'lines'}`;
   return (
     <li className="max-w-full">
       <ChipTag label={label} onRemove={onRemove}>
@@ -202,7 +232,7 @@ export function PastedTextChip({
           <span className="truncate">{label}</span>
         </Pressable>
       </ChipTag>
-      <Dialog open={open} onOpenChange={setOpen} title="Pasted text" width="wide">
+      <Dialog open={open} onOpenChange={setOpen} title={name ?? 'Pasted text'} width="wide">
         <pre className={textRole('body', 'text-ink font-mono break-words whitespace-pre-wrap')}>
           {text}
         </pre>
@@ -239,7 +269,7 @@ export function SuggestionList({
   return (
     <ul
       id={id}
-      // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role, jsx-a11y/no-noninteractive-element-to-interactive-role -- The popup uses ARIA options while focus remains in the editable combobox.
+      // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role, jsx-a11y/no-noninteractive-element-to-interactive-role
       role="listbox"
       aria-label={label}
       hidden={!open}
@@ -254,13 +284,12 @@ export function SuggestionList({
           <button
             type="button"
             id={`${id}-${index}`}
-            // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- ARIA listbox options keep focus on the editable field.
+            // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role
             role="option"
             tabIndex={-1}
             aria-selected={index === selected}
             data-active={index === selected}
             className={menuItemClasses({ className: 'grid h-auto w-full gap-0.5 py-2 text-left' })}
-            // Focus stays in the field; the choice commits on release (WCAG 2.5.2).
             onMouseDown={(event) => event.preventDefault()}
             onClick={() => onPick(index)}
           >

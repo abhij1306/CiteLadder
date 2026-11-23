@@ -20,8 +20,10 @@ import {
   QUICK_RANGE_OPTIONS,
 } from '@/lib/performance/performance';
 import { StateBlock } from '@/components/ui/state-block';
+import { isOneOf } from '@/lib/utils';
 
 type QuickRange = (typeof QUICK_RANGE_OPTIONS)[number]['value'];
+const QUICK_RANGES = QUICK_RANGE_OPTIONS.map((option) => option.value);
 
 function getMoreLabel(selection: RangeSelection, comparing: boolean): string {
   if (comparing) return 'Compare';
@@ -35,9 +37,9 @@ function isRangeBehindMore(selection: RangeSelection, comparing: boolean): boole
   return DIALOG_RANGE_OPTIONS.some((option) => option.value === selection.range);
 }
 
-function quickRangeValue(selection: RangeSelection, comparing: boolean): QuickRange {
-  if (comparing) return '' as QuickRange;
-  return selection.range as QuickRange;
+function quickRangeValue(selection: RangeSelection, comparing: boolean): QuickRange | '' {
+  if (comparing || !isOneOf(QUICK_RANGES, selection.range)) return '';
+  return selection.range;
 }
 
 export function PerformanceWindowCaption({
@@ -74,9 +76,11 @@ export function PerformanceToolbar({
 
   return (
     <div className="contents">
-      <SegmentedControl
+      <SegmentedControl<QuickRange | ''>
         value={quickRangeValue(selection, comparing)}
-        onChange={(range) => onSelectRange({ ...INITIAL_SELECTION, range })}
+        onChange={(range) => {
+          if (range) onSelectRange({ ...INITIAL_SELECTION, range });
+        }}
         options={QUICK_RANGE_OPTIONS}
         ariaLabel="Date range"
         trailing={
@@ -196,7 +200,6 @@ export function performanceNotices({
   projectionFailed,
   selectedMissing,
   comparisonMissing,
-  qualityFlagged,
   readinessFailed,
 }: Readonly<{
   sync: ReturnType<typeof usePerformanceSync>;
@@ -204,7 +207,6 @@ export function performanceNotices({
   projectionFailed: boolean;
   selectedMissing: boolean;
   comparisonMissing: boolean;
-  qualityFlagged: boolean;
   readinessFailed: boolean;
 }>): PerformanceMessage[] {
   const messages: PerformanceMessage[] = [];
@@ -213,7 +215,7 @@ export function performanceNotices({
     messages.push({
       key: 'readiness',
       tone: 'warning',
-      text: "Couldn't load data readiness. Check your connection and try again.",
+      text: "Couldn't load data readiness. The request failed or timed out.",
     });
   if (sync.outcome === 'failed')
     messages.push({
@@ -245,11 +247,5 @@ export function performanceNotices({
       ? null
       : missingCoverageNotice(selectedMissing, comparisonMissing);
   if (coverageNotice) messages.push({ key: 'coverage', tone: 'info', text: coverageNotice });
-  if (qualityFlagged)
-    messages.push({
-      key: 'quality',
-      tone: 'info',
-      text: 'Some imported days are missing or flagged, or come from an earlier complete import. Days without a usable import show no value, not zero.',
-    });
   return messages;
 }

@@ -83,7 +83,6 @@ export function useFittedColumns({
     const observer = new ResizeObserver(update);
     observer.observe(frame);
     return () => observer.disconnect();
-    // A page's column list is often a new array each render; the equal-list guard ends the cycle.
   }, [columns, hasLow, selection]);
 
   const hiddenSet = new Set(hidden);

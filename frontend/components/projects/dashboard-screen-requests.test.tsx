@@ -4,15 +4,9 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vite-p
 import { pendingOverviewHandlers, recordedProjectRead } from '@/test/fixtures/overview';
 import { makeProject } from '@/test/fixtures/project';
 import { mswServer } from '@/test/msw-server';
-import { renderWithProviders } from '@/test/render';
+import { projectScope, renderWithProviders } from '@/test/render';
 
 const project = makeProject();
-vi.mock('@/lib/project/project-context', () => ({
-  useProjectContext: () => ({ activeProject: project, isLoading: false }),
-  useOptionalProjectContext: () => ({ activeProjectId: project.id }),
-  useWorkspaceCapability: () => true,
-  useActiveWorkspaceId: () => project.workspace_id,
-}));
 
 import { DashboardScreen } from './dashboard-screen';
 
@@ -28,7 +22,7 @@ describe('Overview opening requests', () => {
       recordedProjectRead(project.id, 'visibility/prompts', 'prompts', asked, []),
     );
 
-    renderWithProviders(<DashboardScreen />, { projectSelection: { activeProject: project } });
+    renderWithProviders(<DashboardScreen />, { projectSelection: projectScope(project) });
 
     await vi.waitFor(() =>
       expect([...asked].sort()).toEqual(['command-center', 'layout', 'prompts']),

@@ -41,11 +41,6 @@ export function leadingBrands(
   };
 }
 
-/**
- * `identity_key`: whitespace-collapsed and lowercased. Lowercasing rather than
- * full case folding differs only for letters such as `ß` and final sigma, and
- * both sides of every lookup here are keyed by this one function.
- */
 export function identityKey(name: unknown): string {
   return scalarText(name).trim().replace(/\s+/gu, ' ').toLowerCase();
 }

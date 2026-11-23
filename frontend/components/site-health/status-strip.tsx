@@ -6,7 +6,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { Absence } from '@/components/ui/absence';
 import type { SiteCrawl } from '@citeladder/contracts';
 import { useDisplayTimeZone } from '@/lib/display-timezone';
-import { endSentence, formatCount, formatStripTimestamp } from '@/lib/format';
+import { endSentence, formatCount, formatDisplayTimestamp } from '@/lib/format';
 import { ICONS } from '@/lib/icons';
 import { CrawlStatusBadge } from '@/components/site-health/crawl-status-badge';
 import { crawlFailureCopy, dashboardRunNotice } from '@/lib/site-health/run-notice';
@@ -131,7 +131,7 @@ function DashboardNotice({ crawl }: Readonly<{ crawl: SiteCrawl }>) {
   return (
     <ProgressRow
       crawl={crawl}
-      narration={notice?.message ?? `Latest crawl · ${formatStripTimestamp(ranAt, timeZone)}`}
+      narration={notice?.message ?? `Latest crawl · ${formatDisplayTimestamp(ranAt, timeZone)}`}
       counts={[]}
     />
   );

@@ -92,7 +92,6 @@ export const actionItemSchema = responseObject({
   member_count: z.number().int(),
   declarable_member_count: z.number().int(),
   page_count: z.number().int().nullable().default(null),
-  finding_class: z.enum(['defect', 'advisory']).nullable().default(null),
   summary: z.string().nullable().default(null),
   handoff: actionHandoffSchema,
   evidence_cleared_at: z.string().nullable(),
@@ -301,9 +300,6 @@ export const actionDeclarationRequestSchema = z.strictObject({
   declared_implemented_at: z.iso
     .datetime({ offset: true })
     .refine((value) => !value.startsWith('0000-'), 'A valid calendar year is required'),
-  // What shipped it: a release, pull request or commit. One line without
-  // control characters (PostgreSQL text cannot store NUL), at most 500
-  // characters once trimmed; blank records none.
   deployment_reference: z
     .string()
     .trim()

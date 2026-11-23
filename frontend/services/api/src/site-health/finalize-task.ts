@@ -150,7 +150,7 @@ export async function runFinalize(ctx: SiteTaskContext, claimed: SiteTask) {
       await appendFinalRevisions(trx, held.crawl, pending, sources);
       await syncIssueCurrency(trx, held.crawl, pending);
     };
-    const committed = await commit(ctx, claimed, { mode, body: write }); // NOSONAR -- One short transaction per batch, in order.
+    const committed = await commit(ctx, claimed, { mode, body: write }); // NOSONAR
     if (!committed) return;
     aliases = [];
     siteSources = sources;

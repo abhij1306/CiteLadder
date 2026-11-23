@@ -304,7 +304,6 @@ async function persist(
     let sampleCapped = false;
     const { page, discovery } = outcome;
     if (page && discovery) {
-      // First rung of the lock DAG, before any URL write or frontier admission.
       const runtime = await lockRuntime(trx, crawl.workspace_id);
       artifactId = await writeArtifact(trx, crawl, task, page, outcome.facts, {
         policyVersion: ctx.fetcher.settings.policyVersion,
@@ -325,7 +324,6 @@ async function persist(
       await refreshFetchedUrl(trx, crawl, task, page, discovery);
       await dispose(trx, crawl, task, page, outcome.facts);
     } else if (finalFailure(task, outcome.retryable)) {
-      // Membership before the crawl and task, in the Site Health lock order.
       await lockRuntime(trx, crawl.workspace_id);
       await releaseNonPage(trx, crawl, task.url_hash, outcome, { record: true });
     }

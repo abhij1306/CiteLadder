@@ -97,7 +97,7 @@ const tokensAfter = (key: string, prefix: string) =>
 
 function observedContent(facts: Facts): [boolean, string] {
   if (!facts.has_html) return [false, 'no_html'];
-  return [!serverRenderSignals(facts)[0], 'content_not_server_rendered'];
+  return [!serverRenderSignals(facts)[0], 'client_rendering_required'];
 }
 function requirement(kind: '' | 'html' | 'content', facts: Facts): [boolean, string] {
   if (kind === 'content') return observedContent(facts);

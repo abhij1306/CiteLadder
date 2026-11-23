@@ -17,11 +17,6 @@ import { enqueueTerminalAnalyticsRefresh } from './terminal-handoff.ts';
 const FINALIZE = policy.site_health.crawl.finalize;
 const hashOf = (key: string) => createHash('sha256').update(key).digest('hex');
 
-/**
- * A drained crawl's finalize slot, and the separate one that publishes a
- * cancelled crawl: Stop cancels the first with the crawl's other open tasks,
- * so a crawl stopped mid-finalization is still published once.
- */
 export const finalizeHash = (crawl: Pick<Crawl, 'id'>, mode: 'drained' | 'cancelled') =>
   hashOf(mode === 'drained' ? `finalize:${crawl.id}` : `finalize:${crawl.id}:cancelled`);
 
@@ -138,7 +133,6 @@ export async function publishCancelledCrawl(db: Database, crawl: Crawl) {
 export async function failFinalization(db: Database, crawl: Crawl, task: { error_code: string }) {
   crawl.completed_at = new Date();
   crawl.status = 'failed';
-  // The task keeps its error detail; the crawl names the step and the task's code only.
   const failure = {
     code: FINALIZE.error_code,
     message: FINALIZE.error_message,

@@ -103,8 +103,6 @@ export function useActionFilters() {
     setGroupBy,
     filters,
     filtered: impact !== ALL || source !== ALL,
-    // Both filters back to every value in one write: a router navigation lands
-    // later, so a setter per filter would build on the stale address.
     clear: () => setUrlParams({ impact: null, source: null }, 'replace'),
   };
 }

@@ -77,20 +77,6 @@ function structuredDataPresent(facts: Facts): CheckResult {
   ];
 }
 
-function openGraphPresent(facts: Facts): CheckResult {
-  const og = record(facts.open_graph);
-  const title = Boolean(text(og['og:title']).trim());
-  const description = Boolean(text(og['og:description']).trim());
-  return [
-    passFail(title && description),
-    {
-      has_og_title: title,
-      has_og_description: description,
-      property_count: Object.keys(og).length,
-    },
-  ];
-}
-
 function visibleAttribution(facts: Facts): CheckResult {
   const authorship = record(facts.authorship);
   const visible = text(authorship.visible_byline).trim();
@@ -372,7 +358,6 @@ function productAnswerFacts(facts: Facts, contract: CompositeContract): CheckRes
 function offerValidity(value: string, auditTime: unknown) {
   const validUntil = /^\d{4}-\d{2}-\d{2}/u.exec(value)?.[0];
   const parsed = validUntil ? new Date(`${validUntil}T00:00:00Z`) : null;
-  // A real calendar date only: the parser would roll 2024-02-30 into March.
   if (!parsed || Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== validUntil)
     return 'invalid_expiry';
   const observed = typeof auditTime === 'string' ? Date.parse(auditTime) : Number.NaN;
@@ -499,7 +484,6 @@ export function contentChecks(
       presentField(facts, 'meta_description', 'description_length'),
     'technical.canonical_present': (facts) => presentField(facts, 'canonical_url'),
     'aeo.structured_data_present': structuredDataPresent,
-    'aeo.open_graph_present': openGraphPresent,
     'aeo.visible_attribution': visibleAttribution,
     'aeo.content_date_present': contentDatePresent,
     'aeo.content_recency': contentRecency,

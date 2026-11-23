@@ -4,9 +4,12 @@ const API_ERROR_CODES = [
   'agent_call_failed',
   'agent_context_conflict',
   'agent_idempotency_conflict',
+  'agent_model_locked',
   'agent_model_unavailable',
   'agent_not_configured',
   'agent_output_conflict',
+  'agent_proposal_decided',
+  'agent_proposal_running',
   'agent_run_active',
   'agent_suggestion_conflict',
   'agent_turn_limit',
@@ -136,9 +139,13 @@ export type ApiErrorCode = (typeof API_ERROR_CODES)[number];
 
 const KNOWN_CODES: ReadonlySet<string> = new Set(API_ERROR_CODES);
 
+function isApiErrorCode(value: string): value is ApiErrorCode {
+  return KNOWN_CODES.has(value);
+}
+
 export function asApiErrorCode(value: string): ApiErrorCode {
-  if (!KNOWN_CODES.has(value)) {
+  if (!isApiErrorCode(value)) {
     throw new Error(`'${value}' is not a declared API error code`);
   }
-  return value as ApiErrorCode;
+  return value;
 }

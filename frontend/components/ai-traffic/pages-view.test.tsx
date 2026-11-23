@@ -1,9 +1,9 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { afterAll, afterEach, beforeAll, expect, it, vi } from 'vite-plus/test';
+import { afterAll, afterEach, beforeAll, expect, it } from 'vite-plus/test';
 import { mswServer } from '@/test/msw-server';
-import { renderWithProviders } from '@/test/render';
+import { projectScope, renderWithProviders } from '@/test/render';
 import { makeProject } from '@/test/fixtures/project';
 import { focusByKeyboard } from '@/test/keyboard-focus';
 import { TrafficPages } from './pages-view';
@@ -13,12 +13,6 @@ const WORKSPACE = '11111111-1111-4111-8111-111111111111';
 const PROJECT = '88888888-8888-4888-8888-888888888888';
 const PAGES = `/api/v1/projects/${PROJECT}/ai-traffic/pages`;
 const project = makeProject({ id: PROJECT, workspace_id: WORKSPACE });
-vi.mock('@/lib/project/project-context', () => ({
-  useProjectContext: () => ({ activeProject: project, isLoading: false }),
-  useOptionalProjectContext: () => ({ activeProjectId: project.id }),
-  useWorkspaceCapability: () => true,
-  useActiveWorkspaceId: () => project.workspace_id,
-}));
 
 beforeAll(() => mswServer.listen({ onUnhandledFrame: 'error' }));
 afterEach(() => mswServer.resetHandlers());
@@ -74,7 +68,7 @@ function pagerRange(text: string) {
 function renderPages() {
   return renderWithProviders(
     <TrafficPages workspaceId={WORKSPACE} projectId={PROJECT} filters={{ range: '30d' }} />,
-    { projectSelection: { activeProject: project } },
+    { projectSelection: projectScope(project) },
   );
 }
 
@@ -240,7 +234,7 @@ it('lists each count with its qualifiers when the drawer opens from outside the 
   );
   const user = userEvent.setup();
   renderWithProviders(<TrafficUrlButton urlHash={row.url_hash} />, {
-    projectSelection: { activeProject: project },
+    projectSelection: projectScope(project),
   });
   await user.click(screen.getByRole('button', { name: 'View AI traffic' }));
   const panel = await screen.findByRole('dialog', { name: '/guide' });
@@ -276,7 +270,7 @@ it('keeps the drawer’s crawler when a path is opened from it', async () => {
       projectId={PROJECT}
       filters={{ range: '30d', bot_id: 'openai_oai_searchbot' }}
     />,
-    { projectSelection: { activeProject: project } },
+    { projectSelection: projectScope(project) },
   );
   await user.click(
     await screen.findByRole('button', { name: 'View AI traffic for https://example.test/guide' }),

@@ -164,6 +164,45 @@ describe('API keys', () => {
       'api_key.rejected_expired',
     ]);
   });
+
+  it('deletes a key for good, revoking it first, and refuses another workspace or a member', async () => {
+    const tenant = await withApiAccess(await fixtures.tenant());
+    const other = await withApiAccess(await fixtures.tenant());
+    const memberId = await fixtures.user();
+    await fixtures.member(tenant.workspaceId, memberId, 'member');
+    const { key, secret } = await createKey(tenant);
+    const remove = async (userId: string, workspaceId: string, keyId: string) =>
+      (
+        await app.request(`/api/v1/api-keys/${keyId}`, {
+          method: 'DELETE',
+          headers: {
+            cookie: `${config.session.cookieName}=${await sessionToken({ sub: userId, ver: 0 })}`,
+            'x-workspace-id': workspaceId,
+          },
+        })
+      ).status;
+    const listed = async () =>
+      (
+        await db
+          .selectFrom('api_keys')
+          .select('id')
+          .where('workspace_id', '=', tenant.workspaceId)
+          .execute()
+      ).map((row) => row.id);
+
+    expect(await remove(other.userId, other.workspaceId, key.id)).toBe(404);
+    expect(await remove(memberId, tenant.workspaceId, key.id)).toBe(403);
+    expect(await listed()).toEqual([key.id]);
+
+    expect(await remove(tenant.userId, tenant.workspaceId, key.id)).toBe(204);
+    expect(await listed()).toEqual([]);
+    expect((await api(secret, '/projects')).status).toBe(401);
+    expect(await securityEvents(key.id)).toEqual([
+      'api_key.create',
+      'api_key.revoke',
+      'api_key.delete',
+    ]);
+  });
 });
 
 describe('public API requests', () => {

@@ -233,7 +233,6 @@ export type EvaluationGroup = {
   evaluations: (RuleEvaluation & { id: string })[];
 };
 
-/** Rows per statement: both row shapes stay far under PostgreSQL's 65535 bind parameters. */
 const INSERT_CHUNK = 1000;
 const chunksOf = <T>(rows: T[]) =>
   Array.from({ length: Math.ceil(rows.length / INSERT_CHUNK) }, (_, index) =>
@@ -272,7 +271,7 @@ export async function insertEvaluations(db: Database, crawl: Crawl, groups: Eval
     created_at: now,
   }));
   for (const chunk of chunksOf(rows))
-    await db.insertInto('site_rule_evaluations').values(chunk).execute(); // NOSONAR -- In order, in the caller's transaction.
+    await db.insertInto('site_rule_evaluations').values(chunk).execute(); // NOSONAR
   const issues = pairs.flatMap(({ group: { analysisId, siteUrlId, artifactId }, evaluation }) =>
     createsIssue(evaluation)
       ? [
@@ -289,7 +288,6 @@ export async function insertEvaluations(db: Database, crawl: Crawl, groups: Eval
             dimension: evaluation.dimension,
             category: evaluation.category,
             severity: evaluation.severity,
-            finding_class: evaluation.finding_class,
             evidence: JSON.stringify(evaluation.evidence),
             description: evaluation.description,
             remediation: evaluation.remediation,
@@ -300,7 +298,7 @@ export async function insertEvaluations(db: Database, crawl: Crawl, groups: Eval
         ]
       : [],
   );
-  for (const chunk of chunksOf(issues)) await db.insertInto('site_issues').values(chunk).execute(); // NOSONAR -- In order, in the caller's transaction.
+  for (const chunk of chunksOf(issues)) await db.insertInto('site_issues').values(chunk).execute(); // NOSONAR
 }
 
 export async function pageAnalysisContext(

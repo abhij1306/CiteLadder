@@ -4,8 +4,8 @@ import type { Insertable, Selectable } from 'kysely';
 import type { SettingSource } from '../config/settings.ts';
 import type { Database } from '../db/database.ts';
 import type { Audits, CommerceRecommendationObservations } from '../generated/db-schema.ts';
-import { parseShoppingResults, type ShoppingResult } from '../search-surfaces/parsing.ts';
-import { record, strings } from '../db/json.ts';
+import { parseShoppingResults, type ShoppingResult } from '../search-surfaces/scraper-parsing.ts';
+import { providerMetadataWithoutRawBody, record, strings } from '../db/json.ts';
 import type { AuditTask } from '../queue/audit-queue.ts';
 import type { DeriveExecution, ExecutionResult } from '../audits/result-persistence.ts';
 import { deriveExecution } from '../audits/derivation.ts';
@@ -71,11 +71,6 @@ export function configuredShelfResolver(
   }
 }
 
-/**
- * Each resolver call spends one unit of the workspace model quota first. An
- * exhausted quota throws inside the resolver, which leaves the answer's spans
- * unresolved instead of failing the execution.
- */
 function metered(
   db: Database,
   workspaceId: string,
@@ -227,8 +222,6 @@ async function recordObservation(
   },
 ) {
   const { matched, candidate, artifactId, answerText, citations } = evidence;
-  // Price and seller come from the answer's own text; a resolver-supplied
-  // merchant link counts only when the answer carries it.
   const price = observedPrice(span.text, pass.locale);
   const merchantUrl = resolved?.merchant_url.trim() ?? '';
   const merchant = observedMerchant(
@@ -341,7 +334,6 @@ async function cardHolder(
   );
   return { matched: NO_MATCH, candidate };
 }
-/** numeric(14,2) holds prices below 10^12; anything larger is not a price. */
 const cardPrice = (price: number | null) =>
   price !== null && price < 1e12 ? price.toFixed(2) : null;
 async function recordCard(db: Database, pass: Pass, card: ShoppingResult, answer: StoredAnswer) {
@@ -367,11 +359,6 @@ async function recordCard(db: Database, pass: Pass, card: ShoppingResult, answer
   });
 }
 
-/**
- * Record one pass over a stored answer: the pass row, then its observations.
- * The pass is unique on answer, revision and versions, so a repeated
- * derivation records nothing and returns false.
- */
 export async function recordPass(
   trx: Database,
   ctx: PassContext,
@@ -428,36 +415,21 @@ export async function recordPass(
       ? `${resolved.title} ${resolved.brand} ${resolved.product_url}`
       : span.text;
     const matched = matchRecommendation(identity, ctx.catalog);
-    const candidate =
-      await /* NOSONAR -- One transaction: statements run in order. */ observedCandidate(
-        trx,
-        ctx,
-        item,
-        matched,
-        { answerText: answer.answerText, sourceUrls },
-      );
+    const candidate = await /* NOSONAR */ observedCandidate(trx, ctx, item, matched, {
+      answerText: answer.answerText,
+      sourceUrls,
+    });
     if (!ctx.target && !matched.product && !matched.competitor) continue;
-    await /* NOSONAR -- One transaction: statements run in order. */ recordObservation(
-      trx,
-      pass,
-      item,
-      {
-        matched,
-        candidate,
-        artifactId: answer.artifactId,
-        answerText: answer.answerText,
-        citations,
-      },
-    );
+    await /* NOSONAR */ recordObservation(trx, pass, item, {
+      matched,
+      candidate,
+      artifactId: answer.artifactId,
+      answerText: answer.answerText,
+      citations,
+    });
   }
   const cards = parseShoppingResults(record(answer.providerMetadata).raw_response);
-  for (const card of cards)
-    await /* NOSONAR -- One transaction: statements run in order. */ recordCard(
-      trx,
-      pass,
-      card,
-      answer,
-    );
+  for (const card of cards) await /* NOSONAR */ recordCard(trx, pass, card, answer);
   return true;
 }
 
@@ -553,7 +525,6 @@ async function liveContext(
   };
 }
 
-/** Read frozen context, then finish optional model I/O before the caller opens its persistence transaction. */
 export async function prepareShelfExecution(
   db: Database,
   task: AuditTask,
@@ -601,7 +572,12 @@ export async function prepareShelfExecution(
     }
     const artifact = await trx
       .selectFrom('raw_response_artifacts')
-      .select(['answer_text', 'citations', 'provider_metadata', 'created_at'])
+      .select([
+        'answer_text',
+        'citations',
+        providerMetadataWithoutRawBody('provider_metadata'),
+        'created_at',
+      ])
       .where('id', '=', artifactId)
       .where('audit_id', '=', audit.id)
       .where('task_id', '=', task.id)

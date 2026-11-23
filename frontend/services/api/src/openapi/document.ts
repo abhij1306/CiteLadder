@@ -49,7 +49,6 @@ function parameters(location: OpenApiParameter['in'], object?: z.ZodObject): Ope
   return Object.entries(properties).map(([name, { description, ...schema }]) => ({
     name,
     in: location,
-    // OpenAPI requires every path parameter.
     required: location === 'path' || required.has(name),
     ...(typeof description === 'string' ? { description } : {}),
     schema,

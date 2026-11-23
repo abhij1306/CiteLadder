@@ -314,6 +314,8 @@ async function analysisRevision(p: Project, actionId: string, promptIds: string[
         prompt_reference: { topic_id: randomUUID(), prompt_ids: promptIds },
       })}::jsonb`,
       turn_count: 0,
+      model: 'claude-haiku-5-5',
+      reasoning_effort: 'medium',
       last_activity_at: now,
       created_at: now,
       updated_at: now,

@@ -61,6 +61,7 @@ describe('AI Overview evidence', () => {
   it('shows linked-but-not-cited as its own combination', () => {
     render(
       <SurfaceEvidence
+        engine="google_ai_overview"
         evidence={evidence({
           entities: [entity({ linked: true })],
           links: [
@@ -79,13 +80,23 @@ describe('AI Overview evidence', () => {
   });
 
   it('shows cited-but-not-linked as its own combination', () => {
-    render(<SurfaceEvidence evidence={evidence({ entities: [entity({ cited: true })] })} />);
+    render(
+      <SurfaceEvidence
+        engine="google_ai_overview"
+        evidence={evidence({ entities: [entity({ cited: true })] })}
+      />,
+    );
 
     expect(signalsFor('Acme Corp')).toEqual(signals('No', 'No', 'Yes'));
   });
 
   it('names an unranked brand rather than giving it a position', () => {
-    render(<SurfaceEvidence evidence={evidence({ entities: [entity({ cited: true })] })} />);
+    render(
+      <SurfaceEvidence
+        engine="google_ai_overview"
+        evidence={evidence({ entities: [entity({ cited: true })] })}
+      />,
+    );
 
     expect(screen.getByText('Not named')).toBeVisible();
   });
@@ -93,6 +104,7 @@ describe('AI Overview evidence', () => {
   it('separates a measured absence from a retrieval we never completed', () => {
     const { unmount } = render(
       <SurfaceEvidence
+        engine="google_ai_overview"
         evidence={evidence({
           outcome: 'no_ai_overview',
           aio_present: false,
@@ -105,6 +117,7 @@ describe('AI Overview evidence', () => {
 
     render(
       <SurfaceEvidence
+        engine="google_ai_overview"
         evidence={evidence({
           outcome: 'execution_failure',
           aio_present: null,
@@ -119,6 +132,7 @@ describe('AI Overview evidence', () => {
   it('keeps the presence table out of a run that observed nothing', () => {
     render(
       <SurfaceEvidence
+        engine="google_ai_overview"
         evidence={evidence({
           outcome: 'no_ai_overview',
           aio_present: false,

@@ -1,4 +1,4 @@
-import { Link, useLocation, useSearchParams } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 
 import { SidebarIdentButton, SidebarTextTooltip } from '@/components/ui/sidebar';
@@ -14,6 +14,7 @@ import {
 import { ThemeSwitch } from '@/components/ui/theme-switch';
 import { useSession } from '@/lib/auth/session-guard';
 import { scopedNavigationDestination } from '@/lib/navigation/project-destination';
+import { useUrlSearch } from '@/lib/navigation/url-params';
 import { useProjectContext } from '@/lib/project/project-context';
 import { Avatar } from '@/components/ui/avatar';
 
@@ -69,7 +70,7 @@ export function UserMenuTrigger({ presenter }: Readonly<{ presenter: UserMenuPre
   const { activePresenter, email, setOpen } = useUserMenu();
   const { activeWorkspace } = useProjectContext();
   const { pathname } = useLocation();
-  const [searchParams] = useSearchParams();
+  const searchParams = useUrlSearch();
   const currentHref = ACCOUNT_MENU_ITEMS.filter((item) =>
     isNavItemActive(pathname, searchParams, item),
   ).sort((a, b) => b.href.length - a.href.length)[0]?.href;

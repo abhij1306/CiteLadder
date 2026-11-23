@@ -74,13 +74,12 @@ test('tests, codegen, config and registries are ignored; authored source is not'
     'frontend/services/api/src/config/opportunity.ts',
     'frontend/lib/config/agent.ts',
     'frontend/apps/app/src/globals.css',
-    'frontend/services/api/src/mcp/tools.ts',
-    'frontend/services/api/src/mcp/write-tools.ts',
     'frontend/services/api/migrations/0002_x.sql',
     'README.md',
   ];
   const checked = [
     'frontend/services/api/src/mcp/retrieval.ts',
+    'frontend/services/api/src/mcp/tools.ts',
     'frontend/components/agent/chat-screen.tsx',
     'frontend/apps/app/src/app.css',
     'frontend/scripts/check-token-size.mjs',

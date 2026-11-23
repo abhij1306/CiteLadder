@@ -36,9 +36,6 @@ function paramsFor(href: string): URLSearchParams {
 }
 
 function attach(): void {
-  // Nobody was watching, so the address may have moved without a notice (a
-  // `history.replaceState`, a test resetting its deep link). Start from where
-  // it is now, or a commit back to the stale address would notify no one.
   notified = browserLocation();
   window.addEventListener('popstate', refresh);
   window.addEventListener('hashchange', refresh);

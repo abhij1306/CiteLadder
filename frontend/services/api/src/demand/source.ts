@@ -183,7 +183,7 @@ export async function sourceMaterial(
           ? [JSON.stringify([r.page_analysis_id, r.page_artifact_id])]
           : [],
       ),
-    ).map((v) => JSON.parse(v) as string[]),
+    ).map((v): string[] => JSON.parse(v)),
   };
 }
 

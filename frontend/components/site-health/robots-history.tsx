@@ -151,7 +151,6 @@ function RobotsDiff({
   after,
 }: Readonly<{ before: Snapshot | undefined; after: Snapshot | undefined }>) {
   if (!before || !after) return null;
-  // The React Compiler memoizes this on the selected snapshots.
   const lines = diffLines(
     before.body.replace(/\r\n?/gu, '\n'),
     after.body.replace(/\r\n?/gu, '\n'),

@@ -8,26 +8,21 @@ import { issueGroupId, issueImpact } from '../src/site-health/reads/rules.ts';
 const CRAWL = '6f1c1d0e-2b7a-4c3e-9a51-0d2f6b8e4a17';
 
 describe('issue group identity', () => {
-  it('is the RFC 4122 v5 UUID of the crawl, the rule and its finding class', () => {
-    expect(issueGroupId(CRAWL, 'technical.title_present', 'defect')).toBe(
-      '96a82db9-2e4d-57c7-8e14-1bf99ef25f1e',
+  it('is the RFC 4122 v5 UUID of the crawl and the rule', () => {
+    expect(issueGroupId(CRAWL, 'technical.title_present')).toBe(
+      '2b58e280-145a-51cf-9929-b069c0726c43',
     );
-    expect(issueGroupId(CRAWL, 'aeo.answer_first', 'advisory')).toBe(
-      'a3268e1e-4bfb-5286-b16e-65d69c666aae',
-    );
+    expect(issueGroupId(CRAWL, 'aeo.answer_first')).toBe('2d53ebb6-d658-5a37-8412-571c23208d24');
   });
 });
 
 describe('issue impact', () => {
-  it('bands defects by severity and advisories by their readiness weight', () => {
-    expect(issueImpact('technical.indexable', 'defect', 'critical')).toEqual({
-      band: 4,
-      label: 'Critical',
-    });
-    expect(issueImpact('unknown.rule', 'advisory', 'medium')).toEqual({
-      band: 0,
-      label: 'Advisory',
-    });
+  it('bands every issue by its severity', () => {
+    expect(['critical', 'low', 'unranked'].map(issueImpact)).toEqual([
+      { band: 4, label: 'Critical' },
+      { band: 1, label: 'Low' },
+      { band: 0, label: 'Unranked' },
+    ]);
   });
 });
 

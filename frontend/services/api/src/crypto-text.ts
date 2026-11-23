@@ -9,7 +9,6 @@ export function base62(length: number): string {
   return Array.from({ length }, () => BASE62.charAt(randomInt(BASE62.length))).join('');
 }
 
-// Sorted keys bind nested values regardless of insertion or jsonb key order.
 function canonical(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonical);
   if (value && typeof value === 'object')

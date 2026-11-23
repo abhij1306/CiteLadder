@@ -1,6 +1,7 @@
 import type { SiteCrawl, SiteHealthDashboard } from '@citeladder/contracts';
-import { Absence } from '@/components/ui/absence';
+import { checksRunLabel } from '@/lib/site-health/status';
 import { AuditScores } from './overview-metrics';
+import { scoreUnavailableState } from './url-score-summary';
 
 export function ScoreSection({
   crawl,
@@ -15,20 +16,22 @@ export function ScoreSection({
         {
           title: 'Web fundamentals',
           value: summary?.web_fundamentals_score ?? null,
-          unavailable: unavailable(summary?.web_fundamentals_state),
+          caption: checksRunLabel(summary?.web_fundamentals_checks),
+          unavailable: scoreUnavailableState(summary?.web_fundamentals_state),
           href: '/issues?section=technical',
         },
         {
           title: 'AEO readiness',
           value: summary?.aeo_readiness_score ?? null,
-          unavailable: unavailable(summary?.aeo_measurement_state),
+          caption: checksRunLabel(summary?.aeo_readiness_checks),
+          unavailable: scoreUnavailableState(summary?.aeo_measurement_state),
           href: '/issues?section=aeo',
         },
         {
           title: 'AEO checklist completion',
           value: coverage == null ? null : coverage * 100,
           valueUnit: 'percent',
-          unavailable: unavailable(summary?.aeo_measurement_state),
+          unavailable: scoreUnavailableState(summary?.aeo_measurement_state),
           href: '/site?tab=aeo-readiness',
         },
         {
@@ -44,10 +47,4 @@ export function ScoreSection({
       ]}
     />
   );
-}
-function unavailable(state?: string) {
-  if (state === 'limited_evidence')
-    return <Absence state="not_measured" label="Limited evidence" />;
-  if (state === 'excluded') return <Absence state="not_applicable" label="Excluded" />;
-  return <Absence state="not_measured" />;
 }

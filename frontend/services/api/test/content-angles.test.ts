@@ -59,7 +59,7 @@ async function answer(
     .where('prompt_index', '=', promptRef.index)
     .execute();
   for (const citation of cited.filter((item) => item.kind !== 'editorial'))
-    await db // NOSONAR -- Fixture rows update in a fixed order.
+    await db // NOSONAR
       .updateTable('citations')
       .set({
         classification: { competitor: 'competitor', social: 'third_party', owned: 'owned' }[

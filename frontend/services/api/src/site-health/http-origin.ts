@@ -6,7 +6,6 @@ import { logFetchFailure } from './sitemap-walk.ts';
 import type { SiteTaskContext } from './site-task.ts';
 
 const limits = policy.site_health.page_analysis.facts.limits;
-// Only a refused port proves nothing is served; a reset or unreachable host may be transient.
 const NOT_SERVED = new Set(['ECONNREFUSED']);
 
 export function httpOriginUrl(origin: string) {

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { z } from 'zod';
 import type { Database } from '../db/database.ts';
 import { WorkspaceScope } from '../db/workspace-scope.ts';
@@ -6,6 +7,7 @@ import { normalizeDomain } from '../analysis/domains.ts';
 import { normalizeQuery as foldQuery } from '../traffic/normalization.ts';
 import { compareText } from '../text-order.ts';
 import { overrideBody } from '../routes/demand-contracts.ts';
+import { RequestValidationError } from '../http/params.ts';
 
 const queryClassification = overrideBody.shape.classification;
 export type QueryClassification = z.infer<typeof queryClassification>;
@@ -121,4 +123,37 @@ export async function classifyProjectQueries(
     );
   }
   return result;
+}
+
+export async function overrideClassification(
+  db: Database,
+  scope: Readonly<{ workspaceId: string; projectId: string; userId: string }>,
+  input: z.output<typeof overrideBody>,
+): Promise<Classification> {
+  const normalized = normalizeQuery(input.query);
+  if (!normalized)
+    throw new RequestValidationError([
+      { loc: ['query'], type: 'value_error', message: 'Query must contain searchable characters' },
+    ]);
+  const id = randomUUID();
+  await db
+    .insertInto('branded_query_overrides')
+    .values({
+      id,
+      workspace_id: scope.workspaceId,
+      project_id: scope.projectId,
+      actor_user_id: scope.userId,
+      normalized_query: normalized,
+      classification: input.classification,
+      classifier_version: policy.demand.BRANDED_QUERY_CLASSIFIER_VERSION,
+      created_at: new Date(),
+    })
+    .execute();
+  return {
+    normalized_query: normalized,
+    classification: input.classification,
+    matched_terms: [],
+    classifier_version: policy.demand.BRANDED_QUERY_CLASSIFIER_VERSION,
+    override_id: id,
+  };
 }

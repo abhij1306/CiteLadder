@@ -37,17 +37,12 @@ function lineDirectives(line: string, directives: Set<string>) {
   }
 }
 
-/**
- * Header directives, one header line per text line. Each new line starts
- * generic again, so an agent-scoped line never swallows a generic one.
- */
 function headerTokens(value: string) {
   const directives = new Set<string>();
   for (const line of value.split(/\r?\n/u)) lineDirectives(line, directives);
   return directives;
 }
 
-/** The tightest snippet length; `-1` (no limit) stays distinct from unset. */
 function snippetLimit(values: number[]) {
   const bounded = values.filter((value) => value >= 0);
   if (bounded.length) return Math.min(...bounded);

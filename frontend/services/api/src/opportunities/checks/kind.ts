@@ -32,7 +32,6 @@ export type FreezeContext = {
   recommendationIds: string[];
 };
 
-/** Method signatures keep the registry's per-kind modules assignable to the union. */
 export interface CheckModule<K extends CheckKind> {
   readonly kind: K;
   readonly leg: MeasurementLeg;

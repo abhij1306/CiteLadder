@@ -47,13 +47,11 @@ export async function keywordTrafficOutcome(
     { scope: 'query', key, metric: 'impressions' },
   );
   if (rowId) r.result.metric_ids.add(rowId);
-  // Search Console reports no row for a search with no impressions: unknown, not a miss.
   return rate !== null && rate > 0
     ? outcome(r.reading, 'met')
     : outcome(r.reading, 'unavailable', 'no_search_console_row');
 }
 
-/** DataForSEO's "2026-09-01 12:00:00 +00:00" as an instant, or null. */
 function providerInstant(value: unknown): number | null {
   const text = scalarText(value).trim();
   if (!text) return null;

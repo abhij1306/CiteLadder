@@ -97,7 +97,6 @@ function expire(slot: Slot, id: number) {
 
 function start(): Slot {
   const worker = new Worker(new URL('./interpret-worker.ts', import.meta.url), {
-    // Do not inherit a test runner's preload/loader into the native TS worker.
     execArgv: [],
   });
   const slot: Slot = { worker, pending: new Map() };

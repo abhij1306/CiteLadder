@@ -131,7 +131,11 @@ export const searchIntelligenceRoutes = [
     },
     response: z.array(searchRunSchema),
     async handle({ c, db }, { path, query }) {
-      return listRuns(db, scopeOf(c, path.project_id), query.offset, query.limit);
+      return listRuns(db, scopeOf(c, path.project_id), {
+        offset: query.offset,
+        limit: query.limit,
+        awaitingConfirmation: false,
+      });
     },
   }),
   defineGetRoute({

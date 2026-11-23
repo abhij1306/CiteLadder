@@ -16,7 +16,6 @@ import { enqueueCoalesced } from '../queue/enqueue.ts';
 import { gapMinutes, pullCoverage } from './pull-coverage.ts';
 import { isLiveKind } from './sources.ts';
 
-/** Full recomputation under the project row lock prevents stale publication. */
 export async function refreshCrawlLogs(
   db: Database,
   scope: CrawlScope,
@@ -34,7 +33,6 @@ export async function refreshCrawlLogs(
       ? sql<boolean>`reporting_date=any(${reportingDates}::date[])`
       : sql<boolean>`true`;
     const span = [...(reportingDates ?? [])].sort((a, b) => a.localeCompare(b));
-    // The occurred_at range lets the index bound the scan; the local-day test stays exact.
     let selectedRequest = sql<boolean>`true`;
     if (reportingDates)
       selectedRequest = sql<boolean>`(occurred_at at time zone ${tz})::date=any(${reportingDates}::date[])`;
@@ -171,10 +169,6 @@ type Batch = Pick<
   | 'catalog_version'
 >;
 type Upload = Selectable<CrawlLogUploads>;
-/**
- * The longest silence a complete day tolerates. A Firehose stream emits on its
- * buffer interval, so its bound is that interval plus a configured grace.
- */
 function deliveryGapBound(source: Pick<Source, 'buffer_interval_seconds'>) {
   const buffered =
     source.buffer_interval_seconds === null

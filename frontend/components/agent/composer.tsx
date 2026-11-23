@@ -1,11 +1,15 @@
+import { useRef } from 'react';
+
 import { IconButton } from '@/components/ui/button';
 import { ComposerFrame, PastedTextChip, RemovableChip } from '@/components/ui/chat-dock';
-import { ArrowUp, RotateCcw, Square } from '@/lib/icons';
+import { AGENT_ATTACHMENT_ACCEPT } from '@/lib/agent/attachment-file';
+import { ArrowUp, Paperclip, RotateCcw, Square } from '@/lib/icons';
 import type { ContextChip } from '@/lib/agent/handoff';
 import { AGENT_COMPOSER_MAX_ROWS } from '@/lib/config/agent';
 
 import { CommandField } from './command-menu';
 import { ComposerMenu } from './composer-menu';
+import { ModelPicker, type ModelPickerState } from './model-picker';
 import type { SkillChoice } from './skill-picker';
 import type { ComposerState } from './use-composer-commands';
 
@@ -24,6 +28,7 @@ export function Composer({
   attachment,
   scope,
   skill,
+  model,
   commands,
   onStop,
   stopping = false,
@@ -43,6 +48,7 @@ export function Composer({
   attachment?: Readonly<{ label: string; onRemove: () => void }>;
   scope?: readonly string[];
   skill: SkillChoice;
+  model?: ModelPickerState;
   commands: ComposerState;
   onStop?: () => void;
   stopping?: boolean;
@@ -55,6 +61,7 @@ export function Composer({
       onSubmit={() => {
         if (canSend) onSubmit();
       }}
+      onFiles={menuDisabled ? undefined : commands.pastes.attach}
       chipsLabel="Context for this request"
       chips={composerChips({
         attachment,
@@ -84,12 +91,16 @@ export function Composer({
         </>
       }
       tools={
-        <ComposerMenu
-          menu={commands.menu}
-          scope={commands.scope}
-          skill={skill}
-          disabled={menuDisabled}
-        />
+        <>
+          <AttachFileButton onFiles={commands.pastes.attach} disabled={menuDisabled} />
+          <ComposerMenu
+            menu={commands.menu}
+            scope={commands.scope}
+            skill={skill}
+            disabled={menuDisabled}
+          />
+          {model ? <ModelPicker state={model} disabled={menuDisabled} /> : null}
+        </>
       }
       submit={
         <SubmitControl
@@ -102,6 +113,35 @@ export function Composer({
         />
       }
     />
+  );
+}
+
+function AttachFileButton({
+  onFiles,
+  disabled,
+}: Readonly<{ onFiles: (files: File[]) => void; disabled: boolean }>) {
+  const input = useRef<HTMLInputElement>(null);
+  return (
+    <>
+      <input
+        ref={input}
+        type="file"
+        multiple
+        hidden
+        accept={AGENT_ATTACHMENT_ACCEPT}
+        onChange={(event) => {
+          onFiles([...(event.currentTarget.files ?? [])]);
+          event.currentTarget.value = '';
+        }}
+      />
+      <IconButton
+        type="button"
+        icon={Paperclip}
+        label="Attach files"
+        disabled={disabled}
+        onClick={() => input.current?.click()}
+      />
+    </>
   );
 }
 
@@ -219,7 +259,8 @@ function composerChips({
       {pastes.items.map((paste) => (
         <PastedTextChip
           key={paste.key}
-          text={paste.text}
+          text={paste.attachment.text}
+          name={paste.attachment.kind === 'file' ? paste.attachment.name : undefined}
           onRemove={() => pastes.remove(paste.key)}
         />
       ))}

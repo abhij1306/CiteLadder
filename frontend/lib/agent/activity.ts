@@ -18,6 +18,7 @@ const VERB = {
   replace: { running: 'Replacing', done: 'Replaced', failed: 'Couldn’t replace' },
   edit: { running: 'Editing', done: 'Edited', failed: 'Couldn’t edit' },
   suggest: { running: 'Suggesting', done: 'Suggested', failed: 'Couldn’t suggest' },
+  show: { running: 'Placing', done: 'Placed', failed: 'Couldn’t place' },
 } as const satisfies Record<string, Verb>;
 
 const TOOL_ACTIVITY: Record<string, { verb: Verb; noun: string }> = {
@@ -26,6 +27,8 @@ const TOOL_ACTIVITY: Record<string, { verb: Verb; noun: string }> = {
   edit_document: { verb: VERB.edit, noun: 'a document' },
   suggest_edits: { verb: VERB.suggest, noun: 'changes' },
   propose_declaration: { verb: VERB.suggest, noun: 'marking an Action implemented' },
+  show_view: { verb: VERB.show, noun: 'a chart or table' },
+  propose_change: { verb: VERB.suggest, noun: 'a change' },
   web_search: { verb: VERB.search, noun: 'the web' },
   search: { verb: VERB.search, noun: 'CiteLadder' },
   fetch: { verb: VERB.read, noun: 'a record' },
@@ -74,21 +77,17 @@ export type ActivityRow = {
   state: ActivityState;
 };
 
+const CALL_STATES = new Map<string, ActivityState | null>([
+  ['started', 'running'],
+  ['completed', 'done'],
+  ['unavailable', 'unavailable'],
+  ['failed', 'failed'],
+  ['refused', null],
+]);
+
 function callState(status: string): ActivityState | null {
-  switch (status) {
-    case 'started':
-      return 'running';
-    case 'completed':
-      return 'done';
-    case 'unavailable':
-      return 'unavailable';
-    case 'failed':
-      return 'failed';
-    case 'refused':
-      return null;
-    default:
-      return 'unknown';
-  }
+  const state = CALL_STATES.get(status);
+  return state === undefined ? 'unknown' : state;
 }
 
 function callRow(
@@ -146,6 +145,8 @@ export function activityRows(steps: readonly AgentStep[]): ActivityRow[] {
           status: 'completed',
           target: step.label,
         });
+      case 'change':
+        return callRow(key, { tool: 'propose_change', status: 'completed', target: step.label });
       case 'document':
         return [
           {

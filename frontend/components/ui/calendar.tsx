@@ -12,9 +12,6 @@ function anchor(iso: string): Date | null {
   const [, year, month, day] = match;
   const date = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day), 12));
   if (Number.isNaN(date.getTime())) return null;
-  // Date.UTC OVERFLOWS rather than rejecting: "2026-02-31" becomes March 3,
-  // and "2026-13-01" becomes January 2027. Both match the ISO shape above, so
-  // the round trip is the only check that catches them.
   if (
     date.getUTCFullYear() !== Number(year) ||
     date.getUTCMonth() !== Number(month) - 1 ||

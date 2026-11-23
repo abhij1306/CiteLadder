@@ -182,7 +182,6 @@ export const executionClaimSchema = accuracyClaimSchema
     edited: true,
   })
   .extend({
-    // Code-point offsets into the answer text.
     start: z.number().int(),
     end: z.number().int(),
   });

@@ -62,7 +62,7 @@ export async function repriceExecutions(db: Database, request: RepricingRequest)
     appended = 0,
     wouldAppend = 0;
   for (const artifact of candidates) {
-    const state = await repriceArtifact(db, artifact, request);
+    const state = await repriceArtifact(db, artifact, request); // NOSONAR
     if (state === 'exists') {
       alreadyProjected++;
       continue;

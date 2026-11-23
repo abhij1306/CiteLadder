@@ -143,10 +143,10 @@ export class SiteHealthWorker {
     };
     await claim();
     while (inFlight.size) {
-      await Promise.race(inFlight); // NOSONAR -- Wait for the next free slot.
+      await Promise.race(inFlight); // NOSONAR
       if (failures.length) continue;
-      if (!inFlight.size) await this.#reconciled(); // NOSONAR -- Successors first.
-      if (await refill()) await claim(); // NOSONAR -- One refill per settlement.
+      if (!inFlight.size) await this.#reconciled(); // NOSONAR
+      if (await refill()) await claim(); // NOSONAR
     }
     if (failures.length) throw failures[0];
     return claimed;
@@ -216,7 +216,7 @@ export class SiteHealthWorker {
         : Date.now() + Math.max(50, this.settings.poll * 1000);
     for (const crawl of result.failedCrawls) {
       const reconcile = () => reconcileCrawl(this.db, crawl.workspaceId, crawl.crawlId);
-      await this.#guard('recovered crawl reconcile failed', reconcile); // NOSONAR -- One crawl lock at a time, each in its own transaction.
+      await this.#guard('recovered crawl reconcile failed', reconcile); // NOSONAR
     }
     return result.reclaimed;
   }
@@ -270,7 +270,7 @@ export class SiteHealthWorker {
           refillWhile: admit,
         });
         total += count;
-        if (!count && !(await this.#upkeepPass())) break; // NOSONAR -- Recovery batches drain in turn.
+        if (!count && !(await this.#upkeepPass())) break; // NOSONAR
       }
       return total;
     });
@@ -316,6 +316,6 @@ export class SiteHealthWorker {
     return next;
   }
   async #reconciled() {
-    while (this.#reconciles.size) await Promise.all(this.#reconciles.values()); // NOSONAR -- Chains may grow while awaited.
+    while (this.#reconciles.size) await Promise.all(this.#reconciles.values()); // NOSONAR
   }
 }

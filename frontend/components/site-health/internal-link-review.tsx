@@ -6,6 +6,8 @@ import { ActionButton } from '@/components/ui/actions';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 
+import { settingRowsClasses } from '@/components/ui/setting-row';
+import { wellClasses } from '@/components/ui/slip';
 import { ClampText } from '@/components/ui/clamp-text';
 import { CopyButton } from '@/components/ui/copy-button';
 import { Drawer } from '@/components/ui/drawer';
@@ -15,27 +17,47 @@ import { TextLink } from '@/components/ui/text-link';
 import { EditorialSectionHeader } from '@/components/ui/workspace';
 import { MarkActionImplemented } from '@/components/agent/action-declaration';
 import { FileSearch } from '@/lib/icons';
-import { formatCount, readableUrl } from '@/lib/format';
+import { pluralCount, readableUrl } from '@/lib/format';
 import { useWorkspaceCapability } from '@/lib/project/project-context';
 
 const escapeHtml = (value: string) =>
   value.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;');
 
-function PageSummary({
-  heading,
+function LinkEnd({
+  label,
   page,
-}: Readonly<{ heading: string; page: InternalLink['source'] }>) {
+  note,
+}: Readonly<{ label: string; page: InternalLink['source']; note?: string }>) {
+  const summary = page.description || page.excerpt;
   return (
-    <Stack as="section" className="justify-items-start">
-      <EditorialSectionHeader title={heading} />
-      <TextLink variant="external" text="body" className="block max-w-full min-w-0" href={page.url}>
-        <ClampText tooltip={page.url}>{page.title || readableUrl(page.url)}</ClampText>
-      </TextLink>
-      {page.description || page.excerpt ? (
-        <p className="type-body text-ink-2">{page.description || page.excerpt}</p>
-      ) : null}
-    </Stack>
+    <div className="grid min-w-0 grid-cols-[3.5rem_minmax(0,1fr)] gap-x-3">
+      <span className="type-caption pt-0.5">{label}</span>
+      <div className="grid min-w-0 gap-1">
+        <TextLink
+          variant="external"
+          text="body"
+          className="flex w-fit max-w-full min-w-0 items-center"
+          href={page.url}
+        >
+          <ClampText tooltip={page.url} className="min-w-0">
+            {page.title || readableUrl(page.url)}
+          </ClampText>
+        </TextLink>
+        {summary ? (
+          <ClampText lines={2} className="type-caption">
+            {summary}
+          </ClampText>
+        ) : null}
+        {note ? <span className="type-caption">{note}</span> : null}
+      </div>
+    </div>
   );
+}
+
+function inboundNote(count: number | null) {
+  return count === null
+    ? 'Contextual inbound links not counted'
+    : pluralCount(count, 'contextual inbound link');
 }
 
 export function InternalLinkReview({
@@ -63,57 +85,57 @@ export function InternalLinkReview({
     >
       {link ? (
         <Stack gap="section">
-          <PageSummary heading="Source page" page={link.source} />
+          <div className={settingRowsClasses()}>
+            <LinkEnd label="From" page={link.source} />
+            <LinkEnd
+              label="To"
+              page={link.target}
+              note={inboundNote(link.target.contextual_inbound)}
+            />
+          </div>
           <Stack as="section">
-            <EditorialSectionHeader title="Source passage" />
-            {link.placement ? (
-              <p className="type-body text-ink">
-                {link.placement.text.slice(0, link.placement.anchor_start)}
-                <mark>{link.anchor}</mark>
-                {link.placement.text.slice(link.placement.anchor_start + link.anchor.length)}
-              </p>
-            ) : (
-              <p className="type-caption">No captured placement.</p>
-            )}
-          </Stack>
-          <PageSummary heading="Add a link to" page={link.target} />
-          <Stack as="section">
-            {link.placement ? null : (
-              <>
-                <EditorialSectionHeader title="Suggested anchor text" />
-                <p className="type-body text-ink">{link.anchor}</p>
-              </>
-            )}
-            <p className="type-caption">
-              {link.target.contextual_inbound === null
-                ? 'Contextual inbound links not counted'
-                : `${formatCount(link.target.contextual_inbound)} contextual inbound links`}
+            <EditorialSectionHeader title={link.placement ? 'Where it goes' : 'Anchor text'} />
+            <p className={wellClasses('type-body text-ink')}>
+              {link.placement ? (
+                <>
+                  {link.placement.text.slice(0, link.placement.anchor_start)}
+                  <mark className="bg-accent-soft text-accent-text rounded-mark px-0.5">
+                    {link.anchor}
+                  </mark>
+                  {link.placement.text.slice(link.placement.anchor_start + link.anchor.length)}
+                </>
+              ) : (
+                link.anchor
+              )}
             </p>
           </Stack>
-          <Inline className="flex-wrap">
-            <CopyButton
-              variant="primary"
-              value={`<a href="${escapeHtml(link.target.url)}">${escapeHtml(link.anchor)}</a>`}
-            >
-              Copy HTML
-            </CopyButton>
-            <CopyButton variant="secondary" value={link.anchor}>
-              Copy anchor
-            </CopyButton>
-            <CopyButton variant="secondary" value={link.target.url}>
-              Copy URL
-            </CopyButton>
-            <Button asChild variant="secondary">
-              <ProjectLink href={`/site/crawls/${crawlId}/pages/${link.source.site_url_id}`}>
-                <Icon icon={FileSearch} />
-                View source page evidence
-              </ProjectLink>
-            </Button>
-            {link.action_id ? (
-              <ActionButton action="openAction" href={`/actions/${link.action_id}`} />
-            ) : null}
-          </Inline>
-          <p className="type-caption">Copying does not mark it implemented.</p>
+          <Stack gap="item">
+            <Inline className="flex-wrap">
+              <CopyButton
+                variant="primary"
+                value={`<a href="${escapeHtml(link.target.url)}">${escapeHtml(link.anchor)}</a>`}
+              >
+                Copy HTML
+              </CopyButton>
+              <CopyButton variant="secondary" value={link.anchor}>
+                Copy anchor
+              </CopyButton>
+              <CopyButton variant="secondary" value={link.target.url}>
+                Copy URL
+              </CopyButton>
+            </Inline>
+            <Inline className="flex-wrap">
+              <Button asChild variant="quiet">
+                <ProjectLink href={`/site/crawls/${crawlId}/pages/${link.source.site_url_id}`}>
+                  <Icon icon={FileSearch} />
+                  Source page evidence
+                </ProjectLink>
+              </Button>
+              {link.action_id ? (
+                <ActionButton action="openAction" href={`/actions/${link.action_id}`} />
+              ) : null}
+            </Inline>
+          </Stack>
           <LinkDeclaration
             key={`${link.source.analysis_id}:${links.map((item) => item.id).join(',')}`}
             link={link}

@@ -138,7 +138,6 @@ describe('in-request work slots on one API instance', () => {
     });
   });
 
-  // Last: draining stops this process's slots for good.
   it('stops open turns on shutdown so they settle as interrupted, and admits nothing after', async () => {
     let started!: () => void;
     const calling = new Promise<void>((resolve) => {

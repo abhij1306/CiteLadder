@@ -8,7 +8,6 @@ import { timeOrderedId } from '../db/ids.ts';
 import type { Candidate } from './frontier.ts';
 import type { Crawl } from './site-task.ts';
 
-/** Rows per multi-row insert, so a large sitemap stays under PostgreSQL's 65,535 bind parameters. */
 const ROWS_PER_INSERT = 1000;
 
 export type AdmissionState = {
@@ -78,7 +77,7 @@ export async function upsertSiteUrls(trx: Database, crawl: Crawl, items: Candida
   const ids = new Map<string, string>();
   for (let offset = 0; offset < items.length; offset += ROWS_PER_INSERT) {
     const chunk = items.slice(offset, offset + ROWS_PER_INSERT);
-    const rows = await upsertSiteUrlChunk(trx, crawl, chunk); // NOSONAR: chunks bound each insert's bind parameters, in order in one transaction.
+    const rows = await upsertSiteUrlChunk(trx, crawl, chunk); // NOSONAR
     for (const row of rows) ids.set(row.url_hash, row.id);
   }
   const foreign = items.find((item) => !ids.has(item.hash));
@@ -305,7 +304,7 @@ export async function insertObservations(trx: Database, crawl: Crawl, observed: 
   const now = new Date();
   let inserted = 0;
   for (let offset = 0; offset < observed.length; offset += ROWS_PER_INSERT) {
-    const rows = await trx // NOSONAR: chunks bound each insert's bind parameters, in order in one transaction.
+    const rows = await trx // NOSONAR
       .insertInto('site_url_observations')
       .values(
         observed
@@ -325,7 +324,7 @@ export type SitemapEntry = { siteUrlId: string; listedUrl: string; lastmod: stri
 export async function insertSitemapEntries(trx: Database, crawl: Crawl, entries: SitemapEntry[]) {
   const now = new Date();
   for (let offset = 0; offset < entries.length; offset += ROWS_PER_INSERT) {
-    await trx // NOSONAR: chunks bound each insert's bind parameters, in order in one transaction.
+    await trx // NOSONAR
       .insertInto('site_sitemap_entries')
       .values(
         entries.slice(offset, offset + ROWS_PER_INSERT).map((entry) => ({

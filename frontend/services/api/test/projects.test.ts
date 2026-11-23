@@ -257,7 +257,7 @@ describe('project owner', () => {
     expect(created.brand.matching).toMatchObject({
       mode: 'context_required',
       common_word: true,
-      context_terms: ['Home goods'],
+      context_terms: ['Home goods', 'Globex'],
     });
     expect(created.competitors[0]!.matching).toMatchObject({ mode: 'always', common_word: false });
     const changed = await updateProject(

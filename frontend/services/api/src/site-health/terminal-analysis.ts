@@ -141,7 +141,6 @@ export async function appendFinalRevisions(
       readiness_dimensions: JSON.stringify(scores.readiness_dimensions),
     };
   });
-  // A batch is a few hundred pages, far under PostgreSQL's 65535 bind-parameter limit.
   await db.insertInto('site_page_analyses').values(revisions).execute();
   return revisions.length;
 }

@@ -26,10 +26,10 @@ export function SidebarResizeHandle({ sidebarId }: Readonly<{ sidebarId: string 
     onBoundsChange: setBounds,
   });
   return (
-    <div // NOSONAR -- a focusable WAI-ARIA window splitter: pointer and arrow-key handlers resize it
-      // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- Native hr cannot expose a value or take keyboard focus for resizing.
+    <div // NOSONAR
+      // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role
       role="separator"
-      tabIndex={0} // NOSONAR -- a focusable separator is interactive per the WAI-ARIA window splitter pattern
+      tabIndex={0} // NOSONAR
       aria-orientation="vertical"
       aria-label="Resize sidebar"
       aria-controls={sidebarId}
@@ -46,12 +46,8 @@ export function SidebarResizeHandle({ sidebarId }: Readonly<{ sidebarId: string 
       onClick={resize.onClick}
       onDoubleClick={resize.onDoubleClick}
       onKeyDown={resize.onKeyDown}
-      className="focus-ring group rail:flex absolute inset-y-0 end-0 hidden w-6 translate-x-1/2 cursor-col-resize touch-none justify-center"
+      className="focus-ring rail:block absolute inset-y-0 end-0 hidden w-6 translate-x-1/2 cursor-col-resize touch-none"
     >
-      <span
-        aria-hidden
-        className="group-data-[dragging]:bg-ink w-px bg-transparent transition-colors motion-reduce:transition-none"
-      />
       <span id={helpId} className="sr-only">
         Click to step through preset widths, or use the left and right arrow keys to resize. Hold
         Shift for larger steps. A double-click restores the default width.

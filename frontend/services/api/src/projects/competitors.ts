@@ -143,7 +143,7 @@ export function updateCompetitor(
   competitorId: string,
   input: z.output<typeof competitorUpdate>,
 ): Promise<Competitor> {
-  return db.transaction().execute(async (trx) => {
+  return inTransaction(db, async (trx) => {
     await lockProject(trx, scope);
     const rows = await competitorsOf(trx, scope);
     const current = rows.find((row) => row.id === competitorId);
@@ -214,7 +214,7 @@ export function saveCompetitorList(
       updated_at: now,
     });
     for (const [item, row] of claimed)
-      await trx.updateTable('competitors').set(fields(item)).where('id', '=', row.id).execute(); // NOSONAR -- One transaction connection: statements run in order.
+      await trx.updateTable('competitors').set(fields(item)).where('id', '=', row.id).execute(); // NOSONAR
     const added = items
       .filter((item) => !claimed.has(item))
       .map((item) => ({

@@ -14,7 +14,6 @@ export type ParsedDatetime = {
 const MICROSECONDS_PER_SECOND = 1_000_000n;
 const SECONDS_PER_DAY = 86_400;
 
-// PostgreSQL calendar timestamps have no year zero.
 const dateSchema = z.iso.date().refine((value) => !value.startsWith('0000-'));
 const datetimeSchema = z.iso
   .datetime({ offset: true, local: true })
@@ -58,7 +57,6 @@ export function parseDatetime(text: string): ParsedDatetime | null {
   const [, zulu, sign, tzHours, tzMinutes] = parts.zone;
   const [year, month, day] = [Number(y), Number(mo), Number(d)];
   const [hour, minute, second] = [Number(h ?? 0), Number(mi ?? 0), Number(s ?? 0)];
-  // PostgreSQL comparisons retain the first six fractional digits.
   const microsecond = fraction ? Number(fraction.slice(0, 6).padEnd(6, '0')) : 0;
   let offsetSeconds: number | null = null;
   if (zulu) offsetSeconds = 0;
@@ -86,7 +84,6 @@ export function isoformat(value: ParsedDatetime): string {
 }
 
 export function epochMicros(value: ParsedDatetime): bigint {
-  // `setUTCFullYear`, because `Date.UTC` reads years 0-99 as 1900-1999.
   const wall = new Date(0);
   wall.setUTCFullYear(value.year, value.month - 1, value.day);
   wall.setUTCHours(value.hour, value.minute, value.second, 0);

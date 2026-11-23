@@ -40,7 +40,7 @@ async function syncCrawlCurrency(db: Database, crawl: Crawl) {
   const size = batchSize();
   let after: string | null = null;
   for (;;) {
-    const rows: { analysis_id: string }[] = await db // NOSONAR -- Keyset batches, in order.
+    const rows: { analysis_id: string }[] = await db // NOSONAR
       .selectFrom('site_issues')
       .select('analysis_id')
       .distinct()
@@ -54,7 +54,7 @@ async function syncCrawlCurrency(db: Database, crawl: Crawl) {
       db,
       crawl,
       rows.map((row) => row.analysis_id),
-    ); // NOSONAR -- Keyset batches, in order.
+    ); // NOSONAR
     const last = rows.at(-1);
     if (!last || rows.length < size) return;
     after = last.analysis_id;
@@ -67,8 +67,8 @@ export async function refreshIssueCurrency(
   { resync = true }: { resync?: boolean } = {},
 ): Promise<void> {
   if (resync) await syncCrawlCurrency(db, crawl);
-  await persistIssueCatalog(db, crawl);
   await landIssueStates(db, crawl);
+  await persistIssueCatalog(db, crawl);
   const site = await foldingSiteCrawl(db, crawl);
   if (site) {
     await persistIssueCatalog(db, site);

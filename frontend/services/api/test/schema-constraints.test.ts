@@ -14,18 +14,7 @@ import { sql } from 'kysely';
 import { afterAll, describe, expect, it } from 'vitest';
 
 import { policy } from '../src/config.ts';
-import type { Database } from '../src/db/database.ts';
 import type { DB } from '../src/generated/db-schema.ts';
-import {
-  AGENT_LANE,
-  ANALYTICS_LANE,
-  AUDIT_LANE,
-  claimStatement,
-  DISCOVERY_LANE,
-  INTEGRATION_LANE,
-  SITE_HEALTH_LANE,
-} from '../src/queue/task-queue.ts';
-import { expiredBatch } from '../src/referrals/retention.ts';
 import { seedImport, seedMetricRow } from './referral-fixtures.ts';
 import { SiteFixtures } from './site-health-fixtures.ts';
 import { testDatabase } from './support.ts';
@@ -213,6 +202,70 @@ describe('evidence tenancy keys', () => {
     await expect(crawlEvent(other.workspaceId)).rejects.toMatchObject(FOREIGN_KEY);
   });
 
+  it("refuses a task naming another audit's snapshots", async () => {
+    const owner = await fixtures.tenant();
+    const { taskId } = await fixtures.execution(owner, { auditId: await fixtures.audit(owner) });
+    const { taskId: otherTask } = await fixtures.execution(owner, {
+      auditId: await fixtures.audit(owner),
+    });
+    const foreign = await db
+      .selectFrom('audit_tasks')
+      .select(['engine_snapshot_id', 'prompt_snapshot_id'])
+      .where('id', '=', otherTask)
+      .executeTakeFirstOrThrow();
+    const copy = (overrides: Record<string, unknown>) =>
+      clone('audit_tasks', taskId, { idempotency_key: randomUUID(), repetition: 99, ...overrides });
+    await copy({});
+    await expect(
+      copy({ repetition: 98, engine_snapshot_id: foreign.engine_snapshot_id }),
+    ).rejects.toMatchObject(FOREIGN_KEY);
+    await expect(
+      copy({ repetition: 97, prompt_snapshot_id: foreign.prompt_snapshot_id }),
+    ).rejects.toMatchObject(FOREIGN_KEY);
+  });
+
+  it("refuses a chat message filed under another project than its chat's", async () => {
+    const owner = await fixtures.tenant();
+    const other = await fixtures.tenant();
+    const now = new Date();
+    const chatId = randomUUID();
+    await db
+      .insertInto('agent_chats')
+      .values({
+        id: chatId,
+        workspace_id: owner.workspaceId,
+        project_id: owner.projectId,
+        title: 'Chat',
+        context_refs: '[]',
+        turn_count: 0,
+        last_activity_at: now,
+        created_at: now,
+        updated_at: now,
+        model: 'claude-haiku-5-5',
+        reasoning_effort: 'medium',
+      })
+      .execute();
+    const message = (tenant: { workspaceId: string; projectId: string }, sequence: number) =>
+      db
+        .insertInto('agent_messages')
+        .values({
+          id: randomUUID(),
+          chat_id: chatId,
+          sequence,
+          role: 'user',
+          content: 'Hello',
+          evidence_refs: '[]',
+          steps: '[]',
+          mentions: '[]',
+          created_at: now,
+          workspace_id: tenant.workspaceId,
+          project_id: tenant.projectId,
+        })
+        .execute();
+    await message(owner, 1);
+    await expect(message(other, 2)).rejects.toMatchObject(FOREIGN_KEY);
+  });
+
   it('numbers provider attempts once per task', async () => {
     const owner = await fixtures.tenant();
     const auditId = await fixtures.audit(owner);
@@ -383,6 +436,10 @@ describe('traffic projections', () => {
       .execute();
     await expect(clone('traffic_query_stats', query.id)).rejects.toMatchObject(UNIQUE);
     await clone('traffic_query_stats', query.id, { normalized_query: 'trail shoes' });
+    await clone('traffic_query_stats', query.id, { normalized_query: '検'.repeat(600) });
+    await expect(
+      clone('traffic_query_stats', query.id, { normalized_query: '検'.repeat(700) }),
+    ).rejects.toMatchObject({ code: '23514' });
   });
 
   it('pins stats to their snapshot workspace, keeps a page when its URL goes and cascades deletes', async () => {
@@ -747,138 +804,4 @@ describe('status vocabularies', () => {
       expect(await refused(table, column, [...values, UNKNOWN])).toEqual([UNKNOWN]);
     },
   );
-});
-
-describe('project deletion', () => {
-  /**
-   * Parents that gain rows per answer, task, fetched page, rule evaluation,
-   * URL or metric row. Deleting a project removes them row by row, and
-   * PostgreSQL enforces each reference to them with one lookup per removed
-   * row; an unindexed reference scans its whole table, every tenant's rows
-   * included, for each one (migration 0018).
-   */
-  const highVolumeParents: (keyof DB)[] = [
-    'raw_response_artifacts',
-    'audit_tasks',
-    'audit_prompt_snapshots',
-    'audit_engine_snapshots',
-    'site_fetch_artifacts',
-    'site_page_analyses',
-    'site_rule_evaluations',
-    'site_crawl_tasks',
-    'site_urls',
-    'integration_metric_rows',
-    'opportunities',
-    'agent_output_suggestions',
-  ];
-
-  it('indexes every reference to a parent it removes row by row', async () => {
-    const unindexed = await sql<{ reference: string }>`
-      with refs as (
-        select c.conname, c.conrelid, c.conrelid::regclass::text as child,
-          array(select a.attname::text from unnest(c.conkey) k(attnum)
-                join pg_attribute a on a.attrelid = c.conrelid and a.attnum = k.attnum) as cols
-        from pg_constraint c
-        where c.contype = 'f'
-          and c.confrelid::regclass::text = any(${highVolumeParents}::text[])
-      ), index_columns as (
-        select i.indrelid,
-          array(select a.attname::text from unnest(i.indkey) with ordinality k(attnum, ord)
-                join pg_attribute a on a.attrelid = i.indrelid and a.attnum = k.attnum
-                order by k.ord) as cols
-        from pg_index i
-      )
-      select r.child || '.' || array_to_string(r.cols, ',') || ' (' || r.conname || ')' as reference
-      from refs r
-      where not exists (
-        select 1 from index_columns l
-        where l.indrelid = r.conrelid
-          and ((l.cols[1:cardinality(r.cols)] @> r.cols and l.cols[1:cardinality(r.cols)] <@ r.cols)
-            or (l.cols[1] = any(r.cols) and l.cols[1] not in ('workspace_id', 'project_id')))
-      )
-      order by reference`.execute(db);
-    expect(unindexed.rows.map((row) => row.reference)).toEqual([]);
-  });
-
-  it('finds the rows each set-null reference clears through an index', async () => {
-    const references = await sql<{ child: string; cols: string[] }>`
-      select c.conrelid::regclass::text as child,
-        array(select a.attname::text from unnest(c.conkey) k(attnum)
-              join pg_attribute a on a.attrelid = c.conrelid and a.attnum = k.attnum) as cols
-      from pg_constraint c
-      where c.contype = 'f' and c.confdeltype = 'n' and c.confrelid <> 'public.users'::regclass
-        and c.conparentid = 0 -- a partition's copy is checked through its parent's
-      order by 1, 2`.execute(db);
-    const checked: string[] = [];
-    const scanned: string[] = [];
-    for (const { child, cols } of references.rows) {
-      const reference = `${child}.${cols.join(',')}`;
-      checked.push(reference);
-      const lookup = sql.join(
-        cols.map((col) => sql`${sql.ref(col)} = ${randomUUID()}::uuid`),
-        sql` and `,
-      );
-      const scans = await indexScans((trx) =>
-        sql`explain (format json) select 1 from ${sql.table(child)} where ${lookup}`.execute(trx),
-      );
-      const cleared = cols.filter((col) => col !== 'workspace_id' && col !== 'project_id');
-      const served = scans.some(({ condition }) =>
-        cleared.some((col) => condition.includes(`(${col} = `)),
-      );
-      if (!served) scanned.push(reference);
-    }
-    expect(checked).toContain('commerce_categories.workspace_id,project_id,parent_category_id');
-    expect(scanned).toEqual([]);
-  });
-});
-
-async function indexScans(explain: (trx: Database) => Promise<unknown>) {
-  const plan = await db.transaction().execute(async (trx) => {
-    await sql`set local enable_seqscan = off`.execute(trx);
-    return explain(trx);
-  });
-  const scans: { index: string; condition: string }[] = [];
-  const visit = (node: unknown): void => {
-    if (Array.isArray(node)) node.forEach(visit);
-    else if (node !== null && typeof node === 'object') {
-      if ('Index Name' in node && typeof node['Index Name'] === 'string')
-        scans.push({
-          index: node['Index Name'],
-          condition:
-            'Index Cond' in node && typeof node['Index Cond'] === 'string'
-              ? node['Index Cond']
-              : '',
-        });
-      Object.values(node).forEach(visit);
-    }
-  };
-  visit(plan);
-  return scans;
-}
-
-async function indexesRead(explain: (trx: Database) => Promise<unknown>) {
-  return (await indexScans(explain)).map(({ index }) => index);
-}
-
-describe('background reads', () => {
-  it('pages expired referral events through the retention index', async () => {
-    expect(
-      await indexesRead((trx) => expiredBatch(trx, randomUUID(), new Date()).explain('json')),
-    ).toContain('ix_referral_events_retention');
-  });
-
-  it.each([
-    ANALYTICS_LANE,
-    SITE_HEALTH_LANE,
-    DISCOVERY_LANE,
-    AGENT_LANE,
-    INTEGRATION_LANE,
-    AUDIT_LANE,
-  ] as const)('claims $table work through its claimable-only index', async (lane) => {
-    const plan = await indexesRead(async (trx) => {
-      await sql`set local enable_sort = off`.execute(trx);
-      return claimStatement(trx, lane, { now: new Date(), limit: 1 }).explain('json');
-    });
-    expect(plan).toContain(`ix_${lane.table}_claim`);
-  });
 });

@@ -1,6 +1,5 @@
 import { BrandMark } from '@/components/ui/brand-mark';
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
-import { useShownSpan } from '@/components/ui/data-table-fit';
 import { Inline } from '@/components/ui/layout';
 import { TableCell, TableCellLines, TableRow } from '@/components/ui/table';
 import { Pressable } from '@/components/ui/pressable';
@@ -89,7 +88,11 @@ export function SearchIntelligenceCompetitors({
           return (
             <TableRow key={competitor.identity}>
               {identity}
-              <NotFetchedCell />
+              {FIGURE_KEYS.map((key) => (
+                <TableCell numeric key={key}>
+                  <SearchValue value={null} fetched={false} />
+                </TableCell>
+              ))}
             </TableRow>
           );
         return (
@@ -143,11 +146,3 @@ const COMPETITOR_COLUMNS: readonly DataTableColumn[] = [
 ];
 
 const FIGURE_KEYS = COMPETITOR_COLUMNS.slice(1).map((column) => column.key);
-
-function NotFetchedCell() {
-  return (
-    <TableCell colSpan={useShownSpan(FIGURE_KEYS)}>
-      <SearchValue value={null} fetched={false} />
-    </TableCell>
-  );
-}

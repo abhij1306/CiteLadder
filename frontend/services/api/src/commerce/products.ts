@@ -235,7 +235,6 @@ export async function productMetrics(db: Database, scope: CommerceScope, query: 
     ? sql`AND (h.name ILIKE ${search} OR h.brand ILIKE ${search} OR h.url ILIKE ${search})`
     : NOTHING;
   const holderFilter = query.holder ? sql`AND ${query.holder}::uuid = ANY(h.members)` : NOTHING;
-  // LIMIT NULL is no limit.
   const merchantLimit = query.allMerchants ? null : policy.commerce.products.merchant_limit;
   const afterCursor = position
     ? sql`WHERE (k.sort_key, k.name_key, k.holder_id)

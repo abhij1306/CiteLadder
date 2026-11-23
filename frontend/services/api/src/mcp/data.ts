@@ -4,23 +4,15 @@ import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { parseUuid } from '../http/uuid.ts';
 import { utcText } from '../db/timestamps.ts';
-import { strings } from '../db/json.ts';
-import type { Actor } from '../auth/actor.ts';
-import {
-  McpInputError,
-  type Evidence,
-  type EvidencePrincipal,
-  type McpPrincipal,
-} from './types.ts';
-import { holdsWrite, mcpPolicy } from './config.ts';
-import { findWorkspaceMember, memberCan, rolesWith } from '../auth/workspace.ts';
+import { McpInputError, type Evidence, type EvidencePrincipal } from './types.ts';
+import { mcpPolicy } from './config.ts';
+import { memberCan, rolesWith } from '../auth/workspace.ts';
 import { appLink, recordPath } from './links.ts';
 import { containsPattern } from '../db/like.ts';
 import { LISTED_ACTION } from '../opportunities/actions.ts';
 import { statusView } from '../opportunities/action-status.ts';
+import { pageAfter, type PageScope } from '../public-api/pagination.ts';
 
-// A tool call that authorizes several reads checks grant and membership once.
-// Only a principal minted for one call shares its check; any other is live.
 const perCall = new WeakMap<EvidencePrincipal, Promise<string[]> | null>();
 export function principalForCall(principal: EvidencePrincipal): EvidencePrincipal {
   const call = { ...principal };
@@ -74,7 +66,6 @@ export async function authorizeProject(
 ) {
   const id = parseUuid(projectId);
   if (!id) throw new McpInputError('project_id must be a UUID');
-  // A pinned caller learns no more about a sibling project than about a missing one.
   if ('kind' in principal && principal.projectId !== id)
     throw new McpInputError('Project was not found in this account');
   const workspaces = await authorizedWorkspaceIds(db, principal);
@@ -89,83 +80,6 @@ export async function authorizeProject(
   if (!row) throw new McpInputError('Project was not found in this account');
   return row;
 }
-export async function writeActor(
-  db: Database,
-  principal: McpPrincipal,
-  projectId: string,
-): Promise<Actor> {
-  if (!principal.canWrite)
-    throw new McpInputError(
-      'This connection can only read. Reconnect CiteLadder and tick Allow changes to make changes.',
-    );
-  const project = await authorizeProject(db, principal, projectId);
-  // Shared until commit: a revocation, scope change or demotion waits for, or
-  // precedes, the change.
-  const grant = await db
-    .selectFrom('mcp_oauth_grants')
-    .select('scopes')
-    .where('id', '=', principal.grantId)
-    .where('access_token_hash', '=', principal.tokenHash)
-    .where('revoked_at', 'is', null)
-    .forShare()
-    .executeTakeFirst();
-  if (!grant) throw new McpInputError('Project was not found in this account');
-  if (!holdsWrite(strings(grant.scopes)))
-    throw new McpInputError(
-      'This connection can only read. Reconnect CiteLadder and tick Allow changes to make changes.',
-    );
-  const member = await findWorkspaceMember(db, principal.userId, project.workspace_id, 'share');
-  if (!member) throw new McpInputError('Project was not found in this account');
-  return {
-    kind: 'mcp',
-    workspaceId: project.workspace_id,
-    userId: principal.userId,
-    role: member.role,
-    scopes: 'all',
-  };
-}
-
-export async function requireNamed(
-  db: Database,
-  actor: Actor,
-  { kind, name, projectId }: { kind: 'topic' | 'competitor'; name: string; projectId: string },
-) {
-  const row = await db
-    .selectFrom(kind === 'topic' ? 'topics' : 'competitors')
-    .select(['id', 'name'])
-    .where('workspace_id', '=', actor.workspaceId)
-    .where('project_id', '=', projectId)
-    .where(sql`lower(${sql.ref('name')})`, '=', name.toLowerCase())
-    .executeTakeFirst();
-  if (!row) throw new McpInputError(`No ${kind} named "${name}" was found in this project`);
-  return row;
-}
-
-export async function promptSetOf(
-  db: Database,
-  actor: Actor,
-  { projectId, setId }: { projectId: string; setId: string | null | undefined },
-) {
-  const sets = await db
-    .selectFrom('prompt_sets')
-    .select(['id', 'name'])
-    .where('workspace_id', '=', actor.workspaceId)
-    .where('project_id', '=', projectId)
-    .orderBy('created_at')
-    .execute();
-  if (setId) {
-    const set = sets.find((item) => item.id === setId);
-    if (!set) throw new McpInputError('The prompt set was not found in this project');
-    return set;
-  }
-  const [only, ...others] = sets;
-  if (!only) throw new McpInputError('This project has no prompt set yet');
-  if (others.length)
-    throw new McpInputError(
-      `This project has several prompt sets (${sets.map((set) => set.name).join(', ')}); pass prompt_set_id from read_prompt_portfolio`,
-    );
-  return only;
-}
 export const encodeCursor = (...parts: unknown[]) =>
   Buffer.from(JSON.stringify(parts.map(String))).toString('base64url');
 export function decodeCursor(value: string, size: number): string[] {
@@ -177,10 +91,27 @@ export function decodeCursor(value: string, size: number): string[] {
       parts.some((part) => typeof part !== 'string')
     )
       throw new Error('cursor shape');
-    return parts as string[];
+    return parts;
   } catch {
     throw new McpInputError('cursor is invalid');
   }
+}
+export function cursorOffset(cursor: string | null | undefined, selection: readonly string[]) {
+  if (!cursor) return 0;
+  const parts = decodeCursor(cursor, selection.length + 1);
+  const offset = Number(parts.at(-1));
+  if (selection.some((part, index) => parts[index] !== part) || !Number.isSafeInteger(offset))
+    throw new McpInputError('cursor belongs to another selection');
+  return Math.max(0, offset);
+}
+export function offsetPage<T>(
+  rows: readonly T[],
+  page: { offset: number; limit: number; selection: readonly string[] },
+) {
+  const items = rows.slice(page.offset, page.offset + page.limit);
+  const end = page.offset + page.limit;
+  const next = rows.length > end ? encodeCursor(...page.selection, end) : null;
+  return { items, pagination: pagination(items, next) };
 }
 export const reference = (kind: RecordKindName, id: string) => ({
   kind,
@@ -202,6 +133,18 @@ export const pagination = (
   next_cursor: cursor,
   total_count: total,
 });
+export function pageOf<Item extends { id: string }>(
+  items: readonly Item[],
+  args: { cursor?: string | null; limit?: number | null },
+  scope: PageScope,
+) {
+  const page = pageAfter(
+    items,
+    { cursor: args.cursor ?? null, limit: args.limit ?? mcpPolicy.default_list_limit },
+    scope,
+  );
+  return { items: page.items, pagination: pagination(page.items, page.next_cursor, items.length) };
+}
 export async function listAccountProjects(
   db: Database,
   principal: EvidencePrincipal,

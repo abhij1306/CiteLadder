@@ -50,8 +50,6 @@ export async function updateOverviewLayout(
     throw new ApiError(422, 'each Overview widget can appear once');
   await db.transaction().execute(async (trx) => {
     const workspace = new WorkspaceScope(scope.workspaceId);
-    // The project row lock serializes a first save, which has no layout row to
-    // lock yet; a project deleted since the request authorized it is a 404.
     const project = await workspace
       .selectFrom(trx, 'projects')
       .select('id')

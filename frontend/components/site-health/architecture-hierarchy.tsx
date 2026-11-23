@@ -42,7 +42,6 @@ function nodesByParent(nodes: ArchitectureNode[]): Map<string | null, Architectu
   return grouped;
 }
 
-/** The first `limit` nodes in reading order; a prefix, so every shown node's parent is shown. */
 function previewIds(
   roots: readonly ArchitectureNode[],
   grouped: Map<string | null, ArchitectureNode[]>,

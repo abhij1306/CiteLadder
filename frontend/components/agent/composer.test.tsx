@@ -63,7 +63,6 @@ describe('Composer', () => {
 
   it('starts one line tall and grows with its text where the browser lacks field-sizing', async () => {
     vi.stubGlobal('CSS', { supports: () => false });
-    // jsdom has no layout: the field's content height stands in for the browser's.
     const content = vi
       .spyOn(HTMLTextAreaElement.prototype, 'scrollHeight', 'get')
       .mockReturnValue(20);

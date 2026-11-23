@@ -27,6 +27,7 @@ import {
   uncertainRun,
 } from './acquisition-costs.ts';
 import { newAttempt, newCall, newDataset, newRows, publishedPage } from './acquisition-rows.ts';
+import { fitsIndexKey } from '../db/index-key.ts';
 import {
   callDataset,
   callsQuery,
@@ -58,7 +59,6 @@ export type PreparedResearch =
     };
 const terminal = new Set(['succeeded', 'failed', 'partial', 'cancelled', 'uncertain']);
 
-/** Root run lock precedes queue/call locks, matching cancellation's lock order. */
 export class AcquisitionState {
   readonly db: Database;
   readonly task: QueueTask;
@@ -326,17 +326,28 @@ export class AcquisitionState {
         return true;
       }
       let saved = dataset.unique_rows_saved;
-      for (let offset = 0; offset < normalized.rows.length; offset += si.page_size) {
-        const [inserted] = await trx // NOSONAR -- One transaction: pages insert in order.
+      const rows = normalized.rows.filter(
+        (row) => fitsIndexKey(row.keyword) && fitsIndexKey(row.url),
+      );
+      for (let offset = 0; offset < rows.length; offset += si.page_size) {
+        const [inserted] = await trx // NOSONAR
           .insertInto('search_intelligence_rows')
-          .values(
-            newRows(normalized.rows.slice(offset, offset + si.page_size), dataset, call.id, at),
-          )
+          .values(newRows(rows.slice(offset, offset + si.page_size), dataset, call.id, at))
           .onConflict((oc) => oc.columns(['dataset_id', 'provider_row_key']).doNothing())
           .execute();
         saved += Number(inserted?.numInsertedOrUpdatedRows ?? 0n);
       }
-      const page = publishedPage({ dataset, normalized, plan, later, saved, callId: call.id, at });
+      const dropped = normalized.rows.length - rows.length;
+      const page = publishedPage({
+        dataset,
+        normalized,
+        plan,
+        later,
+        saved,
+        dropped,
+        callId: call.id,
+        at,
+      });
       const { finished } = page;
       await trx
         .updateTable('search_intelligence_datasets')

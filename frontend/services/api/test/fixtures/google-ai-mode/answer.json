@@ -1,0 +1,157 @@
+{
+  "version": "0.1.20260224",
+  "status_code": 20000,
+  "status_message": "Ok.",
+  "time": "6.1153 sec.",
+  "cost": 0.0012,
+  "tasks_count": 1,
+  "tasks_error": 0,
+  "tasks": [
+    {
+      "id": "ours",
+      "status_code": 20000,
+      "status_message": "Ok.",
+      "time": "6.0412 sec.",
+      "cost": 0.0012,
+      "result_count": 1,
+      "path": ["v3", "serp", "google", "ai_mode", "task_get", "advanced", "ours"],
+      "data": {
+        "api": "serp",
+        "function": "task_get",
+        "se": "google",
+        "se_type": "ai_mode",
+        "keyword": "best stability running shoes",
+        "location_code": 2840,
+        "language_code": "en",
+        "device": "desktop",
+        "os": "windows",
+        "tag": "audit:task:google_ai_mode"
+      },
+      "result": [
+        {
+          "keyword": "best stability running shoes",
+          "type": "ai_mode",
+          "se_domain": "google.com",
+          "location_code": 2840,
+          "language_code": "en",
+          "check_url": "https://www.google.com/search?q=best+stability+running+shoes&udm=50",
+          "datetime": "2026-02-24 14:38:25 +00:00",
+          "spell": null,
+          "refinement_chips": null,
+          "item_types": ["ai_overview"],
+          "se_results_count": 0,
+          "items_count": 1,
+          "items": [
+            {
+              "type": "ai_overview",
+              "rank_group": 1,
+              "rank_absolute": 1,
+              "page": 1,
+              "position": "left",
+              "xpath": "/html[1]/body[1]/div[3]",
+              "asynchronous_ai_overview": false,
+              "markdown": "Acme and Rival lead for stability.\n\n| Shoe | Drop |\n|---|---|\n| Acme High | 10 mm |",
+              "items": [
+                {
+                  "type": "ai_overview_element",
+                  "position": 1,
+                  "title": null,
+                  "text": "Acme and Rival lead for stability.",
+                  "markdown": "Acme and Rival lead for stability.",
+                  "links": [
+                    {
+                      "type": "link_element",
+                      "title": "Acme stability line",
+                      "description": null,
+                      "url": "https://acme.example/stability",
+                      "domain": "acme.example"
+                    }
+                  ],
+                  "images": null,
+                  "references": [
+                    {
+                      "type": "ai_overview_reference",
+                      "source": "Runner Weekly",
+                      "domain": "runner.example",
+                      "url": "https://runner.example/stability",
+                      "title": "Best stability shoes",
+                      "text": "Acme and Rival top our tests."
+                    }
+                  ]
+                },
+                {
+                  "type": "ai_overview_table_element",
+                  "position": 2,
+                  "markdown": "| Shoe | Drop |\n|---|---|\n| Acme High | 10 mm |",
+                  "table": {
+                    "table_header": ["Shoe", "Drop"],
+                    "table_content": [["Acme High", "10 mm"]]
+                  },
+                  "references": null
+                },
+                {
+                  "type": "ai_overview_shopping",
+                  "position": 3,
+                  "title": "Top picks",
+                  "markdown": "Top picks",
+                  "items": [
+                    {
+                      "type": "ai_overview_shopping_element",
+                      "product_id": "1",
+                      "title": "Rival Guide 9",
+                      "url": "https://www.google.com/search?ibp=oshop&q=rival",
+                      "domain": "www.google.com",
+                      "rating": {
+                        "rating_type": "Max5",
+                        "value": 4.6,
+                        "votes_count": 120,
+                        "rating_max": 5
+                      },
+                      "price": {
+                        "current": 140,
+                        "regular": null,
+                        "max_value": null,
+                        "currency": "USD",
+                        "is_price_range": false,
+                        "displayed_price": "$140.00"
+                      },
+                      "seller": "Rival Store",
+                      "snippet": "Firm medial post.",
+                      "text": null,
+                      "markdown": null
+                    }
+                  ],
+                  "references": null
+                },
+                {
+                  "type": "ai_overview_paid",
+                  "position": 4,
+                  "text": "Sponsored Brandless Runner",
+                  "markdown": "Sponsored Brandless Runner",
+                  "items": [
+                    {
+                      "type": "ai_overview_paid_element",
+                      "title": "Brandless Runner",
+                      "url": "https://ads.example/runner",
+                      "domain": "ads.example"
+                    }
+                  ]
+                }
+              ],
+              "references": [
+                {
+                  "type": "ai_overview_reference",
+                  "source": "Fit Lab",
+                  "domain": "lab.example",
+                  "url": "https://lab.example/arch-test",
+                  "title": "Arch test",
+                  "text": null
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

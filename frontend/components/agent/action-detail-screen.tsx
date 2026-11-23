@@ -5,7 +5,7 @@ import { useParams } from 'react-router-dom';
 import { ActionDock } from '@/components/agent/action-dock';
 import { ActionFacts } from '@/components/agent/action-facts';
 import {
-  Checklist,
+  StepList,
   Labelled,
   Prose,
   READING_SECTION_TITLE,
@@ -23,7 +23,8 @@ import { Notice, readErrorProps } from '@/components/ui/notice';
 import { StateBlock } from '@/components/ui/state-block';
 import { listCrumbs, type FromAction } from '@/lib/agent/action-crumbs';
 import { actionTarget, withShortTarget } from '@/lib/agent/action-title';
-import { actionHandoffHref } from '@/lib/agent/handoff';
+import { actionHandoffHref, actionHandoffInput } from '@/lib/agent/handoff';
+import { useAgentPanelSeed } from '@/lib/agent/panel-context';
 import { issueFamilyBrief, type IssueFamilyBrief } from '@/lib/agent/issue-family-brief';
 import { actionsQueries, type ActionDetail } from '@/lib/api/actions';
 import { isNotFound } from '@/lib/api/errors';
@@ -57,7 +58,6 @@ export function ActionDetailScreen() {
     return fallback(<StateBlock kind="loading" shape={{ kind: 'facts', rows: 5 }} />);
   if (query.data.project_id !== projectId)
     return fallback(<Notice tone="negative">This Action belongs to another project.</Notice>);
-  // Keyed so ticks and a decision's state never outlive their Action.
   return <ActionPage key={query.data.id} action={query.data} workspaceId={workspaceId} />;
 }
 
@@ -79,6 +79,7 @@ function ActionPage({
   const brief = useIssueFamilyBrief(action, workspaceId);
   const todo = brief?.steps ?? steps(action);
   const gaps = contentGapMembers(action);
+  useAgentPanelSeed(actionHandoffInput(action, [...ticked]));
   const tick = (id: string) =>
     setTicked((current) => {
       const next = new Set(current);
@@ -108,7 +109,7 @@ function ActionPage({
         ) : null}
         {todo.length > 0 ? (
           <Labelled title="What to do">
-            <Checklist items={todo} />
+            <StepList items={todo} />
           </Labelled>
         ) : null}
         <ActionUrls

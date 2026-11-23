@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useSearchParams } from 'react-router-dom';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 
+import { useUrlParam } from '@/lib/navigation/url-params';
 import { httpErrorStatus } from '@/lib/api/client';
 import { setReportingWorkspace } from '@/lib/client-errors';
 import { projectQueries, retryProjectShell } from '@/lib/api/projects';
@@ -35,11 +35,9 @@ export {
 const isMissing = (error: unknown) => httpErrorStatus(error) === 404;
 
 function useRequestedScope() {
-  const searchParams = useSearchParams()[0];
-  return {
-    requestedProjectId: searchParams?.get('project') || null,
-    urlWorkspaceId: searchParams?.get('workspace') || null,
-  };
+  const project = useUrlParam('project');
+  const workspace = useUrlParam('workspace');
+  return { requestedProjectId: project || null, urlWorkspaceId: workspace || null };
 }
 
 function useWorkspaceProjects(workspaceId: string | null, allowed: boolean) {

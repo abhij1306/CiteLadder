@@ -50,7 +50,6 @@ function onPointerDown(event: PointerEvent) {
   tabDown = false;
   pressed = true;
   set('pointer');
-  // A press into a dialog's field that already has focus moves no focus.
   const field = textField(event.target);
   if (field && field === document.activeElement && field.closest(OVERLAY)) {
     field.dataset.quietFocus = '';
@@ -61,8 +60,6 @@ function onPointerUp() {
   pressed = false;
 }
 
-// An element's blur does not bubble, so a listener on the window (not in the
-// capture phase) hears only the window itself losing focus.
 function onWindowBlur() {
   away = true;
   keyDown = false;
@@ -73,8 +70,6 @@ function onWindowBlur() {
 function trackInputModality() {
   if (installed || typeof window === 'undefined') return;
   installed = true;
-  // Capture, so a handler that stops propagation cannot hide an input, and the
-  // modality is current before React's own focus handlers (a Tooltip's) read it.
   document.addEventListener('keydown', onKeyDown, true);
   document.addEventListener('keyup', onKeyUp, true);
   document.addEventListener('focusin', onFocusIn, true);

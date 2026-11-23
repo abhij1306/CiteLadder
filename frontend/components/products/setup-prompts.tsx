@@ -247,7 +247,12 @@ function PromptRows({
     return <StateBlock kind="loading" label="Loading prompts" shape={{ kind: 'list' }} />;
   if (!rows.length) {
     return (
-      <StateBlock kind="empty" icon={MessageSquare} heading="No prompts yet" headingLevel={3} />
+      <StateBlock
+        kind="empty"
+        icon={MessageSquare}
+        heading="No prompts written for this product yet"
+        headingLevel={3}
+      />
     );
   }
   return (

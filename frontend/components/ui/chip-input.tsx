@@ -133,7 +133,7 @@ export function ValuesInput({
         onBlur={add}
         onKeyDown={onFieldKey}
         onPaste={onPaste}
-        className="text-ink placeholder:text-ink-2 type-body min-h-6 w-8 min-w-8 flex-1 bg-transparent px-1 disabled:cursor-not-allowed"
+        className="text-ink placeholder:text-ink-3 type-body min-h-6 w-8 min-w-8 flex-1 bg-transparent px-1 disabled:cursor-not-allowed"
       />
       {accepting ? <AcceptTick label={label} disabled={disabled} onAccept={onAccept} /> : null}
     </div>

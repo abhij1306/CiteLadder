@@ -23,7 +23,7 @@ export type CheckboxProps = AccessibleCheckbox & {
 };
 
 const CHECK_BOX =
-  'check-box press [--press:0.92] isolate focus-ring bg-panel border-rule enabled:data-[state=unchecked]:hover:border-control-line text-on-primary data-[state=checked]:border-primary data-[state=indeterminate]:border-primary hit-area grid size-4 shrink-0 place-items-center rounded-mark border disabled:cursor-not-allowed';
+  'check-box press [--press:0.92] isolate focus-ring bg-panel border-control-line text-on-primary data-[state=checked]:border-primary data-[state=indeterminate]:border-primary hit-area grid size-4 shrink-0 place-items-center rounded-mark border disabled:cursor-not-allowed';
 
 const CHECK_DRAW = 'stroke-dashoffset 150ms linear 15ms';
 

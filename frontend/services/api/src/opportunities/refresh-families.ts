@@ -186,7 +186,6 @@ const contentGaps: Family = {
   agesOut: ['content_angle_run_id'],
 };
 
-/** In hit order: the refresh concatenates each family's hits as listed. */
 const FAMILIES: readonly Family[] = [demand, visibility, commerce, site, searchGaps, contentGaps];
 
 const EMPTY_IDENTITY: SourceIdentity = {
@@ -210,7 +209,7 @@ export async function sourceIdentity(
   sources: Sources,
 ): Promise<SourceIdentity> {
   const identity = { ...EMPTY_IDENTITY };
-  for (const family of FAMILIES) Object.assign(identity, await family.identity(db, scope, sources)); // NOSONAR -- The connection may be a transaction.
+  for (const family of FAMILIES) Object.assign(identity, await family.identity(db, scope, sources)); // NOSONAR
   return identity;
 }
 
@@ -229,7 +228,7 @@ export async function collectFamilies(
   let sourceMix: Record<string, unknown> | null = null;
   let present = false;
   for (const family of FAMILIES) {
-    const found = await family.hits(db, scope, sources, identity); // NOSONAR -- One family at a time bounds the pool.
+    const found = await family.hits(db, scope, sources, identity); // NOSONAR
     hits.push(...found.hits);
     limitations.push(...found.limitations);
     if (found.sourceMix) sourceMix = found.sourceMix;

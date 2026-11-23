@@ -135,11 +135,13 @@ function AnswerBody({
   promptText,
   promptId,
   unavailable,
+  attributes,
 }: Readonly<{
   query: UseQueryResult<ExecutionEvidence>;
   promptText: string | null;
   promptId: string | undefined;
   unavailable?: string;
+  attributes?: boolean;
 }>) {
   if (unavailable) return <StateBlock kind="empty" icon={ICONS.runs} heading={unavailable} />;
   if (query.isError)
@@ -159,7 +161,12 @@ function AnswerBody({
       loading={<AnswerLoading />}
       failed={<IslandUnavailable message="Couldn't load the answer." />}
     >
-      <AnswerEvidence evidence={query.data} promptText={promptText} promptId={promptId} />
+      <AnswerEvidence
+        evidence={query.data}
+        promptText={promptText}
+        promptId={promptId}
+        attributes={attributes}
+      />
     </LazyIsland>
   );
 }
@@ -214,11 +221,13 @@ export function AnswerDialog({
   open,
   onOpenChange,
   unavailable,
+  attributes,
 }: Readonly<{
   execution: EvidenceSubject | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   unavailable?: string;
+  attributes?: boolean;
 }>) {
   const { workspaceId } = useProjectScope();
   const engines = usePromptEngineAnswers({
@@ -253,6 +262,7 @@ export function AnswerDialog({
         promptText={engines.shown?.prompt_text ?? null}
         promptId={execution?.prompt_id ?? undefined}
         unavailable={unavailable}
+        attributes={attributes}
       />
     </Dialog>
   );

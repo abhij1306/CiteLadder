@@ -82,8 +82,10 @@ export interface AgentChats {
   created_by_user_id: string | null;
   id: string;
   last_activity_at: Timestamp;
+  model: string;
   pinned_skill_id: string | null;
   project_id: string;
+  reasoning_effort: string;
   title: string;
   turn_count: number;
   updated_at: Timestamp;
@@ -117,6 +119,7 @@ export interface AgentMessages {
   skill_id: string | null;
   skill_source: string | null;
   steps: Json;
+  views: Generated<Json>;
   web_sources: Generated<Json>;
   workspace_id: string;
 }
@@ -234,6 +237,19 @@ export interface AgentOutputSuggestions {
   run_id: string | null;
   snapshot_id: string | null;
   source: string;
+  workspace_id: string;
+}
+
+export interface AgentProposalOutcomes {
+  chat_id: string;
+  created_at: Timestamp;
+  id: string;
+  message_id: string;
+  project_id: string;
+  proposal_index: number;
+  reason: string | null;
+  state: string;
+  user_id: string | null;
   workspace_id: string;
 }
 
@@ -812,7 +828,6 @@ export interface BrandDiscoveries {
   domains: Json;
   error_code: string;
   error_detail: string;
-  evidence: Json;
   gaps: Json;
   id: string;
   idempotency_key: string;
@@ -936,7 +951,6 @@ export interface BrandProfiles {
 export interface BrandResearchSnapshots {
   created_at: Timestamp;
   discovery_id: string;
-  evidence: Json;
   extracted_fields: Json;
   field_confidence: Json;
   id: string;
@@ -1717,21 +1731,6 @@ export interface IntegrationSyncRuns {
   updated_at: Timestamp;
   window_end: Timestamp;
   window_start: Timestamp;
-  workspace_id: string;
-}
-
-export interface McpConfirmations {
-  consumed_at: Timestamp | null;
-  created_at: Timestamp;
-  expires_at: Timestamp;
-  grant_id: string;
-  id: string;
-  kind: string;
-  payload: Json;
-  payload_hash: string;
-  project_id: string;
-  token_hmac: string;
-  user_id: string;
   workspace_id: string;
 }
 
@@ -2849,7 +2848,6 @@ export interface SiteIssueCatalogs {
   analyzer_version: string;
   crawl_id: string;
   created_at: Timestamp;
-  finding_class: string;
   items: Json;
   project_id: string;
   reference_snippets: Generated<Json>;
@@ -2869,7 +2867,6 @@ export interface SiteIssues {
   dimension: string;
   evaluation_id: string;
   evidence: Json | null;
-  finding_class: string;
   id: string;
   is_current: Generated<boolean>;
   project_id: string;
@@ -3325,6 +3322,7 @@ export interface DB {
   agent_output_suggestion_events: AgentOutputSuggestionEvents;
   agent_output_suggestions: AgentOutputSuggestions;
   agent_outputs: AgentOutputs;
+  agent_proposal_outcomes: AgentProposalOutcomes;
   agent_run_transcripts: AgentRunTranscripts;
   agent_runs: AgentRuns;
   agent_tool_attempts: AgentToolAttempts;
@@ -3409,7 +3407,6 @@ export interface DB {
   integration_oauth_states: IntegrationOauthStates;
   integration_property_mappings: IntegrationPropertyMappings;
   integration_sync_runs: IntegrationSyncRuns;
-  mcp_confirmations: McpConfirmations;
   mcp_oauth_clients: McpOauthClients;
   mcp_oauth_grants: McpOauthGrants;
   metric_snapshots: MetricSnapshots;

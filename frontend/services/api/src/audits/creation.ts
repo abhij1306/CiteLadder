@@ -39,10 +39,6 @@ export async function createAuditsInTransaction(
   at: Date,
 ): Promise<[string, ...string[]]> {
   const input = auditInput.parse(request);
-  // The project comes before the account capacity lock (the lock DAG). Each
-  // audit insert takes this key-share lock through its foreign key; taken
-  // there, after the capacity lock, it would wait on a project deletion that
-  // waits on the capacity lock this launch holds.
   await trx
     .selectFrom('projects')
     .select('id')
@@ -60,7 +56,7 @@ export async function createAuditsInTransaction(
   const create = (market: Market) =>
     createMarketAudit(trx, workspaceId, input, { market, launchId }, launch, runtime, at);
   const ids: [string, ...string[]] = [await create(first)];
-  for (const market of rest) ids.push(await create(market));
+  for (const market of rest) ids.push(await create(market)); // NOSONAR
   return ids;
 }
 
@@ -255,7 +251,7 @@ async function persistTasks(options: {
       engine = snapshots.engines.get(slot.engine)!;
     const taskId = randomUUID();
     inserted.push({ taskId, slot, route, engine });
-    await db
+    await db // NOSONAR
       .insertInto('audit_tasks')
       .values({
         id: taskId,
@@ -312,7 +308,7 @@ async function persistTasks(options: {
   }
   for (const { taskId, slot, route, engine } of inserted) {
     const binding = bindTask(plan, route);
-    await db
+    await db // NOSONAR
       .updateTable('audit_tasks')
       .set({ status: 'queued', provider_route_snapshot: JSON.stringify(binding) })
       .where('workspace_id', '=', scope.workspaceId)

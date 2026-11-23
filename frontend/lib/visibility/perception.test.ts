@@ -3,13 +3,16 @@ import {
   breakdownRow,
   coverageLine,
   formatNet,
-  negativeHeadline,
-  rankThemes,
+  categoryShare,
+  filterCategories,
+  rankCategories,
+  sampleNote,
+  sampleShare,
   sentimentFigureValue,
   sentimentReading,
   sentimentTrend,
+  sortCategories,
   stateCopy,
-  themeNegativeShare,
 } from './perception';
 
 const RUN = '11111111-1111-4111-8111-111111111111';
@@ -39,63 +42,148 @@ function cover(mentions: number, classified: number) {
   };
 }
 
-const theme = (name: string, positive: number, negative: number) => ({
-  theme: name,
-  positive,
-  negative,
-  quotes: [],
-});
+const RUN_QUOTE = {
+  text: 'sizes run small',
+  theme: 'Sizing',
+  attribute: { kind: 'labelled' as const, name: 'Runs small' },
+  entity: 'Acme',
+  is_brand: true,
+  logical_engine: 'chatgpt',
+  prompt: 'kids pyjamas?',
+  run_id: RUN,
+  execution_id: RUN,
+  observed_at: '2026-11-01T00:00:00Z',
+  extractor_version: 'x1',
+  template_version: 't1',
+};
+
+function category(name: string, negative: number, positive: number, attributes: string[] = []) {
+  return {
+    category: name,
+    mentions: negative + positive,
+    negative,
+    positive,
+    attributes: attributes.map((attribute, index) => ({
+      attribute,
+      negative: index % 2 ? 0 : 1,
+      positive: index % 2 ? 1 : 0,
+      quotes: [
+        {
+          ...RUN_QUOTE,
+          text: attribute,
+          polarity: index % 2 ? ('positive' as const) : ('negative' as const),
+        },
+      ],
+    })),
+  };
+}
 
 describe('perception derivations', () => {
-  it('heads the tab with the negative share from the classified minimum only', () => {
-    expect(negativeHeadline(score(12, 4, 4))).toBe(
-      'AI says something negative about you in 20% of classified mentions',
-    );
-    expect(negativeHeadline(score(15, 5, 0))).toBe(
-      'AI says nothing negative about you in classified mentions',
-    );
-    expect(negativeHeadline(score(3, 1, 0))).toBeNull();
-    expect(negativeHeadline(score(0, 0, 0))).toBeNull();
-  });
-
-  it('ranks themes by the chosen side and leaves out those with none on it', () => {
-    const themes = [theme('pricing', 1, 4), theme('support', 5, 0), theme('reliability', 2, 4)];
-    expect(rankThemes(themes, 'negative', 8).map((t) => t.theme)).toEqual([
-      'pricing',
-      'reliability',
+  it('ranks categories by the chosen side, ties by name, and leaves out those with none on it', () => {
+    const categories = [
+      category('Pricing', 4, 1),
+      category('Support', 0, 5),
+      category('Delivery', 4, 2),
+    ];
+    expect(rankCategories(categories, 'negative').map((c) => c.category)).toEqual([
+      'Delivery',
+      'Pricing',
     ]);
-    expect(rankThemes(themes, 'positive', 2).map((t) => t.theme)).toEqual([
-      'support',
-      'reliability',
+    expect(rankCategories(categories, 'positive').map((c) => c.category)).toEqual([
+      'Support',
+      'Delivery',
+      'Pricing',
     ]);
   });
 
-  it('shows a breakdown share only from the minimum classified count', () => {
+  it('sorts categories by a column either way, an unjudged share last when descending', () => {
+    const categories = [
+      category('Pricing', 1, 3),
+      category('Delivery', 3, 1),
+      category('Support', 0, 0),
+      category('Apparel', 3, 3),
+    ];
+    const names = (sort: Parameters<typeof sortCategories>[1]) =>
+      sortCategories(categories, sort).map((c) => c.category);
+    expect(names({ key: 'share', descending: true })).toEqual([
+      'Delivery',
+      'Apparel',
+      'Pricing',
+      'Support',
+    ]);
+    expect(names({ key: 'negative', descending: true })).toEqual([
+      'Apparel',
+      'Delivery',
+      'Pricing',
+      'Support',
+    ]);
+    expect(names({ key: 'attribute', descending: false })).toEqual([
+      'Apparel',
+      'Delivery',
+      'Pricing',
+      'Support',
+    ]);
+  });
+
+  it('filters categories by side and search, keeping only the matching attributes and quotes', () => {
+    const categories = [
+      category('Sizing', 2, 1, ['Runs small', 'True to size']),
+      category('Price', 0, 3, ['Cheap basics']),
+    ];
+    const negative = filterCategories(categories, { query: '', polarity: 'negative' });
+    expect(negative.map((c) => [c.category, c.attributes.map((a) => a.attribute)])).toEqual([
+      ['Sizing', ['Runs small']],
+    ]);
+    const searched = filterCategories(categories, { query: ' TRUE ', polarity: 'all' });
+    expect(searched.map((c) => [c.category, c.attributes.map((a) => a.attribute)])).toEqual([
+      ['Sizing', ['True to size']],
+    ]);
+    const named = filterCategories(categories, { query: 'price', polarity: 'all' });
+    expect(named.map((c) => [c.category, c.attributes.map((a) => a.attribute)])).toEqual([
+      ['Price', ['Cheap basics']],
+    ]);
+  });
+
+  it('shows a share as counts below the sample size and as a percentage from it', () => {
+    expect(
+      [category('a', 1, 3), category('b', 2, 3), category('c', 0, 0)].map((c) => categoryShare(c)),
+    ).toEqual([
+      { kind: 'value', share: 0.25, text: '1 / 4', count: 1, basis: 4, small: true },
+      { kind: 'value', share: 0.4, text: '40.0%', count: 2, basis: 5, small: false },
+      { kind: 'empty' },
+    ]);
+  });
+
+  it('switches breakdown shares to counts below the minimum and gates net sentiment', () => {
     const row = (s: ReturnType<typeof score>, mentions: number) => ({
       key: 'k',
       label: 'K',
       score: s,
       coverage: cover(mentions, s.classified),
     });
-    expect(breakdownRow(row(score(12, 4, 3, 1), 30), 20)).toEqual({
-      kind: 'value',
-      classified: 20,
-      mentions: 30,
-      positive: 0.6,
-      neutral: 0.2,
-      negative: 0.15,
-      net: 45,
-    });
-    expect(breakdownRow(row(score(10, 5, 4), 25), 20)).toEqual({
-      kind: 'too_few',
-      classified: 19,
-      mentions: 25,
-      needed: 20,
-    });
-    expect(breakdownRow(row(score(0, 0, 0), 4), 0).kind).toBe('too_few');
-    expect(themeNegativeShare(theme('price', 15, 5), 20)).toBe(0.25);
-    expect(themeNegativeShare(theme('price', 1, 0), 20)).toBeNull();
-    expect(themeNegativeShare(theme('price', 0, 0), 0)).toBeNull();
+    const full = breakdownRow(row(score(12, 4, 3, 1), 30), 20);
+    expect([full.small, full.positive, full.net]).toEqual([
+      false,
+      { kind: 'value', share: 0.6, text: '60.0%', count: 12, basis: 20, small: false },
+      { kind: 'value', text: '+45' },
+    ]);
+    const small = breakdownRow(row(score(10, 5, 4), 25), 20);
+    expect([small.small, small.negative, small.net]).toEqual([
+      true,
+      { kind: 'value', share: 4 / 19, text: '4 / 19', count: 4, basis: 19, small: true },
+      { kind: 'too_few', basis: 19, minimum: 20 },
+    ]);
+    const none = breakdownRow(row(score(0, 0, 0), 4), 20);
+    expect([none.small, none.positive, none.mentions]).toEqual([false, { kind: 'empty' }, 4]);
+  });
+
+  it('notes the counts behind a share and nothing for an empty one', () => {
+    const readings = [0, 19, 20].map((basis) => sampleShare({ count: 0, basis, minimum: 20 }));
+    expect(readings.map((reading) => sampleNote(reading, 'classified'))).toEqual([
+      undefined,
+      '0 of 19 classified',
+      '0 of 20 classified',
+    ]);
   });
 
   it('reads a net sentiment from the minimum classified count, keeping too few apart from zero', () => {
@@ -183,9 +271,11 @@ describe('perception display', () => {
     );
   });
 
-  it('explains an unavailable read by its reason', () => {
-    expect(stateCopy('unavailable', 'platform_cap').description).toBe(
-      'The platform classification limit was reached for these answers.',
-    );
+  it('names an unavailable read by its reason in a short label', () => {
+    expect(stateCopy('unavailable', 'platform_cap').description).toBe('Platform limit reached');
+    expect(stateCopy('unavailable', null)).toEqual({
+      heading: 'Perception unavailable',
+      description: null,
+    });
   });
 });

@@ -419,7 +419,7 @@ describe('terminal checks from persisted evidence', () => {
     ]);
   });
 
-  it('weights pages equally and keeps missing measurements out of the score denominator', () => {
+  it('weights pages equally and counts an applicable page with no check run as 0', () => {
     const passed = canonical(['/a']);
     const failed = canonical(['/a'], { statusCode: 404 });
     const result = aggregateMeasurements([
@@ -431,7 +431,8 @@ describe('terminal checks from persisted evidence', () => {
       },
       { id: 'c', page_kind: 'other', evaluations: [] },
     ]);
-    expect(result.web_fundamentals_score).toBe(75);
+    expect(result.web_fundamentals_score).toBe(15);
+    expect(result.web_fundamentals_checks).toEqual({ run: 3, total: 12 });
     expect(result.web_fundamentals_coverage).toBeCloseTo(2 / 3);
     expect(result.web_fundamentals_state).toBe('limited_evidence');
   });
@@ -473,8 +474,8 @@ describe('terminal checks from persisted evidence', () => {
         evaluations: [indexable, { ...blocked, outcome: 'not_applicable' }],
       },
     ];
-    expect(aggregateMeasurements(rows).aeo_readiness_score).toBe(25);
-    expect(aggregateByPageKind(rows).article!.aeo_readiness_score).toBe(50);
+    expect(aggregateMeasurements(rows).aeo_readiness_score).toBeCloseTo(10);
+    expect(aggregateByPageKind(rows).article!.aeo_readiness_score).toBeCloseTo(20);
   });
 });
 

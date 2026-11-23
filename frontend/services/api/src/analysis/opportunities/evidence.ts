@@ -39,7 +39,6 @@ export type SiteEvidence = {
   crawl_id: string;
   families: {
     rule_id: string;
-    finding_class: string;
     severity: string;
     category: string;
     page_count: number;

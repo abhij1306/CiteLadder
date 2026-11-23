@@ -58,14 +58,6 @@
     {
       "glob": "frontend/apps/app/src/globals.css",
       "reason": "design tokens and the shared rules, ordered by cascade tier: an area (tables, shell) spans several tiers, so an order-keeping split gives tier files, not area files, and the design-system checks read it as the one token owner"
-    },
-    {
-      "glob": "frontend/services/api/src/mcp/tools.ts",
-      "reason": "MCP read-tool registry"
-    },
-    {
-      "glob": "frontend/services/api/src/mcp/write-tools.ts",
-      "reason": "MCP write-tool registry"
     }
   ],
   "baseline": {
@@ -77,7 +69,6 @@
     "frontend/services/api/src/site-health/frontier.ts": 6556,
     "frontend/services/api/src/site-health/lifecycle.ts": 6294,
     "frontend/services/api/src/site-health/reads/issues.ts": 6903,
-    "frontend/services/api/src/visibility/prompts.ts": 6501,
-    "frontend/services/api/src/workers/integration-worker.ts": 6380
+    "frontend/services/api/src/visibility/prompts.ts": 6501
   }
 }

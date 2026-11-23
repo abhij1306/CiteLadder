@@ -94,7 +94,6 @@ function UrlBody({ data }: Readonly<{ data: UrlActions }>) {
   );
 }
 
-/** "Fix this URL with Agent"; a URL that could not be read is not handed over, as the Agent would refuse it. */
 function UrlDock({ siteUrlId, unreadable }: Readonly<{ siteUrlId: string; unreadable: boolean }>) {
   return (
     <PageDock label="Work on this URL">

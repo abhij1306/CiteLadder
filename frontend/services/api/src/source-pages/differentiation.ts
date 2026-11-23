@@ -11,6 +11,7 @@ import { fenceInspectionTask } from './task-fence.ts';
 import { compareText, scalarText } from '../text-order.ts';
 import { lexicalTokens, termCoverage } from '../analysis/lexical.ts';
 import { groupBy } from '../lists.ts';
+import { widen } from '../widen.ts';
 
 const p = policy.content_differentiation;
 const strings = (value: unknown): string[] =>
@@ -65,10 +66,10 @@ export function compareContent(
       snapshot_ids: [...new Set(snapshotIds)].sort(compareText),
       search_context: record(context),
     },
-    parity: [] as Entry[],
-    gaps: [] as Entry[],
-    unique_contributions: [] as Entry[],
-    limitations: [] as string[],
+    parity: widen<Entry[]>([]),
+    gaps: widen<Entry[]>([]),
+    unique_contributions: widen<Entry[]>([]),
+    limitations: widen<string[]>([]),
   };
   if (denominator < p.min_inspected_pages)
     base.limitations.push('Too few selected organic results had usable inspected evidence.');
@@ -320,7 +321,7 @@ export function refreshDifferentiation(
         report: JSON.stringify(report),
         created_at: new Date(),
       };
-      const latest = await trx // NOSONAR -- One transaction: reports insert in order.
+      const latest = await trx // NOSONAR
         .selectFrom('content_differentiation_reports')
         .select(['owned_site_url_id', sql<boolean>`report = ${values.report}::jsonb`.as('same')])
         .where('workspace_id', '=', scope.workspaceId)
@@ -330,7 +331,7 @@ export function refreshDifferentiation(
         .orderBy('id', 'desc')
         .executeTakeFirst();
       if (latest?.same && latest.owned_site_url_id === values.owned_site_url_id) continue;
-      await trx // NOSONAR -- One transaction: reports insert in order.
+      await trx // NOSONAR
         .insertInto('content_differentiation_reports')
         .values(values)
         .execute();

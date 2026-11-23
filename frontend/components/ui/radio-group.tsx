@@ -11,7 +11,7 @@ export type RadioOption<T extends string> = {
 };
 
 const RADIO =
-  'press [--press:0.95] focus-ring bg-panel border-rule enabled:data-[state=unchecked]:hover:border-control-line data-[state=checked]:bg-primary data-[state=checked]:border-primary data-[state=checked]:ring-panel hit-area [--target-hit:var(--target-min)] size-4 shrink-0 rounded-full border ring-inset data-[state=checked]:ring-4 disabled:cursor-not-allowed';
+  'press [--press:0.95] focus-ring bg-panel border-control-line data-[state=checked]:bg-primary data-[state=checked]:border-primary data-[state=checked]:ring-panel hit-area [--target-hit:var(--target-min)] size-4 shrink-0 rounded-full border ring-inset data-[state=checked]:ring-4 disabled:cursor-not-allowed';
 
 const LIST_LAYOUT = {
   list: 'flex flex-col gap-3',
@@ -97,8 +97,8 @@ function RadioCard<T extends string>({
   return (
     <label
       className={cn(
-        'text-ink flex cursor-pointer items-start gap-2 rounded-control border p-4 transition-[background-color,border-color]',
-        selected ? 'bg-panel overlay-selected border-control-line' : 'bg-panel border-rule',
+        'text-ink bg-panel flex cursor-pointer items-start gap-2 rounded-control border border-transparent p-4',
+        selected && 'overlay-selected',
         !selected && !option.disabled && 'hover:overlay-hover',
         option.disabled && 'cursor-not-allowed opacity-60',
       )}

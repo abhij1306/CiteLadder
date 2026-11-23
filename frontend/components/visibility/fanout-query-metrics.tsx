@@ -156,7 +156,7 @@ export function movedState(
       kind: 'error',
       ...readErrorProps(queries.read),
       title: "Couldn't load query changes",
-      fallback: 'Check your connection and try again.',
+      fallback: 'The request failed or timed out.',
     };
   if (!queries.compared) return empty('Nothing to compare yet');
   if (queries.rows.length) return undefined;

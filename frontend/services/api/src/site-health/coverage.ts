@@ -182,7 +182,6 @@ async function sitemapCoverage(db: Database, crawl: Crawl) {
   const unreadDocuments = Number(sitemap.unread_count) || 0;
   if (!members.listed && !unreadDocuments) return null;
   return {
-    // A stored zero stays visible; only a missing count falls back to the entries.
     discovered:
       typeof sitemap.discovered_count === 'number' ? sitemap.discovered_count : members.listed,
     limitReached: sitemap.limit_reached === true,

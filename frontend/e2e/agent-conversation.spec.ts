@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 import type { AgentChatDetail } from '../lib/api/agent';
-import { detail, revision, REV1 } from '../test/agent-chat-fixture';
+import { detail, revision, REV1, AGENT_MODELS, CHAT_MODEL } from '../test/agent-chat-fixture';
 import { actionsPage } from '../test/fixtures/actions';
 import { FIXTURE_PROJECT, fixtureProjectPath, stubAuthedShell } from './helpers/app-fixture';
 
@@ -34,6 +34,7 @@ function chatDetail(): AgentChatDetail {
       running: false,
     },
     pinned_skill_id: 'growth_plan',
+    model: CHAT_MODEL,
     context: {
       refs: { site_facts_reference: { crawl_id: RUN } },
       instructions: { revision: 2 },
@@ -64,6 +65,7 @@ function chatDetail(): AgentChatDetail {
       mentions: [],
       attachments: [],
       proposals: [],
+      views: [],
       created_at: NOW,
     })),
     latest_run: {
@@ -83,7 +85,13 @@ function chatDetail(): AgentChatDetail {
 
 const LONG_URL = (n: number) =>
   `https://www.bestandless.com.au/Categories/Kids/Kids-Underwear-%2526-Socks/Boys-Underwear-Multipack-Collection/boys-trunks-${n}`;
-const LIMITS = { mentions_max: 5, attachments_max: 3, attachment_max_chars: 40000 };
+const LIMITS = {
+  message_max_chars: 50000,
+  mentions_max: 5,
+  attachments_max: 3,
+  attachment_max_chars: 40000,
+  attachments_total_max_chars: 40000,
+};
 
 for (const width of [1440, 390]) {
   test(`a turn with long URL chips stays inside the thread at ${width}px`, async ({ page }) => {
@@ -113,7 +121,7 @@ for (const width of [1440, 390]) {
     reply!.content = `Read Actions and the project overview.\n\n\`${LONG_URL(5)}\``;
     current.messages = [request!, reply!];
     await stubAuthedShell(page, [
-      ['**/api/v1/agent/skills', { skills: SKILLS, limits: LIMITS }],
+      ['**/api/v1/agent/skills', { skills: SKILLS, models: AGENT_MODELS, limits: LIMITS }],
       [`**/api/v1/projects/${FIXTURE_PROJECT.id}/actions*`, actionsPage()],
       [`**/api/v1/projects/${FIXTURE_PROJECT.id}/agent/chats?*`, { items: [], next_cursor: null }],
     ]);
@@ -164,10 +172,13 @@ for (const width of [1280, 390]) {
         '**/api/v1/agent/skills',
         {
           skills: SKILLS,
+          models: AGENT_MODELS,
           limits: {
+            message_max_chars: 50000,
             mentions_max: 5,
             attachments_max: 3,
             attachment_max_chars: 40000,
+            attachments_total_max_chars: 40000,
           },
         },
       ],
@@ -243,10 +254,13 @@ for (const width of [1280, 390]) {
           '**/api/v1/agent/skills',
           {
             skills: SKILLS,
+            models: AGENT_MODELS,
             limits: {
+              message_max_chars: 50000,
               mentions_max: 5,
               attachments_max: 3,
               attachment_max_chars: 40000,
+              attachments_total_max_chars: 40000,
             },
           },
         ],

@@ -66,7 +66,7 @@ it('refuses a catalog change that breaks triggered siblings or weighted pillar c
   ).toThrow('pillar');
 });
 
-it('keeps score membership in one place and never scores a hidden diagnostic', () => {
+it('scores every visible page and site-root check and never a hidden diagnostic', () => {
   const s = policy.site_health;
   const validate = (rules: typeof s.rule_catalog) =>
     validateSiteHealthCatalog(
@@ -75,16 +75,25 @@ it('keeps score membership in one place and never scores a hidden diagnostic', (
       s.reads.aeo_check_pillar,
       s.reads.content_addressable_check_fields,
     );
-  const advisory = s.rule_catalog.find((rule) => rule.rule_id === 'technical.hsts_present')!;
-  expect(advisory.finding_class).toBe('diagnostic');
-  const scoredDiagnostic = s.rule_catalog.map((rule) =>
-    rule === advisory ? { ...rule, score_roles: ['web_fundamentals'] } : rule,
+  const replace = (ruleId: string, change: Partial<(typeof s.rule_catalog)[number]>) =>
+    s.rule_catalog.map((rule) => (rule.rule_id === ruleId ? { ...rule, ...change } : rule));
+  expect(() => validate(s.rule_catalog)).not.toThrow();
+  expect(() =>
+    validate(replace('technical.hsts_present', { score_roles: ['web_fundamentals'] })),
+  ).toThrow('visible finding');
+  expect(() =>
+    validate(replace('technical.title_present', { score_roles: ['aeo_readiness'] })),
+  ).toThrow('pillar disagree');
+  expect(() => validate(replace('technical.h1_present', { finding_class: 'advisory' }))).toThrow(
+    'Invalid Site Health rule policy: technical.h1_present',
   );
-  expect(() => validate(scoredDiagnostic)).toThrow('visible finding');
-  const unpillared = s.rule_catalog.map((rule) =>
-    rule.rule_id === 'aeo.open_graph_present' ? { ...rule, score_roles: ['aeo_readiness'] } : rule,
-  );
-  expect(() => validate(unpillared)).toThrow('pillar disagree');
+  for (const ruleId of ['technical.h1_present', 'technical.robots_txt_present'])
+    expect(() => validate(replace(ruleId, { score_roles: [] }))).toThrow(
+      `Unscored check ${ruleId}`,
+    );
+  expect(() =>
+    validate(replace('technical.canonical_integrity', { score_roles: [] })),
+  ).not.toThrow();
 });
 
 it('scopes a crawl to its own tenant of a shared hosting suffix', () => {

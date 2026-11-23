@@ -24,9 +24,6 @@ export const brandDiscoveriesApi = {
     const value = await apiClient.get('/brand-discovery-catalog', options);
     return strictValidate(brandDiscoveryCatalogSchema, value, 'brandDiscovery.catalog');
   },
-  // A discovery — and the project it becomes — belongs to ONE workspace, so
-  // every call names the workspace it is for rather than inheriting whichever
-  // one happened to be selected when the request was retried.
   create: async (
     input: BrandDiscoveryCreateRequest,
     idempotencyKey: string,
@@ -87,10 +84,6 @@ export const brandDiscoveryQueries = {
     }),
 };
 
-/**
- * Re-read one discovery, after a run settles or a completion whose outcome is
- * unknown: a request the browser abandoned may still have committed.
- */
 export const refreshBrandDiscovery = (
   client: QueryClient,
   workspaceId: string | null,

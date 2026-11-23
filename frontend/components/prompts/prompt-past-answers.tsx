@@ -4,7 +4,7 @@ import { useState } from 'react';
 import type { FirstNamed, PromptAnswer, PromptAnswerPage } from '@citeladder/contracts';
 import type { ProjectMarket } from '@citeladder/contracts/markets';
 import { AnswerFormatTags } from '@/components/runs/answer-formats';
-import { AnswerDialog } from '@/components/runs/answer-dialog';
+import { useAnswerDialog } from '@/components/runs/answer-link';
 import { Absence } from '@/components/ui/absence';
 import { BrandMark } from '@/components/ui/brand-mark';
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
@@ -52,7 +52,9 @@ export function PromptPastAnswers({
   const engines = useEngineCatalog();
   const timeZone = useDisplayTimeZone();
   const [cursors, setCursors] = useState<readonly string[]>([]);
-  const [opened, setOpened] = useState<string | null>(null);
+  const answerDialog = useAnswerDialog();
+  const openAnswer = (id: string) =>
+    answerDialog.open({ id, prompt_text: promptText, prompt_id: promptId });
   const read = useQuery({
     ...runsQueries.promptExecutions(scope, promptId, {
       ...params,
@@ -94,7 +96,7 @@ export function PromptPastAnswers({
           <TableRow
             key={answer.execution_id}
             className="cursor-pointer"
-            onClick={() => setOpened(answer.execution_id)}
+            onClick={() => openAnswer(answer.execution_id)}
           >
             <TableCell>
               <TextLink asChild underline="hover">
@@ -103,7 +105,7 @@ export function PromptPastAnswers({
                   aria-label={`Open the ${engines.label(answer.logical_engine)} answer from ${formatDisplayDate(answer.run_at, timeZone)}`}
                   onClick={(event) => {
                     event.stopPropagation();
-                    setOpened(answer.execution_id);
+                    openAnswer(answer.execution_id);
                   }}
                   className="min-h-6 w-auto min-w-0"
                 >
@@ -135,13 +137,7 @@ export function PromptPastAnswers({
           </TableRow>
         ))}
       </DataTable>
-      <AnswerDialog
-        execution={opened ? { id: opened, prompt_text: promptText, prompt_id: promptId } : null}
-        open={opened !== null}
-        onOpenChange={(next) => {
-          if (!next) setOpened(null);
-        }}
-      />
+      {answerDialog.dialog}
     </>
   );
 }
@@ -155,7 +151,7 @@ function tableState(
       kind: 'error',
       ...readErrorProps(read),
       title: "Couldn't load past answers",
-      fallback: 'Check your connection and try again.',
+      fallback: 'The request failed or timed out.',
     };
   if (!page) return { kind: 'loading', label: 'Loading past answers…' };
   if (!page.items.length)

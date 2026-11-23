@@ -2,6 +2,7 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
 import { ReportPage } from '@/components/templates/report-page';
+import { IssuesExport } from '@/components/site-health/issues-export';
 import { Inline } from '@/components/ui/layout';
 import {
   IssueDetailDrawer,
@@ -43,11 +44,12 @@ import {
   issueCatalogParams,
   issueSeverityChange,
   issueSeverityChoice,
+  toIssueParams,
   useIssueFilters,
   type IssueFilters,
 } from '@/lib/site-health/issue-filters';
 import { issueTitle } from '@/lib/site-health/issues';
-import { formatCount } from '@/lib/format';
+import { absent, formatCount, type Formatted } from '@/lib/format';
 
 function useIssuesCatalogQueries({
   workspaceId,
@@ -114,7 +116,15 @@ export function IssuesCatalog({
   const pager = useCatalogPager(cursor, issuesQuery.data?.next_cursor ?? null, catalog.goToPage);
 
   return (
-    <ReportPage>
+    <ReportPage
+      actions={
+        <IssuesExport
+          workspaceId={workspaceId}
+          crawlId={crawlId}
+          filters={toIssueParams(filters)}
+        />
+      }
+    >
       {notice}
       <IssuesSummary
         query={priorityQuery}
@@ -129,10 +139,7 @@ export function IssuesCatalog({
             <SectionControl
               value={filters.section}
               summary={summary}
-              upTo={
-                crawlSummary &&
-                crawlSummary.defect_issue_type_count + crawlSummary.advisory_issue_type_count
-              }
+              upTo={crawlSummary?.issue_count}
               onChange={(section) => updateFilters({ section })}
             />
           ),
@@ -214,6 +221,8 @@ function issueColumns(sort: IssueSort, onSort: (sort: IssueSort) => void): DataT
       width: 'metric',
       sort: { active: sort === 'pages', descending: true, onSort: () => onSort('pages') },
     },
+    { key: 'new', label: 'New', kind: 'number', width: 'metric' },
+    { key: 'fixed', label: 'Fixed', kind: 'number', width: 'metric' },
     { key: 'category', label: 'Category', width: 'category', priority: 'low' },
   ];
 }
@@ -250,11 +259,21 @@ function IssueRow({
       <TableCell numeric className="tabular-nums">
         {formatCount(issue.affected_url_count)}
       </TableCell>
+      <TableCell numeric className="tabular-nums">
+        {sinceLastCrawl(issue.new_url_count)}
+      </TableCell>
+      <TableCell numeric className="tabular-nums">
+        {sinceLastCrawl(issue.resolved_url_count)}
+      </TableCell>
       <TableCell>
         <IssueCategoryTag issue={issue} />
       </TableCell>
     </TableRow>
   );
+}
+
+function sinceLastCrawl(count: number | null): Formatted {
+  return count === null ? absent('unavailable') : formatCount(count);
 }
 
 function SectionControl({
@@ -330,11 +349,6 @@ function ruleFilterTitle(rows: readonly SiteIssue[], ruleId: string): string {
   return row ? issueTitle(row) : 'one issue';
 }
 
-/**
- * The catalog's page controls. The cursor lives in the URL and the API pages
- * forward only, so the way back is the trail of cursors this view followed; a
- * deep-linked page has none and steps back to the first page.
- */
 function useCatalogPager(
   cursor: string | null,
   nextCursor: string | null,

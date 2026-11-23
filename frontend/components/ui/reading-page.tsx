@@ -1,6 +1,5 @@
-import { useId, useState, type ReactNode } from 'react';
+import { useId, type ReactNode } from 'react';
 
-import { Checkbox } from '@/components/ui/checkbox';
 import { textRole, type TextRole } from '@/components/ui/typography';
 
 export function ReadingColumn({ children }: Readonly<{ children: ReactNode }>) {
@@ -65,25 +64,12 @@ export function DetailsFacts({ facts }: Readonly<{ facts: readonly DetailFact[] 
   );
 }
 
-export function Checklist({ items }: Readonly<{ items: readonly string[] }>) {
-  const [done, setDone] = useState<ReadonlySet<number>>(new Set());
+export function StepList({ items }: Readonly<{ items: readonly string[] }>) {
   return (
-    <ul className="flex flex-col">
-      {items.map((item, index) => (
-        <li key={item} className={textRole('body', 'flex items-start gap-3 py-1')}>
-          <Checkbox
-            aria-label={item}
-            className="mt-0.5"
-            checked={done.has(index)}
-            onCheckedChange={() =>
-              setDone((current) => {
-                const next = new Set(current);
-                if (!next.delete(index)) next.add(index);
-                return next;
-              })
-            }
-          />
-          <span className="min-w-0 break-words">{item}</span>
+    <ul className="flex list-disc flex-col gap-1 ps-5">
+      {items.map((item) => (
+        <li key={item} className={textRole('body', 'min-w-0 break-words')}>
+          {item}
         </li>
       ))}
     </ul>

@@ -67,9 +67,9 @@ export async function eachPageAuditBatch(
   const size = batchSize();
   let after: string | null = null;
   for (;;) {
-    const ids: string[] = await auditedPagesAfter(db, crawl, { after, size }); // NOSONAR -- Keyset batches, in order.
+    const ids: string[] = await auditedPagesAfter(db, crawl, { after, size }); // NOSONAR
     if (!ids.length) return;
-    await visit(await pageAudits(db, crawl, ids)); // NOSONAR -- Keyset batches, in order.
+    await visit(await pageAudits(db, crawl, ids)); // NOSONAR
     const last = ids.at(-1);
     if (!last || ids.length < size) return;
     after = last;

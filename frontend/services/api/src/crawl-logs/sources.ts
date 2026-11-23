@@ -62,7 +62,6 @@ const LIVE: readonly string[] = ['webhook', 'pull'] satisfies readonly SourceKin
 export const isLiveKind = (kind: string) => LIVE.includes(kind);
 const token = () => 'clw_' + randomBytes(32).toString('base64url');
 const NONCE_ALPHABET = 'abcdefghijklmnopqrstuvwxyz234567';
-/** 26 lowercase base32 characters: a valid GCP label value. 256 % 32 = 0, so unbiased. */
 const nonce = () => [...randomBytes(26)].map((byte) => NONCE_ALPHABET[byte % 32]).join('');
 function pullColumns(input: z.output<typeof createSourceSchema>) {
   if (input.setup !== 'gcp_pubsub_pull' || input.subscription === undefined)
@@ -226,7 +225,6 @@ export async function mutateSource(
     if (!source) throw notFound('Crawl log source');
     if (action === 'rotate' && (source.status !== 'active' || source.kind !== 'webhook'))
       throw new ApiError(409, 'Source cannot rotate');
-    // Revocation is idempotent: the first revoked_at is the audit and coverage boundary.
     if (action === 'revoke' && source.status === 'revoked') return { id, token: null };
     const secret = action === 'rotate' ? token() : null;
     await trx
@@ -306,7 +304,6 @@ export async function authorizeToken(db: Database, id: string, authorization: st
     .where('id', '=', id)
     .where('kind', '=', 'webhook')
     .executeTakeFirst();
-  // Revoked sources retain their hash so a valid revoked token receives 409.
   const expected = Buffer.from(source?.token_hash ?? hash('invalid'), 'hex');
   const actual = Buffer.from(hash(supplied), 'hex');
   if (!source || !supplied || !timingSafeEqual(actual, expected))

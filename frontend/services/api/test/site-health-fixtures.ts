@@ -213,10 +213,6 @@ export class SiteFixtures extends VisibilityFixtures {
       )
       .execute();
   }
-  /**
-   * A worker held to the seed's crawl. The local database is shared with other
-   * test runs, so an unscoped worker could claim and run their tasks.
-   */
   worker(seed: SiteSeed, options: Omit<SiteWorkerOptions, 'taskScope'> = {}) {
     return new SiteHealthWorker(this.siteDb, {
       ...options,
@@ -664,7 +660,6 @@ export class SiteFixtures extends VisibilityFixtures {
         dimension: rule.dimension,
         category: rule.category,
         severity: rule.severity,
-        finding_class: rule.finding_class,
         evidence: JSON.stringify({}),
         description: rule.description,
         remediation: rule.remediation,
@@ -701,8 +696,8 @@ export class SiteFixtures extends VisibilityFixtures {
         positioning: '',
         target_audience: '',
         products_services: '[]',
-        sources: '[]',
-        source_artifact_ids: '[]',
+        sources: '{}',
+        source_artifact_ids: '{}',
         created_at: now,
         updated_at: now,
       })

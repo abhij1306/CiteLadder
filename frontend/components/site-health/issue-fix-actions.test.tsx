@@ -74,7 +74,7 @@ describe('Mark fixed and Re-run all in the issue dialog', () => {
     expect(within(dialog).getByRole('button', { name: 'Mark fixed' })).toBeDisabled();
     await user.click(within(dialog).getByRole('button', { name: 'Close drawer' }));
     const fixFirst = await screen.findByRole('region', { name: 'Fix these first' });
-    expect(within(fixFirst).getByText('32 of 32 pages fixed')).toBeInTheDocument();
+    expect(within(fixFirst).getByText('Marked fixed, awaiting re-audit')).toBeInTheDocument();
   });
 
   it('re-runs an issue’s open tracked pages, refreshes its progress once the re-audit lands, and says why when a crawl is running', async () => {

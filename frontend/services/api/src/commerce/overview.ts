@@ -86,7 +86,6 @@ async function categoryShelf(db: Database, scope: CommerceScope, categoryId: str
   const { created_at, ...measured } = snapshot;
   return {
     ...measured,
-    // Stored as 0 with no successful execution: unavailable, not zero.
     product_visibility: snapshot.successful_execution_count ? snapshot.product_visibility : null,
     measured_at: created_at.toISOString(),
   };

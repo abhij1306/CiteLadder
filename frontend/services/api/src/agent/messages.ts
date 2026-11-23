@@ -44,6 +44,7 @@ export async function appendMessage(
     mentions?: Json[];
     attachments?: Json[];
     proposals?: Json[];
+    views?: Json[];
   },
 ) {
   const previous = await db
@@ -72,6 +73,7 @@ export async function appendMessage(
       mentions: JSON.stringify(input.mentions ?? []),
       attachments: JSON.stringify(input.attachments ?? []),
       proposals: JSON.stringify(input.proposals ?? []),
+      views: JSON.stringify(input.views ?? []),
       created_at: new Date(),
     })
     .returningAll()
@@ -132,7 +134,6 @@ const GENERIC_RECOVERY =
 export function recoveryReply(code: string) {
   return RECOVERY[code] ?? GENERIC_RECOVERY;
 }
-/** Marks chat activity; returning the row also takes its lock for the caller's transaction. */
 export function touchChat(db: Database, workspaceId: string, chatId: string) {
   const now = new Date();
   return db

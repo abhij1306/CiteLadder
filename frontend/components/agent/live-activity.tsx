@@ -27,8 +27,14 @@ export function LiveActivity({ detail }: Readonly<{ detail: AgentChatDetail }>) 
       return answered ? null : <Notice tone="warning">{runErrorCopy('stopped_at_limit')}</Notice>;
     case 'failed':
       return answered ? null : <Notice tone="negative">{runErrorCopy(outcome.code)}</Notice>;
-    default:
+    case 'none':
+    case 'succeeded':
+    case 'cancelled':
       return null;
+    default: {
+      const unhandled: never = outcome;
+      return unhandled;
+    }
   }
 }
 function ReadingPage() {

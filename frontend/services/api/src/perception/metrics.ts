@@ -1,4 +1,5 @@
 import type {
+  PerceptionAttribute,
   PerceptionCoverage,
   PerceptionQuote,
   PerceptionResponse,
@@ -10,6 +11,7 @@ import { z } from 'zod';
 import { perceptionLabelSchema } from '@citeladder/contracts/visibility-perception';
 
 import { compareText } from '../text-order.ts';
+import { categoryKey } from './categories.ts';
 import { isNamed } from './passages.ts';
 import type { VerifiedAspect } from './validate.ts';
 
@@ -23,7 +25,12 @@ export type MentionStatus =
   | { kind: 'pending' }
   | { kind: 'unavailable'; reason: UnavailableReason };
 
-export type NamedAspect = Omit<VerifiedAspect, 'theme_id'> & { theme: string };
+export type NamedAspect = Omit<VerifiedAspect, 'theme_id' | 'attribute'> & {
+  theme: string;
+  attribute: PerceptionAttribute;
+};
+
+type CategoryLimits = { max_attributes_per_category: number; max_quotes_per_attribute: number };
 
 export type Mention = {
   entity: string;
@@ -217,6 +224,7 @@ function quoteOf(answer: PerceptionAnswer, mention: Mention, aspect: NamedAspect
   return {
     text: aspect.quote,
     theme: aspect.theme,
+    attribute: aspect.attribute,
     polarity: aspect.polarity,
     entity: mention.entity,
     is_brand: mention.isBrand,
@@ -371,23 +379,89 @@ const UNMARKED: { logo_url: string | null; website_url: string | null } = {
   website_url: null,
 };
 
-export function entityScores(answers: readonly PerceptionAnswer[]) {
-  const byEntity = new Map<string, { name: string; isBrand: boolean; mentions: Mention[] }>();
-  for (const mention of answers.flatMap((answer) => answer.mentions)) {
-    const key = `${mention.isBrand}:${mention.entity}`;
-    const entity = byEntity.get(key);
-    if (entity) entity.mentions.push(mention);
-    else byEntity.set(key, { name: mention.entity, isBrand: mention.isBrand, mentions: [mention] });
+type Said = { answer: PerceptionAnswer; mention: Mention };
+
+function tally(said: readonly Said[], limits: CategoryLimits) {
+  type Attribute = {
+    attribute: string;
+    positive: number;
+    negative: number;
+    quotes: PerceptionQuote[];
+  };
+  const categories = new Map<
+    string,
+    { mentions: number; positive: number; negative: number; attributes: Map<string, Attribute> }
+  >();
+  const recent = [...said].sort((a, b) => compareText(b.answer.observedAt, a.answer.observedAt));
+  for (const { answer, mention } of recent) {
+    if (mention.status.kind !== 'classified') continue;
+    const raised = new Set<string>();
+    for (const aspect of mention.aspects) {
+      const row = categories.get(aspect.theme) ?? {
+        mentions: 0,
+        positive: 0,
+        negative: 0,
+        attributes: new Map<string, Attribute>(),
+      };
+      categories.set(aspect.theme, row);
+      if (!raised.has(aspect.theme)) row.mentions++;
+      raised.add(aspect.theme);
+      row[aspect.polarity]++;
+      if (aspect.attribute.kind !== 'labelled') continue;
+      const key = categoryKey(aspect.attribute.name);
+      const attribute = row.attributes.get(key) ?? {
+        attribute: aspect.attribute.name,
+        positive: 0,
+        negative: 0,
+        quotes: [],
+      };
+      attribute[aspect.polarity]++;
+      if (mention.isBrand && attribute.quotes.length < limits.max_quotes_per_attribute)
+        attribute.quotes.push(quoteOf(answer, mention, aspect));
+      row.attributes.set(key, attribute);
+    }
   }
-  return [...byEntity.values()]
-    .map(({ name, isBrand, mentions }) => ({
-      name,
-      is_brand: isBrand,
-      ...UNMARKED,
-      score: score(mentions),
-      coverage: coverage(mentions),
-      theme_mentions: themeMentions(mentions),
+  const total = (row: { positive: number; negative: number }) => row.positive + row.negative;
+  return [...categories]
+    .map(([category, row]) => ({
+      category,
+      mentions: row.mentions,
+      positive: row.positive,
+      negative: row.negative,
+      attributes: [...row.attributes.values()]
+        .sort((a, b) => total(b) - total(a) || compareText(a.attribute, b.attribute))
+        .slice(0, limits.max_attributes_per_category),
     }))
+    .sort((a, b) => total(b) - total(a) || compareText(a.category, b.category));
+}
+
+export function entityScores(answers: readonly PerceptionAnswer[], limits: CategoryLimits) {
+  const byEntity = new Map<string, { name: string; isBrand: boolean; said: Said[] }>();
+  for (const answer of answers)
+    for (const mention of answer.mentions) {
+      const key = `${mention.isBrand}:${mention.entity}`;
+      const entity = byEntity.get(key);
+      if (entity) entity.said.push({ answer, mention });
+      else
+        byEntity.set(key, {
+          name: mention.entity,
+          isBrand: mention.isBrand,
+          said: [{ answer, mention }],
+        });
+    }
+  return [...byEntity.values()]
+    .map(({ name, isBrand, said }) => {
+      const mentions = said.map((row) => row.mention);
+      return {
+        name,
+        is_brand: isBrand,
+        ...UNMARKED,
+        score: score(mentions),
+        coverage: coverage(mentions),
+        theme_mentions: themeMentions(mentions),
+        categories: tally(said, limits),
+      };
+    })
     .sort(
       (a, b) =>
         Number(b.is_brand) - Number(a.is_brand) ||
@@ -398,12 +472,16 @@ export function entityScores(answers: readonly PerceptionAnswer[]) {
 
 export function perceptionSummary(
   answers: readonly PerceptionAnswer[],
-  limits: { max_quotes_per_theme: number; max_negative_quotes: number; max_drivers: number },
+  limits: CategoryLimits & {
+    max_quotes_per_theme: number;
+    max_negative_quotes: number;
+    max_drivers: number;
+  },
 ): Omit<PerceptionResponse, 'source_audit_ids'> {
   const brandMentions = answers.flatMap((answer) =>
     answer.mentions.filter((mention) => mention.isBrand),
   );
-  const entities = entityScores(answers);
+  const entities = entityScores(answers, limits);
   const brandCoverage = coverage(brandMentions);
   const quotes = classifiedQuotes(answers, (mention) => mention.isBrand).map(
     ({ ordinal: _ordinal, ...quote }) => quote,

@@ -37,10 +37,16 @@ export function LedgerItem({
   const text = (
     <>
       <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <ClampText className={textRole('body', 'flex-[1_1_15rem]')}>{title}</ClampText>
+        <ClampText phoneWrap className={textRole('body', 'flex-[1_1_15rem]')}>
+          {title}
+        </ClampText>
         {meta === undefined ? null : <div className="flex shrink-0 items-center gap-2">{meta}</div>}
       </div>
-      {caption === undefined ? null : <ClampText className="type-caption">{caption}</ClampText>}
+      {caption === undefined ? null : (
+        <ClampText phoneWrap className="type-caption">
+          {caption}
+        </ClampText>
+      )}
       {links === undefined ? null : (
         <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1">{links}</div>
       )}

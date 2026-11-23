@@ -627,7 +627,6 @@ describe('Search Intelligence citation matches', () => {
       auditId,
       analysis: { citations: [{ url: 'https://linker.example/post' }] },
     });
-    // 5,101 matches at 13 parameters each exceed PostgreSQL's 65,535 limit.
     await sql`insert into citations (id, workspace_id, audit_id, analysis_id, artifact_id,
         analyzer_version, ordinal, url, title, domain, classification, source_class, source_origin,
         source_taxonomy_version, is_owned, is_unintended, matched_competitor, resolved_url,

@@ -1,13 +1,15 @@
 import type { Context, Hono } from 'hono';
+import { z } from 'zod';
 import type { ServiceConfig } from '../config.ts';
 import api from '../config/api.json' with { type: 'json' };
 import type { AppEnv } from '../context.ts';
 import type { Database } from '../db/database.ts';
+import { isRecord } from '../db/json.ts';
+import { lenient, nested, opaque } from '../lenient-fields.ts';
 import { loadMcpConfig, mcpPolicy } from './config.ts';
 import { authenticateMcp } from './token-auth.ts';
-import { admitToolCall, admitWriteCall } from './registration.ts';
+import { admitToolCall } from './registration.ts';
 import { dispatchTool, presentationTools, tools } from './tools.ts';
-import { dispatchWrite, isWriteTool, writeTools } from './write-tools.ts';
 import { callerMessage } from './types.ts';
 import { getLogger } from '../logging.ts';
 import { parseUuid } from '../http/uuid.ts';
@@ -17,7 +19,6 @@ const logger = getLogger('mcp');
 const VERSIONS = ['2026-07-28', '2025-11-25'];
 const INSTRUCTIONS = [
   "CiteLadder data about a business's visibility in AI answers and search.",
-  "Changes need the user's explicit agreement: say what you will change and wait for their yes before any change tool. For a prepare tool, show its preview and call confirm_change only after they agree to it.",
   'Start with list_projects, then get_project_business_context; use the focused reads for detail.',
   'Missing evidence is unavailable, never zero. Report change without claiming its cause.',
   'IDs and citeladder:// references are for your tool calls only: never show them to the user. Name the page, prompt, competitor or Action instead, and give app links as links.',
@@ -26,11 +27,36 @@ const toolNames = new Set(tools.map((tool) => tool.name));
 const listedTools = tools.map((tool) =>
   presentationTools.has(tool.name) ? { ...tool, _meta: appToolMetadata } : tool,
 );
-const listedWithChanges = [...listedTools, ...writeTools];
 const CAPABILITIES = { tools: {}, resources: {}, prompts: {} };
-function object(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
+const VERSION_KEY = 'io.modelcontextprotocol/protocolVersion';
+const clientInfoSchema = z.object({ name: z.string(), version: z.string() });
+const metaSchema = nested({
+  [VERSION_KEY]: opaque,
+  'io.modelcontextprotocol/clientInfo': lenient(
+    (value) => clientInfoSchema.safeParse(value).success,
+  ),
+  'io.modelcontextprotocol/clientCapabilities': lenient(isRecord),
+}).transform((meta) => ({
+  version: meta[VERSION_KEY],
+  described:
+    meta['io.modelcontextprotocol/clientInfo'] &&
+    meta['io.modelcontextprotocol/clientCapabilities'],
+}));
+const paramsSchema = z.object({ name: opaque, uri: opaque, arguments: opaque, _meta: metaSchema });
+const rpcMessageSchema = z.object({
+  jsonrpc: z.literal('2.0'),
+  method: z.string(),
+  id: z.union([z.string(), z.int()]).optional(),
+  params: paramsSchema.optional(),
+});
+const toolCallSchema = z.object({
+  name: z.string(),
+  arguments: z.record(z.string(), z.unknown()).optional(),
+});
+const promptCallSchema = z.object({
+  name: z.literal('business_health_review'),
+  arguments: z.object({ project_id: z.string().refine((id) => parseUuid(id) !== null) }),
+});
 function origin(value: string): string | null {
   try {
     const url = new URL(value);
@@ -64,20 +90,15 @@ function decodedHeader(value: string | undefined): string | undefined {
 type McpContext = Context<AppEnv>;
 type McpSettings = ReturnType<typeof loadMcpConfig>;
 type McpPrincipalGrant = NonNullable<Awaited<ReturnType<typeof authenticateMcp>>>;
-type RpcMessage = {
-  jsonrpc: '2.0';
-  method: string;
-  id?: string | number;
-  params?: Record<string, unknown>;
-};
+type RpcMessage = z.output<typeof rpcMessageSchema>;
+type RpcParams = z.output<typeof paramsSchema>;
 type McpCall = {
   c: McpContext;
   db: Database;
-  config: ServiceConfig;
   settings: McpSettings;
   principal: McpPrincipalGrant;
   message: RpcMessage;
-  params: Record<string, unknown>;
+  params: RpcParams;
   modern: boolean;
 };
 type MethodResult = Record<string, unknown> | Response;
@@ -146,57 +167,40 @@ function transportRefusal(c: McpContext): Response | null {
     return c.json(rpcError(null, -32600, 'Content-Type must be application/json'), 415);
   return null;
 }
-function isRpcMessage(message: unknown): message is RpcMessage {
-  return (
-    object(message) &&
-    message.jsonrpc === '2.0' &&
-    typeof message.method === 'string' &&
-    (message.params === undefined || object(message.params)) &&
-    (message.id === undefined || typeof message.id === 'string' || Number.isSafeInteger(message.id))
-  );
-}
 async function readMessage(c: McpContext): Promise<RpcMessage | Response> {
-  let message: unknown;
+  let body: unknown;
   try {
-    message = await c.req.json();
+    body = await c.req.json();
   } catch {
     return c.json(rpcError(null, -32700, 'Parse error'), 400);
   }
-  return isRpcMessage(message) ? message : c.json(rpcError(null, -32600, 'Invalid request'), 400);
+  const message = rpcMessageSchema.safeParse(body);
+  return message.success ? message.data : c.json(rpcError(null, -32600, 'Invalid request'), 400);
 }
-/** The 2026 protocol carries version, method and name in headers that must match the body. */
 function modernHeadersRefusal(
   c: McpContext,
   message: RpcMessage,
-  params: Record<string, unknown>,
-  meta: Record<string, unknown>,
+  params: RpcParams,
 ): Response | null {
   const headerVersion = c.req.header('mcp-protocol-version');
   if (
-    headerVersion !== meta['io.modelcontextprotocol/protocolVersion'] ||
+    headerVersion !== params._meta.version ||
     c.req.header('mcp-method') !== message.method ||
     (['tools/call', 'prompts/get', 'resources/read'].includes(message.method) &&
       decodedHeader(c.req.header('mcp-name')) !== (params.name ?? params.uri))
   )
     return c.json(rpcError(message.id, -32020, 'Request headers do not match body metadata'), 400);
-  const info = meta['io.modelcontextprotocol/clientInfo'];
-  if (
-    !object(info) ||
-    typeof info.name !== 'string' ||
-    typeof info.version !== 'string' ||
-    !object(meta['io.modelcontextprotocol/clientCapabilities'])
-  )
+  if (!params._meta.described)
     return c.json(rpcError(message.id, -32602, 'Required client metadata is missing'), 400);
   return null;
 }
 function negotiateVersion(
   c: McpContext,
   message: RpcMessage,
-  params: Record<string, unknown>,
+  params: RpcParams,
 ): { modern: boolean } | Response {
-  const meta = object(params._meta) ? params._meta : {};
   const headerVersion = c.req.header('mcp-protocol-version');
-  const requestedVersion = meta['io.modelcontextprotocol/protocolVersion'] ?? headerVersion;
+  const requestedVersion = params._meta.version ?? headerVersion;
   const modern = requestedVersion === VERSIONS[0] || headerVersion === VERSIONS[0];
   if (requestedVersion !== undefined && !VERSIONS.includes(String(requestedVersion)))
     return c.json(
@@ -206,7 +210,7 @@ function negotiateVersion(
       }),
       400,
     );
-  return (modern ? modernHeadersRefusal(c, message, params, meta) : null) ?? { modern };
+  return (modern ? modernHeadersRefusal(c, message, params) : null) ?? { modern };
 }
 
 const serverInfo = {
@@ -226,29 +230,16 @@ function initialize({ c, message, modern }: McpCall): MethodResult {
   };
 }
 async function callTool(call: McpCall): Promise<MethodResult> {
-  const { c, db, config, settings, principal, message, params } = call;
-  if (
-    typeof params.name !== 'string' ||
-    (params.arguments !== undefined && !object(params.arguments))
-  )
-    return c.json(rpcError(message.id, -32602, 'Invalid tool arguments'), 400);
-  const name = params.name;
-  const writeName = principal.canWrite && isWriteTool(name) ? name : null;
-  const write = writeName !== null;
-  if (!toolNames.has(name) && !write)
+  const { c, db, settings, principal, message } = call;
+  const parsed = toolCallSchema.safeParse(call.params);
+  if (!parsed.success) return c.json(rpcError(message.id, -32602, 'Invalid tool arguments'), 400);
+  const { name } = parsed.data;
+  if (!toolNames.has(name))
     return c.json(rpcError(message.id, -32602, `Unknown tool: ${name}`), 400);
   try {
     await admitToolCall(db, principal.grantId, principal.userId);
-    if (write) await admitWriteCall(db, principal.grantId);
-    const args = params.arguments ?? {};
-    const value =
-      writeName === null
-        ? await dispatchTool(db, principal, name, args, settings.browserOrigin)
-        : await dispatchWrite(
-            { db, config, principal, origin: settings.browserOrigin },
-            writeName,
-            args,
-          );
+    const args = parsed.data.arguments ?? {};
+    const value = await dispatchTool(db, principal, name, args, settings.browserOrigin);
     return {
       content: [{ type: 'text', text: JSON.stringify(value) }],
       structuredContent: value,
@@ -256,18 +247,20 @@ async function callTool(call: McpCall): Promise<MethodResult> {
       ...(presentationTools.has(name) ? { _meta: appToolMetadata } : {}),
     };
   } catch (error) {
-    return toolFailure(error, name, write);
+    return toolFailure(error, name);
   }
 }
-function toolFailure(error: unknown, name: string, write: boolean): MethodResult {
+function toolFailure(error: unknown, name: string): MethodResult {
   const problem = callerMessage(error);
   if (problem === null)
     logger.warning('MCP tool call failed', {
       tool: name,
       exceptionType: error instanceof Error ? error.name : 'unknown',
     });
-  const fallback = write ? 'The change was not made.' : 'Evidence is unavailable.';
-  return { content: [{ type: 'text', text: problem ?? fallback }], isError: true };
+  return {
+    content: [{ type: 'text', text: problem ?? 'Evidence is unavailable.' }],
+    isError: true,
+  };
 }
 async function readResource({ c, db, settings, principal, message, params }: McpCall) {
   if (params.uri === appResource.uri) return readAppResource();
@@ -297,14 +290,9 @@ async function readResource({ c, db, settings, principal, message, params }: Mcp
   }
 }
 function getPrompt({ c, message, params }: McpCall): MethodResult {
-  const args = params.arguments;
-  if (
-    params.name !== 'business_health_review' ||
-    !object(args) ||
-    typeof args.project_id !== 'string' ||
-    !parseUuid(args.project_id)
-  )
-    return c.json(rpcError(message.id, -32602, 'Invalid prompt arguments'), 400);
+  const parsed = promptCallSchema.safeParse(params);
+  if (!parsed.success) return c.json(rpcError(message.id, -32602, 'Invalid prompt arguments'), 400);
+  const args = parsed.data.arguments;
   return {
     messages: [
       {
@@ -318,7 +306,7 @@ function getPrompt({ c, message, params }: McpCall): MethodResult {
   };
 }
 async function dispatchMethod(call: McpCall): Promise<MethodResult> {
-  const { c, message, principal, modern } = call;
+  const { c, message, modern } = call;
   switch (message.method) {
     case 'initialize':
       return initialize(call);
@@ -332,7 +320,7 @@ async function dispatchMethod(call: McpCall): Promise<MethodResult> {
     case 'ping':
       return {};
     case 'tools/list':
-      return { tools: principal.canWrite ? listedWithChanges : listedTools };
+      return { tools: listedTools };
     case 'tools/call':
       return callTool(call);
     case 'resources/list':
@@ -366,8 +354,7 @@ async function dispatchMethod(call: McpCall): Promise<MethodResult> {
       return c.json(rpcError(message.id, -32601, 'Method not found'), modern ? 404 : 200);
   }
 }
-/** 2026-07-28 requires `ttlMs` and `cacheScope` on these results (CacheableResult). */
-function cacheHint(method: string, params: Record<string, unknown>) {
+function cacheHint(method: string, params: RpcParams) {
   const { catalogue, grant, project } = mcpPolicy.result_cache;
   switch (method) {
     case 'server/discover':
@@ -395,7 +382,7 @@ async function handleMcpRequest(
   if (refusal) return refusal;
   const message = await readMessage(c);
   if (message instanceof Response) return message;
-  const params = object(message.params) ? message.params : {};
+  const params = message.params ?? paramsSchema.parse({});
   const version = negotiateVersion(c, message, params);
   if (version instanceof Response) return version;
   if (message.id === undefined) return c.body(null, 202);
@@ -403,7 +390,6 @@ async function handleMcpRequest(
   const result = await dispatchMethod({
     c,
     db,
-    config,
     settings,
     principal,
     message,

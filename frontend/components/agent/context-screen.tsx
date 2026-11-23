@@ -57,10 +57,7 @@ function ContextWorkspace({
 
   return (
     <TabsRoot value={requestedTab} onValueChange={setTab} orientation="vertical">
-      <SettingsPage
-        wide={requestedTab === 'map'}
-        rail={<TabRail items={CONTEXT_TABS} ariaLabel="Context sections" />}
-      >
+      <SettingsPage rail={<TabRail items={CONTEXT_TABS} ariaLabel="Context sections" />}>
         <ContextPanels
           project={project}
           workspaceId={workspaceId}

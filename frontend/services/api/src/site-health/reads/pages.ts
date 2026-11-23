@@ -11,6 +11,7 @@ import { record, strings } from '../../db/json.ts';
 import { WorkspaceScope } from '../../db/workspace-scope.ts';
 import { notFound } from '../../errors.ts';
 import { loadCrawl, rootFailure, type Crawl } from './crawl.ts';
+import { pageFilterFingerprint, type PageRowFilters } from './page-filters.ts';
 import {
   linkedFrom,
   measurementFields,
@@ -19,7 +20,6 @@ import {
   pageWindow,
   shownIssueFilter,
   type PageRow,
-  type PageRowFilters,
   type PageSort,
   type Referrer,
 } from './page-rows.ts';
@@ -76,10 +76,7 @@ async function window(
 ) {
   const fingerprint = {
     crawl_id: crawl.id,
-    status: filters.status ?? null,
-    monitored: filters.monitored ?? null,
-    page_kind: filters.pageKind ?? null,
-    query: filters.query?.trim().toLowerCase() || null,
+    ...pageFilterFingerprint(filters),
     sort,
   };
   const rows = await pageRows(db, crawl, {
@@ -142,28 +139,29 @@ export async function requireAdmitted(db: Database, crawl: Crawl, siteUrlId: str
 
 function pageFacts(facts: Record<string, unknown>) {
   const headings = record(facts.headings);
-  const anchors = Array.isArray(record(facts.links).anchors)
-    ? (record(facts.links).anchors as unknown[]).map(record)
-    : [];
-  const internal = anchors.filter((anchor) => anchor.is_internal === true).length;
+  const links = record(facts.links).anchors;
+  const anchors = Array.isArray(links) ? links.map(record) : null;
+  const internal = anchors?.filter((anchor) => anchor.is_internal === true).length ?? null;
   const robots = record(facts.robots);
-  const int = (value: unknown) => (typeof value === 'number' ? Math.trunc(value) : 0);
+  const int = (value: unknown) => (typeof value === 'number' ? Math.trunc(value) : null);
   const text = (value: unknown) => (typeof value === 'string' && value !== '' ? value : null);
+  const headingCounts = Object.values(record(headings.counts))
+    .map(int)
+    .filter((value) => value !== null);
   return {
     title: text(facts.title),
     meta_description: text(facts.meta_description),
     canonical_url: text(facts.canonical_url),
     robots_directives: (['noindex', 'nofollow'] as const).filter((name) => robots[name] === true),
     h1_count: int(headings.h1_count),
-    heading_count: Object.values(record(headings.counts)).reduce<number>(
-      (sum, value) => sum + int(value),
-      0,
-    ),
+    heading_count: headingCounts.length
+      ? headingCounts.reduce((sum, value) => sum + value, 0)
+      : null,
     image_count: int(record(facts.images).count),
     image_missing_alt_count: int(record(facts.images).missing_alt),
     word_count: int(record(facts.body).word_count),
     internal_link_count: internal,
-    external_link_count: anchors.length - internal,
+    external_link_count: anchors && internal !== null ? anchors.length - internal : null,
     structured_data_types: strings(record(facts.structured_data).types),
   };
 }
@@ -173,7 +171,7 @@ function deliveryFacts(facts: Record<string, unknown>, htmlBytes: number | null)
   const blocking = record(facts.blocking_resources);
   const value = <T>(key: string) => (delivery[key] ?? null) as T | null;
   const text = (key: string) =>
-    typeof delivery[key] === 'string' && delivery[key] !== '' ? (delivery[key] as string) : null;
+    typeof delivery[key] === 'string' && delivery[key] !== '' ? delivery[key] : null;
   return {
     field_cwv_available: false as const,
     status_code: value<number>('status_code'),
@@ -315,7 +313,7 @@ export async function pageDetail(
     delivery: deliveryFacts(facts, analysis?.decoded_bytes ?? null),
     issues: issues.map((issue) => ({
       ...issueOccurrence(issue, page),
-      group_id: issueGroupId(crawl.id, issue.rule_id, issue.finding_class),
+      group_id: issueGroupId(crawl.id, issue.rule_id),
       score_roles: ruleScoreRoles(issue.rule_id),
     })),
     evaluations: evaluations.map((evaluation) => ({

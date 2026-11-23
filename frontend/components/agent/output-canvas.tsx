@@ -248,14 +248,9 @@ function SectionEditor({
       gap="compact"
       onSubmit={(event: FormEvent) => {
         event.preventDefault();
-        // The descriptor's refresh shows the saved revision, which unmounts this
-        // editor before a mutate callback could run, so the draft is cleared
-        // from the settled promise instead.
         save
           .mutateAsync({ ...target, baseRevisionId: revision.id, title: revision.title, body })
-          .then(done, () => {
-            // The notice below reports the failure; the draft stays for another try.
-          });
+          .then(done, () => {});
       }}
     >
       <label htmlFor={inputId} className="sr-only">

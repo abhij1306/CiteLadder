@@ -63,14 +63,13 @@ async function resolveIssueGroup(db: OriginDb, scope: OriginScope, refs: OriginR
     .where('id', '=', groupRef.crawl_id)
     .executeTakeFirst();
   if (!crawl) throw new AgentError('agent_context_unavailable');
-  const detail = await issueDetail(
-    db,
-    scope.workspaceId,
-    groupRef.crawl_id,
-    groupRef.group_id,
-    { limit: policy.agent_context.content_context_max_pages, cursor: null },
-    groupRef.site_url_id,
-  );
+  const detail = await issueDetail(db, {
+    workspaceId: scope.workspaceId,
+    crawlId: groupRef.crawl_id,
+    groupId: groupRef.group_id,
+    paging: { limit: policy.agent_context.content_context_max_pages, cursor: null },
+    siteUrlId: groupRef.site_url_id,
+  });
   if (groupRef.site_url_id && !detail.occurrences.length)
     throw new AgentError('agent_context_unavailable');
   return {

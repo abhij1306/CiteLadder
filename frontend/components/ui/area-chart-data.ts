@@ -21,9 +21,10 @@ export function chartRows(
   const xs = pointXs(data);
   return data.flatMap((point, index) => {
     const x = xs[index] ?? index;
-    const values = Object.fromEntries(
-      lines.map((line, at) => [`l${at}`, line.values[index] ?? null]),
-    ) as Record<`l${number}`, number | null>;
+    const values: Record<`l${number}`, number | null> = {};
+    lines.forEach((line, at) => {
+      values[`l${at}`] = line.values[index] ?? null;
+    });
     const row: ChartRow = { x, index, break: false, ...values };
     const before = xs[index - 1];
     if (!point.breakBefore || before === undefined) return [row];
@@ -49,6 +50,25 @@ export function gapRanges(values: readonly (number | null)[], xs: readonly numbe
   });
   if (start !== null) ranges.push({ from: edge(start, -1), to: edge(values.length - 1, 1) });
   return ranges;
+}
+
+export function breakBridges(
+  values: readonly (number | null)[],
+  data: readonly TrendPoint[],
+): Readonly<{ from: { x: number; y: number }; to: { x: number; y: number } }>[] {
+  const xs = pointXs(data);
+  return data.flatMap((point, index) => {
+    const before = values[index - 1] ?? null;
+    const after = values[index] ?? null;
+    const [fromX, toX] = [xs[index - 1], xs[index]];
+    if (!point.breakBefore || before === null || after === null) return [];
+    if (fromX === undefined || toX === undefined) return [];
+    return [{ from: { x: fromX, y: before }, to: { x: toX, y: after } }];
+  });
+}
+
+export function distinctTicks(xs: readonly number[], label: (x: number) => string | undefined) {
+  return xs.filter((x, index) => index === 0 || label(x) !== label(xs[index - 1] ?? x));
 }
 
 export function eventsInSpan(data: readonly TrendPoint[], events: readonly TrendEvent[]) {

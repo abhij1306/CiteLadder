@@ -9,17 +9,21 @@ const SOFT_ERROR_PHRASES = ['page not found', '404 not found', 'does not exist']
 export const passFail = (condition: boolean) => (condition ? 'satisfied' : 'missing');
 
 export function serverRenderSignals(facts: Facts): [boolean, Record<string, unknown>] {
-  const body = record(facts.body);
-  const words = count(body.word_count);
-  const chars = text(body.text).length;
-  const scripts = count(facts.inline_script_chars);
+  const words = count(facts.main_word_count);
+  const h1Count = count(record(facts.headings).h1_count);
+  const inlineScriptChars = count(facts.inline_script_chars);
+  const externalScripts = list(record(facts.links).scripts).length;
   return [
-    words < SERVER_RENDERED_MIN_WORDS && scripts > chars,
+    (inlineScriptChars > 0 || externalScripts > 0) &&
+      h1Count === 0 &&
+      words < SERVER_RENDERED_MIN_WORDS,
     {
       word_count: words,
       minimum_words: SERVER_RENDERED_MIN_WORDS,
-      body_text_chars: chars,
-      inline_script_chars: scripts,
+      body_word_count: count(record(facts.body).word_count),
+      h1_count: h1Count,
+      inline_script_chars: inlineScriptChars,
+      external_scripts: externalScripts,
     },
   ];
 }
@@ -44,7 +48,6 @@ const crawlerAccess =
       catalog_version: robots.catalog_version,
       robots_snapshot_id: robots.robots_snapshot_id,
     };
-    // A missing robots.txt (RFC 9309: a 4xx other than 401/403) means "no rules": access is measured.
     const missing = robots.status === policy.site_health.crawl.robots_statuses.not_found;
     if (!robots.fetched && !missing)
       return ['not_applicable', { ...evidence, reason: 'robots_not_fetched' }];
@@ -129,6 +132,15 @@ const deliveryChecks: Record<string, (facts: Facts) => CheckResult> = {
       return ['not_applicable', { reason: 'no_ttfb_measurement' }];
     const ms = count(ttfb);
     return [passFail(ms <= r.ttfb_warn_ms), { ttfb_ms: ms, threshold_ms: r.ttfb_warn_ms }];
+  },
+  'technical.html_size': (facts) => {
+    const bytes = delivery(facts).decoded_bytes;
+    if (bytes === null || bytes === undefined)
+      return ['unknown', { reason: 'insufficient_evidence' }];
+    const evidence = { decoded_bytes: count(bytes), max_bytes: r.html_max_bytes };
+    return evidence.decoded_bytes > r.html_max_bytes
+      ? ['missing', { ...evidence, reason: 'html_too_large' }]
+      : ['satisfied', evidence];
   },
   'technical.uncompressed_html': (facts) => {
     const d = delivery(facts);

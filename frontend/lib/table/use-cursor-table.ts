@@ -5,10 +5,6 @@ import { TABLE_DEFAULT_PAGE_SIZE, type TablePageSize, isTablePageSize } from '@/
 export function useCursorTable(scopeKey: string) {
   const [stack, setStack] = useState<readonly string[]>([]);
   const [pageSizeState, setPageSizeState] = useState<TablePageSize>(TABLE_DEFAULT_PAGE_SIZE);
-  // The scope the current stack was cut against, held as STATE so the reset
-  // below is React's "adjust state during render" pattern rather than a ref
-  // read. An effect would let one paint go out with the previous scope's
-  // cursor still applied — exactly the request the server rejects.
   const [stackScope, setStackScope] = useState(scopeKey);
   if (stackScope !== scopeKey) {
     setStackScope(scopeKey);

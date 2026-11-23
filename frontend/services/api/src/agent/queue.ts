@@ -50,7 +50,6 @@ export async function endInterrupted(
   run: Run,
   reconcile: (db: Database, run: Run) => Promise<void>,
 ) {
-  // Closing its calls and the terminal writes share one ordered transaction.
   await reconcile(db, run);
   await db
     .updateTable('agent_runs')
@@ -147,7 +146,7 @@ export class AgentQueue {
         .forUpdate()
         .skipLocked()
         .execute();
-      for (const run of rows) await endInterrupted(trx, run, reconcile); // NOSONAR -- One transaction connection: the runs end in order.
+      for (const run of rows) await endInterrupted(trx, run, reconcile); // NOSONAR
       return rows.length;
     });
   }

@@ -1,11 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 
 import { AgentFailureNotice } from '@/components/agent/agent-failure-notice';
 import { BriefingCard } from '@/components/agent/briefing-card';
 import { Composer } from '@/components/agent/composer';
 import { useSkillChoice } from '@/components/agent/skill-picker';
+import { useModelPicker } from '@/components/agent/model-picker';
 import { useAgentCatalog } from '@/components/agent/use-agent-catalog';
 import { useCreateChat } from '@/components/agent/use-chat-turns';
 import { useComposerCommands } from '@/components/agent/use-composer-commands';
@@ -19,12 +20,13 @@ import { contextChips, parseAgentHandoff, withoutContext } from '@/lib/agent/han
 import { approachLabel, targetKindLabel } from '@/lib/agent/vocabulary';
 import { actionsQueries, type Action } from '@/lib/api/actions';
 import { useProjectHref } from '@/lib/navigation/project-destination';
+import { useUrlSearch } from '@/lib/navigation/url-params';
 import { useProjectScope } from '@/lib/project/active-project-scope';
 import { Notice, readErrorProps } from '@/components/ui/notice';
 
 export function NewChatScreen() {
   const { workspaceId, projectId } = useProjectScope();
-  const [searchParams] = useSearchParams();
+  const searchParams = useUrlSearch();
   const handoffKey = searchParams.toString();
   return (
     <NewChat
@@ -46,9 +48,6 @@ function NewChat({
   searchParams: URLSearchParams;
 }>) {
   const handoff = useMemo(() => parseAgentHandoff(searchParams), [searchParams]);
-  // Undefined until typed: the composer shows the URL's prompt or, for an
-  // Action handoff, the Action's own message once it loads. The message is
-  // read, never carried in the URL, so history and logs keep only ids.
   const [typed, setTyped] = useState(handoff.prompt);
   const [context, setContext] = useState(handoff.context);
   const [skillId, setSkillId] = useState<string | null | undefined>(handoff.skillId ?? undefined);
@@ -63,6 +62,7 @@ function NewChat({
   );
   const failure = create.failure;
   const commands = useComposerCommands({ workspaceId, projectId });
+  const model = useModelPicker();
   const { actionId, action, message, attachment, unavailable } = useAttachedAction(
     workspaceId,
     handoff.actionId,
@@ -93,6 +93,7 @@ function NewChat({
       (prepared) =>
         create.start({
           ...prepared,
+          choice: model.request,
           skillId: pinnedId ? undefined : skillId,
           workflowId: pinnedId,
           actionId,
@@ -103,7 +104,7 @@ function NewChat({
 
   return (
     <ThreadPage>
-      <Stack gap="section" className="my-auto">
+      <Stack gap="section" className="max-w-thread mx-auto my-auto w-full">
         <h2 className={textRole('title', 'text-center')}>What can I help with?</h2>
         {unavailable ? (
           <Notice tone="negative">
@@ -132,6 +133,7 @@ function NewChat({
             placeholder="Ask a question or describe the work"
             attachment={attachment}
             skill={skill}
+            model={model.picker}
             scope={handoffScope.facts}
             chips={contextChips(sent, handoffScope.labels)}
             commands={commands}
@@ -145,7 +147,7 @@ function NewChat({
           <BriefingCard
             workspaceId={workspaceId}
             projectId={projectId}
-            onStart={create.start}
+            onStart={(input) => create.start({ ...input, choice: model.request })}
             pending={pending}
             disabled={!access.canSend}
           />

@@ -68,7 +68,7 @@ export function CsvImportFileInput({
           onSelect(file);
           event.currentTarget.value = '';
         }}
-        className="focus-ring border-rule bg-surface text-ink file:bg-well file:text-ink type-body type-control-file rounded-control file:rounded-control block w-full border px-2 py-2 file:me-2 file:border-0 file:px-2 file:py-1"
+        className="focus-ring bg-surface text-ink file:bg-well file:text-ink type-body type-control-file rounded-control file:rounded-control block w-full border border-transparent px-2 py-2 file:me-2 file:border-0 file:px-2 file:py-1"
       />
     </label>
   );

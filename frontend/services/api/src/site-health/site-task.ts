@@ -22,11 +22,6 @@ import type { SitePageFetcher } from './page-fetch.ts';
 import type { CrawlCadences } from './refresh-cadence.ts';
 import type { SiteWorkerSettings } from './runtime.ts';
 
-/**
- * Every crawl column but the score summary: it grows with the crawl (tens of
- * kilobytes, read back from TOAST) and only the crawl projection reads it, so
- * the task, lock and reconcile paths never load it.
- */
 export const CRAWL_COLUMNS = [
   'admitted_url_count',
   'analysis_requested_count',
@@ -114,11 +109,6 @@ export const owned = (db: Database, task: SiteTask, owner: string) =>
     .where('lease_owner', '=', owner)
     .where('attempt_count', '=', task.attempt_count);
 
-/**
- * Whether the loaded row is still this slot's claim. A worker's owner is fixed
- * for its lifetime, so the attempt tells a stale slot from the same worker's
- * re-claim after recovery charged the expired lease. The commit fence decides.
- */
 export const heldBySlot = (loaded: SiteTask, claimed: SiteTask, owner: string) =>
   loaded.lease_owner === owner && loaded.attempt_count === claimed.attempt_count;
 
@@ -418,14 +408,11 @@ async function settleThrown(ctx: SiteTaskContext, claimed: SiteTask, error: unkn
     });
   } catch (error_) {
     if (!isRetryableContention(error_)) throw error_;
-    // The task row alone, through the lease fence: a re-claimed lease is never settled here.
     await asyncCommit(ctx.db, async (trx) => {
       const task = await ctx.queue.fence(trx, claimed, ctx.owner);
       if (task && task.conflict_count < ctx.settings.conflictMax)
         await settleTask(trx, ctx, task, { kind: 'conflict', errorDetail: detail, cause: error });
     }).catch((contended: unknown) => {
-      // A cancel or sibling still holds the task row: lease recovery settles it at
-      // expiry. Throwing would fail the whole runner lane for one task's lock wait.
       if (!isRetryableContention(contended)) throw contended;
       logger.warning('site_task_settle_contended', { task_id: claimed.id });
     });
@@ -434,7 +421,6 @@ async function settleThrown(ctx: SiteTaskContext, claimed: SiteTask, error: unkn
 
 export async function runSiteTask(runner: SiteTaskRunner, claimed: SiteTask, work: SiteTaskWork) {
   const heartbeat = maintainLease(
-    // At the claimed attempt: recovery charges one, so a re-claim never renews this slot.
     () =>
       runner.queue.heartbeat(claimed.id, runner.owner, claimed.workspace_id, claimed.attempt_count),
     runner.settings.heartbeat * 1000,

@@ -19,7 +19,6 @@ function manifestRoute(route: AppRouteRecord): RouteObject {
   return {
     path: route.path,
     loader: () => {
-      // React.lazy surfaces any failure through RouteError when the leaf mounts.
       void load().catch(() => {});
       return null;
     },

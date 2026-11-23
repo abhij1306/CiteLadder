@@ -71,7 +71,6 @@ export type BudgetSubject =
 type BudgetValue = number | SettingSpec;
 
 type Budget = {
-  /** The persisted `usage_windows.operation`; renaming it resets live windows. */
   operation: string;
   subject: BudgetSubject;
   limit: BudgetValue;
@@ -205,12 +204,6 @@ export const budgets = {
     operation: 'mcp.tool_call.user',
     subject: 'user',
     limit: mcpLimits.tool_call_user_limit,
-    windowSeconds: mcpLimits.tool_call_window_seconds,
-  },
-  mcp_write_call_grant: {
-    operation: 'mcp.write_call.grant',
-    subject: 'mcp_grant',
-    limit: mcpLimits.write_call_grant_limit,
     windowSeconds: mcpLimits.tool_call_window_seconds,
   },
 } satisfies Record<string, Budget>;

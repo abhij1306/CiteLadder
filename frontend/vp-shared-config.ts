@@ -1,6 +1,119 @@
 import type { OxlintConfig } from 'vite-plus/lint';
 import type { OxfmtConfig } from 'vite-plus/fmt';
 
+const apiTypeAssertionBaseline = [
+  'services/api/src/agent/skills.ts',
+  'services/api/src/agent/tool-adapters.ts',
+  'services/api/src/analysis/aggregate.ts',
+  'services/api/src/analysis/position.ts',
+  'services/api/src/audits/costs.ts',
+  'services/api/src/audits/execution-context.ts',
+  'services/api/src/audits/freeze.ts',
+  'services/api/src/audits/frozen-configuration.ts',
+  'services/api/src/auth/client-identity.ts',
+  'services/api/src/auth/oauth.ts',
+  'services/api/src/billing/ai-pricing.ts',
+  'services/api/src/billing/catalog-authoring.ts',
+  'services/api/src/billing/catalog.ts',
+  'services/api/src/billing/plan-operators.ts',
+  'services/api/src/billing/reads.ts',
+  'services/api/src/cli/dataforseo-locations.ts',
+  'services/api/src/commands/permission.ts',
+  'services/api/src/commerce/import.ts',
+  'services/api/src/commerce/shelf-parsing.ts',
+  'services/api/src/config/abuse.ts',
+  'services/api/src/config/audits.ts',
+  'services/api/src/config/billing.ts',
+  'services/api/src/config/connected-data.ts',
+  'services/api/src/crawl-logs/ingest.ts',
+  'services/api/src/db/committed-work.ts',
+  'services/api/src/db/operator-transaction.ts',
+  'services/api/src/db/timestamps.ts',
+  'services/api/src/db/workspace-scope.ts',
+  'services/api/src/documents/pdf-brand.ts',
+  'services/api/src/entitlements/bootstrap.ts',
+  'services/api/src/entitlements/grants.ts',
+  'services/api/src/entitlements/ledger.ts',
+  'services/api/src/errors.ts',
+  'services/api/src/http/body.ts',
+  'services/api/src/http/params.ts',
+  'services/api/src/http/table-export.ts',
+  'services/api/src/integrations/oauth.ts',
+  'services/api/src/integrations/sync.ts',
+  'services/api/src/integrations/tokens.ts',
+  'services/api/src/mcp/oauth-routes.ts',
+  'services/api/src/mcp/retrieval.ts',
+  'services/api/src/models/anthropic.ts',
+  'services/api/src/openapi/document.ts',
+  'services/api/src/opportunities/action-tree.ts',
+  'services/api/src/opportunities/checks/read-context.ts',
+  'services/api/src/opportunities/refresh-evidence.ts',
+  'services/api/src/opportunities/refresh-hits.ts',
+  'services/api/src/projects/brand-profile.ts',
+  'services/api/src/projects/discovery-inputs.ts',
+  'services/api/src/projects/inputs.ts',
+  'services/api/src/prompts/generation-drafts.ts',
+  'services/api/src/providers/connections.ts',
+  'services/api/src/providers/platform-secrets.ts',
+  'services/api/src/providers/probes.ts',
+  'services/api/src/providers/states.ts',
+  'services/api/src/public-api/example.ts',
+  'services/api/src/queue/task-queue.ts',
+  'services/api/src/referrals/events.ts',
+  'services/api/src/referrals/snapshot.ts',
+  'services/api/src/routes/define.ts',
+  'services/api/src/routes/integrations.ts',
+  'services/api/src/routes/providers.ts',
+  'services/api/src/routes/site-health.ts',
+  'services/api/src/safe-fetch.ts',
+  'services/api/src/search-intelligence/requests.ts',
+  'services/api/src/site-health/analysis/off-thread.ts',
+  'services/api/src/site-health/analysis/questions.ts',
+  'services/api/src/site-health/analysis/regions.ts',
+  'services/api/src/site-health/analysis/structured-data.ts',
+  'services/api/src/site-health/archetypes.ts',
+  'services/api/src/site-health/change-compare.ts',
+  'services/api/src/site-health/frontier.ts',
+  'services/api/src/site-health/internal-link-publish.ts',
+  'services/api/src/site-health/reads/content-handoff.ts',
+  'services/api/src/site-health/reads/pages.ts',
+  'services/api/src/site-health/reads/projections.ts',
+  'services/api/src/site-health/selection.ts',
+  'services/api/src/site-health/url-admission.ts',
+  'services/api/src/source-pages/assessment.ts',
+  'services/api/src/traffic/performance.ts',
+  'services/api/src/visibility/dashboard.ts',
+  'services/api/src/visibility/surface.ts',
+  'services/api/src/web-evidence/acquisition.ts',
+  'services/api/src/workers/analytics-worker.ts',
+  'services/api/src/workers/integration-dispatcher.ts',
+  'services/api/src/workers/integration-worker.ts',
+];
+
+const ICONS_IMPORT = { name: '@tabler/icons-react', message: 'Import glyphs from @/lib/icons.' };
+const SEARCH_PARAMS_IMPORT = {
+  name: 'react-router-dom',
+  importNames: ['useSearchParams'],
+  message: 'Read and write URL params through useUrlParam in @/lib/navigation/url-params.',
+};
+const FETCH_MESSAGE = 'Call the API through @/lib/api/client or @/lib/sse/use-event-stream.';
+const BROWSER_FILES = [
+  'components/**',
+  'lib/**',
+  'apps/*/src/**',
+  'packages/*/src/**',
+  'packages/*/*.{ts,tsx}',
+];
+const CONSOLE_FILES = [
+  '**/services/api/src/cli/**',
+  '**/services/api/scripts/**',
+  '**/scripts/**',
+  '**/*.config.{ts,mts,mjs,js}',
+  '**/lib/server/worker-request-log.ts',
+  '**/apps/docs/public/templates/**',
+];
+const TEST_FILES = ['**/*.{test,spec}.{ts,tsx}', 'test/**', 'e2e/**', '**/test/**'];
+
 export const lintConfig: OxlintConfig = {
   plugins: ['typescript'],
   // Central strictness contract (previously CLI flags on the lint script):
@@ -38,6 +151,7 @@ export const lintConfig: OxlintConfig = {
   ],
   rules: {
     'no-array-constructor': 'error',
+    'no-console': 'error',
     'no-unused-expressions': 'warn',
     'no-unused-vars': [
       'error',
@@ -69,15 +183,69 @@ export const lintConfig: OxlintConfig = {
     'typescript/prefer-as-const': 'error',
     'typescript/prefer-namespace-keyword': 'error',
     'typescript/triple-slash-reference': 'error',
-    'no-restricted-imports': [
-      'error',
-      { paths: [{ name: '@tabler/icons-react', message: 'Import glyphs from @/lib/icons.' }] },
-    ],
+    'no-restricted-imports': ['error', { paths: [ICONS_IMPORT, SEARCH_PARAMS_IMPORT] }],
   },
   overrides: [
     {
       files: ['**/lib/icons.ts'],
-      rules: { 'no-restricted-imports': 'off' },
+      rules: { 'no-restricted-imports': ['error', { paths: [SEARCH_PARAMS_IMPORT] }] },
+    },
+    {
+      files: ['**/lib/navigation/**'],
+      rules: { 'no-restricted-imports': ['error', { paths: [ICONS_IMPORT] }] },
+    },
+    {
+      files: BROWSER_FILES,
+      rules: {
+        'no-restricted-globals': ['error', { name: 'fetch', message: FETCH_MESSAGE }],
+        'no-restricted-properties': [
+          'error',
+          { object: 'window', property: 'fetch', message: FETCH_MESSAGE },
+          { object: 'globalThis', property: 'fetch', message: FETCH_MESSAGE },
+          { object: 'self', property: 'fetch', message: FETCH_MESSAGE },
+        ],
+        'typescript/consistent-type-assertions': ['error', { assertionStyle: 'never' }],
+      },
+    },
+    {
+      files: [
+        '**/lib/api/client.ts',
+        '**/lib/sse/use-event-stream.ts',
+        '**/lib/client-errors.ts',
+        '**/lib/server/worker-origin-proxy.ts',
+        '**/apps/docs/src/components/DocsSearchDialog.tsx',
+        '**/apps/marketing/src/turnstile.ts',
+      ],
+      rules: { 'no-restricted-globals': 'off', 'no-restricted-properties': 'off' },
+    },
+    {
+      files: [
+        '**/lib/api/client.ts',
+        '**/components/ui/select.tsx',
+        '**/components/ui/tabs.tsx',
+        '**/components/analytics/google-analytics.ts',
+      ],
+      rules: { 'typescript/consistent-type-assertions': 'off' },
+    },
+    {
+      files: [...CONSOLE_FILES, ...TEST_FILES],
+      rules: { 'no-console': 'off' },
+    },
+    {
+      files: TEST_FILES,
+      rules: {
+        'no-restricted-globals': 'off',
+        'no-restricted-properties': 'off',
+        'typescript/consistent-type-assertions': 'off',
+      },
+    },
+    {
+      files: ['services/api/src/**/*.ts'],
+      rules: { 'typescript/consistent-type-assertions': ['error', { assertionStyle: 'never' }] },
+    },
+    {
+      files: apiTypeAssertionBaseline,
+      rules: { 'typescript/consistent-type-assertions': 'off' },
     },
     {
       files: ['**/*.{js,jsx,mjs,ts,tsx,mts,cts}'],
@@ -167,8 +335,6 @@ export const fmtConfig: OxfmtConfig = {
     '**/pnpm-lock.yaml',
     '**/services/*/src/generated/**',
     '**/packages/*/src/generated/**',
-    // Re-wrapping this inflates it past the owner line budget that
-    // check-frontend-architecture.mjs enforces; kept hand-formatted.
     '**/apps/app/src/globals.css',
   ],
 };

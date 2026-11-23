@@ -61,7 +61,7 @@ export class ModelCalls {
       const budget = budgetSchema.parse(run.budget);
       if (!Number.isInteger(ordinal) || ordinal < 1 || ordinal > budget.max_model_calls)
         throw new AgentError('stopped_at_limit');
-      if (run.requested_model !== model.model) throw new AgentError('model_changed');
+      if (run.requested_model !== model.model) throw new AgentError('model_unavailable');
       const existing = await trx
         .selectFrom('agent_model_attempts')
         .select('id')
@@ -120,7 +120,6 @@ export class ModelCalls {
       return attempt;
     });
   }
-  /** Recording a receipt outlives cancellation/lease loss; the first receipt wins. */
   receipt(
     workspaceId: string,
     attemptId: string,
@@ -211,7 +210,6 @@ export class ModelCalls {
       throw new AgentError('provider_error');
     }
     await this.receipt(lease.workspaceId, attempt.id, result);
-    // A returned result never revives a cancelled/reclaimed run.
     await this.db.transaction().execute((trx) => lockRun(trx, lease));
     return result;
   }
@@ -256,7 +254,6 @@ export class ModelCalls {
         .forUpdate()
         .skipLocked()
         .execute();
-      // One transaction connection: runs are reconciled in order.
       for (const run of runs) await this.reconcile(trx, run); // NOSONAR
       return runs.length;
     });

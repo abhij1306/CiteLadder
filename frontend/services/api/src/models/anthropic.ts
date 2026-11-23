@@ -68,7 +68,6 @@ function modelError(error: unknown, signal: AbortSignal) {
 function anthropicClient(settings: Settings, transport: Transport, endpoint: URL) {
   return new Anthropic({
     apiKey: settings.apiKey,
-    // The SDK adds /v1 itself; a configured /v1 suffix is accepted.
     baseURL: endpoint.origin,
     timeout: settings.timeoutSeconds * 1000,
     maxRetries: Math.max(0, settings.attempts - 1),
@@ -126,7 +125,6 @@ export function anthropicCompletion(
       requested_model: settings.model,
       returned_model: message.model || settings.model,
       finish_status: message.stop_reason ?? 'unknown',
-      // Input counts every prompt token, cached or not, as OpenAI-compatible usage does.
       usage: {
         input_tokens:
           cached === null || written === null ? null : usage.input_tokens + cached + written,
@@ -180,7 +178,6 @@ function conversationUsage(usage: BetaUsage): Record<string, number | null> {
     output_tokens: usage.output_tokens + sum((entry) => entry.output_tokens),
     cached_input_tokens: read,
     cache_write_input_tokens: write,
-    // The breakdown arrives at stream start; a later total never makes it the larger.
     cache_write_1h_input_tokens: Math.min(hourWrites, write),
     reasoning_tokens: usage.output_tokens_details?.thinking_tokens ?? null,
     web_search_requests: webSearchRequests(usage),
@@ -277,8 +274,6 @@ export function anthropicConversation(
               input_schema: { ...input_schema, type: 'object' as const },
               ...(stream_input ? { eager_input_streaming: true } : {}),
             })),
-            // Last, so the client tools before it keep their cached bytes. The
-            // basic version runs on every model and adds no code-execution blocks.
             ...(request.webSearches > 0 ? [webSearchTool(request.webSearches)] : []),
           ],
           messages: cachedMessages(request.messages),

@@ -2,7 +2,6 @@ import { useState, type ReactNode } from 'react';
 
 import { StatusMark } from '@/components/ui/status-mark';
 import { Tag } from '@/components/ui/tag';
-import { MeasurementContext } from '@/components/runs/measurement-context';
 import { CircleStop, Download, RotateCcw } from '@/lib/icons';
 import { useEngineCatalog } from '@/lib/providers/engines';
 import { marketLabel } from '@citeladder/contracts/markets';
@@ -12,7 +11,7 @@ import { MastheadPrimary } from '@/components/ui/masthead-actions';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Inline, Stack } from '@/components/ui/layout';
 import { Spinner } from '@/components/ui/spinner';
-import { RungMeter } from '@/components/ui/rung-meter';
+import { ProgressMeter } from '@/components/ui/progress-meter';
 import { humanizeApiError } from '@/lib/api/errors';
 import type { MutationNotice as MutationNoticeData } from '@/lib/api/mutation-notice';
 import { runsApi } from '@/lib/api/runs';
@@ -83,7 +82,7 @@ export function RunActions({
       </Button>
       <Button variant="secondary" onClick={() => onExport('md')} disabled={exporting !== null}>
         <Icon icon={Download} />
-        {exporting === 'md' ? 'Exporting…' : 'Export MD'}
+        {exporting === 'md' ? 'Exporting…' : 'Export Markdown'}
       </Button>
       {onCancel && (cancelable || cancelPending) ? (
         <Button variant="danger" onClick={onCancel} disabled={cancelPending}>
@@ -92,28 +91,15 @@ export function RunActions({
         </Button>
       ) : null}
       {audit.failed_count > 0 && onRerunFailures ? (
-        <RerunFailed
-          primary={audit.status === 'failed'}
-          onRerun={onRerunFailures}
-          pending={rerunPending}
-        />
+        <MastheadPrimary>
+          <Button variant="primary" onClick={onRerunFailures} disabled={rerunPending}>
+            <Icon icon={RotateCcw} />
+            {rerunPending ? 'Creating repair…' : 'Rerun failed'}
+          </Button>
+        </MastheadPrimary>
       ) : null}
     </>
   );
-}
-
-function RerunFailed({
-  primary,
-  onRerun,
-  pending,
-}: Readonly<{ primary: boolean; onRerun: () => void; pending: boolean }>) {
-  const button = (
-    <Button variant={primary ? 'primary' : 'secondary'} onClick={onRerun} disabled={pending}>
-      <Icon icon={RotateCcw} />
-      {pending ? 'Creating repair…' : 'Rerun failed'}
-    </Button>
-  );
-  return primary ? <MastheadPrimary>{button}</MastheadPrimary> : button;
 }
 
 export function ProgressSkeleton() {
@@ -138,7 +124,6 @@ function ProgressStatus({ audit, polling }: Readonly<{ audit: Audit; polling: bo
         {AUDIT_STATES[audit.status].label}
       </StatusMark>
       <Tag>{marketLabel(audit.market)}</Tag>
-      <MeasurementContext provenance={audit.model_provenance} />
       {audit.not_applicable_engines.length ? (
         <Tag>
           Not available in this market: {audit.not_applicable_engines.map(engines.label).join(', ')}
@@ -158,7 +143,7 @@ function RunProgress({
 }>) {
   const percent = requested > 0 ? Math.min(100, Math.round((finished / requested) * 100)) : 0;
 
-  return <RungMeter label="Progress" value={percent} />;
+  return <ProgressMeter label="Progress" value={percent} />;
 }
 
 const RUN_FIGURES = [

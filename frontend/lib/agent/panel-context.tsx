@@ -3,6 +3,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useEffectEvent,
   useMemo,
   useRef,
   useState,
@@ -84,10 +85,13 @@ export function useAgentPanel(): AgentPanelValue | null {
 export function useAgentPanelSeed(input: HandoffInput | null): void {
   const seeds = useContext(AgentPanelSeedContext);
   const key = input ? JSON.stringify(input) : '';
+  const publish = useEffectEvent((target: AgentPanelSeedValue, token: symbol) => {
+    if (input) target.publishSeed({ token, handoff: agentHandoff(input) });
+  });
   useEffect(() => {
     if (!key || !seeds) return;
     const token = Symbol('agent-panel-seed');
-    seeds.publishSeed({ token, handoff: agentHandoff(JSON.parse(key) as HandoffInput) });
+    publish(seeds, token);
     return () => seeds.withdrawSeed(token);
   }, [key, seeds]);
 }

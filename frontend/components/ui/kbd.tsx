@@ -1,7 +1,7 @@
 import { cn } from '@/lib/utils';
 
 const CAP =
-  'border-rule text-ink-2 inline-flex h-5 min-w-5 items-center justify-center rounded-mark border px-1 type-data-sm whitespace-nowrap normal-case [[data-public-surface]_&]:bg-surface';
+  'border-transparent bg-state-selected text-ink-2 inline-flex h-5 min-w-5 items-center justify-center rounded-mark border px-1 type-data-sm whitespace-nowrap normal-case';
 
 export function Kbd({
   children,

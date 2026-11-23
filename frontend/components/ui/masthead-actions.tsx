@@ -69,15 +69,16 @@ type FoldedEntry = Readonly<{
 
 const ALWAYS = '[data-in-more]';
 
-export function MastheadOverflow({ children }: Readonly<{ children: ReactNode }>) {
+export function MastheadOverflow({
+  label = 'More',
+  children,
+}: Readonly<{ label?: string; children: ReactNode }>) {
   const [group, setGroup] = useState<HTMLDivElement | null>(null);
   const [foldedSlot, setFoldedSlot] = useState<HTMLSpanElement | null>(null);
   const [menus] = useState(() => new Map<string, ReactNode>());
   const rowSlot = useContext(MastheadPrimarySlot) ?? null;
   const fold = useFold({ group, rowSlot, foldedSlot });
-  // The always-folded box renders with the group's first children, so it is there once `group` is.
   const more = group?.querySelector(ALWAYS) ? 'always' : fold.more;
-  // A folded control's overlay returns focus here (`returnTargetFor` in dialog.tsx).
   const moreId = useId();
 
   return (
@@ -98,6 +99,7 @@ export function MastheadOverflow({ children }: Readonly<{ children: ReactNode }>
       {more === 'none' ? null : (
         <MoreMenu
           id={moreId}
+          label={label}
           trigger={more === 'always' ? undefined : 'rail:hidden'}
           read={() => foldedEntries([foldedSlot, group], menus)}
         />
@@ -147,9 +149,15 @@ function foldOf({
 
 function MoreMenu({
   id,
+  label,
   trigger,
   read,
-}: Readonly<{ id: string; trigger: string | undefined; read: () => FoldedEntry[] }>) {
+}: Readonly<{
+  id: string;
+  label: string;
+  trigger: string | undefined;
+  read: () => FoldedEntry[];
+}>) {
   const [entries, setEntries] = useState<readonly FoldedEntry[]>([]);
   return (
     <Menu
@@ -162,7 +170,7 @@ function MoreMenu({
         <IconButton
           data-folds={id}
           icon={MoreHorizontal}
-          label="More"
+          label={label}
           variant="secondary"
           className={trigger}
         />
@@ -300,7 +308,7 @@ const TITLE_SHARE = 0.4;
 
 function rowDeficit(header: HTMLElement): number {
   const title = header.querySelector<HTMLElement>('[data-masthead-title]');
-  const heading = title?.querySelector<HTMLElement>('h1');
+  const heading = title?.querySelector<HTMLElement>('[data-masthead-name]');
   const end = header.querySelector<HTMLElement>('[data-masthead-end]');
   const overflow = title ? Math.max(0, title.scrollWidth - title.clientWidth) : 0;
   const reserve = heading

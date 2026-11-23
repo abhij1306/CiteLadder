@@ -6,9 +6,6 @@ export function normalizedUrlForCompare(url: string): string {
   try {
     const parsed = new URL(text);
     if (!parsed.hostname) return text.toLowerCase();
-    // Preserve persisted Action grouping, including historical identities. Validate
-    // with URL, but retain the observed host/path rather than URL's IDNA and
-    // dot-segment normalization. This is not crawler identity.
     const [, rawHost, rawPath, rawQuery] =
       /^[a-z][a-z0-9+.-]*:\/\/([^/?#]*)([^?#]*)(?:\?([^#]*))?/iu.exec(text) ?? [];
     if (rawHost === undefined || rawPath === undefined) return text.toLowerCase();

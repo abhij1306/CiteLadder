@@ -40,12 +40,12 @@ export type Selection = {
   topic_id?: string | null;
 };
 export type Page = { cursor?: string | null; limit?: number | null };
-const inMarket = (scope: ReadScope, args: Selection) => ({
+export const inMarket = (scope: ReadScope, args: Selection) => ({
   ...scope,
   marketId: args.market_id ?? null,
   topicId: args.topic_id ?? null,
 });
-const runs = (scope: ReadScope, args: Selection): RunSelection => ({
+export const runs = (scope: ReadScope, args: Selection): RunSelection => ({
   ...inMarket(scope, args),
   auditId: args.audit_id ?? null,
   auditIds: null,
@@ -55,8 +55,7 @@ const runs = (scope: ReadScope, args: Selection): RunSelection => ({
   toAt: null,
 });
 
-/** A topic filter names one of this project's topics; an ID alone authorizes nothing. */
-async function requireTopic({ db, scope }: ProjectRead, topicId: string | null | undefined) {
+export async function requireTopic({ db, scope }: ProjectRead, topicId: string | null | undefined) {
   if (!topicId) return;
   const topic = await new WorkspaceScope(scope.workspaceId)
     .selectFrom(db, 'topics')
@@ -242,7 +241,7 @@ type OverviewArgs = Selection & {
   view?: 'summary' | 'topics' | 'matrix';
 };
 
-const dashboardQuery = (args: Selection) =>
+export const dashboardQuery = (args: Selection) =>
   ({
     auditId: args.audit_id ?? null,
     logicalEngine: args.engine ?? null,
@@ -315,7 +314,6 @@ export async function oneRun(
   try {
     const selection = await scopedSelection(read.db, runs(read.scope, args));
     ran = true;
-    // An empty page would read as zero; a topic the run never asked is not measured.
     if (args.topic_id && selection.auditId) {
       const { workspaceId } = read.scope;
       await topicBlock(read.db, {
@@ -412,8 +410,8 @@ export async function sourceUrl(
   args: Selection & { url: string },
 ): Promise<Evidence> {
   const detail = await getSourceUrlDetail(db, runs(scope, args), args.url);
-  if (!detail.retrievals) return { ...unavailable('url_not_cited_in_selection'), url: args.url };
-  return { state: 'available', ...detail };
+  if (detail.retrievals) return { state: 'available', ...detail };
+  return { ...unavailable('url_not_cited_in_selection'), url: args.url };
 }
 
 function validateSelection(selection: AnalyticsSelection) {

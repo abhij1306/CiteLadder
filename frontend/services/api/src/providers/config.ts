@@ -23,6 +23,7 @@ export function providerSettings(env: SettingSource = process.env) {
     openaiMaxToolCalls: Number(resolveSettingSpec(spec.openai_max_tool_calls, env)),
     keyGraceDays: Number(resolveSettingSpec(spec.byok_key_grace_days, env)),
     maxResponseBytes: Number(resolveSettingSpec(spec.max_response_bytes, env)),
+    answerRawBodyMaxBytes: Number(resolveSettingSpec(spec.answer_raw_body_max_bytes, env)),
     dataforseoTimeout: Number(
       resolveSettingSpec(providerPolicy.dataforseo.test_timeout_seconds, env),
     ),
@@ -30,11 +31,6 @@ export function providerSettings(env: SettingSource = process.env) {
 }
 export type ProviderSettings = ReturnType<typeof providerSettings>;
 
-/**
- * OpenAI reasoning control for a route's effort. `off` maps to `none` for
- * models that accept it; supported levels are sent explicitly, since a model's
- * own default (e.g. `medium`) costs more than the configured route effort.
- */
 export function openaiReasoning(effort: string | null | undefined) {
   if (effort === 'off') return { reasoning: { effort: 'none' } };
   return effort && ['low', 'medium', 'high'].includes(effort) ? { reasoning: { effort } } : {};

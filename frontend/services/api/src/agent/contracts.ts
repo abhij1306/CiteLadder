@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { Selectable } from 'kysely';
 import type { AgentChats, AgentRuns, AgentModelAttempts } from '../generated/db-schema.ts';
+import { agentReasoningEffortSchema } from '@citeladder/contracts/agent';
 import { policy } from '../config.ts';
 import type { ContentFormat } from '../config/skill-inputs.ts';
 import type { WorkflowCatalog } from './workflows.ts';
@@ -27,7 +28,7 @@ export const budgetSchema = z.object({
   max_web_searches: z.number().int().nonnegative(),
   max_web_searches_per_call: z.number().int().nonnegative(),
   limit_reminder_calls: z.number().int().nonnegative(),
-  reasoning_effort: z.enum(['low', 'medium', 'high']),
+  reasoning_effort: agentReasoningEffortSchema,
   compaction_trigger_tokens: z.number().int().positive(),
   replay_max_chars: z.number().int().positive(),
   execution_timeout_seconds: z.number().positive(),
@@ -39,11 +40,15 @@ export const budgetSchema = z.object({
   output_title_max_chars: z.number().int().positive(),
 });
 export type Budget = z.infer<typeof budgetSchema>;
-export function admittedBudget(executionTimeoutSeconds: number) {
+export function admittedBudget(
+  executionTimeoutSeconds: number,
+  effort?: Budget['reasoning_effort'],
+) {
   return budgetSchema.parse({
     ...agentPolicy,
     version: 1,
     execution_timeout_seconds: executionTimeoutSeconds,
+    reasoning_effort: effort ?? agentPolicy.reasoning_effort,
   });
 }
 export const outputPayloadSchema = z.strictObject({

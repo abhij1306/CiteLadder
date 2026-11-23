@@ -1,5 +1,6 @@
 import { Absence } from '@/components/ui/absence';
 import type { PageDetail } from '@citeladder/contracts';
+import { checksRunLabel } from '@/lib/site-health/status';
 import { AuditScores } from './overview-metrics';
 
 export function UrlScoreSummary({ detail }: Readonly<{ detail: PageDetail }>) {
@@ -9,11 +10,13 @@ export function UrlScoreSummary({ detail }: Readonly<{ detail: PageDetail }>) {
         {
           title: 'Web fundamentals',
           value: detail.web_fundamentals_score,
+          caption: checksRunLabel(detail.web_fundamentals_checks),
           unavailable: scoreUnavailableState(detail.web_fundamentals_state),
         },
         {
           title: 'AEO readiness',
           value: detail.aeo_readiness_score,
+          caption: checksRunLabel(detail.aeo_readiness_checks),
           unavailable: scoreUnavailableState(
             detail.aeo_measurement_state,
             detail.aeo_measurement_reason,
@@ -34,10 +37,7 @@ export function UrlScoreSummary({ detail }: Readonly<{ detail: PageDetail }>) {
   );
 }
 
-function scoreUnavailableState(state: string, reason?: string) {
-  if (state === 'limited_evidence') {
-    return <Absence state="not_measured" label="Limited evidence" />;
-  }
+export function scoreUnavailableState(state: string | undefined, reason?: string) {
   if (state === 'excluded') return <Absence state="not_applicable" label="Excluded" />;
   if (reason === 'unsupported_purpose_checklist') {
     return <Absence state="not_applicable" label="No AEO checklist for this page kind" />;

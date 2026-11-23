@@ -3,20 +3,15 @@ import { useState, type ReactNode } from 'react';
 import { AskAgentLink } from '@/components/agent/ask-agent-link';
 import { askAgentPrompt, buildFixPrompt } from '@/components/site-health/issue-detail-dialog';
 import { IssueEvidence } from '@/components/site-health/issue-evidence';
+import { IssueSeverityMark } from '@/components/site-health/issue-metadata';
 import { Tag } from '@/components/ui/tag';
 import { Button } from '@/components/ui/button';
 import { CopyButton } from '@/components/ui/copy-button';
 import { Inline, Stack } from '@/components/ui/layout';
 import { DisclosureList, DisclosureRow } from '@/components/ui/list-row';
-import { StatusMark } from '@/components/ui/status-mark';
 import { Icon } from '@/components/ui/icon';
 import type { PageIssue } from '@citeladder/contracts';
-import {
-  dimensionLabel,
-  scoreRoleLabels,
-  severityLabel,
-  severityRank,
-} from '@/lib/site-health/issues';
+import { dimensionLabel, scoreRoleLabels, severityRank } from '@/lib/site-health/issues';
 import { StateBlock } from '@/components/ui/state-block';
 import { ChevronDown } from '@/lib/icons';
 import { cn } from '@/lib/utils';
@@ -35,27 +30,21 @@ export function PageIssues({
   audited: boolean;
   crawlId: string;
 }>) {
-  const defects = issues
-    .filter((issue) => issue.finding_class === 'defect')
-    .sort((a, b) => severityRank(a.severity) - severityRank(b.severity));
-  const advisories = issues.filter((issue) => issue.finding_class !== 'defect');
+  const sorted = [...issues].sort((a, b) => severityRank(a.severity) - severityRank(b.severity));
   return (
-    <>
-      <TitledSection title={`All issues (${defects.length})`}>
-        <SectionContent>
-          {defects.length === 0 ? (
-            <StateBlock
-              kind="empty"
-              inline
-              message={audited ? 'No issues found.' : 'Audit not finished.'}
-            />
-          ) : (
-            <IssueList issues={defects} crawlId={crawlId} />
-          )}
-        </SectionContent>
-      </TitledSection>
-      {advisories.length > 0 ? <Advisories advisories={advisories} /> : null}
-    </>
+    <TitledSection title={`All issues (${sorted.length})`}>
+      <SectionContent>
+        {sorted.length === 0 ? (
+          <StateBlock
+            kind="empty"
+            inline
+            message={audited ? 'No issues found.' : 'Audit not finished.'}
+          />
+        ) : (
+          <IssueList issues={sorted} crawlId={crawlId} />
+        )}
+      </SectionContent>
+    </TitledSection>
   );
 }
 
@@ -90,11 +79,7 @@ function IssueRow({ issue, children }: Readonly<{ issue: PageIssue; children: Re
       title={issue.issue_title}
       meta={
         <>
-          {issue.finding_class === 'defect' ? (
-            <StatusMark variant="severity" value={issue.severity}>
-              {severityLabel(issue.severity)}
-            </StatusMark>
-          ) : null}
+          <IssueSeverityMark issue={issue} />
           <span>{dimensionLabel(issue.dimension)}</span>
         </>
       }
@@ -139,21 +124,4 @@ function Remediation({ issue }: Readonly<{ issue: PageIssue }>) {
   return issue.remediation ? (
     <p className="type-body text-ink whitespace-pre-line">{issue.remediation}</p>
   ) : null;
-}
-
-function Advisories({ advisories }: Readonly<{ advisories: readonly PageIssue[] }>) {
-  return (
-    <TitledSection title={`Advisories (${advisories.length})`}>
-      <SectionContent>
-        <DisclosureList>
-          {advisories.map((issue) => (
-            <IssueRow key={issue.occurrence_id} issue={issue}>
-              <Remediation issue={issue} />
-              <IssueEvidence occurrence={issue} />
-            </IssueRow>
-          ))}
-        </DisclosureList>
-      </SectionContent>
-    </TitledSection>
-  );
 }

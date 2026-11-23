@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { actionStatusSchema } from './action-status.ts';
+import { agentViewSchema } from './agent-views.ts';
 
 const responseObject = <Shape extends z.ZodRawShape>(shape: Shape) => z.object(shape);
 const uuid = () => z.uuid();
@@ -120,6 +121,7 @@ export const agentStepSchema = z.discriminatedUnion('kind', [
   }),
   responseObject({ kind: z.literal('suggestion') }),
   responseObject({ kind: z.literal('proposal'), label: z.string() }),
+  responseObject({ kind: z.literal('change'), label: z.string() }),
   responseObject({
     kind: z.literal('tool'),
     ordinal: z.number().int(),
@@ -138,24 +140,40 @@ export const agentStepSchema = z.discriminatedUnion('kind', [
 ]);
 export type AgentStep = z.infer<typeof agentStepSchema>;
 
+export const AGENT_ATTACHMENT_NAME_MAX_CHARS = 255;
 function attachmentSchema(text: z.ZodString) {
-  return z.discriminatedUnion('kind', [z.strictObject({ kind: z.literal('pasted_text'), text })]);
+  return z.discriminatedUnion('kind', [
+    z.strictObject({ kind: z.literal('pasted_text'), text }),
+    z.strictObject({
+      kind: z.literal('file'),
+      name: z.string().trim().min(1).max(AGENT_ATTACHMENT_NAME_MAX_CHARS),
+      text,
+    }),
+  ]);
 }
 export const agentAttachmentSchema = attachmentSchema(z.string());
 export type AgentAttachment = z.infer<typeof agentAttachmentSchema>;
+export const attachedChars = (items: readonly Pick<AgentAttachment, 'text'>[]) =>
+  items.reduce((sum, item) => sum + item.text.length, 0);
 
-/**
- * What a reply proposed for the person to do; only their own click does it.
- * A declaration names the Action, the revision that shipped (null: done
- * outside CiteLadder) and what the person said about going live.
- */
+export const agentDeclarationProposalSchema = responseObject({
+  kind: z.literal('declaration'),
+  action_id: uuid(),
+  revision: responseObject({ id: uuid(), number: z.number().int() }).nullable(),
+  go_live_day: z.iso.date().nullable(),
+  deployment_reference: z.string().nullable(),
+});
 export const agentProposalSchema = z.discriminatedUnion('kind', [
+  agentDeclarationProposalSchema,
   responseObject({
-    kind: z.literal('declaration'),
-    action_id: uuid(),
-    revision: responseObject({ id: uuid(), number: z.number().int() }).nullable(),
-    go_live_day: z.iso.date().nullable(),
-    deployment_reference: z.string().nullable(),
+    kind: z.literal('change'),
+    index: z.number().int().nonnegative(),
+    title: z.string(),
+    rows: z.array(responseObject({ label: z.string(), value: z.string() })),
+    spend: z.string().nullable(),
+    opens: responseObject({ label: z.string(), path: z.string() }).nullable(),
+    outcome: z.enum(['open', 'executed', 'dismissed', 'unavailable']),
+    refusal: z.string().nullable().default(null),
   }),
 ]);
 export type AgentProposal = z.infer<typeof agentProposalSchema>;
@@ -175,6 +193,7 @@ export const agentMessageSchema = responseObject({
     .default([]),
   attachments: z.array(agentAttachmentSchema).default([]),
   proposals: z.array(agentProposalSchema).default([]),
+  views: z.array(agentViewSchema).default([]),
   created_at: z.string(),
 });
 
@@ -245,9 +264,17 @@ export const agentPageFetchSchema = z.discriminatedUnion('status', [
   }),
 ]);
 
+export const agentReasoningEffortSchema = z.enum(['low', 'medium', 'high']);
+export type AgentReasoningEffort = z.infer<typeof agentReasoningEffortSchema>;
+
 export const agentChatDetailSchema = responseObject({
   chat: agentChatSummarySchema,
   pinned_skill_id: z.string().nullable(),
+  model: responseObject({
+    id: z.string(),
+    reasoning_effort: agentReasoningEffortSchema,
+    locked: z.boolean(),
+  }),
   context: agentContextDisclosureSchema.partial(),
   messages: z.array(agentMessageSchema),
   latest_run: agentRunSchema.nullable(),
@@ -273,7 +300,6 @@ export const agentRevisionsPageSchema = responseObject({
 });
 
 export const agentPageFieldSchema = agentPageFieldsSchema.keyof();
-/** A half-open range of the Markdown body in UTF-16 code units, as JavaScript and CodeMirror count. */
 const agentBodySpanSchema = responseObject({
   start: z.number().int().nonnegative(),
   end: z.number().int().nonnegative(),
@@ -396,10 +422,17 @@ export const agentSkillCatalogSchema = responseObject({
   skills: z.array(agentSkillSchema),
   workflows: z.array(agentWorkflowSchema).default([]),
   output_kinds: z.array(agentOutputKindSchema).default([]),
+  models: responseObject({
+    options: z.array(responseObject({ id: z.string(), label: z.string() })),
+    default_model: z.string(),
+    default_reasoning_effort: agentReasoningEffortSchema,
+  }),
   limits: responseObject({
+    message_max_chars: z.number().int(),
     mentions_max: z.number().int(),
     attachments_max: z.number().int(),
     attachment_max_chars: z.number().int(),
+    attachments_total_max_chars: z.number().int(),
   }),
 });
 
@@ -452,7 +485,6 @@ export const agentContextRefsSchema = z.strictObject({
     .nullish(),
   action_url_ids: z.array(uuid()).min(1).max(50).nullish(),
   url_actions_reference: z.strictObject({ site_url_id: uuid() }).nullish(),
-  // One objection group from the Objections tab, with its cited sources (AV-37).
   objection_group_id: uuid().nullish(),
 });
 export type AgentContextRefs = z.input<typeof agentContextRefsSchema>;
@@ -462,6 +494,7 @@ export function agentRequestSchemas(bounds: {
   mentions_max: number;
   attachments_max: number;
   attachment_max_chars: number;
+  attachments_total_max_chars: number;
   output_title_max_chars: number;
   output_body_max_chars: number;
   instructions_max_chars: number;
@@ -469,6 +502,8 @@ export function agentRequestSchemas(bounds: {
   const message = z.string().max(bounds.message_max_chars).trim().min(1);
   const skill = z.string().max(64).nullish();
   const workflow = z.string().max(64).nullish();
+  const model = z.string().max(64).nullish();
+  const reasoningEffort = agentReasoningEffortSchema.nullish();
   const mentions = z
     .array(uuid())
     .max(bounds.mentions_max)
@@ -477,6 +512,10 @@ export function agentRequestSchemas(bounds: {
   const attachments = z
     .array(attachmentSchema(z.string().min(1).max(bounds.attachment_max_chars)))
     .max(bounds.attachments_max)
+    .refine(
+      (items) => attachedChars(items) <= bounds.attachments_total_max_chars,
+      `Attachments hold up to ${bounds.attachments_total_max_chars} characters together`,
+    )
     .default([]);
   return {
     create: z.strictObject({
@@ -487,12 +526,16 @@ export function agentRequestSchemas(bounds: {
       context: agentContextRefsSchema.default({}),
       mentions,
       attachments,
+      model,
+      reasoning_effort: reasoningEffort,
     }),
     message: z.strictObject({
       message,
       skill_id: skill,
       mentions,
       attachments,
+      model,
+      reasoning_effort: reasoningEffort,
     }),
     edit: z.strictObject({
       base_revision_id: uuid(),

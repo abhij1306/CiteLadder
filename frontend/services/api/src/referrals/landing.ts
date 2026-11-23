@@ -59,7 +59,7 @@ export async function referralEvidence(db: Database, scope: PartitionScope) {
 type Evidence = Awaited<ReturnType<typeof referralEvidence>>;
 type EvidenceRow = Evidence['rows'][number];
 const count = (m: Record<string, unknown>, key: string) =>
-  typeof m[key] === 'number' && Number.isFinite(m[key]) ? (m[key] as number) : 0;
+  typeof m[key] === 'number' && Number.isFinite(m[key]) ? m[key] : 0;
 const aiSource = (evidence: Evidence, row: EvidenceRow, source = '', medium = '') =>
   evidence.classifications.aiSource(row.property_ref, row.day, source, medium);
 type Counts = { sessions: number; engaged_sessions: number; key_events: number };
@@ -232,7 +232,7 @@ export async function replaceReferralLandings(
     .where('reporting_date', '<=', sql<Date>`${scope.end}::date`)
     .execute();
   for (let i = 0; i < extras.landing.length; i += policy.traffic.TRAFFIC_METRIC_ROW_BATCH_SIZE) {
-    await db // NOSONAR -- Chunks stay under the bind-parameter limit on one connection.
+    await db // NOSONAR
       .insertInto('ai_referral_landing_daily')
       .values(
         extras.landing.slice(i, i + policy.traffic.TRAFFIC_METRIC_ROW_BATCH_SIZE).map((r) => ({

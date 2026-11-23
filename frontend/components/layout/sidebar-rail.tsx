@@ -45,7 +45,6 @@ export function RailFlyout({
 }: Readonly<{ label: string; icon: IconGlyph; current: boolean; children: ReactNode }>) {
   const [open, setOpen] = useState(false);
   return (
-    // Not modal: a modal menu locks scrolling and pointer events until an outside click.
     <Menu open={open} onOpenChange={setOpen} modal={false}>
       <SidebarRowTooltip label={label}>
         <MenuTrigger

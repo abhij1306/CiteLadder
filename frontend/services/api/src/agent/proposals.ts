@@ -1,4 +1,4 @@
-import { agentProposalSchema, type AgentProposal } from '@citeladder/contracts/agent';
+import { agentDeclarationProposalSchema } from '@citeladder/contracts/agent';
 import { z } from 'zod';
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
@@ -7,6 +7,7 @@ import { declarableMembers } from '../opportunities/actions.ts';
 import { ruleCheckKind } from '../opportunities/checks/registry.ts';
 import type { BuiltinOutcome } from './builtin-tools.ts';
 import type { Scope } from './contracts.ts';
+import { proposalLimit } from './change-proposals.ts';
 import type { ChatDocument } from './outputs.ts';
 import { stepText } from './sources.ts';
 import type { TurnState } from './turn-budget.ts';
@@ -165,19 +166,24 @@ export async function proposeDeclaration(
   if (problem) return { ok: false, text: problem };
   const shipped = shippedRevision(turn, state, document, actionId);
   if (!shipped.ok) return shipped;
-  // Checked after the last await: calls in one response run concurrently.
-  if (state.proposals.some((proposal) => proposal.action_id === actionId))
+  if (
+    state.proposals.some(
+      (proposal) => proposal.kind === 'declaration' && proposal.action_id === actionId,
+    )
+  )
     return {
       ok: false,
       text: 'This Action’s declaration is already proposed in this turn. Reply now.',
     };
-  const proposal: AgentProposal = agentProposalSchema.parse({
+  const proposal = agentDeclarationProposalSchema.parse({
     kind: 'declaration',
     action_id: actionId,
     revision: shipped.revision,
     go_live_day: day ?? null,
     deployment_reference: reference?.trim() || null,
   });
+  const filled = proposalLimit(state);
+  if (filled) return filled;
   state.proposals.push(proposal);
   state.steps.push({ kind: 'proposal', label: stepText(checked.label) });
   return {

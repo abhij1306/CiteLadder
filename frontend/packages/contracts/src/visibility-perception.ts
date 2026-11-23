@@ -26,6 +26,16 @@ const perceptionUnavailableReasonSchema = z.enum([
   'model_changed',
 ]);
 
+export const perceptionAttributeSchema = z
+  .discriminatedUnion('kind', [
+    z.object({ kind: z.literal('labelled'), name: z.string() }),
+    z.object({ kind: z.literal('not_found') }),
+    z.object({ kind: z.literal('not_labelled') }),
+  ])
+  .describe(
+    'What the answer says about the business in plain buyer words. not_found: labelled, but the model gave no usable attribute. not_labelled: labelled before attributes existed; only its category is known.',
+  );
+
 const perceptionStateSchema = z.enum(['value', 'pending', 'unavailable', 'no_mentions']);
 
 export const perceptionCoverageSchema = responseObject({
@@ -54,27 +64,10 @@ export const perceptionScoreSchema = responseObject({
     .describe('(positive − negative) / classified × 100, −100 to 100. Null: nothing classified.'),
 });
 
-export const perceptionEntitySchema = responseObject({
-  name: z.string(),
-  is_brand: z.boolean(),
-  ...brandMarkFields,
-  score: perceptionScoreSchema,
-  coverage: perceptionCoverageSchema,
-  theme_mentions: z
-    .array(responseObject({ theme: z.string(), mentions: z.number().int() }))
-    .describe('Per theme, the classified mentions raising it at least once.'),
-});
-
-export const perceptionBreakdownSchema = responseObject({
-  key: z.string().describe('The engine, topic or prompt this row covers.'),
-  label: z.string(),
-  score: perceptionScoreSchema,
-  coverage: perceptionCoverageSchema,
-});
-
 export const perceptionQuoteSchema = responseObject({
   text: z.string(),
   theme: z.string(),
+  attribute: perceptionAttributeSchema,
   polarity: perceptionPolaritySchema,
   entity: z.string(),
   is_brand: z.boolean(),
@@ -85,6 +78,44 @@ export const perceptionQuoteSchema = responseObject({
   observed_at: z.string(),
   extractor_version: z.string(),
   template_version: z.string(),
+});
+
+const perceptionCategorySchema = responseObject({
+  category: z.string(),
+  mentions: z.number().int().describe('Classified mentions raising the category at least once.'),
+  positive: z.number().int(),
+  negative: z.number().int(),
+  attributes: z
+    .array(
+      responseObject({
+        attribute: z.string(),
+        positive: z.number().int(),
+        negative: z.number().int(),
+        quotes: z
+          .array(perceptionQuoteSchema)
+          .describe("A few of the answers' own words; the brand's only, empty for a competitor."),
+      }),
+    )
+    .describe('The most raised attributes, labelled ones only.'),
+});
+
+export const perceptionEntitySchema = responseObject({
+  name: z.string(),
+  is_brand: z.boolean(),
+  ...brandMarkFields,
+  score: perceptionScoreSchema,
+  coverage: perceptionCoverageSchema,
+  theme_mentions: z
+    .array(responseObject({ theme: z.string(), mentions: z.number().int() }))
+    .describe('Per theme, the classified mentions raising it at least once.'),
+  categories: z.array(perceptionCategorySchema),
+});
+
+export const perceptionBreakdownSchema = responseObject({
+  key: z.string().describe('The engine, topic or prompt this row covers.'),
+  label: z.string(),
+  score: perceptionScoreSchema,
+  coverage: perceptionCoverageSchema,
 });
 
 const perceptionThemeSchema = responseObject({
@@ -160,9 +191,9 @@ export const executionPerceptionSchema = responseObject({
   aspects: z.array(
     responseObject({
       theme: z.string(),
+      attribute: perceptionAttributeSchema,
       polarity: perceptionPolaritySchema,
       quote: z.string(),
-      // Code-point offsets into the answer text.
       start: z.number().int(),
       end: z.number().int(),
     }),
@@ -171,6 +202,7 @@ export const executionPerceptionSchema = responseObject({
 
 export type PerceptionResponse = z.infer<typeof perceptionResponseSchema>;
 export type PerceptionQuote = z.infer<typeof perceptionQuoteSchema>;
+export type PerceptionAttribute = z.infer<typeof perceptionAttributeSchema>;
 export type PerceptionScore = z.infer<typeof perceptionScoreSchema>;
 export type PerceptionCoverage = z.infer<typeof perceptionCoverageSchema>;
 export type ExecutionPerception = z.infer<typeof executionPerceptionSchema>;

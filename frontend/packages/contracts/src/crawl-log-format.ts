@@ -9,9 +9,7 @@ export type LogMapping = {
   request_id: string;
   timestamp_unit: 'iso' | 'seconds' | 'milliseconds' | 'nanoseconds';
   timestamp_fallback?: { date: string; time: string };
-  /** Field values that mean "absent" (CloudFront writes `-`). */
   missing_tokens?: readonly string[];
-  /** `url`: the user agent arrives percent-encoded (CloudFront `cs(User-Agent)`). */
   user_agent_decode?: 'url';
 };
 type MappedField =
@@ -75,7 +73,6 @@ function logValue(line: string, format: string): unknown {
     return null;
   }
 }
-/** An epoch number, or its decimal string form (CloudFront sends `"1700000000123"`). */
 function epochNumber(value: unknown) {
   if (typeof value === 'string' && /^-?\d+(?:\.\d+)?$/u.test(value)) return Number(value);
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
@@ -103,7 +100,6 @@ function fallbackTimestamp(date: unknown, time: unknown) {
     return undefined;
   const stamp = `${date}T${time}`;
   const parsed = Date.parse(stamp + 'Z');
-  // Date normalizes 2026-02-31 into March; only a value that round-trips is a real instant.
   return Number.isFinite(parsed) && new Date(parsed).toISOString().slice(0, 19) === stamp
     ? stamp + 'Z'
     : undefined;
@@ -125,17 +121,17 @@ function logStatus(value: unknown) {
 export function parseLogLine(line: string, format: string, mapping: LogMapping): MappedLog | null {
   const value = logValue(line, format);
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const row = value as Record<string, unknown>;
+  const row = new Map(Object.entries(value));
   const absent = new Set(mapping.missing_tokens ?? []);
   const read = (name: string) => {
-    const raw = row[name];
+    const raw = row.get(name);
     return typeof raw === 'string' && absent.has(raw) ? undefined : raw;
   };
   const fallback = mapping.timestamp_fallback;
   const usesFallback =
     format !== 'combined' && fallback !== undefined && read(mapping.timestamp) === undefined;
   const field = (key: MappedField) => {
-    if (format === 'combined') return row[key];
+    if (format === 'combined') return row.get(key);
     if (key === 'timestamp' && usesFallback)
       return fallbackTimestamp(read(fallback.date), read(fallback.time));
     return read(mapping[key]);

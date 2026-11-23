@@ -8,13 +8,7 @@ import { jsonObject, numberRecord } from '../db/json.ts';
 import { wireUtc, storedInstant, utcText, utcTextOf } from '../db/timestamps.ts';
 import { compareText } from '../text-order.ts';
 import { groupBy } from '../lists.ts';
-import {
-  cellPrompt,
-  compareCells,
-  loadComparisonCells,
-  sharesCellContext,
-  type ComparisonCell,
-} from './comparison.ts';
+import { cellPrompt, compareCells, loadComparisonCells, sharesCellContext } from './comparison.ts';
 import { brandWinCounts } from '../analysis/win-rate.ts';
 import {
   brandIdentities,
@@ -286,8 +280,6 @@ async function loadOutcomes(
     ])
     .where('workspace_id', '=', scope.workspaceId)
     .where('audit_id', 'in', auditIds)
-    // Scoped to the cohort these rows describe, so a comparison prompt never
-    // absorbs the core answers at the same index.
     .where('cohort', 'in', [...selectedCohorts(cohort)]);
   if (engine) answers = answers.where('logical_engine', '=', engine);
   let taskQuery = db
@@ -401,9 +393,6 @@ async function enrichOutcomes(
     item.avg_position = ranked.length
       ? round2(ranked.reduce((total, value) => total + value, 0) / ranked.length)
       : null;
-    // A cell is one (engine, model) pair, counted against that pair's tasks.
-    // A pair whose every task failed keeps its cell, so it reads as failed
-    // rather than vanishing.
     const routeKey = (row: { logical_engine: string; transport_model: string }) =>
       JSON.stringify([row.logical_engine, row.transport_model]);
     const cellsByRoute = groupBy(answered, routeKey);
@@ -425,10 +414,7 @@ async function enrichOutcomes(
     if (runs && cells) {
       const identity = JSON.stringify([prompt.prompt_id ?? prompt.text, prompt.text]);
       const forPrompt = (auditId: string) =>
-        new Map([...cells.get(auditId)!].filter(([key]) => cellPrompt(key) === identity)) as Map<
-          string,
-          ComparisonCell
-        >;
+        new Map([...cells.get(auditId)!].filter(([key]) => cellPrompt(key) === identity));
       item.comparison = compareCells(forPrompt(audit.id), forPrompt(previous!.id), runs);
       item.comparison_status = item.comparison?.status ?? 'no_matching_observations';
       item.visibility_delta = item.comparison?.deltas.visibility ?? null;
@@ -472,7 +458,7 @@ function poolCounts(rows: readonly Counts[]): Counts {
   for (const field of COUNT_FIELDS) {
     const values = rows.map((row) => row[field]);
     pooled[field] = values.every((value) => value !== null && value !== undefined)
-      ? (values as number[]).reduce((total, value) => total + value, 0)
+      ? values.reduce((total, value) => total + value, 0)
       : null;
   }
   return pooled;

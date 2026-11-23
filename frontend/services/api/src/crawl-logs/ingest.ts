@@ -157,7 +157,6 @@ export async function diagnosticReceipt(
     .onConflict((c) => c.constraint('uq_crawl_log_batch_key').doNothing())
     .execute();
 }
-/** One admission owner for webhooks and uploads. No provider or model I/O. */
 export async function ingest(
   db: Database,
   source: Selectable<CrawlLogSources>,
@@ -181,7 +180,6 @@ export async function ingest(
   const now = options.now ?? new Date();
   const key = options.key ?? createHash('sha256').update(body).digest('hex');
   if (!key.trim() || key.length > 255) throw new ApiError(422, 'Invalid idempotency key');
-  // Attempt quota commits before parsing; replay does not spend accepted-line quota.
   if (!options.quotaChecked) await batchQuota(db, source, now, options.key);
   const {
     lines,
@@ -351,7 +349,7 @@ async function insertRequests(
 ) {
   if (admitted.length) {
     for (let start = 0; start < admitted.length; start += crawlLogs.insert_rows_per_statement) {
-      const inserted = await trx
+      const inserted = await trx // NOSONAR
         .insertInto('bot_requests')
         .values(
           admitted
@@ -386,7 +384,6 @@ function decodeBatch(
   const format = upload ? 'ndjson' : source.format;
   let lines: string[] = [];
   let unsupported: UnsupportedLogFormat | null = null;
-  // Cloudflare validates HTTP destinations with this authenticated gzipped probe.
   const validation =
     source.setup === 'cloudflare_logpush' &&
     /^\s*\{\s*"content"\s*:\s*"tests"\s*\}\s*$/u.test(text);

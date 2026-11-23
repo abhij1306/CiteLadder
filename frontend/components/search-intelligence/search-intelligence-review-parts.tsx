@@ -279,7 +279,7 @@ export function ReviewFooter({
         <Button variant="secondary" onClick={onBack}>
           Back
         </Button>
-        <Button variant="primary" disabled={busy} onClick={onConfirm}>
+        <Button variant="primary" pending={busy} pendingLabel="Starting…" onClick={onConfirm}>
           Confirm {formattedText(runEstimate(review))} analysis
         </Button>
       </Inline>
@@ -287,7 +287,13 @@ export function ReviewFooter({
   return (
     <Inline gap="compact" className="justify-between">
       <span className={textRole('caption')}>{pluralCount(selected, 'dataset')} selected</span>
-      <Button variant="primary" disabled={busy || !canReview} onClick={onReview}>
+      <Button
+        variant="primary"
+        disabled={!canReview}
+        pending={busy}
+        pendingLabel="Estimating…"
+        onClick={onReview}
+      >
         Review cost
       </Button>
     </Inline>

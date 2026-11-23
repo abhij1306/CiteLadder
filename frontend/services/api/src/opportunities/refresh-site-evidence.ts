@@ -17,7 +17,6 @@ type Page = Family['pages'][number];
 async function perPageFamilies(db: Database, crawl: ViewCrawl): Promise<Family[]> {
   const { rows } = await sql<{
     rule_id: string;
-    finding_class: string;
     severity: string;
     category: string;
     site_url_id: string;
@@ -26,29 +25,28 @@ async function perPageFamilies(db: Database, crawl: ViewCrawl): Promise<Family[]
     page_count: number;
   }>`
     with pages as (
-      select i.rule_id, i.finding_class, i.site_url_id, u.normalized_url as url,
+      select i.rule_id, i.site_url_id, u.normalized_url as url,
         min(coalesce(i.severity, '')) as severity, min(coalesce(i.category, '')) as category,
         array_agg(i.id::text order by i.id) as issue_ids
       from site_issues i
       join site_urls u on u.workspace_id = i.workspace_id and u.id = i.site_url_id
         and u.project_id = ${crawl.project_id}
       where ${viewIssuesSql(crawl)} and not ${siteLevelRule}
-        and i.finding_class = any(${[...family.FINDING_CLASSES]}::text[])
-      group by i.rule_id, i.finding_class, i.site_url_id, u.normalized_url
+      group by i.rule_id, i.site_url_id, u.normalized_url
     ), ranked as (
       select pages.*,
-        row_number() over (partition by rule_id, finding_class order by url collate "C", site_url_id) as page_rank,
-        count(*) over (partition by rule_id, finding_class) as page_count
+        row_number() over (partition by rule_id order by url collate "C", site_url_id) as page_rank,
+        count(*) over (partition by rule_id) as page_count
       from pages
     )
-    select rule_id, finding_class, severity, category, site_url_id, url, issue_ids,
+    select rule_id, severity, category, site_url_id, url, issue_ids,
       page_count::int as page_count
     from ranked
     where page_rank <= ${family.COHORT_PAGES_MAX}
-    order by rule_id collate "C", finding_class, page_rank`.execute(db);
+    order by rule_id collate "C", page_rank`.execute(db);
   const families = new Map<string, Family>();
   for (const row of rows) {
-    const key = `${row.rule_id}\u0000${row.finding_class}`;
+    const key = row.rule_id;
     const page = { site_url_id: row.site_url_id, url: row.url };
     const found = families.get(key);
     if (found) {
@@ -57,7 +55,6 @@ async function perPageFamilies(db: Database, crawl: ViewCrawl): Promise<Family[]
     } else
       families.set(key, {
         rule_id: row.rule_id,
-        finding_class: row.finding_class,
         severity: row.severity,
         category: row.category,
         page_count: row.page_count,
@@ -119,7 +116,6 @@ function pageListPages(finding: PageListFinding): Page[] {
 type SiteLevelRow = {
   id: string;
   rule_id: string;
-  finding_class: string;
   severity: string;
   category: string;
   site_url_id: string;
@@ -137,7 +133,6 @@ function siteLevelFamily(found: Family | undefined, row: SiteLevelRow, named: Pa
   const wholeSite = sorted.length === 0;
   return {
     rule_id: row.rule_id,
-    finding_class: row.finding_class,
     severity: row.severity,
     category: row.category,
     page_count: wholeSite
@@ -153,14 +148,13 @@ function siteLevelFamily(found: Family | undefined, row: SiteLevelRow, named: Pa
 
 async function siteLevelFamilies(db: Database, crawl: ViewCrawl): Promise<Family[]> {
   const { rows } = await sql<SiteLevelRow>`
-    select i.id, i.rule_id, i.finding_class, i.severity, i.category, i.site_url_id,
+    select i.id, i.rule_id, i.severity, i.category, i.site_url_id,
       u.normalized_url as url, i.evidence
     from site_issues i
     join site_urls u on u.workspace_id = i.workspace_id and u.id = i.site_url_id
       and u.project_id = ${crawl.project_id}
     where ${viewIssuesSql(crawl)} and ${siteLevelRule}
-      and i.finding_class = any(${[...family.FINDING_CLASSES]}::text[])
-    order by i.rule_id collate "C", i.finding_class, i.id`.execute(db);
+    order by i.rule_id collate "C", i.id`.execute(db);
   const named = rows.flatMap((row) => {
     const finding = siteLevelFinding(row.rule_id, row.evidence);
     return finding ? [{ row, pages: evidencePages(finding) }] : [];
@@ -180,7 +174,7 @@ async function siteLevelFamilies(db: Database, crawl: ViewCrawl): Promise<Family
   );
   const families = new Map<string, Family>();
   for (const { row, pages } of named) {
-    const key = `${row.rule_id}\u0000${row.finding_class}`;
+    const key = row.rule_id;
     const owns = pages.flatMap(({ site_url_id }) => {
       const url = owned.get(site_url_id);
       return url === undefined ? [] : [{ site_url_id, url }];

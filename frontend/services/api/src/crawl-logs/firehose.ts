@@ -18,7 +18,6 @@ import { markStalled } from './stall.ts';
 import { base64Text } from './base64-text.ts';
 
 const logger = getLogger('api.crawl_logs.firehose');
-/** Firehose's own bounds: 10,000 records, each at most 1,000 KiB decoded. */
 const MAX_RECORDS = 10_000;
 const MAX_RECORD_BYTES = 1_024_000;
 const envelopeSchema = z.object({
@@ -78,7 +77,6 @@ function envelope(text: string, requestId: string) {
   return { lines, rejected };
 }
 
-/** The key of one chunk; chunk 0 is committed last, so it marks a fully stored request. */
 const chunkKey = (requestId: string, index: number) => `firehose:${requestId}:${index}`;
 
 async function admit(
@@ -91,12 +89,9 @@ async function admit(
 ) {
   const size = crawlLogs.max_lines_per_batch;
   const chunks = Math.max(1, Math.ceil(lines.length / size));
-  // Chunks are admitted last to first, each under its own key and attempt quota,
-  // so a stored chunk 0 proves every chunk of the request was stored. Chunk 0's
-  // quota was spent before the body was read.
   for (let index = chunks - 1; index >= 0; index -= 1) {
     const key = chunkKey(requestId, index);
-    if (index > 0) await batchQuota(db, source, now, key); // NOSONAR -- Chunks are admitted in order, last to first.
+    if (index > 0) await batchQuota(db, source, now, key); // NOSONAR
     const chunk = Buffer.from(lines.slice(index * size, (index + 1) * size).join('\n'));
     const options = {
       key,
@@ -107,7 +102,7 @@ async function admit(
       rejectedRecords: index === 0 ? rejected : 0,
       receivedBytes: index === 0 ? receivedBytes : 0,
     };
-    await ingest(db, source, chunk, options); // NOSONAR -- A stored chunk 0 must prove every later chunk was stored first.
+    await ingest(db, source, chunk, options); // NOSONAR
   }
 }
 
@@ -129,7 +124,6 @@ export async function firehoseDelivery(
   try {
     if (!requestId || requestId.length > 200)
       throw new ApiError(400, 'X-Amz-Firehose-Request-Id is required');
-    // The token is accepted only from Firehose's access-key header, never the URL.
     source = await authorizeToken(db, sourceId, `Bearer ${headers.accessKey ?? ''}`);
     if (source.setup !== 'aws_firehose')
       throw new ApiError(409, 'This source is not an Amazon Firehose source');
@@ -149,7 +143,6 @@ export async function firehoseDelivery(
       });
       return reply(500, requestId, 'Unexpected error; Firehose will retry');
     }
-    // Firehose drops a 413 batch for good; the receipt and the source row say so.
     if (error.status === 413 && source) {
       await diagnosticReceipt(db, source, 'oversize', now);
       await markStalled(db, source, 'oversize', now);

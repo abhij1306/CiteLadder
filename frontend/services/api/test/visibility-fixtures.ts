@@ -618,7 +618,13 @@ export class VisibilityFixtures extends Fixtures {
 
   async sourcePage(
     tenant: Tenant,
-    input: { urlHash: string; url: string; pageFormat?: string; action?: string },
+    input: {
+      urlHash: string;
+      url: string;
+      pageFormat?: string;
+      action?: string;
+      inspectionState?: string;
+    },
   ): Promise<void> {
     await this.database
       .insertInto('source_pages')
@@ -629,7 +635,7 @@ export class VisibilityFixtures extends Fixtures {
         url_hash: input.urlHash,
         canonical_url: input.url,
         registrable_domain: new URL(input.url).hostname,
-        inspection_state: 'inspected',
+        inspection_state: input.inspectionState ?? 'inspected',
         page_format: input.pageFormat ?? 'article',
         page_format_method: 'page',
         recurrence_count: 1,

@@ -12,7 +12,6 @@ import { type SERIES_STROKE, SeriesTonesContext, seriesTones } from './step-char
 describe('seriesColor', () => {
   it('names a variable globals.css emits for every tone, so a script-drawn series has a colour', () => {
     const css = readFileSync(join(import.meta.dirname, '../../apps/app/src/globals.css'), 'utf8');
-    // An `@theme inline` value is folded into utilities and never emitted as a variable.
     const emitted = css.replaceAll(/@theme inline \{[^}]*\}/g, '');
     const tones = ['you', 'rival-1', 'rival-2', 'rival-3', 'rival-4', 'other'] satisfies Array<
       keyof typeof SERIES_STROKE

@@ -1,5 +1,5 @@
 import type { NetSentiment } from '@citeladder/contracts';
-import { PERCEPTION_MIN_CLASSIFIED } from '@/lib/config/visibility';
+import { PERCEPTION_MIN_CLASSIFIED, PERCEPTION_MIN_THEME_JUDGING } from '@/lib/config/visibility';
 import { availabilityLabel, percentText } from '@/lib/format';
 import type {
   PerceptionCoverage,
@@ -86,18 +86,11 @@ export function gatedFigure(
   };
 }
 
-const REASON_COPY: Record<NonNullable<PerceptionResponse['reason']>, string> = {
-  model_not_configured: 'Sentiment classification is not set up on this platform yet.',
-  platform_cap: 'The platform classification limit was reached for these answers.',
-  entity_limit: 'These answers named more businesses than are classified per answer.',
-  invalid_output: 'The classifier returned nothing usable for these answers.',
-  model_error: 'The classifier could not be reached for these answers.',
-  task_failed: 'Classification stopped before it finished for these answers.',
-  not_assessable: 'The answers did not say enough about you to judge their tone.',
-  model_omitted: 'The classifier left these businesses out of its answer.',
-  model_changed:
-    'The classifier model changed after these runs started, so they were not classified.',
-};
+export function describesTooFew(data: Pick<PerceptionResponse, 'state' | 'reason' | 'coverage'>) {
+  if (data.state === 'pending') return false;
+  if (data.state === 'unavailable') return data.reason === 'not_assessable';
+  return data.coverage.classified < PERCEPTION_MIN_CLASSIFIED;
+}
 
 export function stateCopy(
   state: Exclude<PerceptionResponse['state'], 'value'>,
@@ -111,7 +104,7 @@ export function stateCopy(
     case 'unavailable':
       return {
         heading: 'Perception unavailable',
-        description: REASON_COPY[reason ?? 'not_assessable'],
+        description: reason ? sentenceCase(UNAVAILABLE_SHORT[reason]) : null,
       };
     default: {
       const _exhaustive: never = state;
@@ -132,36 +125,100 @@ const UNAVAILABLE_SHORT: Record<NonNullable<PerceptionResponse['reason']>, strin
   model_changed: 'classifier model changed',
 };
 
-type Score = PerceptionResponse['entities'][number]['score'];
-type Theme = PerceptionResponse['themes'][number];
-
-export function negativeHeadline(
-  score: Score | null | undefined,
-  minimum = PERCEPTION_MIN_CLASSIFIED,
-): string | null {
-  if (!score || score.negative_share === null || !meetsMinimum(score.classified, minimum))
-    return null;
-  if (score.negative === 0) return 'AI says nothing negative about you in classified mentions';
-  return `AI says something negative about you in ${Math.round(score.negative_share * 100)}% of classified mentions`;
+function sentenceCase(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
-export function rankThemes(
-  themes: readonly Theme[],
-  order: 'negative' | 'positive',
-  limit: number,
-): Theme[] {
-  return themes
-    .filter((theme) => theme[order] > 0)
-    .sort((a, b) => b[order] - a[order] || a.theme.localeCompare(b.theme))
-    .slice(0, limit);
+type Category = PerceptionResponse['entities'][number]['categories'][number];
+export type Polarity = 'negative' | 'positive';
+
+export const SMALL_SAMPLE = 'Small sample';
+
+export type SampleShare =
+  | { kind: 'empty' }
+  | { kind: 'value'; share: number; text: string; count: number; basis: number; small: boolean };
+
+export function sampleShare({
+  count,
+  basis,
+  minimum = PERCEPTION_MIN_CLASSIFIED,
+}: Readonly<{ count: number; basis: number; minimum?: number }>): SampleShare {
+  if (basis <= 0) return { kind: 'empty' };
+  const share = count / basis;
+  const small = basis < minimum;
+  return {
+    kind: 'value',
+    share,
+    text: small ? `${count} / ${basis}` : percentText(share),
+    count,
+    basis,
+    small,
+  };
 }
 
-export function themeNegativeShare(
-  theme: Pick<Theme, 'negative' | 'positive'>,
-  minimum = PERCEPTION_MIN_CLASSIFIED,
-): number | null {
-  const polar = theme.negative + theme.positive;
-  return meetsMinimum(polar, minimum) ? theme.negative / polar : null;
+export function sampleNote(reading: SampleShare, noun: string): string | undefined {
+  if (reading.kind === 'empty') return undefined;
+  return `${reading.count} of ${reading.basis} ${noun}`;
+}
+
+export function categoryShare(
+  category: Pick<Category, 'negative' | 'positive'>,
+  minimum = PERCEPTION_MIN_THEME_JUDGING,
+): SampleShare {
+  return sampleShare({
+    count: category.negative,
+    basis: category.negative + category.positive,
+    minimum,
+  });
+}
+
+export function rankCategories(categories: readonly Category[], order: Polarity): Category[] {
+  return categories
+    .filter((category) => category[order] > 0)
+    .sort((a, b) => b[order] - a[order] || a.category.localeCompare(b.category));
+}
+
+export type CategorySort = Readonly<{
+  key: 'attribute' | 'negative' | 'positive' | 'share';
+  descending: boolean;
+}>;
+
+function sortValue(category: Category, key: Exclude<CategorySort['key'], 'attribute'>): number {
+  if (key !== 'share') return category[key];
+  const judged = category.negative + category.positive;
+  return judged ? category.negative / judged : -1;
+}
+
+export function sortCategories(categories: readonly Category[], sort: CategorySort): Category[] {
+  const sign = sort.descending ? -1 : 1;
+  return [...categories].sort((a, b) => {
+    const byName = a.category.localeCompare(b.category);
+    if (sort.key === 'attribute') return sign * byName;
+    return sign * (sortValue(a, sort.key) - sortValue(b, sort.key)) || byName;
+  });
+}
+
+export function filterCategories(
+  categories: readonly Category[],
+  { query, polarity }: Readonly<{ query: string; polarity: Polarity | 'all' }>,
+): Category[] {
+  const needle = query.trim().toLocaleLowerCase();
+  const matches = (text: string) => !needle || text.toLocaleLowerCase().includes(needle);
+  return categories.flatMap((category) => {
+    if (polarity !== 'all' && category[polarity] === 0) return [];
+    const named = matches(category.category);
+    const attributes = category.attributes.flatMap((attribute) => {
+      if (polarity !== 'all' && attribute[polarity] === 0) return [];
+      if (!named && !matches(attribute.attribute)) return [];
+      const quotes =
+        polarity === 'all'
+          ? attribute.quotes
+          : attribute.quotes.filter((quote) => quote.polarity === polarity);
+      return [{ ...attribute, quotes }];
+    });
+    if (!named && !attributes.length) return [];
+    return [{ ...category, attributes }];
+  });
 }
 
 export function sentimentTrend(
@@ -177,34 +234,20 @@ export function sentimentTrend(
   }));
 }
 
-export type BreakdownRow =
-  | { kind: 'too_few'; classified: number; mentions: number; needed: number }
-  | {
-      kind: 'value';
-      classified: number;
-      mentions: number;
-      positive: number;
-      neutral: number;
-      negative: number;
-      net: number | null;
-    };
-
 export function breakdownRow(
   row: PerceptionResponse['topics'][number],
-  minimum: number,
-): BreakdownRow {
+  minimum = PERCEPTION_MIN_CLASSIFIED,
+) {
   const { score, coverage } = row;
-  const counts = { classified: score.classified, mentions: coverage.mentions };
-  if (!meetsMinimum(score.classified, minimum))
-    return { kind: 'too_few', ...counts, needed: minimum };
-  // `mixed` counts in the denominator only, so the three shares need not sum to one.
+  const share = (count: number) => sampleShare({ count, basis: score.classified, minimum });
   return {
-    kind: 'value',
-    ...counts,
-    positive: score.positive / score.classified,
-    neutral: score.neutral / score.classified,
-    negative: score.negative / score.classified,
-    net: score.net_sentiment,
+    classified: score.classified,
+    mentions: coverage.mentions,
+    small: score.classified > 0 && score.classified < minimum,
+    positive: share(score.positive),
+    neutral: share(score.neutral),
+    negative: share(score.negative),
+    net: netReading(score.net_sentiment, score.classified, minimum),
   };
 }
 

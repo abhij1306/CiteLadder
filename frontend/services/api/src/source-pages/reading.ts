@@ -82,11 +82,6 @@ export function judgedUnderCurrentRoster(scope: Scope, snapshotId: RawBuilder<un
   )`;
 }
 
-/**
- * The latest SUCCESSFUL reading of each page judged under the roster in
- * force. `source_pages.latest_snapshot_id` is the latest attempt, so a failed
- * read would hide what was learned.
- */
 export async function latestReadings(db: Database, scope: Scope, pageIds: string[]) {
   const latest = new Map<string, Reading>();
   if (!pageIds.length) return latest;

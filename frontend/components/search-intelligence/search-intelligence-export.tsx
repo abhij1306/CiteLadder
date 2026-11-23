@@ -34,13 +34,12 @@ export function SearchIntelligenceExport({
       const exported: SearchIntelligenceRow[] = [];
       let cursor: string | undefined;
       do {
-        const saved =
-          await /* NOSONAR -- Each page needs the previous page's cursor. */ searchIntelligenceApi.rows(
-            projectId,
-            dataset.id,
-            { workspaceId, signal },
-            { ...params, cursor, limit: 200 },
-          );
+        const saved = await /* NOSONAR */ searchIntelligenceApi.rows(
+          projectId,
+          dataset.id,
+          { workspaceId, signal },
+          { ...params, cursor, limit: 200 },
+        );
         exported.push(...saved.rows);
         cursor = saved.next_cursor ?? undefined;
       } while (cursor);
@@ -79,7 +78,7 @@ export function SearchIntelligenceExport({
     <>
       <Button variant="quiet" disabled={exporting} onClick={() => void exportSaved()}>
         <Icon icon={Download} />
-        {exporting ? 'Exporting…' : 'Export saved CSV'}
+        {exporting ? 'Exporting…' : 'Export CSV'}
       </Button>
       {exportError ? <Notice tone="negative">{exportError}</Notice> : null}
     </>

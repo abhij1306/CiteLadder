@@ -1,7 +1,11 @@
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import type { ComposerCommands, ComposerPastes, PastedText } from '@/components/agent/command-menu';
+import { attachedChars, type AgentAttachment } from '@citeladder/contracts/agent';
+
+import type { ComposerCommands, ComposerPastes } from '@/components/agent/command-menu';
+import { useToast } from '@/components/ui/toast';
+import { readAttachmentFile } from '@/lib/agent/attachment-file';
 import {
   actionLinks,
   matchOptions,
@@ -21,7 +25,7 @@ import { useDebounced } from '@/lib/use-debounced';
 
 const ACTION = 'action:';
 
-type Prepared = { message: string; mentions: string[]; attachments: PastedText[] };
+type Prepared = { message: string; mentions: string[]; attachments: AgentAttachment[] };
 
 type Draft = Readonly<{ message: string; edit: (change: (current: string) => string) => void }>;
 
@@ -42,7 +46,7 @@ export function useComposerCommands({
 }>): ComposerCommands & {
   pastes: ComposerPastes;
   clear: () => void;
-  restore: (saved: { mentions: readonly Mention[]; pastes: readonly PastedText[] }) => void;
+  restore: (saved: { mentions: readonly Mention[]; pastes: readonly AgentAttachment[] }) => void;
   prepare: (draft: Draft, send: (prepared: Prepared) => void) => void;
   resolving: boolean;
   menu: ComposerMenuState;
@@ -52,7 +56,11 @@ export function useComposerCommands({
   const [mentions, setMentions] = useState<Mention[]>([]);
   const [pastes, setPastes] = useState<ComposerPastes['items'][number][]>([]);
   const pasteCount = useRef(0);
-  const keyed = (text: string) => ({ key: `paste-${++pasteCount.current}`, text });
+  const keyed = (attachment: AgentAttachment) => ({
+    key: `paste-${++pasteCount.current}`,
+    attachment,
+  });
+  const toast = useToast();
   const latestMentions = useRef(mentions);
   const latestPastes = useRef(pastes);
   useEffect(() => {
@@ -61,6 +69,18 @@ export function useComposerCommands({
   }, [mentions, pastes]);
   const [resolving, setResolving] = useState(false);
   const resolvingRef = useRef(false);
+  const [reading, setReading] = useState(0);
+  const pendingReads = useRef(0);
+  const readGeneration = useRef(0);
+  const settleRead = (change: number) => {
+    pendingReads.current = Math.max(0, pendingReads.current + change);
+    setReading(pendingReads.current);
+  };
+  const heldChars = () => attachedChars(latestPastes.current.map((paste) => paste.attachment));
+  const dropReads = () => {
+    readGeneration.current += 1;
+    settleRead(-pendingReads.current);
+  };
   const [menuOpen, setMenuOpen] = useState(false);
   const [skillsOnly, setSkillsOnly] = useState(false);
   const removeCommand = useRef<(() => void) | null>(null);
@@ -137,13 +157,21 @@ export function useComposerCommands({
       });
     },
     prepare: ({ message, edit }, send) => {
-      if (resolvingRef.current) return;
-      const finish = (text: string) =>
+      if (resolvingRef.current || pendingReads.current > 0) return;
+      const finish = (text: string) => {
+        if (limits && text.length > limits.message_max_chars) {
+          toast.notify(
+            `Messages hold up to ${limits.message_max_chars.toLocaleString('en-US')} characters`,
+            `This one has ${text.length.toLocaleString('en-US')}. Shorten it, or attach the text as a file.`,
+          );
+          return;
+        }
         send({
           message: text,
           mentions: latestMentions.current.map((mention) => mention.id),
-          attachments: pasteAttachments(latestPastes.current),
+          attachments: latestPastes.current.map((paste) => paste.attachment),
         });
+      };
       if (!actionLinks(message, { origin: window.location.origin, projectId }).length) {
         finish(message);
         return;
@@ -155,14 +183,14 @@ export function useComposerCommands({
           const text = applyLinks(message, resolved);
           if (text !== message)
             edit((current) => (current.trim() === message.trim() ? text : current));
-          finish(text);
+          if (pendingReads.current === 0) finish(text);
         })
         .finally(() => {
           resolvingRef.current = false;
           setResolving(false);
         });
     },
-    resolving,
+    resolving: resolving || reading > 0,
     mentions,
     openSkillPicker: (remove, focus) => {
       removeCommand.current = remove;
@@ -204,12 +232,48 @@ export function useComposerCommands({
           limits != null &&
           text.length >= AGENT_PASTE_ATTACHMENT_MIN_CHARS &&
           text.length <= limits.attachment_max_chars &&
-          pastes.length < limits.attachments_max;
+          heldChars() + text.length <= limits.attachments_total_max_chars &&
+          pastes.length + pendingReads.current < limits.attachments_max;
         if (fits) {
-          const paste = keyed(text);
+          const paste = keyed({ kind: 'pasted_text', text });
+          latestPastes.current = [...latestPastes.current, paste];
           setPastes((current) => [...current, paste]);
         }
         return fits;
+      },
+      attach: (files) => {
+        if (!limits) {
+          toast.notify("Couldn't attach files yet", 'Try again in a moment.');
+          return;
+        }
+        const room = limits.attachments_max - latestPastes.current.length - pendingReads.current;
+        if (files.length > room)
+          toast.notify(
+            `Up to ${limits.attachments_max} attachments per message`,
+            room > 0 ? `Only the first ${room} were added.` : 'Remove one to add another.',
+          );
+        const taken = files.slice(0, Math.max(0, room));
+        const generation = readGeneration.current;
+        settleRead(taken.length);
+        for (const file of taken)
+          void readAttachmentFile(file, limits.attachment_max_chars).then((read) => {
+            if (generation !== readGeneration.current) return;
+            settleRead(-1);
+            if (read.kind === 'refused') {
+              toast.notify(`Couldn't attach ${file.name}`, read.message);
+              return;
+            }
+            if (heldChars() + read.attachment.text.length > limits.attachments_total_max_chars) {
+              toast.notify(
+                `Couldn't attach ${file.name}`,
+                `Attachments in one message hold up to ${limits.attachments_total_max_chars.toLocaleString('en-US')} characters together. Remove one or attach part of the file.`,
+              );
+              return;
+            }
+            const paste = keyed(read.attachment);
+            latestPastes.current = [...latestPastes.current, paste];
+            setPastes((current) => [...current, paste]);
+          });
       },
       remove: (key) => setPastes((current) => current.filter((paste) => paste.key !== key)),
     },
@@ -218,13 +282,10 @@ export function useComposerCommands({
       setPastes([]);
     },
     restore: (saved) => {
+      dropReads();
       setMentions([...saved.mentions]);
-      setPastes(saved.pastes.map(({ text }) => keyed(text)));
+      setPastes(saved.pastes.map(keyed));
     },
   };
 }
 export type ComposerState = ReturnType<typeof useComposerCommands>;
-
-function pasteAttachments(pastes: ComposerPastes['items']): PastedText[] {
-  return pastes.map(({ text }) => ({ kind: 'pasted_text', text }));
-}

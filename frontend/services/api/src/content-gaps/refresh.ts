@@ -208,10 +208,6 @@ async function runAngles(db: Database, scope: Scope, runId: string): Promise<Pre
   }));
 }
 
-/**
- * A task's reads of earlier runs' angles, each run read once: runs and their
- * angles are insert-only, so the persist step reuses what the compute read.
- */
 function angleReader(scope: Scope) {
   const read = new Map<string, Promise<PreviousAngle[]>>();
   return (db: Database, runId: string) => {
@@ -282,7 +278,7 @@ async function cluster(
 ): Promise<Validated<Clustered[]>> {
   const angles: Clustered[] = [];
   for (const group of prepared.groups) {
-    await checkCancelled('content_angle_cluster_call'); // NOSONAR -- One bounded call per topic, in order.
+    await checkCancelled('content_angle_cluster_call'); // NOSONAR
     const request = clusterPrompt({
       language: prepared.inputs.market.language,
       maxLabelChars: p.max_label_chars,
@@ -335,7 +331,7 @@ async function match(
     const offered = [...new Map(candidates.flat().map((page) => [page.siteUrlId, page])).values()];
     const pageIds = new Map(offered.map((page, index) => [page.siteUrlId, pageId(index)]));
     const byPageId = new Map(offered.map((page, index) => [pageId(index), page]));
-    await checkCancelled('content_angle_match_call'); // NOSONAR -- One bounded call per topic, in order.
+    await checkCancelled('content_angle_match_call'); // NOSONAR
     const request = matchPrompt({
       language: inputs.market.language,
       angles: topicAngles.map((angle, index) => ({
@@ -414,7 +410,6 @@ const usageOf = (calls: readonly StepCall[]) =>
 
 async function inputsMoved(trx: Database, prepared: Prepared) {
   const { scope, inputs } = prepared;
-  // One transaction connection runs one statement at a time.
   const auditId = await latestBrandRunId(trx, { ...scope, marketId: null });
   return (
     auditId !== inputs.audits.anchor.auditId ||
@@ -432,8 +427,6 @@ function persist(
   return async (trx: Database) => {
     const { scope, inputs, keys } = prepared;
     await subjectXactLock(trx, ['content-angles', scope.workspaceId, scope.projectId].join(':'));
-    // A newer audit or crawl landed while this task computed: writing would put
-    // stale inputs over a newer run. Its own trigger enqueues the recompute.
     if (await inputsMoved(trx, prepared)) return;
     const latest = await latestSucceededRun(trx, scope);
     if (sameKeys(latest, keys)) return;
@@ -468,7 +461,6 @@ function persist(
       })
       .execute();
     if (outcome.outcome === 'failed') return;
-    // Lineage is decided under the lock, against the latest succeeded run before this one.
     const previous = latest ? await previousAngles(trx, latest.id) : [];
     await insertAngles(trx, prepared, { id: runId, previous }, outcome.angles, now);
     await enqueueDerivedOpportunityRefresh(trx, {
@@ -505,8 +497,6 @@ async function insertAngles(
     keyed.map((angle) => [angle.id, inherited.get(angle.id) ?? randomUUID()]),
   );
   const fresh = keyed.filter((angle) => !inherited.get(angle.id));
-  // A lineage's planned-page key is its first label's, fixed here and never
-  // rewritten, so a relabelled angle keeps its planned-page Action.
   if (fresh.length)
     await trx
       .insertInto('content_angle_lineages')

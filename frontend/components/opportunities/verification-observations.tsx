@@ -52,8 +52,9 @@ function GapChanges({ result }: Readonly<{ result: VerificationResult | undefine
   if (!changes || typeof changes !== 'object' || !('state' in changes)) return null;
   if (changes.state === 'not_run') return <p>Gap comparison: no reading yet</p>;
   if (changes.state !== 'available') return <p>Gap comparison: not available</p>;
+  const lists = new Map(Object.entries(changes));
   const count = (key: string) => {
-    const value = key in changes ? changes[key as keyof typeof changes] : null;
+    const value = lists.get(key);
     return Array.isArray(value) ? value.length : 0;
   };
   return (

@@ -237,7 +237,6 @@ describe('terminal analysis publication', () => {
         rule: null,
         siteUrlId: null,
         pageKind: null,
-        findingClass: 'defect',
       },
       { limit: 10, cursor: null },
     );
@@ -346,7 +345,7 @@ describe('terminal analysis publication', () => {
     for (const path of paths)
       others.push(
         await fixtures.page(seed, path, page(path === '/a' ? ['/screens', '/old'] : ['/screens'])),
-      ); // NOSONAR: sequential fixtures.
+      ); // NOSONAR
     await fixtures.redirect(seed, '/screens', '/simulation');
     await fixtures.redirect(seed, '/old', '/new');
     await finalize(seed);
@@ -376,7 +375,6 @@ describe('terminal analysis publication', () => {
         rule: null,
         siteUrlId: null,
         pageKind: null,
-        findingClass: 'defect',
       },
       { limit: 50, cursor: null },
     );
@@ -925,7 +923,6 @@ describe('crawl lifecycle', () => {
     const worker = new SiteHealthWorker(db, {
       settings: { ...siteWorkerSettings({}), concurrency: 1, poll: 0 },
     });
-    // The shared test database holds other suites' due work; this drain sees none.
     vi.spyOn(worker.queue, 'claim').mockResolvedValue([]);
     expect(await worker.runUntilIdle(new AbortController().signal)).toBe(0);
     expect((await tasksOf(stalled.crawlId, 'finalize')).map((task) => task.status)).toEqual([
@@ -943,7 +940,7 @@ describe('crawl lifecycle', () => {
     await monitoredPage(plain, '/');
     const empty = await fixtures.crawl('cancelled');
     await publishCancelledCrawls(db, 50);
-    for (const crawl of [seed, plain, empty]) await finalize(crawl); // NOSONAR -- One crawl at a time.
+    for (const crawl of [seed, plain, empty]) await finalize(crawl); // NOSONAR
     await publishCancelledCrawls(db, 50);
     expect(await snapshots(seed.crawlId)).toHaveLength(1);
     expect(await tasksOf(seed.crawlId, 'finalize')).toHaveLength(1);

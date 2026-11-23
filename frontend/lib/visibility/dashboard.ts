@@ -13,7 +13,7 @@ import {
   absent,
   formatMean,
   formatPercent,
-  formatStripTimestamp,
+  formatDisplayTimestamp,
   type Formatted,
 } from '@/lib/format';
 import { AUDIT_STATES } from '@/lib/runs/status';
@@ -62,12 +62,6 @@ export function isDashboardStatus(status: AuditStatus): boolean {
   return DASHBOARD_STATUSES.has(status);
 }
 
-/**
- * Build the run-selector options from the project's audits: keep only
- * dashboard-ready runs, newest first (by completed-at, then created-at) —
- * mirroring the backend's default-run resolution so the first option is the
- * one the endpoint defaults to when `audit_id` is omitted.
- */
 export function toRunOptions(
   audits: ReadonlyArray<{
     id: string;
@@ -89,7 +83,7 @@ export function toRunOptions(
       id: audit.id,
       status: audit.status,
       completedAt: audit.completed_at,
-      label: formatStripTimestamp(audit.completed_at ?? audit.created_at, timeZone),
+      label: formatDisplayTimestamp(audit.completed_at ?? audit.created_at, timeZone),
     }));
 }
 

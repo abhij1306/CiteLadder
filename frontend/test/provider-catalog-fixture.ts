@@ -76,6 +76,19 @@ export const providerCatalogFixture = {
         },
       ],
     },
+    {
+      logical_engine: 'google_ai_mode',
+      label: 'Google AI Mode',
+      routes: [
+        {
+          transport_provider: 'dataforseo',
+          transport_model: 'google-ai-mode-serp',
+          retrieval_enabled: null,
+          reasoning_effort: null,
+          surface_kind: 'search_ai',
+        },
+      ],
+    },
   ],
 };
 

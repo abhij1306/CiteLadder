@@ -70,7 +70,6 @@ function usePromptToggle(scope: ProjectScope) {
   const press = (prompt: Prompt) => {
     if (saving.has(prompt.id)) return;
     setSaving((current) => new Set(current).add(prompt.id));
-    // Per-call promise: mutate's own callbacks fire only for the latest of overlapping calls.
     void mutation
       .mutateAsync({ promptId: prompt.id, enabled: !prompt.enabled })
       .catch(() => undefined)
@@ -111,7 +110,7 @@ function FiguresFailure({ measurements }: Readonly<{ measurements: PromptMeasure
       kind="read"
       {...readErrorProps(measurements.read)}
       title="Couldn't load the prompts' latest figures"
-      fallback="The prompts are listed without their measured columns."
+      fallback="Couldn't load the prompts' latest figures"
     />
   );
 }
@@ -158,7 +157,7 @@ function libraryBodyFor({
         kind="error"
         error={read.error}
         title="Couldn't load the prompts"
-        fallback="Check your connection and try again."
+        fallback="The request failed or timed out."
         onRetry={read.retry}
         pending={read.retrying}
       />
@@ -193,7 +192,7 @@ function libraryTabs(
   return hasPrompts ? <PromptStatusTabs counts={counts} /> : undefined;
 }
 
-// react-doctor-disable-next-line react-doctor/no-giant-component -- this component only orchestrates queries/mutations; toolbar, topic rail, table, empty state, and dialogs are extracted.
+// react-doctor-disable-next-line react-doctor/no-giant-component
 export function PromptLibrary() {
   const { workspaceId, projectId, project } = useProjectScope();
   const scope = { workspaceId, projectId };
@@ -231,7 +230,6 @@ export function PromptLibrary() {
   const measured = measurementsOf(measurements);
   const evidence = usePromptEvidence();
   const toast = useToast();
-  // Per-call promises, not mutate's callbacks: those fire only for the latest of overlapping calls.
   const failedTo = (action: string) => (error: unknown) =>
     toast.notify(`Couldn't ${action}`, mutationNoticeForError(error, { action }).message, {
       tone: 'negative',
@@ -446,7 +444,7 @@ export function PromptLibrary() {
           ) : null}
           {hasPrompts ? <FiguresFailure measurements={measurements} /> : null}
           <ToggleFailure toggle={toggle.mutation} />
-          <PendingReviewNotice count={review.count} />
+          <PendingReviewNotice count={review.count} shown={statusFilter === 'active'} />
 
           <TopicDialogs
             dialog={topicDialog}

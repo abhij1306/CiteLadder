@@ -1,4 +1,3 @@
-/** Integer-seeded MT19937 with rejection sampling, so stored run seeds reproduce the same slot order. */
 export function shuffleAuditSlots<T>(items: T[], seedText: string): T[] {
   let seed = BigInt(seedText);
   if (seed < 0n) seed = -seed;

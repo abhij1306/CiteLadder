@@ -67,7 +67,7 @@ type RouteBody<Path extends ParamSpecs, Query extends ParamSpecs, Response exten
 type RouteSpec<Path extends ParamSpecs, Query extends ParamSpecs, Response extends z.ZodType> = {
   family: RouteContract['family'];
   path: string;
-  params: { path: Path; query: Query };
+  params: { path: Path; query: Query; closed?: true };
   response: Response;
   method?: 'get' | 'post' | 'put' | 'patch' | 'delete';
   status?: ContentfulStatusCode | 204;
@@ -95,10 +95,26 @@ type PermissionDeclaration = {
 export type ProductRoute = {
   contract: RouteContract;
   publicContract?: RouteContract;
-  params: { path: ParamSpecs; query: ParamSpecs };
+  params: { path: ParamSpecs; query: ParamSpecs; closed?: true };
   streamsBody: boolean;
   register: (app: Hono<AppEnv>, config: ServiceConfig, db: Database) => void;
 };
+
+type ScalarOf<K> = Extract<ParamSpec['scalar'], { kind: K }>;
+
+function intSchema(scalar: ScalarOf<'int'>) {
+  let schema = z.int();
+  if (scalar.ge !== undefined) schema = schema.min(scalar.ge);
+  if (scalar.le !== undefined) schema = schema.max(scalar.le);
+  return schema;
+}
+
+function strSchema(scalar: ScalarOf<'str'>) {
+  let schema = z.string();
+  if (scalar.minLength !== undefined) schema = schema.min(scalar.minLength);
+  if (scalar.maxLength !== undefined) schema = schema.max(scalar.maxLength);
+  return schema;
+}
 
 function scalarSchema(spec: ParamSpec): z.ZodType {
   const { scalar } = spec;
@@ -113,20 +129,16 @@ function scalarSchema(spec: ParamSpec): z.ZodType {
       return z.number();
     case 'bool':
       return z.boolean();
-    case 'int': {
-      let schema = z.int();
-      if (scalar.ge !== undefined) schema = schema.min(scalar.ge);
-      if (scalar.le !== undefined) schema = schema.max(scalar.le);
-      return schema;
-    }
-    case 'str': {
-      let schema = z.string();
-      if (scalar.minLength !== undefined) schema = schema.min(scalar.minLength);
-      if (scalar.maxLength !== undefined) schema = schema.max(scalar.maxLength);
-      return schema;
-    }
+    case 'int':
+      return intSchema(scalar);
+    case 'str':
+      return strSchema(scalar);
     case 'literal':
       return z.enum(scalar.values as [string, ...string[]]);
+    default: {
+      const unhandled: never = scalar;
+      return unhandled;
+    }
   }
 }
 
@@ -148,7 +160,7 @@ const optionalString = z.string().nullable().optional();
 const ACTIVE_WORKSPACE_HEADERS = z.object({ 'x-workspace-id': optionalString });
 
 function honoPath(path: string): string {
-  return path.replaceAll(/\{([^}]+)\}/gu, ':$1'); // NOSONAR -- input is a static OpenAPI route template, never request data
+  return path.replaceAll(/\{([^}]+)\}/gu, ':$1'); // NOSONAR
 }
 
 function methodNotAllowed(method: string): never {
@@ -217,7 +229,7 @@ export function defineRoute<
       if (activeProject && c.get('workspace').projectId === null) throw notFound('Project');
       if (route.permission) c.set('permission', route.permission);
       const params = validateParams(route.params, {
-        path: c.req.param() as Record<string, string>,
+        path: c.req.param(),
         search: new URL(c.req.url).search,
       });
       if (route.raw) return route.handle({ c, db, config }, params);
@@ -328,11 +340,6 @@ function publicOperation(
   return { contract, register };
 }
 
-/**
- * A browser marks a request another origin started as `Sec-Fetch-Site:
- * cross-site` or `same-site`; the product's own pages are same-origin, and
- * server-to-server callers (webhooks, CLIs) send no such header.
- */
 const sameSiteWrite: MiddlewareHandler<AppEnv> = async (c, next) => {
   const site = c.req.header('sec-fetch-site');
   if (site === 'cross-site' || site === 'same-site')
@@ -443,9 +450,6 @@ export function registerMethodGuards(app: Hono<AppEnv>, routes: readonly Product
     })
     .sort((a, b) => a.parameters - b.parameters);
   app.use('*', async (c, next) => {
-    // A literal route such as /competitors/discoveries takes precedence over
-    // /competitors/{candidate_id}. Its GET must not inherit the latter's PATCH
-    // guard. Hono's implicit HEAD remains disallowed unless explicitly declared.
     const segments = c.req.path.split('/');
     const guard = guards.find(
       (entry) =>

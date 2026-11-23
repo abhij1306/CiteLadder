@@ -12,11 +12,21 @@ function state(scored: number, expected: number, unresolved: boolean) {
 
 class RoleSum {
   pages = 0;
+  applicable = 0;
   sum = 0;
   scored = 0;
   unresolved = false;
-  add(score: number | null, measured: boolean) {
+  add({
+    score,
+    expected,
+    measured,
+  }: {
+    score: number | null;
+    expected: number;
+    measured: boolean;
+  }) {
     this.pages++;
+    if (expected > 0 || score !== null) this.applicable++;
     if (score !== null) {
       this.sum += score;
       this.scored++;
@@ -25,7 +35,7 @@ class RoleSum {
   }
   result() {
     return {
-      score: this.scored ? this.sum / this.scored : null,
+      score: this.scored ? this.sum / this.applicable : null,
       coverage: this.pages ? this.scored / this.pages : null,
       state: state(this.scored, this.pages, this.unresolved),
     };
@@ -57,7 +67,7 @@ class DimensionSum {
       ...fallback,
       dimension_applicability: 'applicable',
       dimension_measurement_state: measurement,
-      score: this.scored ? this.sum / this.scored : null,
+      score: this.scored ? this.sum / this.applicable : null,
       coverage: this.scored / this.applicable,
       earned_points: this.sum / 100,
       determinate_points: this.scored,
@@ -69,15 +79,51 @@ class DimensionSum {
   }
 }
 
+class ChecksSum {
+  run = 0;
+  total = 0;
+  add(run: number, total: number) {
+    this.run += run;
+    this.total += total;
+  }
+  result() {
+    return this.total ? { run: this.run, total: this.total } : null;
+  }
+}
+
+const aeoChecks = (dimensions: Measurement['readiness_dimensions']) =>
+  dimensions
+    .filter((pillar) => pillar.dimension_applicability === 'applicable')
+    .reduce(
+      (sum, pillar) => ({
+        run: sum.run + pillar.determinate_points,
+        total: sum.total + pillar.expected_points,
+      }),
+      { run: 0, total: 0 },
+    );
+
 class PageSetFold {
   private readonly web = new RoleSum();
   private readonly aeo = new RoleSum();
+  private readonly webChecks = new ChecksSum();
+  private readonly aeoChecks = new ChecksSum();
   private readonly dimensions = EMPTY_DIMENSIONS().map(() => new DimensionSum());
   private pages = 0;
   add(page: Measurement) {
     this.pages++;
-    this.web.add(page.web_fundamentals_score, page.web_fundamentals_state === 'measured');
-    this.aeo.add(page.aeo_readiness_score, page.aeo_measurement_state === 'measured');
+    const aeo = aeoChecks(page.readiness_dimensions);
+    this.web.add({
+      score: page.web_fundamentals_score,
+      expected: page.technical_expected_weight,
+      measured: page.web_fundamentals_state === 'measured',
+    });
+    this.aeo.add({
+      score: page.aeo_readiness_score,
+      expected: aeo.total,
+      measured: page.aeo_measurement_state === 'measured',
+    });
+    this.webChecks.add(page.technical_determinate_weight, page.technical_expected_weight);
+    this.aeoChecks.add(aeo.run, aeo.total);
     page.readiness_dimensions.forEach((pillar, index) => this.dimensions[index]?.add(pillar));
   }
   result() {
@@ -91,6 +137,8 @@ class PageSetFold {
       aeo_readiness_score: aeo.score,
       aeo_measurement_coverage: aeo.coverage,
       aeo_measurement_state: aeo.state,
+      web_fundamentals_checks: this.webChecks.result(),
+      aeo_readiness_checks: this.aeoChecks.result(),
       readiness_dimensions: this.dimensions.map((sum, index) => sum.result(empty[index]!)),
       analyzed_url_count: this.pages,
       scoring_version: policy.site_health.reads.scoring_version,

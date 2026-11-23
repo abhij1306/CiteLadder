@@ -26,7 +26,7 @@ async function shares(
   selection: RunSelection,
   scope: ReturnType<typeof evidenceScope>,
   dimension: MoverQuery['dimension'],
-): Promise<{ answers: number; byKey: Map<string, number> }> {
+): Promise<{ answers: number; citations: number; byKey: Map<string, number> }> {
   const column = dimension === 'url' ? 'citation.url' : 'citation.domain';
   const answers = scope.select('ra.id as analysis_id').as('answers');
   const [counted, total] = await Promise.all([
@@ -48,6 +48,7 @@ async function shares(
   const citations = counted.reduce((sum, row) => sum + row.citations, 0);
   return {
     answers: total.answers,
+    citations,
     byKey: new Map(counted.map((row) => [row.key, citations ? row.citations / citations : 0])),
   };
 }
@@ -62,6 +63,8 @@ export async function getSourceMovers(
   const empty = (status: string): Movers => ({
     dimension: query.dimension,
     comparison_status: status,
+    current_citations: null,
+    previous_citations: null,
     risers: [],
     fallers: [],
   });
@@ -98,5 +101,11 @@ export async function getSourceMovers(
       .filter((mover) => mover.delta * sign > 0)
       .sort((left, right) => (right.delta - left.delta) * sign || compareText(left.key, right.key))
       .slice(0, query.limit);
-  return { ...empty('comparable'), risers: ranked(1), fallers: ranked(-1) };
+  return {
+    ...empty('comparable'),
+    current_citations: current.citations,
+    previous_citations: previous.citations,
+    risers: ranked(1),
+    fallers: ranked(-1),
+  };
 }

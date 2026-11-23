@@ -281,7 +281,6 @@ it('finishes its leased batch and stops new claims once the budget expires or sh
 });
 
 it('refills a freed slot while a slow task is still running', async () => {
-  // Separate crawls: transactional executors serialize on their crawl's row lock.
   const slow = await fixtures.task(await fixtures.crawl(), 'link_metrics', { priority: 100 });
   await fixtures.task(await fixtures.crawl(), 'link_metrics', { priority: 90 });
   const third = await fixtures.task(await fixtures.crawl(), 'link_metrics');
@@ -443,7 +442,6 @@ it('reconciles and stops a crawl while a task commit inserts rows that reference
   const seed = await fixtures.crawl('running');
   await fixtures.task(seed);
   await db.transaction().execute(async (trx) => {
-    // A child insert key-shares the crawl row through its foreign key until it commits.
     await sql`select id from site_crawls where id = ${seed.crawlId} for key share`.execute(trx);
     await cancelCrawl(db, seed.workspaceId, seed.crawlId);
     await lifecycle.reconcileCrawl(db, seed.workspaceId, seed.crawlId);
@@ -481,7 +479,6 @@ it('commits an analysis while another analysis holds the workspace runtime lock'
     .returningAll()
     .executeTakeFirstOrThrow();
   await db.transaction().execute(async (trx) => {
-    // A discover's FOR UPDATE still orders analyses behind it; analyses only share the row.
     await sql`select id from workspace_site_health_runtime
       where workspace_id = ${seed.workspaceId} for share`.execute(trx);
     await worker.execute(leased);

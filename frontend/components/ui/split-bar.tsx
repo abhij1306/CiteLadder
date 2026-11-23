@@ -126,7 +126,7 @@ export function SplitBar({
           return (
             <div
               key={left.key}
-              // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- A native range input has one thumb; a divider shares the bar with its neighbours.
+              // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role
               role="slider"
               tabIndex={disabled ? -1 : 0}
               aria-label={`${left.label} and ${right.label}`}

@@ -1,6 +1,7 @@
 import { gunzipSync } from 'node:zlib';
 
 import { XMLParser, XMLValidator } from 'fast-xml-parser';
+import { isRecord } from '../db/json.ts';
 
 export class SitemapParseError extends Error {}
 export class SitemapTooLargeError extends SitemapParseError {}
@@ -36,7 +37,6 @@ const loc = (entry: unknown) =>
   entry && typeof entry === 'object' && 'loc' in entry && typeof entry.loc === 'string'
     ? entry.loc.trim()
     : '';
-/** A W3C datetime is at most 29 characters; anything longer is kept bounded, not trusted. */
 const MAX_LASTMOD_CHARS = 64;
 const lastmodOf = (entry: unknown) =>
   entry && typeof entry === 'object' && 'lastmod' in entry && typeof entry.lastmod === 'string'
@@ -60,7 +60,7 @@ export function parseSitemap(body: Buffer, contentType: string, limits: SitemapL
   const document: Record<string, unknown> = parser.parse(text);
   const [rootName, root] = Object.entries(document).find(([key]) => !key.startsWith('?')) ?? [];
   const isIndex = rootName?.toLowerCase() === 'sitemapindex';
-  const children = root && typeof root === 'object' ? (root as Record<string, unknown>) : {};
+  const children = isRecord(root) ? root : {};
   const all = (entries: unknown) =>
     (Array.isArray(entries) ? entries : []).map(loc).filter(Boolean);
   const refs = all(children.sitemap);
@@ -108,7 +108,6 @@ export class SitemapCollector {
     const room = Math.max(0, this.#options.maxSiteUrls - this.urls.length);
     const kept = document.urls.slice(0, room);
     if (document.truncated || kept.length < document.urls.length) this.truncated = true;
-    // One push per URL: spreading a 50,000-URL document can overflow the call stack.
     for (const url of kept) this.urls.push(url);
     for (const url of kept) {
       const declared = document.lastmod.get(url);

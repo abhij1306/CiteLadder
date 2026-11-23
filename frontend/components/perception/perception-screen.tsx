@@ -35,7 +35,7 @@ type Filters = ReturnType<typeof useVisibilityFilters>;
 type Queries = ReturnType<typeof useVisibilityQueries>;
 
 export function PerceptionScreen() {
-  const filters = useVisibilityFilters();
+  const filters = useVisibilityFilters({ defaultSelection: 'range' });
   const queries = useVisibilityQueries(filters, 'perception');
   const { pilot, tab, setTab, items } = usePerceptionTab();
   const accuracy = useAccuracy({ filters, queries, pilot });
@@ -51,7 +51,7 @@ export function PerceptionScreen() {
         filters={ready ? <FilterBar filters={pageFilters} /> : undefined}
       >
         <RunBanner queries={queries} />
-        <TabPanel value={tab} className="focus-ring">
+        <TabPanel value={tab}>
           <SelectionTab
             ready={ready}
             queries={queries}
@@ -143,7 +143,7 @@ function PageState({ queries }: Readonly<{ queries: Queries }>) {
         kind="error"
         {...readErrorProps(auditsQuery)}
         title="Couldn't load this project's runs"
-        fallback="Check your connection and try again."
+        fallback="The request failed or timed out."
       />
     );
   return <VisibilityEmptyState activeRun={queries.activeRun ?? null} />;
@@ -166,7 +166,7 @@ function usePageFilters(filters: Filters, queries: Queries) {
     onChangeGranularity: filters.setGranularity,
     cohort: filters.cohort,
     onChangeCohort: filters.setCohort,
-    selectionMode: filters.selectionMode,
+    selectionMode: queries.selectionMode,
     markets: queries.markets,
     market: filters.market,
     onChangeMarket: filters.setMarket,

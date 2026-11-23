@@ -1,5 +1,3 @@
-import { useEffect } from 'react';
-
 import { ArrowDown, ArrowUp } from '@/lib/icons';
 import { Checkbox } from '@/components/ui/checkbox';
 import { HintedTableHead, SortableTableHead } from '@/components/ui/table-heads';
@@ -88,6 +86,7 @@ function gutters(columns: readonly DataTableColumn[]): boolean[] {
 }
 
 const GUTTER_PX = 12;
+const HUG_CAP = '40ch';
 
 export function columnRules({
   scope,
@@ -108,7 +107,6 @@ export function columnRules({
   const shownGutters = gutters(shown);
   const gutter = new Set(shown.filter((_, index) => shownGutters[index]));
   const share = `${(100 / Math.max(1, shown.filter(isFlexible).length)).toFixed(3)}%`;
-  // The select box column is exactly its width, so the pinned identity cell's offset matches it.
   const select = `width:${SELECT_WIDTH};min-width:${SELECT_WIDTH};padding-inline-end:8px`;
   const rules = selection ? [`${at(1)}{${select}}`] : [];
   columns.forEach((column, index) => {
@@ -123,6 +121,10 @@ export function columnRules({
         ? `width:${share};max-width:0;min-width:var(--data-table-identity-min);`
         : `width:1px;white-space:nowrap;min-width:${steps(role.steps)};`;
     rules.push(`${cell}{text-align:${kind.align};${size}${pad}}`);
+    if (role.kind === 'steps')
+      rules.push(
+        `${cell} > :is(.truncate, :has(.truncate)){width:max-content;max-width:${HUG_CAP}}`,
+      );
     if (kind.tabular)
       rules.push(
         `${at(index + offset, 'tbody > tr:not([data-table-state])')}{font-variant-numeric:tabular-nums}`,
@@ -136,27 +138,6 @@ export function columnRules({
       rules.push(`${at(columns.indexOf(last) + offset)}{padding-inline-end:16px}`);
   }
   return rules.join('');
-}
-
-const warnedColumnSets = new Set<string>();
-
-export function useFlexibleColumnCheck({
-  columns,
-  title,
-  label,
-}: Readonly<{ columns: readonly DataTableColumn[]; title?: string; label?: string }>) {
-  useEffect(() => {
-    if (!import.meta.env?.DEV) return;
-    if (columns.some(isFlexible)) return;
-    const name = title ?? label ?? columns.map((column) => column.label).join(', ');
-    const widths = columns.map((column) => `${column.key}:${column.width}`).join(',');
-    const signature = `${name}|${widths}`;
-    if (warnedColumnSets.has(signature)) return;
-    warnedColumnSets.add(signature);
-    console.warn(
-      `DataTable "${name}" has no flexible column (width "flex"): its spare width spreads over its figures.`,
-    );
-  }, [columns, title, label]);
 }
 
 function steps(count: number) {

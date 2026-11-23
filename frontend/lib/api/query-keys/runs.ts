@@ -16,8 +16,6 @@ export const runKeys = {
     [...auditExecutions(auditId), workspaceId] as const,
   execution: (workspaceId: string | null, executionId: string) =>
     ['runs', 'execution', executionId, workspaceId] as const,
-  // Its own root, not under `runs`: a launch invalidates `runs.all`, and the
-  // estimate for the launch just sent must not be re-asked as the dialog closes.
   estimate: (workspaceId: string | null, input: Readonly<Record<string, unknown>> | null) =>
     ['audit-estimate', workspaceId, input] as const,
 };

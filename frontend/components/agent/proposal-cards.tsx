@@ -5,6 +5,7 @@ import {
   isDeclarable,
   MarkImplementedButton,
 } from '@/components/agent/action-declaration';
+import { ChangeProposalCard } from '@/components/agent/change-proposal-card';
 import { ActionButton } from '@/components/ui/actions';
 import { DraftSheet } from '@/components/ui/draft-sheet';
 import { Stack } from '@/components/ui/layout';
@@ -15,14 +16,19 @@ import { useWorkspaceCapability } from '@/lib/project/project-context';
 import { Notice, readErrorProps } from '@/components/ui/notice';
 
 type Proposal = AgentMessage['proposals'][number];
+type Declaration = Extract<Proposal, { kind: 'declaration' }>;
 type ChatAction = AgentChatDetail['actions'][number];
 
 export function ProposalCards({
   workspaceId,
+  chatId,
+  messageId,
   proposals,
   actions,
 }: Readonly<{
   workspaceId: string;
+  chatId: string;
+  messageId: string;
   proposals: readonly Proposal[];
   actions: readonly ChatAction[];
 }>) {
@@ -42,8 +48,18 @@ export function ProposalCards({
               />
             ) : null;
           }
+          case 'change':
+            return (
+              <ChangeProposalCard
+                key={`change:${proposal.index}`}
+                workspaceId={workspaceId}
+                chatId={chatId}
+                messageId={messageId}
+                proposal={proposal}
+              />
+            );
           default: {
-            const _exhaustive: never = proposal.kind;
+            const _exhaustive: never = proposal;
             return _exhaustive;
           }
         }
@@ -59,7 +75,7 @@ function DeclarationProposal({
   workspaceId,
   proposal,
   action,
-}: Readonly<{ workspaceId: string; proposal: Proposal; action: ChatAction }>) {
+}: Readonly<{ workspaceId: string; proposal: Declaration; action: ChatAction }>) {
   const mayWrite = useWorkspaceCapability('write');
   const detail = useQuery(actionsQueries.detail(workspaceId, action.id));
   const label = action.target_label;
@@ -102,7 +118,7 @@ function DeclareButton({
   workspaceId,
   proposal,
   action,
-}: Readonly<{ workspaceId: string; proposal: Proposal; action: ActionDetail }>) {
+}: Readonly<{ workspaceId: string; proposal: Declaration; action: ActionDetail }>) {
   if (action.members.some(({ rule_id }) => rule_id === 'site_contextual_links'))
     return <ContextualLinkDeclarationRoute />;
   return (
@@ -115,7 +131,7 @@ function DeclareButton({
   );
 }
 
-function proposalDetail(proposal: Proposal) {
+function proposalDetail(proposal: Declaration) {
   const what = proposal.revision
     ? `Revision ${proposal.revision.number} of the document`
     : 'Work done outside CiteLadder';

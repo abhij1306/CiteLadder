@@ -211,14 +211,11 @@ function insertCrawl(
   return db
     .insertInto('site_crawls')
     .values({
-      // Time-ordered: the crawl id is the month partition key of its evidence.
       id: timeOrderedId(),
       workspace_id: input.workspaceId,
       project_id: input.projectId,
       profile_id: input.profileId,
       root_url: input.root,
-      // Unread since the tracked set (SH-B6) made every crawl's order stable; the column is
-      // NOT NULL until a later release drops it (expand/contract).
       random_seed: '0',
       configuration: JSON.stringify(input.configuration),
       sample_mode: sample,
@@ -281,7 +278,6 @@ function refreshProfile(
       id: randomUUID(),
       workspace_id: workspaceId,
       project_id: projectId,
-      // Unused since SH-B13; the column is NOT NULL until a later release drops it (expand/contract).
       selection_version: 0,
       created_at: now,
       ...values,

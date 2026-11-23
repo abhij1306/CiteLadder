@@ -9,7 +9,10 @@ function SourcePaging(props: Parameters<typeof sourcePager>[0]) {
   return <Pager {...sourcePager(props)} />;
 }
 
-vi.mock('@/lib/navigation/url-state', () => ({ setUrlParams: vi.fn() }));
+vi.mock('@/lib/navigation/url-state', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/navigation/url-state')>()),
+  setUrlParams: vi.fn(),
+}));
 
 it('navigates using server cursors and disables navigation while loading', () => {
   const data: SourcesData = {

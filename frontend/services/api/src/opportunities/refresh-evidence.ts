@@ -95,7 +95,6 @@ function declineHit(row: DeclineRow, auditId: string): DetectorHit {
   };
 }
 
-/** Owned domains reach the workspace only through their scoped project. */
 async function ownedDomainList(
   db: Database,
   scope: WorkspaceScope,
@@ -177,8 +176,6 @@ export async function loadVisibilityEvidence(
     .orderBy('id')
     .limit(o.RECOMPUTE_MAX_ANALYSES + 1)
     .execute();
-  // A prompt cut at the cap would keep only some engines' answers and read as
-  // absent where a dropped engine mentioned the brand, so it is dropped whole.
   const cut =
     loaded.length > o.RECOMPUTE_MAX_ANALYSES && isNonEmpty(loaded)
       ? lastOf(loaded).prompt_index

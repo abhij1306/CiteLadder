@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { pageKindSchema, siteCrawlSchema, siteUrlSourceSchema } from './crawl.ts';
+import { checksRunSchema, pageKindSchema, siteCrawlSchema, siteUrlSourceSchema } from './crawl.ts';
 import { responseObject, uuid } from './core.ts';
 import { cursorPageSchema } from './pagination.ts';
 
@@ -13,6 +13,8 @@ export const analysisSummaryFields = {
   aeo_measurement_coverage: z.number().nullable(),
   aeo_measurement_state: z.enum(['measured', 'limited_evidence', 'not_measured', 'excluded']),
   aeo_measurement_reason: z.string(),
+  web_fundamentals_checks: checksRunSchema.nullable(),
+  aeo_readiness_checks: checksRunSchema.nullable(),
   main_content_indexable: z.boolean().nullable(),
   robots_excluded: z.boolean(),
   last_audited: z.string().nullable(),

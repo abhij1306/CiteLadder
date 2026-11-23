@@ -3,7 +3,6 @@ import { commandCenterSchema } from '@citeladder/contracts/opportunities';
 import { projectMarketCreateSchema, projectMarketSchema } from '@citeladder/contracts/markets';
 import { z } from 'zod';
 
-import { budget, spendBudget } from '../abuse/usage.ts';
 import { COMPETITORS_WRITE } from '../commands/competitors.ts';
 import { routeActor } from '../commands/permission.ts';
 import { readBody } from '../http/body.ts';
@@ -17,7 +16,7 @@ import {
 } from '../projects/service.ts';
 import { commandCenter } from '../projects/command-center.ts';
 import { addMarket, deleteMarket, listMarkets } from '../projects/markets.ts';
-import { refreshLogos } from '../projects/logo-refresh.ts';
+import { refreshProjectLogos } from '../projects/logo-refresh.ts';
 import { defineGetRoute, definePostRoute, definePatchRoute, defineDeleteRoute } from './define.ts';
 
 const family = 'projects';
@@ -97,12 +96,11 @@ export const projectRoutes = [
     capability: 'write',
     params: { path: projectPath, query: {} },
     response: projectSchema,
-    async handle({ c, db, config }, { path }) {
-      const scope = { workspaceId: c.get('workspace').workspaceId, projectId: path.project_id };
-      await readProject(db, scope);
-      await spendBudget(db, budget('brand_logo_refresh', config.settings), scope.workspaceId);
-      return refreshLogos(db, scope);
-    },
+    handle: ({ c, db, config }, { path }) =>
+      refreshProjectLogos(db, config.settings, {
+        workspaceId: c.get('workspace').workspaceId,
+        projectId: path.project_id,
+      }),
   }),
   defineGetRoute({
     family,

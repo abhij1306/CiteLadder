@@ -53,7 +53,6 @@ export function logoDevUrl(websiteUrl: string | null | undefined, size: number):
     size: String(Math.min(size * 2, 800)),
     format: 'png',
     theme: 'auto',
-    // 404 instead of a grey monogram — see the module note.
     fallback: '404',
   });
   return `https://img.logo.dev/${encodeURIComponent(domain)}?${params.toString()}`;

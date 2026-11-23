@@ -48,7 +48,6 @@ function resultText(block: ConversationBlock) {
   return Array.isArray(content) ? blockText(parseBlocks(content)) : '';
 }
 
-/** One stored message as chat-completion messages; tool results come first, as the API requires. */
 function chatMessages(message: ConversationMessage): ChatMessage[] {
   if (message.role === 'assistant') {
     const calls = blockToolCalls(message.content);
@@ -185,7 +184,6 @@ async function readAnswer(response: Response, listener?: ConversationListener): 
       throw new ModelError('connection');
     }
   }
-  // A destination may ignore the stream request; its JSON answer is read as usual.
   const parsed = completionSchema.safeParse(await modelJson(response));
   if (!parsed.success) throw new ModelError('parse');
   const [choice] = parsed.data.choices;
@@ -243,7 +241,6 @@ export function openAIConversation(
         parallel_tool_calls: true,
         reasoning_effort: request.effort,
         max_completion_tokens: outputCap(request, settings.maxOutputTokens),
-        // One key for the shared prefix improves cache routing.
         prompt_cache_key: 'citeladder-agent',
         stream: true,
         stream_options: { include_usage: true },
@@ -280,10 +277,8 @@ export function openAIConversation(
       requested_model: settings.model,
       returned_model: answer.model || settings.model,
       finish_status: answer.finish ?? 'unknown',
-      // Chat completions charge no cache write.
       usage: { ...normalizedUsage(answer.usage), cache_write_input_tokens: 0 },
       latency_ms: latency,
-      // Chat completions report no cache diagnosis or per-step usage.
       response_id: '',
       cache: { reason: 'not_requested' },
       iterations: [],

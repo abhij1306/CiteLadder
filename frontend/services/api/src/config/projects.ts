@@ -11,7 +11,7 @@ export const projectReads = {
     { key: 'missing_prompts', size: 'full' },
     { key: 'ranked_actions', size: 'full' },
     { key: 'company_facts', size: 'full' },
-  ] satisfies OverviewWidget[] as OverviewWidget[],
+  ] satisfies OverviewWidget[],
   CODE_OVERVIEW_LAYOUT_CONFLICT: 'overview_layout_conflict',
   overview_opportunity_rows: 8,
   overview_report_list_rows: 10,

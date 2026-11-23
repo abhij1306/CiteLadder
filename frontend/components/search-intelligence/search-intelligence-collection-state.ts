@@ -29,6 +29,12 @@ const VIEWS: Record<CollectionTab, readonly [View, ...View[]]> = {
   ],
 };
 
+const COLLECTION_TABS: readonly CollectionTab[] = ['keywords', 'backlinks', 'competitors'];
+
+export function collectionTabOf(kind: string): CollectionTab | null {
+  return COLLECTION_TABS.find((tab) => VIEWS[tab].some((view) => view.value === kind)) ?? null;
+}
+
 export type KeywordFilterValues = Readonly<{ minVolume: string; intent: string }>;
 
 const NO_KEYWORD_FILTERS: KeywordFilterValues = { minVolume: '', intent: '' };

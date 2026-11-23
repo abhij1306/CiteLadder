@@ -109,7 +109,6 @@ export function matrixProjection(input: MatrixInput): Omit<VisibilityMatrix, 'so
       share_of_voice: row?.share_of_voice ?? null,
       avg_position: row?.avg_position ?? null,
       win_rate: row?.win_rate ?? null,
-      // Perceived, and the brand was never named: no mentions, not unmeasured.
       sentiment: entities
         ? (entities.find((e) => sameBrand(e, target))?.sentiment ?? NO_MENTIONS)
         : null,

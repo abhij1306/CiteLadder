@@ -17,23 +17,22 @@ import { createJevClient, type JevClient } from '../models/jev.ts';
 import {
   generationContext,
   offeringMaps,
+  OFFERING_NEEDED,
+  TOPIC_NEEDED,
   recoverTopics,
+  topicProposalInput,
   type GenerationContext,
   type OfferingMap,
   type TopicRecovery,
 } from './generation-context.ts';
+import { countDrop, generateDrafts, type Draft, type Drops } from './generation-drafts.ts';
+import { brandPromptRoom, requireBrandPromptRoom } from './brand-quota.ts';
 import {
-  countDrop,
   draftCallLimit,
-  generateDrafts,
-  type Draft,
-  type Drops,
-} from './generation-drafts.ts';
-import {
-  cohortShares,
   generationInput,
   generationInvalid,
   generationSetting,
+  needsCompetitor,
   requestKey,
   validateRequest,
   validateSelection,
@@ -46,6 +45,7 @@ import { dimensions, geoTerms, topicWeights } from './generation-plan.ts';
 import { cohortQuotas, gatedOut, judgeDrafts, selectRun } from './generation-quality.ts';
 import { acquireProjectLock, acquirePromptSetLock } from './locks.ts';
 import { observedRef } from './observed-queries.ts';
+import { brandTopics } from './brand-topics.ts';
 import { scopedPromptSet } from './prompt-sets.ts';
 import { meterFor, type Meter } from '../models/metering.ts';
 import { listTopics } from './topics.ts';
@@ -226,13 +226,19 @@ function stage(
       });
       return false;
     });
-    const selected = selectRun(eligible, input, topicWeights(context)),
+    const ranked = selectRun(eligible, input, topicWeights(context));
+    const room =
+      input.mode === 'brand'
+        ? await brandPromptRoom(trx, { workspaceId, projectId: set.project_id })
+        : ranked.length;
+    const selected = ranked.slice(0, room),
       rejected = eligible.filter(gatedOut),
       geo = geoTerms(context);
     const evidence = {
       generator_version: policy.prompts.generation.version,
       buyer_query_policy_version: policy.prompts.generation.policy_version,
       requested_count: input.count,
+      mode: input.mode,
       requested_topic_ids: wantedTopics(input),
       cohort: input.cohort,
       run_context: input.run_context || null,
@@ -365,14 +371,34 @@ async function replay(
   });
 }
 
-async function requireCompetitor(db: Database, workspaceId: string, setId: string) {
+export async function generationPreconditions(
+  db: Database,
+  workspaceId: string,
+  setId: string,
+  input: GenerationInput,
+) {
+  validateRequest(input);
   const set = await scopedPromptSet(db, workspaceId, setId);
-  const competitor = await db
-    .selectFrom('competitors')
-    .select('id')
-    .where('project_id', '=', set.project_id)
-    .executeTakeFirst();
-  if (!competitor) throw generationInvalid('Add a competitor before generating comparison prompts');
+  if (input.mode === 'brand')
+    await requireBrandPromptRoom(db, { workspaceId, projectId: set.project_id }, input.count);
+  if (needsCompetitor(input)) {
+    const competitor = await db
+      .selectFrom('competitors')
+      .select('id')
+      .where('project_id', '=', set.project_id)
+      .executeTakeFirst();
+    if (!competitor)
+      throw generationInvalid('Add a competitor before generating comparison prompts');
+  }
+  if (wantedTopics(input).length) return;
+  const scope = { workspaceId, projectId: set.project_id };
+  const recovery = await topicProposalInput(db, scope);
+  if (!recovery.existing.length) {
+    if (!recovery.offerings.length) throw generationInvalid(OFFERING_NEEDED);
+    return;
+  }
+  const topic = await brandTopics(db, scope).select('topics.id').executeTakeFirst();
+  if (!topic) throw generationInvalid(TOPIC_NEEDED);
 }
 
 export async function generatePrompts(
@@ -384,13 +410,11 @@ export async function generatePrompts(
   idempotencyKey: string | null = null,
 ) {
   if (idempotencyKey) {
-    // Authorize the set before revealing whether the key was used.
     await scopedPromptSet(db, workspaceId, setId);
     const prior = await replay(db, workspaceId, setId, input, idempotencyKey);
     if (prior) return prior;
   }
-  validateRequest(input);
-  if (cohortShares(input).comparison > 0) await requireCompetitor(db, workspaceId, setId);
+  await generationPreconditions(db, workspaceId, setId, input);
   const meter = (dependencies.meter ?? meterFor)(db, workspaceId);
   let metered: ModelGateway | undefined;
   const gatewayFor = () => {
@@ -414,7 +438,7 @@ export async function generatePrompts(
           },
         );
     const context = await generationContext(db, workspaceId, setId, input);
-    if (cohortShares(input).comparison > 0 && !context.context.competitors.length)
+    if (needsCompetitor(input) && !context.context.competitors.length)
       throw generationInvalid('Add a competitor before generating comparison prompts');
     const gateway = gatewayFor();
     await spendBudget(db, budget('agent_provider_call', process.env), workspaceId, {

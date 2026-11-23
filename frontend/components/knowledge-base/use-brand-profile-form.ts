@@ -25,17 +25,12 @@ const IDENTITY_FIELDS = [
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
-/**
- * The named fields of `next` that differ from `base`. Only what the reader
- * changed is sent, because the API marks every sent field and facet reviewed.
- */
 function changed<T, K extends keyof T>(fields: readonly K[], next: T, base: T): Partial<T> {
   const patch: Partial<T> = {};
   for (const field of fields) if (!same(next[field], base[field])) patch[field] = next[field];
   return patch;
 }
 
-/** A cleared category is sent so the API can reject it; an unset facet never is. */
 function identityUpdate(identity: IdentityFacets, saved: IdentityFacets) {
   const category = identity.category.trim();
   return {

@@ -5,13 +5,14 @@ import { Stack } from '@/components/ui/layout';
 import { Skeleton } from '@/components/ui/skeleton';
 import { textRole } from '@/components/ui/typography';
 import type { SearchIntelligenceRun } from '@/lib/api/search-intelligence';
-import { formatCount } from '@/lib/format';
+import { formatCount, pluralCount } from '@/lib/format';
 import { words } from '@/lib/ai-traffic/vocabulary';
 import { SEARCH_RUN_STATES } from '@/lib/search-intelligence/status';
 import { reportedCost, runEstimate } from './search-intelligence-format';
 import { Notice } from '@/components/ui/notice';
 import { StateBlock } from '@/components/ui/state-block';
 import { FigureStrip } from '@/components/ui/figure-strip';
+import { countMeter, WorkProgress } from '@/components/ui/work-progress';
 
 const STOP_REASONS: Readonly<Record<string, string>> = {
   cost_ceiling_reached:
@@ -46,8 +47,18 @@ export function RunNotice({
   if (!run) return null;
   if (SEARCH_RUN_STATES[run.status].active)
     return (
-      <Notice
-        tone="info"
+      <WorkProgress
+        label="Analysis progress"
+        narration={
+          run.status === 'queued'
+            ? 'Waiting to start the analysis'
+            : 'Fetching search data from DataForSEO'
+        }
+        meter={countMeter({
+          done: run.completed_calls,
+          total: run.planned_calls,
+          label: `${formatCount(run.completed_calls)} of ${pluralCount(run.planned_calls, 'request')} complete`,
+        })}
         action={
           onCancel ? (
             <Button variant="secondary" disabled={cancelling} onClick={() => onCancel(run.id)}>
@@ -55,9 +66,7 @@ export function RunNotice({
             </Button>
           ) : undefined
         }
-      >
-        Analysis in progress: {run.completed_calls} of {run.planned_calls} requests complete.
-      </Notice>
+      />
     );
   if (!['partial', 'failed', 'uncertain'].includes(run.status)) return null;
   const reason =

@@ -9,7 +9,6 @@ import { siteRuleCheck } from './site-rule.ts';
 import { trafficMetricCheck } from './traffic-metric.ts';
 import { visibilityMetricCheck } from './visibility-metric.ts';
 
-/** In freeze order: a declaration's checks are stored in this order. */
 export const CHECKS: { readonly [K in CheckKind]: CheckModule<K> } = {
   visibility_metric: visibilityMetricCheck,
   site_rule: siteRuleCheck,

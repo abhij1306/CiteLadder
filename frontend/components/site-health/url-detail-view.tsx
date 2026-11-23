@@ -6,6 +6,8 @@ import { Inline, Stack } from '@/components/ui/layout';
 import { useAgentPanelSeed } from '@/lib/agent/panel-context';
 import { UrlText } from '@/components/ui/table';
 import { InternalLinksCard } from '@/components/site-health/internal-links-card';
+import { PageChecks } from '@/components/site-health/page-checks';
+import { PageFacts } from '@/components/site-health/page-facts';
 import { PageIssues, type RerunControl } from '@/components/site-health/page-issues';
 import { PageKindBadge } from '@/components/site-health/page-kind-badge';
 import { RobotsExcludedBadge } from '@/components/site-health/robots-choice';
@@ -82,12 +84,14 @@ export function UrlDetailView({
         crawlId={detail.crawl_id}
       />
       <TechnicalDetails detail={detail} />
+      <PageChecks evaluations={detail.evaluations} />
+      <PageFacts facts={detail.facts} />
     </RecordPage>
   );
 }
 
 function pageHandoff(detail: PageDetail) {
-  const count = detail.issues.filter((issue) => issue.finding_class === 'defect').length;
+  const count = detail.issues.length;
   return {
     siteUrlId: detail.site_url_id,
     targetUrl: detail.display_url,

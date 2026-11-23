@@ -17,7 +17,6 @@ export function lockOwnedTask(db: Database, task: QueueTask) {
     .executeTakeFirst();
 }
 
-/** Called inside the mutation transaction, before project/page locks. */
 export async function fenceInspectionTask(db: Database, task?: QueueTask) {
   if (task && !(await lockOwnedTask(db, task))) {
     throw new TaskCancelledError('Source-page inspection no longer owns its lease');

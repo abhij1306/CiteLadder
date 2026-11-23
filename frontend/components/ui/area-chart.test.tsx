@@ -3,7 +3,14 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vite-plus/test';
 
 import { AreaChart } from './area-chart';
-import { chartRows, eventsInSpan, gapRanges, niceTicks } from './area-chart-data';
+import {
+  breakBridges,
+  chartRows,
+  distinctTicks,
+  eventsInSpan,
+  gapRanges,
+  niceTicks,
+} from './area-chart-data';
 import { roleColor } from './chart-tooltip';
 import { SeriesTonesContext, seriesTones } from './step-chart-parts';
 
@@ -24,6 +31,28 @@ describe('AreaChart data', () => {
       { x: 0.5, index: -1, break: true },
       { x: 1, index: 1, break: false, l0: 50, l1: null },
     ]);
+  });
+
+  it('bridges a break only between two measured points', () => {
+    const data = [
+      { label: 'a', value: 40, timestamp: 100 },
+      { label: 'b', value: 50, timestamp: 200, breakBefore: true },
+      { label: 'c', value: 60, timestamp: 300 },
+      { label: 'd', value: 70, timestamp: 400, breakBefore: true },
+    ];
+    expect(breakBridges([40, 50, null, 70], data)).toEqual([
+      { from: { x: 100, y: 40 }, to: { x: 200, y: 50 } },
+    ]);
+  });
+
+  it('labels a run of same-day points once', () => {
+    const label = new Map([
+      [1, 'Nov 22'],
+      [2, 'Nov 23'],
+      [3, 'Nov 23'],
+      [4, 'Nov 24'],
+    ]);
+    expect(distinctTicks([1, 2, 3, 4], (x) => label.get(x))).toEqual([1, 2, 4]);
   });
 
   it('widens a missing run halfway to its neighbours, and half a step at an end', () => {
@@ -121,6 +150,35 @@ describe('AreaChart', () => {
     expect(container.querySelector('[data-single-measurement]')).not.toBeNull();
     expect(container.querySelector('.recharts-surface')).toBeNull();
     expect(screen.getByText('Measured 1 Jun 2026')).toBeVisible();
+  });
+
+  it('says why there is no chart when no line was ever measured', () => {
+    const { container, rerender } = render(
+      <AreaChart
+        label="Net sentiment"
+        name="Net"
+        empty="Too few mentions"
+        data={[
+          { label: 'Jun', value: null },
+          { label: 'Jul', value: null },
+        ]}
+      />,
+    );
+    expect(screen.getByText('Too few mentions')).toBeVisible();
+    expect(container.querySelector('[role="group"]')).toBeNull();
+    rerender(
+      <AreaChart
+        label="Net sentiment"
+        name="Net"
+        empty="Too few mentions"
+        data={[
+          { label: 'Jun', value: null },
+          { label: 'Jul', value: 10 },
+        ]}
+      />,
+    );
+    expect(screen.queryByText('Too few mentions')).toBeNull();
+    expect(container.querySelector('[role="group"]')).not.toBeNull();
   });
 
   it('reads a point with the arrow keys in a tooltip card', async () => {

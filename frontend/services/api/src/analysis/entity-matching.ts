@@ -53,17 +53,24 @@ function effectiveEntityMatching(
   entities: readonly MatchedEntity[],
   seeds: readonly string[],
 ): Record<string, EffectivePolicy> {
+  const named = entities.filter((entity) => entity.name.trim());
+  const distinctive = named.filter((entity) => !commonWordName(entity));
   return Object.fromEntries(
-    entities
-      .filter((entity) => entity.name.trim())
-      .map((entity) => {
-        const common = commonWordName(entity);
-        const saved = stored[entityKey(entity.name)];
-        const fallback: EntityPolicy = common
-          ? { mode: 'context_required', context_terms: [...seeds], exclusion_phrases: [] }
-          : { mode: 'always', context_terms: [], exclusion_phrases: [] };
-        return [entityKey(entity.name), { ...(saved ?? fallback), common_word: common }];
-      }),
+    named.map((entity) => {
+      const common = commonWordName(entity);
+      const saved = stored[entityKey(entity.name)];
+      const rivals = distinctive
+        .filter((other) => other !== entity)
+        .flatMap((other) => [other.name, ...other.aliases]);
+      const fallback: EntityPolicy = common
+        ? {
+            mode: 'context_required',
+            context_terms: [...new Set([...seeds, ...rivals])],
+            exclusion_phrases: [],
+          }
+        : { mode: 'always', context_terms: [], exclusion_phrases: [] };
+      return [entityKey(entity.name), { ...(saved ?? fallback), common_word: common }];
+    }),
   );
 }
 

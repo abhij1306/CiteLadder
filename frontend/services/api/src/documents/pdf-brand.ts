@@ -155,8 +155,6 @@ async function tokenSource(): Promise<string> {
     return await readFile(new URL('../../assets/design-tokens.css', import.meta.url), 'utf8');
   } catch (error) {
     if (!(error instanceof Error) || !('code' in error) || error.code !== 'ENOENT') throw error;
-    // Source-run development reads the token owner itself; the image copies
-    // the identical file into the API's packaged assets before deploy.
     return readFile(new URL('../../../../apps/app/src/globals.css', import.meta.url), 'utf8');
   }
 }

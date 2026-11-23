@@ -14,10 +14,7 @@ import { renderWithProviders } from '@/test/render';
 import { OnboardingScreen } from './onboarding-screen';
 import { useOnboardingFlow } from './onboarding-flow';
 
-const { setActiveProjectId, selection } = vi.hoisted(() => ({
-  setActiveProjectId: vi.fn(),
-  selection: { activeProjectId: '55555555-5555-4555-8555-555555555555' as string | null },
-}));
+const setActiveProjectId = vi.fn();
 
 const PROJECT_ID = '22222222-2222-4222-8222-222222222222';
 const ACTIVE_PROJECT_ID = '55555555-5555-4555-8555-555555555555';
@@ -34,15 +31,6 @@ const createdProject = makeProject({
   workspace_id: WORKSPACE_ID,
   website_url: 'https://example.com',
 });
-
-vi.mock('@/lib/project/project-context', () => ({
-  useActiveWorkspaceId: () => 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-  useProjectContext: () => ({
-    activeWorkspaceId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-    activeProjectId: selection.activeProjectId,
-    setActiveProjectId,
-  }),
-}));
 
 vi.mock('@/lib/onboarding/use-brand-discovery', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/onboarding/use-brand-discovery')>();
@@ -91,13 +79,16 @@ function RouterProbe({ destination }: Readonly<{ destination: string }>) {
   return <output data-testid="location">{location.pathname + location.search}</output>;
 }
 
-function renderOnboarding(destination = onboardingUrl()) {
+function renderOnboarding(
+  destination = onboardingUrl(),
+  activeProjectId: string | null = ACTIVE_PROJECT_ID,
+) {
   return renderWithProviders(
     <>
       <RouterProbe destination={destination} />
       <OnboardingScreen />
     </>,
-    { initialEntries: [destination] },
+    { initialEntries: [destination], projectSelection: { activeProjectId, setActiveProjectId } },
   );
 }
 
@@ -120,7 +111,6 @@ afterEach(() => {
   vi.clearAllMocks();
   searchParams = '';
   useRealDiscovery = false;
-  selection.activeProjectId = ACTIVE_PROJECT_ID;
   visitedLocations.length = 0;
   window.sessionStorage.clear();
 });
@@ -307,6 +297,7 @@ describe('OnboardingScreen', () => {
       </>,
       {
         initialEntries: [destination],
+        projectSelection: { activeProjectId: ACTIVE_PROJECT_ID, setActiveProjectId },
       },
     );
     await waitFor(() => expect(flow.profile).not.toBeNull());
@@ -380,9 +371,8 @@ describe('OnboardingScreen', () => {
 
   it('offers no way out of an additional-project flow that has nowhere to go', async () => {
     searchParams = `new=1&workspace=${WORKSPACE_ID}`;
-    selection.activeProjectId = null;
     mswServer.use(catalogHandler());
-    renderOnboarding();
+    renderOnboarding(onboardingUrl(), null);
 
     await screen.findByLabelText(/^Brand name/);
     expect(screen.queryByRole('link', { name: 'Exit' })).not.toBeInTheDocument();

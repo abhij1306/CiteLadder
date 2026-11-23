@@ -1,7 +1,7 @@
 import { classify } from './page-kinds.ts';
 import { record, text, type Facts } from './read-facts.ts';
 import { evaluatePageRules } from './rules.ts';
-import { scoreAnalysis } from './scoring.ts';
+import { crawlSiteChecks, finalPageChecks, scoreAnalysis } from './scoring.ts';
 import { deriveTraits } from './traits.ts';
 
 export type PageContext = {
@@ -44,6 +44,10 @@ export function analyzePage(facts: Facts, context: PageContext) {
     assessment,
     traits,
     evaluations,
-    scores: scoreAnalysis(evaluations, assessment.page_kind),
+    scores: scoreAnalysis(
+      finalPageChecks(evaluations, evaluationFacts),
+      assessment.page_kind,
+      crawlSiteChecks(evaluations),
+    ),
   };
 }

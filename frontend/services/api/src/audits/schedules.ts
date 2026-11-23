@@ -133,7 +133,6 @@ export function updateSchedule(
 }
 
 export async function deleteSchedule(db: Database, scope: ScheduleScope, id: string) {
-  // DELETE takes the row lock the retained scheduler's claim/finalize waits on.
   const deleted = await db
     .deleteFrom('audit_schedules')
     .where('id', '=', id)

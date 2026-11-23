@@ -177,6 +177,31 @@ export function viewIssuesSql(crawl: ViewCrawl, alias = 'i', view?: RawBuilder<u
         select v.crawl_id, v.site_url_id from ${pages} v)))`;
 }
 
+function usableSiteCrawls(db: Database, crawl: ViewCrawl) {
+  return siteCrawls(db, crawl.workspace_id, crawl.project_id)
+    .select(['id', 'workspace_id', 'project_id', 'configuration', 'started_at', 'created_at'])
+    .where('status', 'in', USABLE_CRAWL_STATUSES);
+}
+
+const crawlKey = (crawl: ViewCrawl) => sql`(${crawl.created_at}::timestamptz, ${crawl.id}::uuid)`;
+
+export async function adjacentSiteCrawls(db: Database, crawl: ViewCrawl) {
+  const [previous, next] = await Promise.all([
+    usableSiteCrawls(db, crawl)
+      .where(sql<boolean>`(created_at, id) < ${crawlKey(crawl)}`)
+      .limit(1)
+      .executeTakeFirst(),
+    usableSiteCrawls(db, crawl)
+      .where(sql<boolean>`(created_at, id) > ${crawlKey(crawl)}`)
+      .clearOrderBy()
+      .orderBy('created_at')
+      .orderBy('id')
+      .limit(1)
+      .executeTakeFirst(),
+  ]);
+  return { previous: previous ?? null, next: next ?? null };
+}
+
 export async function foldingSiteCrawl(db: Database, rerun: Crawl): Promise<Crawl | null> {
   if (!isPageRerun(rerun)) return null;
   const crawl = await siteCrawls(db, rerun.workspace_id, rerun.project_id)

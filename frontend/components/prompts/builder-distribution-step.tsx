@@ -16,6 +16,7 @@ import { formatCount } from '@/lib/format';
 import {
   INTENT_KEYS,
   seedSourceOf,
+  type GenerationMode,
   type RunSettings,
   type SeedChoice,
 } from '@/lib/prompts/builder-run';
@@ -30,6 +31,10 @@ const SHARE_SEGMENTS = [
   { key: 'branded', label: 'Branded' },
   { key: 'comparison', label: 'Competitor alternatives' },
 ] as const;
+const MODE_OPTIONS = [
+  { value: 'market', label: 'Buyer questions' },
+  { value: 'brand', label: 'Brand prompts' },
+] as const satisfies readonly { value: GenerationMode; label: string }[];
 const SOURCE_LABELS: Record<SeedChoice, string> = {
   search_console: 'Search Console',
   search_intelligence: 'Keyword research',
@@ -173,24 +178,97 @@ function SeedList({
   );
 }
 
+type Limits = Pick<
+  PromptFormLimits,
+  | 'generation_count_max'
+  | 'brand_prompts_max'
+  | 'brand_generation_calls'
+  | 'distribution_personas_max'
+>;
+
+function CountField({
+  settings,
+  onChange,
+  max,
+}: Readonly<{ settings: RunSettings; onChange: (settings: RunSettings) => void; max: number }>) {
+  return (
+    <SettingField inline label="Number of prompts" hint={`1–${max}`}>
+      {(field) => (
+        <Input
+          {...field}
+          type="number"
+          inputMode="numeric"
+          min={1}
+          max={max}
+          width="quantity"
+          value={settings.count}
+          onChange={(event) => onChange({ ...settings, count: event.target.value })}
+        />
+      )}
+    </SettingField>
+  );
+}
+
 export function BuilderDistributionStep({
+  mode,
+  onModeChange,
+  notices,
+  ...props
+}: Readonly<
+  Parameters<typeof MarketSettings>[0] & {
+    mode: GenerationMode;
+    onModeChange: (mode: GenerationMode) => void;
+    notices: ReactNode;
+  }
+>) {
+  const { settings, onChange, limits } = props;
+  return (
+    <Stack gap="section" className="max-w-[var(--container-prose)]">
+      {notices}
+      <SettingsGroup title="What to generate">
+        <SegmentedControl<GenerationMode>
+          ariaLabel="What to generate"
+          value={mode}
+          options={MODE_OPTIONS}
+          onChange={onModeChange}
+        />
+      </SettingsGroup>
+      {mode === 'brand' ? (
+        <SettingsGroup
+          title="Size"
+          status={
+            <span className={textRole('caption', 'tabular-nums')}>
+              {`AI credits: up to ${formatCount(limits.brand_generation_calls)} model calls`}
+            </span>
+          }
+        >
+          <SettingRows>
+            <CountField settings={settings} onChange={onChange} max={limits.brand_prompts_max} />
+          </SettingRows>
+        </SettingsGroup>
+      ) : (
+        <MarketSettings {...props} />
+      )}
+    </Stack>
+  );
+}
+
+function MarketSettings({
   settings,
   onChange,
   hasCompetitors,
   personaChoices,
   seeds,
   topics,
-  notices,
   limits,
 }: Readonly<{
-  limits: Pick<PromptFormLimits, 'generation_count_max' | 'distribution_personas_max'>;
+  limits: Limits;
   settings: RunSettings;
   onChange: (settings: RunSettings) => void;
   hasCompetitors: boolean;
   personaChoices: readonly string[];
   seeds: { data?: SeedQueries; status: ReactNode };
   topics: readonly Topic[];
-  notices: ReactNode;
 }>) {
   const sources: SeedChoice[] = [...(seeds.data?.sources.map((item) => item.source) ?? []), 'none'];
   const intent = INTENT_SEGMENTS.map((segment) => share(settings.intent[segment.key]));
@@ -205,24 +283,10 @@ export function BuilderDistributionStep({
       },
     });
   return (
-    <Stack gap="section" className="max-w-[var(--container-prose)]">
-      {notices}
+    <>
       <SettingsGroup title="Size and share">
         <SettingRows>
-          <SettingField inline label="Number of prompts" hint={`1–${limits.generation_count_max}`}>
-            {(field) => (
-              <Input
-                {...field}
-                type="number"
-                inputMode="numeric"
-                min={1}
-                max={limits.generation_count_max}
-                width="quantity"
-                value={settings.count}
-                onChange={(event) => onChange({ ...settings, count: event.target.value })}
-              />
-            )}
-          </SettingField>
+          <CountField settings={settings} onChange={onChange} max={limits.generation_count_max} />
           <ShareMix settings={settings} onChange={onChange} hasCompetitors={hasCompetitors} />
         </SettingRows>
       </SettingsGroup>
@@ -282,6 +346,6 @@ export function BuilderDistributionStep({
           seeds.status
         )}
       </SettingsGroup>
-    </Stack>
+    </>
   );
 }

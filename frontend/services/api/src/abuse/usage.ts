@@ -28,7 +28,7 @@ export function activeJobRetrySeconds(source: SettingSource = process.env): numb
     'active_job_retry_after_seconds',
     abuse.active_job_retry_after_seconds,
     source,
-  ) as number;
+  );
 }
 
 export type Budget = {
@@ -148,7 +148,6 @@ function throttled(subjectKind: BudgetSubject, operation: string, expires: Date,
   );
 }
 
-/** Autocommitted atomic counters, before hashing or provider I/O. */
 async function enforceSubjectRequest(
   db: Database,
   subjectKind: BudgetSubject,

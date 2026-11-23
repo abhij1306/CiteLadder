@@ -61,7 +61,7 @@ export function AnalysisRead<T>({
         kind="read"
         {...readErrorProps(query)}
         title={title}
-        fallback="Check your connection and try again."
+        fallback="The request failed or timed out."
       />
     );
   if (ready === undefined)

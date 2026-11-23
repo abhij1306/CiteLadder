@@ -57,7 +57,6 @@ export function EngineComparison({
                     catalog.label(engine.logical_engine)
                   )
                 }
-                secondary={modelsOf(visibility, engine.logical_engine, catalog) || undefined}
               />
             </TableCell>
             <TableCell numeric>{formatRate(engine.brand_mention_rate)}</TableCell>
@@ -68,16 +67,4 @@ export function EngineComparison({
       </DataTable>
     </TitledSection>
   );
-}
-
-function modelsOf(
-  visibility: Visibility,
-  engine: string,
-  catalog: ReturnType<typeof useEngineCatalog>,
-): string {
-  return visibility.model_provenance
-    .filter((item) => item.logical_engine === engine)
-    .map((item) => catalog.modelLabel(engine, item.transport_model))
-    .filter((model): model is string => model !== null)
-    .join(', ');
 }

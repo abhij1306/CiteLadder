@@ -5,16 +5,22 @@ import { visibilityQueries } from '@/lib/api/visibility-queries';
 import { PERCEPTION_PENDING_POLL_MS } from '@/lib/config/operational';
 import type { SourceFilters } from '@/components/visibility/source-rows';
 import {
-  periodSelectionParams,
   selectionEnabled,
+  selectionParams,
   type SourceQueries,
 } from '@/lib/visibility/use-source-analysis';
 
-export function usePerception(
-  filters: Pick<SourceFilters, 'engine' | 'cohort'>,
-  queries: SourceQueries,
-) {
-  const params = periodSelectionParams(filters, queries);
+type PerceptionFilters = Pick<SourceFilters, 'engine' | 'cohort'> & { market: string | null };
+
+function perceptionParams(filters: PerceptionFilters, queries: SourceQueries) {
+  const { audit_ids: _pooled, ...run } = selectionParams(filters, queries);
+  return queries.selectedPeriod
+    ? { ...run, market: filters.market ?? undefined, ...queries.selectedPeriod }
+    : run;
+}
+
+export function usePerception(filters: PerceptionFilters, queries: SourceQueries) {
+  const params = perceptionParams(filters, queries);
   const enabled = selectionEnabled(queries);
   const query = useQuery({
     ...visibilityQueries.perception(

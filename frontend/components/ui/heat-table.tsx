@@ -14,6 +14,7 @@ import { SkeletonBlock, SkeletonFrame } from '@/components/ui/skeleton-block';
 import { Tooltip } from '@/components/ui/tooltip';
 import { textRole } from '@/components/ui/typography';
 import type { DataAvailabilityState, Formatted } from '@/lib/format';
+import { cssVars } from '@/lib/css-vars';
 import { cn } from '@/lib/utils';
 
 const heat = (place: number) =>
@@ -33,49 +34,62 @@ type HeatTableProps = Readonly<{
 
 export function HeatTable({ labelledBy, corner, columns, rows }: HeatTableProps) {
   return (
-    <Table fixed ariaLabelledBy={labelledBy}>
-      <TableHeader>
-        <TableRow>
-          <TableHead className="w-40">{corner}</TableHead>
-          {columns.map((column) => (
-            <TableHead key={column.key} className="text-center">
-              {column.header}
-            </TableHead>
-          ))}
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {rows.map((row) => (
-          <TableRow key={row.key}>
-            <TableRowHeader>{row.header}</TableRowHeader>
-            {row.cells.map((cell, index) => (
-              <td key={columns[index]?.key ?? index} className="p-0.5 text-center">
-                {cell.kind === 'void' ? (
-                  <div
-                    className="rounded-mark flex min-h-10 flex-col items-center justify-center"
-                    style={{ backgroundImage: HATCH }}
-                  >
-                    <i className={textRole('caption')}>
-                      <Absence state={cell.state} label={cell.label} />
-                    </i>
-                  </div>
-                ) : (
-                  <div
-                    className="rounded-mark flex min-h-10 flex-col items-center justify-center"
-                    style={{ background: heat(cell.tint) }}
-                  >
-                    <span className={textRole('label', 'tabular-nums')}>{cell.text}</span>
-                    {/* Ink: ink-2 falls under 4.5:1 on the strongest tint in both themes. */}
-                    <span className={textRole('caption', 'text-ink')}>{cell.detail}</span>
-                  </div>
-                )}
-              </td>
+    <GridFloor columns={columns.length}>
+      <Table fixed ariaLabelledBy={labelledBy} className={HEAT_FLOOR}>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="w-40">{corner}</TableHead>
+            {columns.map((column) => (
+              <TableHead key={column.key} className={HEAT_HEAD}>
+                {column.header}
+              </TableHead>
             ))}
           </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+        </TableHeader>
+        <TableBody>
+          {rows.map((row) => (
+            <TableRow key={row.key}>
+              <TableRowHeader>{row.header}</TableRowHeader>
+              {row.cells.map((cell, index) => (
+                <td key={columns[index]?.key ?? index} className="p-0.5 text-center">
+                  {cell.kind === 'void' ? (
+                    <div
+                      className="rounded-mark flex min-h-10 flex-col items-center justify-center"
+                      style={{ backgroundImage: HATCH }}
+                    >
+                      <i className={textRole('caption')}>
+                        <Absence state={cell.state} label={cell.label} />
+                      </i>
+                    </div>
+                  ) : (
+                    <div
+                      className="rounded-mark flex min-h-10 flex-col items-center justify-center"
+                      style={{ background: heat(cell.tint) }}
+                    >
+                      <span className={textRole('label', 'tabular-nums')}>{cell.text}</span>
+                      <span className={textRole('caption', 'text-ink')}>{cell.detail}</span>
+                    </div>
+                  )}
+                </td>
+              ))}
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </GridFloor>
   );
+}
+
+const HEAT_FLOOR =
+  'min-w-[calc(10rem+var(--grid-columns)*5rem)] phone:min-w-[calc(10rem+var(--grid-columns)*6rem)]';
+const HEAT_HEAD =
+  'phone:whitespace-normal phone:[&>span]:flex-col phone:[&>span]:gap-1 phone:[&_.truncate]:whitespace-normal text-center';
+const RANK_CHIP =
+  'rounded-mark flex h-[var(--control-md)] items-center justify-center gap-1 overflow-hidden px-2 whitespace-nowrap phone:h-auto phone:min-h-[var(--control-md)] phone:flex-wrap phone:py-1 phone:text-center';
+const RANK_FLOOR = 'phone:min-w-[calc(10rem+var(--grid-columns)*8rem)]';
+
+function GridFloor({ columns, children }: Readonly<{ columns: number; children: ReactNode }>) {
+  return <div style={cssVars({ '--grid-columns': columns })}>{children}</div>;
 }
 
 export function GridTableSkeleton({
@@ -162,52 +176,56 @@ export function RankTable({
 }>) {
   const columns = Array.from({ length: places }, (_, index) => index);
   return (
-    <Table fixed ariaLabelledBy={labelledBy}>
-      <TableHeader>
-        <TableRow>
-          <TableHead className="w-54">{corner}</TableHead>
-          {columns.map((index) => (
-            <TableHead key={index} className="text-center">
-              #{index + 1}
-            </TableHead>
-          ))}
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {rows.map((row) => (
-          <TableRow key={row.key}>
-            <TableRowHeader>{row.header}</TableRowHeader>
-            {row.chips.length === 0
-              ? columns.map((index) => (
-                  <td key={index} className="p-1 text-center">
-                    {row.empty}
-                  </td>
-                ))
-              : columns.map((index) => {
-                  const chip = row.chips[index];
-                  return (
-                    <td key={chip?.key ?? index} className="p-1">
-                      {chip ? (
-                        <div
-                          className={cn(
-                            'rounded-mark flex h-[var(--control-md)] items-center justify-center gap-1 overflow-hidden px-2 whitespace-nowrap',
-                            chip.own
-                              ? textRole('captionStrong', 'bg-accent-wash text-accent-text')
-                              : textRole('caption', 'bg-well text-ink'),
-                          )}
-                        >
-                          {chip.mark}
-                          <span className="min-w-0 truncate">{chip.name}</span>
-                          <span className="opacity-80">{printed(chip.detail)}</span>
-                        </div>
-                      ) : null}
-                    </td>
-                  );
-                })}
+    <GridFloor columns={places}>
+      <Table fixed ariaLabelledBy={labelledBy} className={RANK_FLOOR}>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="phone:w-40 w-54">{corner}</TableHead>
+            {columns.map((index) => (
+              <TableHead key={index} className="text-center">
+                #{index + 1}
+              </TableHead>
+            ))}
           </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+        </TableHeader>
+        <TableBody>
+          {rows.map((row) => (
+            <TableRow key={row.key}>
+              <TableRowHeader>{row.header}</TableRowHeader>
+              {row.chips.length === 0
+                ? columns.map((index) => (
+                    <td key={index} className="p-1 text-center">
+                      {row.empty}
+                    </td>
+                  ))
+                : columns.map((index) => {
+                    const chip = row.chips[index];
+                    return (
+                      <td key={chip?.key ?? index} className="p-1">
+                        {chip ? (
+                          <div
+                            className={cn(
+                              RANK_CHIP,
+                              chip.own
+                                ? textRole('captionStrong', 'bg-accent-wash text-accent-text')
+                                : textRole('caption', 'bg-well text-ink'),
+                            )}
+                          >
+                            {chip.mark}
+                            <span className="phone:whitespace-normal min-w-0 truncate">
+                              {chip.name}
+                            </span>
+                            <span className="opacity-80">{printed(chip.detail)}</span>
+                          </div>
+                        ) : null}
+                      </td>
+                    );
+                  })}
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </GridFloor>
   );
 }
 

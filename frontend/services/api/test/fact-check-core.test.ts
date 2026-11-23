@@ -38,12 +38,14 @@ const pkg: PerceptionPackage = {
       name: 'Acme',
       kind: 'brand',
       spans: [{ start: 0, end: [...BRAND].length, text: BRAND }],
+      cut_chars: 0,
     },
     {
       entity_id: 'competitor:rival',
       name: 'Rival',
       kind: 'competitor',
       spans: [{ start: 60, end: 60 + [...RIVAL].length, text: RIVAL }],
+      cut_chars: 0,
     },
   ],
 };

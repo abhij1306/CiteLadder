@@ -98,7 +98,7 @@ export function persistExecutionSuccess(
         ? { provider_cost_microusd: reported }
         : {}),
     };
-    const metadata = { ...previous, ...result.provider_metadata };
+    const { raw_body: rawBody, ...metadata } = { ...previous, ...result.provider_metadata };
     const artifact = {
       id: artifactId,
       workspace_id: claimed.workspace_id,
@@ -113,7 +113,7 @@ export function persistExecutionSuccess(
       citations: JSON.stringify(result.citations),
       retrieved_sources:
         result.retrieved_sources === null ? null : JSON.stringify(result.retrieved_sources),
-      provider_metadata: JSON.stringify(metadata),
+      provider_metadata: JSON.stringify({ ...metadata, raw_body: rawBody }),
       usage: JSON.stringify(usage),
       finish_reason: result.finish_reason,
       raw_finish_reason: result.raw_finish_reason,
@@ -130,7 +130,7 @@ export function persistExecutionSuccess(
         search_used: result.search_used,
         search_events: artifact.search_events,
         citations: artifact.citations,
-        provider_metadata: artifact.provider_metadata,
+        provider_metadata: JSON.stringify(metadata),
         finish_reason: result.finish_reason,
         raw_finish_reason: result.raw_finish_reason,
         latency_ms: result.latency_ms,

@@ -4,7 +4,7 @@ import { useMemo } from 'react';
 import { agentQueries, type AgentCatalog } from '@/lib/api/agent';
 import { useActiveWorkspaceId } from '@/lib/project/project-context';
 
-const EMPTY: Omit<AgentCatalog, 'limits'> = {
+const EMPTY: Omit<AgentCatalog, 'limits' | 'models'> = {
   skills: [],
   workflows: [],
   output_kinds: [],
@@ -15,6 +15,7 @@ export function useAgentCatalog() {
   const query = useQuery({ ...agentQueries.skills(workspaceId), enabled: Boolean(workspaceId) });
   const catalog = query.data ?? EMPTY;
   const limits = query.data?.limits ?? null;
+  const models = query.data?.models ?? null;
   const { status, error, refetch, isFetching } = query;
   return useMemo(() => {
     const kinds = new Map(catalog.output_kinds.map((kind) => [kind.kind, kind]));
@@ -23,10 +24,11 @@ export function useAgentCatalog() {
     return {
       ...catalog,
       limits,
+      models,
       read: { status, error, refetch, isFetching },
       workflow: (id: string | null | undefined) => (id ? workflows.get(id) : undefined),
       outputKind,
       kindLabel: (kind: string | null | undefined) => outputKind(kind)?.label ?? 'Output',
     };
-  }, [catalog, limits, status, error, refetch, isFetching]);
+  }, [catalog, limits, models, status, error, refetch, isFetching]);
 }

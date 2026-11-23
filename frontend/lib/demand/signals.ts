@@ -1,8 +1,9 @@
+import { z } from 'zod';
 import type { DemandDetectorPolicy } from '@citeladder/contracts';
 import { agentHandoffHref } from '@/lib/agent/handoff';
 import type { DemandSignal } from '@/lib/api/demand';
 import { parseAbsoluteHttpUrl } from '@/lib/safe-http-url';
-import { isRecord } from '@/lib/utils';
+import { isOneOf } from '@/lib/utils';
 
 type SignalType =
   | 'striking_distance'
@@ -81,10 +82,8 @@ const FALLBACK_TYPE_META: { label: string; definition: Definition } = {
 };
 
 export function signalTypeMeta(signalType: string) {
-  return (
-    (SIGNAL_TYPE_META as Record<string, typeof FALLBACK_TYPE_META>)[signalType] ??
-    FALLBACK_TYPE_META
-  );
+  const known: Readonly<Record<string, typeof FALLBACK_TYPE_META | undefined>> = SIGNAL_TYPE_META;
+  return known[signalType] ?? FALLBACK_TYPE_META;
 }
 
 export function signalDefinition(signalType: string, policy: DemandDetectorPolicy): string {
@@ -94,7 +93,7 @@ export function signalDefinition(signalType: string, policy: DemandDetectorPolic
 
 export function matchesTab(signal: DemandSignal, tab: FilterTab): boolean {
   if (tab === 'all') return true;
-  return (SIGNAL_GROUPS[tab] as readonly string[]).includes(signal.signal_type);
+  return isOneOf(SIGNAL_GROUPS[tab], signal.signal_type);
 }
 
 export function countByTab(signals: readonly DemandSignal[], tab: FilterTab): number {
@@ -124,21 +123,19 @@ export function safePageUrl(pageUrl: string | null | undefined): string | null {
   return pageUrl && parseAbsoluteHttpUrl(pageUrl) ? pageUrl.trim() : null;
 }
 
-export type CompetingPage = { url: string; impressions: number; share: number };
+const competingPageSchema = z.object({
+  url: z.string(),
+  impressions: z.number(),
+  share: z.number(),
+});
+export type CompetingPage = z.infer<typeof competingPageSchema>;
 
 export function competingPages(signal: DemandSignal): CompetingPage[] {
   const pages = signal.evidence.pages;
   if (!Array.isArray(pages)) return [];
-  return pages.filter((page): page is CompetingPage => {
-    if (!isRecord(page)) return false;
-    const { url, impressions, share } = page;
-    return (
-      typeof url === 'string' &&
-      typeof impressions === 'number' &&
-      Number.isFinite(impressions) &&
-      typeof share === 'number' &&
-      Number.isFinite(share)
-    );
+  return pages.flatMap((page) => {
+    const parsed = competingPageSchema.safeParse(page);
+    return parsed.success ? [parsed.data] : [];
   });
 }
 

@@ -4,7 +4,6 @@ import { AppGrid } from '@/components/ui/app-grid';
 import type { DataTableState } from '@/components/ui/data-table';
 import { readErrorProps } from '@/components/ui/notice';
 import { Stack } from '@/components/ui/layout';
-import { SourceDomainDetail } from '@/components/visibility/source-domain-detail';
 import { TopMoversCard, useSourceMovers } from '@/components/visibility/source-movers';
 import { NearMissTable, useSourceNearMisses } from '@/components/visibility/source-near-misses';
 import { sourceTableToolbar } from '@/components/visibility/source-toolbar';
@@ -40,57 +39,39 @@ export function VisibilitySources({
   queries,
 }: Readonly<{ tab: SourceTab; filters: SourceFilters; queries: SourceQueries }>) {
   const [openUrl, setOpenUrl] = useUrlState('source_url', optionalStringUrlCodec);
-  const [domain, setDomain] = useUrlState('source_domain', optionalStringUrlCodec, {
-    clearKeys: ['source_cursor', 'source_offset', 'source_as_of', 'source_url', 'source_view'],
-  });
 
   if (openUrl) {
-    return (
-      <SourceUrlDetail
-        url={openUrl}
-        domain={domain}
-        filters={filters}
-        queries={queries}
-        onBack={() => setOpenUrl(null)}
-        onOpenInventory={() => {
-          setOpenUrl(null);
-          setDomain(null);
-        }}
-      />
-    );
-  }
-  if (domain) {
-    return (
-      <SourceDomainDetail
-        domain={domain}
-        filters={filters}
-        queries={queries}
-        onBack={() => setDomain(null)}
-        onOpenUrl={setOpenUrl}
-      />
-    );
+    return <SourceUrlDetail url={openUrl} filters={filters} queries={queries} />;
   }
   return (
-    // Deliberately NOT keyed on the tab. Remounting threw away the React Query
-    // observer along with the panel, so `retainPreviousDataForScope` had no
-    // previous data to hold and the table emptied to a skeleton on every
-    // switch. The panel resets its own local state instead.
     <SourcesPanel
       dimension={tab === 'domains' ? 'domain' : 'url'}
       readNotCited={tab === 'read-not-cited'}
       filters={filters}
       queries={queries}
       onOpenUrl={setOpenUrl}
-      onOpenDomain={setDomain}
+      onOpenDomain={openDomainUrls}
     />
   );
 }
 
-export function SourcesPanel({
+export function openDomainUrls(domain: string) {
+  setUrlParams({
+    tab: 'urls',
+    source_pick: domain,
+    source_url: null,
+    source_type: null,
+    source_standing: null,
+    source_cursor: null,
+    source_offset: null,
+    source_as_of: null,
+  });
+}
+
+function SourcesPanel({
   dimension,
   filters,
   queries,
-  domain = null,
   onOpenUrl,
   onOpenDomain,
   readNotCited = false,
@@ -98,7 +79,6 @@ export function SourcesPanel({
   dimension: 'domain' | 'url';
   filters: SourceFilters;
   queries: SourceQueries;
-  domain?: string | null;
   onOpenUrl: (url: string) => void;
   onOpenDomain?: (domain: string) => void;
   readNotCited?: boolean;
@@ -120,7 +100,7 @@ export function SourcesPanel({
   }
 
   const [pickedDomain] = useUrlState('source_pick', optionalStringUrlCodec);
-  const activeDomain = domain ?? (dimension === 'url' ? pickedDomain : null);
+  const activeDomain = dimension === 'url' ? pickedDomain : null;
   const scope = { dimension, domain: activeDomain, cursor, asOf, sourceType, gapOnly, pageSize };
   const { sourceQuery } = useSourceAnalysis(filters, queries, scope);
   const seriesQuery = useSourceSeries(filters, queries, {
@@ -133,7 +113,7 @@ export function SourcesPanel({
     enabled: readNotCited,
     limit: pageSize,
   });
-  const moversQuery = useSourceMovers(filters, queries, { dimension, enabled: !domain });
+  const moversQuery = useSourceMovers(filters, queries, { dimension, enabled: true });
   const comparable = queries.visibilityQuery.data?.comparison?.status === 'comparable';
   const onPageSizeChange = (value: number) => {
     setPageSize(isTablePageSize(value) ? value : TABLE_DEFAULT_PAGE_SIZE);
@@ -220,9 +200,7 @@ export function SourcesPanel({
               <TypesCard slices={slices} total={data?.total_citations ?? 0} query={sourceQuery} />
             </AppGrid>
           )}
-          {domain ? null : (
-            <TopMoversCard dimension={dimension} query={moversQuery} comparable={comparable} />
-          )}
+          <TopMoversCard dimension={dimension} query={moversQuery} comparable={comparable} />
         </>
       ) : null}
     </Stack>
@@ -242,7 +220,7 @@ function useGapOnly(dimension: 'domain' | 'url', readNotCited: boolean) {
   return dimension === 'url' && !readNotCited && standing === 'gap';
 }
 
-function tableState({
+export function tableState({
   query,
   rows,
   narrowed,
@@ -260,7 +238,7 @@ function tableState({
       kind: 'error',
       ...readErrorProps(query),
       title: "Couldn't load the sources",
-      fallback: 'Check your connection and try again.',
+      fallback: 'The request failed or timed out.',
     };
   }
   if (!query.data) return { kind: 'loading', label: 'Loading sources…' };

@@ -27,10 +27,11 @@ const seeds: SeedQueries = {
   ],
 };
 const context = {
+  mode: 'market' as const,
   seeds,
   hasCompetitors: false,
   personaChoices: ['Parent', 'Club coach'],
-  limits: { generation_count_max: 50, seed_query_ids_max: 200 },
+  limits: { generation_count_max: 50, brand_prompts_max: 10, seed_query_ids_max: 200 },
 };
 
 const topic = (id: string, name: string): Topic => ({
@@ -115,7 +116,7 @@ describe('runRequest', () => {
   });
 
   it('holds the count and ticked searches to the bounds the server listed', () => {
-    const limits = { generation_count_max: 12, seed_query_ids_max: 0 };
+    const limits = { generation_count_max: 12, brand_prompts_max: 10, seed_query_ids_max: 0 };
     expect(runRequest({ ...defaultRunSettings(), count: '13' }, { ...context, limits })).toEqual({
       ok: false,
       problem: 'Choose between 1 and 12 prompts.',
@@ -123,6 +124,20 @@ describe('runRequest', () => {
     expect(
       runRequest({ ...defaultRunSettings(), unticked: new Set([Q2]) }, { ...context, limits }),
     ).toEqual({ ok: false, problem: 'Tick at most 0 search queries, or keep them all.' });
+  });
+
+  it('sends a brand run as its count and note alone, held to the brand limit', () => {
+    const brand = { ...context, mode: 'brand' as const, seeds: null };
+    expect(
+      runRequest({ ...defaultRunSettings(), count: '6', runContext: ' Spring launch ' }, brand),
+    ).toEqual({
+      ok: true,
+      request: { mode: 'brand', count: 6, topic_ids: [], run_context: 'Spring launch' },
+    });
+    expect(runRequest({ ...defaultRunSettings(), count: '11' }, brand)).toEqual({
+      ok: false,
+      problem: 'Choose between 1 and 10 brand prompts.',
+    });
   });
 
   it('plans no competitor share without a tracked competitor', () => {

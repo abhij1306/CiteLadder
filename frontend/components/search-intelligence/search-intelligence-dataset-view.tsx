@@ -144,10 +144,6 @@ function useRowsPanelSeed(
   useAgentPanelSeed(rows.length > 0 ? rowsHandoff(datasetId, rows, title) : null);
 }
 
-/**
- * Ask agent about saved rows. Only their ids travel; the server re-reads and
- * authorizes them. A table page never exceeds the 100-row reference cap.
- */
 function rowsHandoff(
   datasetId: string,
   rows: readonly SearchIntelligenceRow[],
@@ -164,7 +160,7 @@ function rowsHandoff(
   };
 }
 
-function EvidenceDrawer({
+export function EvidenceDrawer({
   selected,
   onClose,
 }: Readonly<{ selected: SearchIntelligenceRow | null; onClose: () => void }>) {

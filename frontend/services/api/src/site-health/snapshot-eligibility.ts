@@ -17,7 +17,6 @@ export function eligibilityState(outcomes: Record<string, string>, task: Eligibi
       ? taskOutcome({ errorCode: task.error_code, statusCode: task.status_code })
       : null;
   if (failure === 'excluded') return { state: 'excluded', status: 'excluded' } as const;
-  // A removed page cannot be indexed; the broken-link check reports whoever links to it.
   if (failure === 'gone') return { state: 'excluded', status: 'error' } as const;
   if (outcomes['search.indexability'] === 'not_applicable')
     return { state: 'excluded', status: 'audited' } as const;

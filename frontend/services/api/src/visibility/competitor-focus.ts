@@ -49,7 +49,6 @@ export async function getCompetitorFocus(
         sql<number>`count(distinct ra.id) filter (where ra.brand_mentioned)::int`.as(
           'answers_naming_you',
         ),
-        // Windowed after HAVING and before LIMIT: every row the cap hides.
         sql<number>`(count(*) over ())::int`.as('total'),
       ])
       .groupBy('cited.domain')

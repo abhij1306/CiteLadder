@@ -18,18 +18,18 @@
       "other": 20
     },
     "value_fallback_tokens": [
-      ["product", ["products", "p", "shop", "store"]],
+      ["product", ["products", "p"]],
       ["comparison", ["compare", "vs", "versus"]],
       ["service", ["services", "solutions"]],
-      ["local", ["locations", "location", "store-locator"]],
-      ["category", ["collections", "collection", "categories"]],
+      ["local", ["locations", "location", "stores", "store", "store-locator"]],
+      ["category", ["collections", "collection", "categories", "shop"]],
       ["pricing", ["plans", "prices"]],
       ["about", ["company", "team", "story", "who-we-are"]],
       ["article", ["blog", "articles", "news", "insights"]],
-      ["guide", ["guides", "resources", "learn", "help"]],
+      ["guide", ["guides", "resources", "learn"]],
       ["faq", ["faqs"]],
-      ["docs", ["documentation"]],
-      ["contact", ["get-in-touch", "support"]],
+      ["docs", ["documentation", "help", "support"]],
+      ["contact", ["get-in-touch"]],
       ["trust", ["privacy", "terms", "legal", "policy", "policies", "security"]]
     ],
     "exclusions": {

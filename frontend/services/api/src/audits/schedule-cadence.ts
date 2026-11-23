@@ -34,7 +34,6 @@ function localTime(instant: number, zone: string) {
     ((instant % 1000) + 1000) % 1000,
   );
 }
-/** ZoneInfo fold=0: first occurrence of ambiguous time; pre-transition offset for a missing local time. */
 function inZone(local: number, zone: string) {
   const surrounding = [local - 2 * 86400000, local, local + 2 * 86400000];
   const offsets = [...new Set(surrounding.map((instant) => localTime(instant, zone) - instant))];

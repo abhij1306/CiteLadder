@@ -158,7 +158,6 @@ describe('ContentMarkdown', () => {
     );
     const link = screen.getByRole('link', { name: 'Pricing' });
 
-    // `fireEvent` returns false when a handler cancelled the browser's navigation.
     expect(fireEvent.click(link)).toBe(true);
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(link).toHaveAttribute('href', 'https://acme.com/pricing');

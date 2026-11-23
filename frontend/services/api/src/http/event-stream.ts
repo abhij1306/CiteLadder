@@ -63,7 +63,7 @@ export async function* eventFrames(tail: EventTail, signal: AbortSignal): AsyncG
     if (state === 'gone') return;
     if (state === 'terminal' && ++terminalPolls >= settings.terminalGracePolls) return;
     const delay = Math.min(settings.pollSeconds * 1000, Math.max(0, deadline - Date.now()));
-    await waitForPoll(delay, signal); // NOSONAR -- Poll interval between event pages.
+    await waitForPoll(delay, signal); // NOSONAR
   }
 }
 
@@ -97,10 +97,6 @@ export function eventTailStream(tail: EventTail, held: AbortSignal): ReadableStr
   });
 }
 
-/**
- * The response that carries every event stream, a tail or the Agent's live
- * turn; proxies must not buffer it.
- */
 export function eventStreamResponse(body: ReadableStream<Uint8Array>): Response {
   return new Response(body, {
     headers: {

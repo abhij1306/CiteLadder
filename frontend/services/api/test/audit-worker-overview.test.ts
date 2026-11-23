@@ -98,78 +98,107 @@ describe('leased Google AI Overview phases', () => {
     expect(posts).toHaveLength(2);
     expect(posts[1]).toBe(posts[0]);
   });
-  it('observes a Google AI Overview with one paid submission and a free retrieval', async () => {
-    const t = await seed(true, [], 'google_ai_overview'),
-      paths: string[] = [];
-    let tick = Date.now();
-    const clock = () => new Date(tick);
-    const w = worker(
-      t,
-      async (input) => {
-        const url = String(input);
-        paths.push(url.split('/').slice(-2).join('/'));
-        if (url.endsWith('/task_post'))
+  it.each([
+    ['google_ai_overview', 'organic/task_post'],
+    ['google_ai_mode', 'ai_mode/task_post'],
+  ] as const)(
+    'observes %s with one paid submission to %s and a free retrieval',
+    async (engine, post) => {
+      const t = await seed(true, [], engine),
+        paths: string[] = [];
+      let tick = Date.now();
+      const clock = () => new Date(tick);
+      const w = worker(
+        t,
+        async (input) => {
+          const url = String(input);
+          paths.push(url.split('/').slice(-2).join('/'));
+          if (url.endsWith('/task_post'))
+            return Response.json({
+              status_code: 20000,
+              tasks: [{ id: 'aio-task', status_code: 20100, cost: 0.002 }],
+            });
           return Response.json({
             status_code: 20000,
-            tasks: [{ id: 'aio-task', status_code: 20100, cost: 0.002 }],
+            tasks: [
+              {
+                id: 'aio-task',
+                status_code: 20000,
+                result: [
+                  {
+                    items: [
+                      {
+                        type: 'ai_overview',
+                        items: [
+                          {
+                            type: 'ai_overview_element',
+                            text: 'Acme Running shoes',
+                            links: [{ url: 'https://acme.example/shoes' }],
+                          },
+                        ],
+                        references: [{ url: 'https://publisher.example/guide' }],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
           });
-        return Response.json({
-          status_code: 20000,
-          tasks: [
-            {
-              id: 'aio-task',
-              status_code: 20000,
-              result: [
-                {
-                  items: [
-                    {
-                      type: 'ai_overview',
-                      items: [
-                        {
-                          type: 'ai_overview_element',
-                          text: 'Acme Running shoes',
-                          links: [{ url: 'https://acme.example/shoes' }],
-                        },
-                      ],
-                      references: [{ url: 'https://publisher.example/guide' }],
-                    },
-                  ],
-                },
-              ],
-            },
-          ],
-        });
-      },
-      runtime,
-      clock,
-    );
-    await w.runOnce();
-    expect(await stored(t.task.id)).toMatchObject({
-      status: 'awaiting_provider_result',
-      provider_task_id: 'aio-task',
-      attempt_count: 1,
-    });
-    tick += 2000;
-    await ready(t.task.id);
-    await w.runOnce();
-    expect(paths).toEqual(['organic/task_post', 'advanced/aio-task']);
-    expect(await stored(t.task.id)).toMatchObject({ status: 'succeeded', attempt_count: 1 });
-    const observation = await db
-      .selectFrom('aio_observations')
-      .select(['outcome', 'provider_task_id', 'reference_count'])
-      .where('task_id', '=', t.task.id)
-      .executeTakeFirstOrThrow();
-    expect(observation).toEqual({
-      outcome: 'ai_overview_present',
-      provider_task_id: 'aio-task',
-      reference_count: 1,
-    });
-    const artifact = await db
-      .selectFrom('raw_response_artifacts')
-      .select('usage')
-      .where('task_id', '=', t.task.id)
-      .executeTakeFirstOrThrow();
-    expect(record(artifact.usage).provider_cost_microusd).toBe(2000);
+        },
+        runtime,
+        clock,
+      );
+      await w.runOnce();
+      expect(await stored(t.task.id)).toMatchObject({
+        status: 'awaiting_provider_result',
+        provider_task_id: 'aio-task',
+        attempt_count: 1,
+      });
+      tick += 2000;
+      await ready(t.task.id);
+      await w.runOnce();
+      expect(paths).toEqual([post, 'advanced/aio-task']);
+      expect(await stored(t.task.id)).toMatchObject({ status: 'succeeded', attempt_count: 1 });
+      const observation = await db
+        .selectFrom('aio_observations')
+        .select(['outcome', 'provider_task_id', 'reference_count'])
+        .where('task_id', '=', t.task.id)
+        .executeTakeFirstOrThrow();
+      expect(observation).toEqual({
+        outcome: 'ai_overview_present',
+        provider_task_id: 'aio-task',
+        reference_count: 1,
+      });
+      const artifact = await db
+        .selectFrom('raw_response_artifacts')
+        .select(['logical_engine', 'answer_text', 'citations', 'usage', 'provider_metadata'])
+        .where('task_id', '=', t.task.id)
+        .executeTakeFirstOrThrow();
+      expect(artifact).toMatchObject({
+        logical_engine: engine,
+        answer_text: 'Acme Running shoes',
+        citations: [{ url: 'https://publisher.example/guide', domain: 'publisher.example' }],
+      });
+      expect(record(artifact.usage).provider_cost_microusd).toBe(2000);
+      expect(record(record(artifact.provider_metadata).raw_response).id).toBe('aio-task');
+    },
+  );
+  it('stores a Google AI Mode search with no answer as absent, not failed', async () => {
+    const t = await submittedOverview(0, 'google_ai_mode');
+    await worker(t, async () =>
+      Response.json({
+        status_code: 20000,
+        tasks: [{ id: 'aio-task', status_code: 40102, status_message: 'No Search Results.' }],
+      }),
+    ).runOnce();
+    expect(await stored(t.task.id)).toMatchObject({ status: 'succeeded', answer_text: '' });
+    expect(
+      await db
+        .selectFrom('aio_observations')
+        .select(['outcome', 'aio_present', 'provider_status_code'])
+        .where('task_id', '=', t.task.id)
+        .executeTakeFirstOrThrow(),
+    ).toEqual({ outcome: 'no_ai_overview', aio_present: false, provider_status_code: 40102 });
   });
   it('stops a Google AI Overview at the poll ceiling without another provider call', async () => {
     const t = await submittedOverview(1000);

@@ -109,7 +109,6 @@ async function issue(
       dimension: 'aeo',
       category: 'content',
       severity,
-      finding_class: 'defect',
       evidence: JSON.stringify({ observed: 'missing' }),
       description: '',
       remediation: 'Fix it.',
@@ -369,7 +368,7 @@ export async function angleRun(
     const lineageId = angle.lineageId ?? randomUUID();
     lineages.push(lineageId);
     if (!angle.lineageId)
-      await db // NOSONAR -- Fixture rows insert in a fixed order.
+      await db // NOSONAR
         .insertInto('content_angle_lineages')
         .values({
           id: lineageId,
@@ -382,7 +381,7 @@ export async function angleRun(
         .execute();
     const angleId = randomUUID();
     const counts = angle.members.map((member) => member.citations ?? 2);
-    await db // NOSONAR -- Fixture rows insert in a fixed order.
+    await db // NOSONAR
       .insertInto('content_angles')
       .values({
         id: angleId,
@@ -399,7 +398,7 @@ export async function angleRun(
         created_at: now,
       })
       .execute();
-    await db // NOSONAR -- Fixture rows insert in a fixed order.
+    await db // NOSONAR
       .insertInto('content_angle_members')
       .values(
         angle.members.map((member, index) => ({
@@ -419,7 +418,7 @@ export async function angleRun(
         })),
       )
       .execute();
-    await db // NOSONAR -- Fixture rows insert in a fixed order.
+    await db // NOSONAR
       .insertInto('content_angle_owned_matches')
       .values({
         id: randomUUID(),

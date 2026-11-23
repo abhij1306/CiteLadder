@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { AgentFailureNotice } from '@/components/agent/agent-failure-notice';
 import { ChatConversation, ReplyComposer, useChatThread } from '@/components/agent/chat-thread';
 import { Composer } from '@/components/agent/composer';
+import { useModelPicker } from '@/components/agent/model-picker';
 import { useSkillChoice } from '@/components/agent/skill-picker';
 import { useComposerCommands } from '@/components/agent/use-composer-commands';
 import { useFollowLatest } from '@/components/agent/use-follow-latest';
@@ -102,6 +103,7 @@ function PanelStart({
   const commands = useComposerCommands({ workspaceId, projectId });
   const access = useAgentAccess();
   const create = useCreateChat(workspaceId, projectId, onStarted);
+  const model = useModelPicker();
   const skill = useSkillChoice({
     value: skillId,
     onChange: setSkillId,
@@ -117,7 +119,13 @@ function PanelStart({
           onChange={setMessage}
           onSubmit={() =>
             commands.prepare({ message, edit: setMessage }, (prepared) =>
-              create.start({ ...prepared, skillId, actionId: seed.actionId, context }),
+              create.start({
+                ...prepared,
+                choice: model.request,
+                skillId,
+                actionId: seed.actionId,
+                context,
+              }),
             )
           }
           pending={create.pending || commands.resolving}
@@ -127,6 +135,7 @@ function PanelStart({
           commands={commands}
           onRemoveChip={(chip) => setContext((current) => withoutContext(current, chip.key))}
           skill={skill}
+          model={model.picker}
         />
       }
     >

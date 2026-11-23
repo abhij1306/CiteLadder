@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { proposalNews } from './proposal-outcomes.ts';
+import type { ServiceConfig } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import {
   type ServerToolEvent,
@@ -88,6 +90,7 @@ export type RuntimeDependencies = {
   models: ModelCalls;
   modelFor: (run: Awaited<ReturnType<typeof lockRun>>) => AgentModel | Promise<AgentModel>;
   attachTarget: AttachTarget;
+  config: () => ServiceConfig;
 };
 export type Turn = Awaited<ReturnType<AgentRuntime['load']>>;
 type Progress = {
@@ -150,6 +153,7 @@ export class AgentRuntime {
         rules: offeredRuleIds({ sections: manifest.package.sections, action: manifest.action }),
         context: suppliedManifest(manifest, budget.context_package_max_chars),
         transcripts: await chatTranscripts(trx, scope, chat.id),
+        proposalNews: await proposalNews(trx, scope, run),
         budget,
       };
     });
@@ -214,6 +218,7 @@ export class AgentRuntime {
             text: methodology(state.skill, state, budget),
           }
         : null,
+      proposals: turn.proposalNews,
       request: turn.request,
     });
     state.messages.push(opening.message);
@@ -258,7 +263,6 @@ export class AgentRuntime {
       if (!response)
         return this.finish(lease, turn, model, state, UNAVAILABLE_REPLY, latest.summary, true);
       previousResponseId = response.response_id || previousResponseId;
-      // A discarded response's searches were still run, so they count against the turn's budget.
       state.searches += reportedSearches(response);
       if (response.stop === 'max_tokens') {
         effort = retryEffort(effort, ordinal, budget);
@@ -316,11 +320,6 @@ export class AgentRuntime {
     if (result.stop === 'refusal') throw new AgentError('model_refused');
     return result;
   }
-  /**
-   * One response's tool calls. Built-ins run first, in the order written, since
-   * they change the turn's state; reads then run concurrently, each recorded as
-   * its own attempt. Every call gets a result the model reads, in call order.
-   */
   private async runTools(
     lease: Lease,
     turn: Turn,
@@ -343,7 +342,7 @@ export class AgentRuntime {
         );
       }
       if (isBuiltin(call.name))
-        return runBuiltin(this.db, this.deps.catalog, { turn, state, call }).then((outcome) => {
+        return runBuiltin(this.db, this.deps, { turn, state, call }).then((outcome) => {
           const edited = outcome.document ? state.staged.get(outcome.document) : undefined;
           if (call.name === EDIT_DOCUMENT && outcome.ok && edited)
             events?.document?.({
@@ -489,12 +488,13 @@ export class AgentRuntime {
         webSources: web,
         steps,
         proposals: state.proposals,
+        views: state.views,
         skillId: skill?.id,
         skillSource: source,
       });
       for (const [number, document] of staged) {
         const saved = turn.documents.find(({ output }) => output.number === number);
-        await /* NOSONAR -- One transaction connection: outputs save in order. */ saveAgentOutput(
+        await /* NOSONAR */ saveAgentOutput(
           trx,
           chat,
           {

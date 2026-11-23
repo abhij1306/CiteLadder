@@ -116,9 +116,9 @@ export function actionItem(action: Opportunity): ReorderItem {
           className="flex min-w-0"
           href={action.action_id ? `/actions/${action.action_id}` : '/actions'}
         >
-          <ClampText>{action.title}</ClampText>
+          <ClampText phoneWrap>{action.title}</ClampText>
         </TextLink>
-        <ClampText className={textRole('body', 'text-ink-2 min-w-0 flex-1')}>
+        <ClampText className={textRole('body', 'text-ink-2 phone:hidden min-w-0 flex-1')}>
           {actionScope(action)}
         </ClampText>
         <ActionPriority action={action} />

@@ -1,9 +1,5 @@
 import { z } from 'zod';
 
-/**
- * What a public API key may do. The creator's current workspace role still
- * bounds every call: a key never grants more than its creator holds now.
- */
 const API_KEY_SCOPES = [
   'read',
   'prompts:write',
@@ -39,7 +35,6 @@ export type ApiKeyList = z.infer<typeof apiKeyListSchema>;
 
 export const apiKeyCreateSchema = z.strictObject({
   name: z.string().trim().min(1).max(80),
-  /** `read` is always granted, whether or not it is listed. */
   scopes: z.array(apiKeyScopeSchema).default([]),
   project_ids: z.array(z.uuid()).min(1).max(100).nullable().default(null),
   expires_at: z.iso.datetime({ offset: true }).nullable().default(null),

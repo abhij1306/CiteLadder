@@ -5,7 +5,6 @@ const SUPPORTED_RESOURCES: ReadonlySet<string> = new Set([
   'http_load_balancer',
   'cloud_run_revision',
 ]);
-/** A Cloud Logging entry is at most 256 KB; anything larger is not one. */
 const MAX_ENTRY_BYTES = 262_144;
 const logEntrySchema = z.object({
   timestamp: z.string().min(1),
@@ -40,7 +39,6 @@ export function gcpLogLine(data: string): string | null {
   } catch {
     return null;
   }
-  // The query and fragment never leave this function; host scope drops IP hosts.
   return JSON.stringify({
     timestamp: entry.data.timestamp,
     host: url.hostname,

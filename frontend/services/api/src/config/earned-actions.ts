@@ -4,6 +4,8 @@ export const earnedActions = {
   RULE_EARNED_PAGE_ACQUIRE: 'earned_page_acquire_listing',
   EARNED_PAGE_TARGET_PREFIX: 'earned-page:',
   EARNED_EXCLUDED_SOURCE_CLASSES: ['brand_owned', 'competitor_owned'],
+  EARNED_EXCLUDED_DOMAINS: ['wikipedia.org'],
+  EARNED_TITLE_SITE_SUFFIX: '\\s+[-|–—]\\s+.*$',
   EARNED_PAGE_USAGE_FACTOR_MAX: 2,
   EARNED_PAGE_COMPETITOR_FACTOR_MAX: 1.6,
   EARNED_PAGE_COMPETITOR_FACTOR_STEP: 0.2,

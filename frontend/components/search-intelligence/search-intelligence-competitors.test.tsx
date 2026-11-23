@@ -31,13 +31,12 @@ it('distinguishes empty comparisons from unfetched data and opens the saved www 
     />,
   );
   expect(screen.getByText('No results')).toBeInTheDocument();
-  expect(screen.getAllByText('Not fetched')).toHaveLength(4);
-  const other = screen.getByRole('row', { name: /other/ });
   expect(
-    within(other)
-      .getAllByRole('cell')
-      .map((cell) => cell.getAttribute('colspan')),
-  ).toEqual([null, '4']);
+    within(screen.getByRole('row', { name: /rival/ })).getAllByText('Not fetched'),
+  ).toHaveLength(3);
+  expect(
+    within(screen.getByRole('row', { name: /other/ })).getAllByText('Not fetched'),
+  ).toHaveLength(4);
   await userEvent.click(
     screen.getByRole('button', { name: 'No results Keywords they rank for and you don’t: rival' }),
   );

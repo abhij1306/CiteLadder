@@ -109,8 +109,6 @@ export function tokenizeCsv(raw: string): string[][] {
   const text = raw.codePointAt(0) === 0xfeff ? raw.slice(1) : raw;
   const state: CsvState = { rows: [], field: '', row: [], inQuotes: false };
 
-  // Each consumer returns the last index it used, which may skip a paired
-  // character (an escaped quote or the \n of \r\n).
   let index = 0;
   while (index < text.length) {
     const consumed = state.inQuotes
@@ -204,8 +202,6 @@ function parseRow(
     input: {
       text,
       topic,
-      // Backend `PromptInput.theme` is a non-null string; send '' (not null)
-      // when the column is blank so the import never 422s.
       theme: codePoints((cell(map.theme) ?? '').trim())
         .slice(0, THEME_MAX_CHARS)
         .join(''),

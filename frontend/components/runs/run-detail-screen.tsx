@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 
 import { AnswerDialog } from '@/components/runs/answer-dialog';
@@ -9,6 +9,7 @@ import { NotFoundScreen } from '@/components/templates/not-found-screen';
 import { RecordPage } from '@/components/templates/record-page';
 import { useDisplayTimeZone } from '@/lib/display-timezone';
 import { isNotFound } from '@/lib/api/errors';
+import { useUrlParam } from '@/lib/navigation/url-params';
 import { mutationNoticeForError } from '@/lib/api/mutation-notice';
 import { runsMutations, runsQueries } from '@/lib/api/runs';
 import { useProjectHref } from '@/lib/navigation/project-destination';
@@ -25,10 +26,9 @@ export function RunDetailScreen() {
   const params = useParams<{ runId: string }>();
   const router = useNavigate();
   const projectHref = useProjectHref();
-  const searchParams = useSearchParams()[0];
   const runId = params.runId ?? '';
   const { workspaceId } = useProjectScope();
-  const executionParam = searchParams.get('execution');
+  const executionParam = useUrlParam('execution');
   const [selectedExecutionId, setSelectedExecutionId] = useState<string | null>(null);
 
   const auditQuery = useQuery({
@@ -100,8 +100,7 @@ export function RunDetailScreen() {
         onOpenChange={(open) => {
           if (!open) {
             setSelectedExecutionId(null);
-            if (searchParams.has('execution'))
-              router(projectHref(`/runs/${runId}`), { replace: true });
+            if (executionParam !== null) router(projectHref(`/runs/${runId}`), { replace: true });
           }
         }}
       />

@@ -15,8 +15,6 @@ const app = createApp(config, db);
 const fixtures = new SiteFixtures(db);
 const settings = crawlSchedulerSettings({});
 const DAY = 86_400_000;
-// Occurrences sit a year ahead, so a scheduled tick running beside this file
-// on the shared database never finds them due.
 const base = new Date(Date.UTC(new Date().getUTCFullYear() + 1, 0, 4, 9));
 const firstRun = new Date(base.getTime() + 7 * DAY);
 const due = new Date(firstRun.getTime() + 60_000);

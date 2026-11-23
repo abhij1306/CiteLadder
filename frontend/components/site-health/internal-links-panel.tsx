@@ -2,6 +2,7 @@ import { Absence } from '@/components/ui/absence';
 import type { InternalLink, InternalLinkAnalysis } from '@citeladder/contracts/site-health';
 
 import { ActionStatusBadge } from '@/components/agent/action-status-badge';
+import { isOneOf } from '@/lib/utils';
 
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
@@ -12,8 +13,7 @@ import { pageNumberControls, useResizableTablePage } from '@/components/ui/pager
 import { TableCell, TableCellLines, TableRow, UrlText } from '@/components/ui/table';
 import { TextLink } from '@/components/ui/text-link';
 import { ICONS, PanelRightOpen } from '@/lib/icons';
-import { ACTION_STATUS_LABEL } from '@/lib/agent/vocabulary';
-import type { ActionStatus } from '@/lib/api/actions';
+import { actionStatusSchema } from '@citeladder/contracts/action-status';
 import { mutationNoticeForError } from '@/lib/api/mutation-notice';
 import { formatCount, readableUrl } from '@/lib/format';
 import { internalLinkStateNotice } from '@/lib/site-health/status';
@@ -36,10 +36,10 @@ export function InternalLinksPanel({
   const analysis = read.data?.analysis;
   const links = filterLinks(
     analysis?.recommendations ?? [],
-    params.get('links_q') ?? '',
-    params.get('links_status') ?? '',
+    params.links_q ?? '',
+    params.links_status ?? '',
   );
-  const selected = analysis?.recommendations.find((link) => link.id === params.get('link'));
+  const selected = analysis?.recommendations.find((link) => link.id === params.link);
   return (
     <Stack gap="workspace" className="min-w-0">
       <Notices read={read} />
@@ -271,7 +271,7 @@ function LinksTable({
 
 function LinkActionStatus({ status }: Readonly<{ status: string | null }>) {
   if (status === null) return <NoAction />;
-  if (status in ACTION_STATUS_LABEL) return <ActionStatusBadge status={status as ActionStatus} />;
+  if (isOneOf(actionStatusSchema.options, status)) return <ActionStatusBadge status={status} />;
   return <Absence state="unavailable" label="Unknown status" />;
 }
 

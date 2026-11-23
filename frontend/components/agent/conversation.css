@@ -1,8 +1,3 @@
-/* Loaded with the Agent's threads, not on boot. An older Agent turn skips
-   layout and paint while off screen; the browser keeps its last rendered
-   height (`auto`), and 320 stands in until then. Only with scroll anchoring
-   (not Safari): without it the estimate's error would jump the thread as a
-   reader scrolls up into older turns. */
 @supports (overflow-anchor: auto) {
   .render-when-visible {
     content-visibility: auto;

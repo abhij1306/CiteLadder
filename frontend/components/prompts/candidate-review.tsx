@@ -4,7 +4,7 @@ import { useId, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
 import { Icon } from '@/components/ui/icon';
-import { Inline, Stack } from '@/components/ui/layout';
+import { Stack } from '@/components/ui/layout';
 import { TableCell, TableCellLines, TableRow, TableSelectCell } from '@/components/ui/table';
 import type { PromptCandidate, PromptSet, Topic } from '@citeladder/contracts';
 import { X } from '@/lib/icons';
@@ -192,18 +192,20 @@ export function usePendingReview({
   };
 }
 
-export function PendingReviewNotice({ count }: Readonly<{ count: number }>) {
-  if (!count) return null;
+export function PendingReviewNotice({ count, shown }: Readonly<{ count: number; shown: boolean }>) {
+  if (!count || !shown) return null;
   return (
-    <Notice tone="info">
-      <Inline as="span" className="flex-wrap justify-between">
-        {count === 1
-          ? '1 generated prompt is waiting for review.'
-          : `${count} generated prompts are waiting for review.`}
+    <Notice
+      tone="info"
+      action={
         <Button asChild variant="secondary">
           <ProjectLink href={PROMPT_BUILDER_REVIEW_HREF}>Review suggestions</ProjectLink>
         </Button>
-      </Inline>
+      }
+    >
+      {count === 1
+        ? '1 generated prompt is waiting for review.'
+        : `${count} generated prompts are waiting for review.`}
     </Notice>
   );
 }

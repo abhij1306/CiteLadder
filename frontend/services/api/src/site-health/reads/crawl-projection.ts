@@ -1,4 +1,8 @@
-import { isActiveCrawl, type crawlCountersSchema } from '@citeladder/contracts/site-health';
+import {
+  checksRunSchema,
+  isActiveCrawl,
+  type crawlCountersSchema,
+} from '@citeladder/contracts/site-health';
 import type { z } from 'zod';
 
 import type { Database } from '../../db/database.ts';
@@ -13,6 +17,10 @@ type Counters = z.input<typeof crawlCountersSchema>;
 
 const int = (value: unknown) => (typeof value === 'number' ? Math.trunc(value) : 0);
 const num = (value: unknown) => (typeof value === 'number' ? value : null);
+const checks = (value: unknown) => {
+  const parsed = checksRunSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
+};
 const text = (value: unknown, fallback: string) =>
   typeof value === 'string' && value !== '' ? value : fallback;
 
@@ -32,6 +40,8 @@ export function scoreSummary(crawl: ProjectedCrawl) {
         aeo_measurement_coverage: num(values.aeo_measurement_coverage),
         aeo_measurement_state: text(values.aeo_measurement_state, NOT_MEASURED),
         aeo_measurement_reason: text(values.aeo_measurement_reason, ''),
+        web_fundamentals_checks: checks(values.web_fundamentals_checks),
+        aeo_readiness_checks: checks(values.aeo_readiness_checks),
       },
     ] as const;
   });
@@ -42,6 +52,8 @@ export function scoreSummary(crawl: ProjectedCrawl) {
     aeo_readiness_score: num(summary.aeo_readiness_score),
     aeo_measurement_coverage: num(summary.aeo_measurement_coverage),
     aeo_measurement_state: text(summary.aeo_measurement_state, NOT_MEASURED),
+    web_fundamentals_checks: checks(summary.web_fundamentals_checks),
+    aeo_readiness_checks: checks(summary.aeo_readiness_checks),
     search_eligibility: text(summary.search_eligibility, 'unknown'),
     selected_count: int(summary.selected_count),
     analyzed_count: int(summary.analyzed_count),

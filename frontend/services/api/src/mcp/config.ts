@@ -2,9 +2,6 @@ import { policy, resolveSettingSpec, type ServiceConfig, type SettingSource } fr
 
 export const mcpPolicy = policy.mcp.constants;
 
-/** Whether stored scopes include `citeladder:write`. */
-export const holdsWrite = (scopes: readonly string[]) => scopes.includes(mcpPolicy.write_scope);
-
 const originOf = (value: string) => {
   try {
     return new URL(value).origin;

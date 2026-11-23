@@ -11,6 +11,7 @@ import {
 import type { SourceClass } from '@citeladder/contracts/opportunities';
 import type { IssueSection } from '@citeladder/contracts/site-health';
 import { opportunities } from './opportunity.ts';
+import { widen } from '../widen.ts';
 
 const kinds = (...listed: ActionTargetKind[]): ActionTargetKind[] => listed;
 
@@ -300,9 +301,9 @@ export const actions = {
   ISSUE_SECTION_GROUPING,
   SOURCE_CLASS_GROUPING,
   SOURCE_CLASS_GROUPING_DEFAULT: 'other_sources' as const satisfies ActionGrouping,
-  AGENT_KIND_GROUPING: { planned_page: 'create_content' } as Readonly<
-    Partial<Record<string, ActionGrouping>>
-  >,
+  AGENT_KIND_GROUPING: widen<Readonly<Partial<Record<string, ActionGrouping>>>>({
+    planned_page: 'create_content',
+  }),
   ACTION_GROUPING_FALLBACK: 'improve_pages' as const satisfies ActionGrouping,
   ACTION_TREE_PAGE_SIZE: 10,
   ACTION_BLOCKING_GROUPINGS: ['seo', 'aeo'] as const satisfies readonly ActionGrouping[],

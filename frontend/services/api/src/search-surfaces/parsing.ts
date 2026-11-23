@@ -1,29 +1,24 @@
-import { getDomain } from 'tldts';
 import { z } from 'zod';
-import { record } from '../db/json.ts';
+import { isRecord } from '../db/json.ts';
 import { scalarText } from '../text-order.ts';
-import type { Citation, RetrievedSource, SearchEvent } from '../answer-engines/contracts.ts';
-import { ProviderError } from '../providers/errors.ts';
 import type { ExecutionResult } from '../audits/result-persistence.ts';
 import { providerPolicy } from '../providers/config.ts';
 import { classifySourceOrigin } from '../analysis/opportunities/source-patterns.ts';
-import { citationIdentity } from '../source-pages/identity.ts';
-import { costMicrousd } from '../providers/dataforseo.ts';
-import { searchPolicy, type ScraperEngine } from './dataforseo.ts';
+import { lenient, list, listOf, nested, recordsOf, withRaw } from '../lenient-fields.ts';
+import { searchPolicy, type SerpEngine } from './dataforseo.ts';
+import {
+  domain,
+  emptyUsage,
+  envelopeSchema,
+  integer,
+  kind,
+  pending,
+  stamped,
+  text,
+} from './payload.ts';
 import { casefold } from '../casefold.ts';
 import { onlyOf } from '../lists.ts';
 
-const list = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
-const objects = (value: unknown) =>
-  list(value)
-    .filter((item) => item && typeof item === 'object' && !Array.isArray(item))
-    .map(record);
-const text = (value: unknown) => (typeof value === 'string' ? value.trim() : '');
-const integer = (value: unknown) =>
-  typeof value === 'number' && Number.isInteger(value) ? value : null;
-const domain = (value: string) => getDomain(value) ?? '';
-const pending = (status: unknown) =>
-  typeof status === 'number' && searchPolicy.constants.pending_task_status_codes.includes(status);
 type SurfaceLink = { url: string; domain: string; title: string; element_index: number };
 type SurfaceReference = {
   url: string;
@@ -73,94 +68,119 @@ function emptyOverview(
     observed_at: null,
   };
 }
-function observedAt(page: Record<string, unknown>, task: Record<string, unknown>) {
-  for (const source of [page, task]) {
-    const raw = text(source.datetime || source.time).replace(' +00:00', 'Z');
-    if (!raw) continue;
-    const value = new Date(raw);
-    if (Number.isFinite(value.getTime())) return value;
-  }
-  return null;
+const linkSchema = z.object({
+  url: lenient((value) => scalarText(value).trim()),
+  domain: lenient(scalarText),
+  title: lenient(scalarText),
+});
+const componentShape = {
+  title: lenient(text),
+  text: lenient(text),
+  markdown: lenient(text),
+  links: listOf(linkSchema),
+  references: listOf(linkSchema),
+};
+const elementSchema = withRaw(
+  z.object({
+    ...componentShape,
+    type: kind,
+    snippet: lenient(text),
+    table: nested({
+      table_header: lenient((value) => list(value).map(text)),
+      table_content: lenient((value) =>
+        list(value).map((row) => list(row).map(text).filter(Boolean).join(' ')),
+      ),
+    }),
+    items: lenient((value): { texts: string[]; children: unknown[] } => {
+      const items = list(value);
+      return { texts: items.map(text), children: items.filter(isRecord) };
+    }),
+    components: listOf(z.object(componentShape)),
+  }),
+);
+type OverviewElement = z.output<typeof elementSchema>;
+function optionalList(value: unknown): unknown[] | null {
+  if (value == null) return [];
+  return Array.isArray(value) ? value : null;
 }
-const OVERVIEW_ELEMENT_TYPES: ReadonlySet<string> = new Set([
-  'ai_overview_element',
-  'ai_overview_expanded_element',
-  'ai_overview_table_element',
-  'ai_overview_video_element',
-]);
-const withComponents = (element: Record<string, unknown>) => [
-  element,
-  ...objects(element.components),
-];
-function elements(block: Record<string, unknown>): [number, Record<string, unknown>][] {
-  if (block.items != null && !Array.isArray(block.items))
-    throw new Error('Invalid overview elements');
-  const result: [number, Record<string, unknown>][] = [];
+const blockSchema = z.object({
+  type: kind,
+  items: lenient(optionalList),
+  markdown: lenient(scalarText),
+  rank_absolute: lenient(integer),
+  references: listOf(linkSchema),
+});
+type OverviewBlock = z.output<typeof blockSchema>;
+const pageSchema = lenient((value) =>
+  isRecord(value) && Object.keys(value).length
+    ? stamped({
+        items: lenient((items) => optionalList(items) && recordsOf(blockSchema, items)),
+      }).parse(value)
+    : null,
+);
+const withComponents = (element: OverviewElement) => [element, ...element.components];
+function elements(engine: SerpEngine, block: OverviewBlock): [number, OverviewElement][] {
+  if (block.items === null) throw new Error('Invalid overview elements');
+  const answerTypes: readonly string[] = searchPolicy.serp.answer_element_types[engine];
+  const skippedTypes: readonly string[] = searchPolicy.serp.skipped_element_types[engine];
+  const result: [number, OverviewElement][] = [];
   function descend(value: unknown, index: number, depth: number) {
-    const node = record(value);
-    if (depth > 128 || !OVERVIEW_ELEMENT_TYPES.has(scalarText(node.type)))
+    const node = elementSchema.parse(value);
+    if (skippedTypes.includes(node.type)) return;
+    if (depth > 128 || !answerTypes.includes(node.type))
       throw new Error('Unknown overview element');
     result.push([index, node]);
-    for (const child of objects(node.items)) descend(child, index, depth + 1);
+    for (const child of node.items.children) descend(child, index, depth + 1);
   }
-  list(block.items).forEach((node, index) => descend(node, index, 0));
+  block.items.forEach((node, index) => descend(node, index, 0));
   return result;
 }
-function fragments(element: Record<string, unknown>) {
-  const table = record(element.table);
+function fragments(element: OverviewElement) {
   const values = [
-    text(element.title),
-    text(element.text),
-    text(element.snippet),
-    ...list(table.table_header).map(text),
-    ...list(table.table_content).map((row) => list(row).map(text).filter(Boolean).join(' ')),
-    ...list(element.items).map(text),
-    ...objects(element.components).flatMap((part) => [
-      text(part.title),
-      text(part.text) || text(part.markdown),
-    ]),
+    element.title,
+    element.text,
+    element.snippet,
+    ...element.table.table_header,
+    ...element.table.table_content,
+    ...element.items.texts,
+    ...element.components.flatMap((part) => [part.title, part.text || part.markdown]),
   ].filter(Boolean);
-  return values.length ? values : [text(element.markdown)].filter(Boolean);
+  return values.length ? values : [element.markdown].filter(Boolean);
 }
-type OverviewTask = {
-  task: Record<string, unknown>;
-  status: number;
-  page: Record<string, unknown>;
-};
+type Envelope = z.output<typeof envelopeSchema>;
+type OverviewTask = Envelope['tasks'][number];
+type OverviewPage = NonNullable<z.output<typeof pageSchema>>;
+type ResolvedTask = { task: OverviewTask; status: number; page: OverviewPage | null };
 function resolveOverviewTask(
-  envelope: Record<string, unknown>,
+  engine: SerpEngine,
+  envelope: Envelope,
   expectedId: string,
-): OverviewTask | { early: OverviewResult | 'still_pending' } {
-  const envelopeStatus = integer(envelope.status_code),
-    c = searchPolicy.constants,
+): ResolvedTask | { early: OverviewResult | 'still_pending' } {
+  const c = searchPolicy.constants,
     s = searchPolicy.surface;
-  if (envelopeStatus !== null && envelopeStatus !== c.status_ok)
-    return { early: emptyOverview(s.outcome_provider_error, envelope, envelopeStatus) };
-  const matched = objects(envelope.tasks).filter((t) => scalarText(t.id) === expectedId);
-  const task = onlyOf(matched);
+  if (envelope.status_code !== null && envelope.status_code !== c.status_ok)
+    return { early: emptyOverview(s.outcome_provider_error, envelope.raw, envelope.status_code) };
+  const task = onlyOf(envelope.tasks.filter((t) => scalarText(t.id) === expectedId));
   if (!task)
     return {
       early: emptyOverview(s.outcome_parser_error, {
         parse_error: 'task identity is missing or ambiguous',
-        payload: envelope,
+        payload: envelope.raw,
       }),
     };
-  const status = integer(task.status_code);
+  const status = task.status_code;
   if (pending(status)) return { early: 'still_pending' };
-  if (status === null) return { early: emptyOverview(s.outcome_parser_error, task) };
+  if (status === null) return { early: emptyOverview(s.outcome_parser_error, task.raw) };
+  const absentCodes: readonly number[] = searchPolicy.serp.absent_status_codes[engine];
+  if (absentCodes.includes(status)) return { task, status, page: null };
   if (status !== c.status_ok)
-    return { early: emptyOverview(s.outcome_provider_error, task, status) };
-  const pages = list(task.result),
-    page = record(pages[0]);
-  if (
-    !pages.length ||
-    !Object.keys(page).length ||
-    (page.items != null && !Array.isArray(page.items))
-  )
-    return { early: emptyOverview(s.outcome_parser_error, task) };
+    return { early: emptyOverview(s.outcome_provider_error, task.raw, status) };
+  const page = pageSchema.parse(task.result[0]);
+  if (!task.result.length || !page || page.items === null)
+    return { early: emptyOverview(s.outcome_parser_error, task.raw) };
   return { task, status, page };
 }
-function overviewContent(walked: [number, Record<string, unknown>][]) {
+function overviewContent(walked: [number, OverviewElement][]) {
   const seenText = new Set<string>(),
     parts: string[] = [];
   const links = new Map<string, SurfaceLink>();
@@ -171,93 +191,79 @@ function overviewContent(walked: [number, Record<string, unknown>][]) {
       seenText.add(key);
       parts.push(fragment.trim());
     }
-    for (const link of withComponents(element).flatMap((part) => objects(part.links))) {
-      const url = scalarText(link.url).trim();
-      if (url && !links.has(url))
-        links.set(url, {
-          url,
-          domain: domain(scalarText(link.domain) || url),
-          title: scalarText(link.title),
+    for (const link of withComponents(element).flatMap((part) => part.links)) {
+      if (link.url && !links.has(link.url))
+        links.set(link.url, {
+          url: link.url,
+          domain: domain(link.domain || link.url),
+          title: link.title,
           element_index: index,
         });
     }
   }
   return { parts, links };
 }
-function overviewReferences(
-  block: Record<string, unknown>,
-  walked: [number, Record<string, unknown>][],
-) {
+function overviewReferences(block: OverviewBlock, walked: [number, OverviewElement][]) {
   const references = new Map<string, SurfaceReference>();
   const owners = [block, ...walked.flatMap(([, element]) => withComponents(element))];
-  for (const ref of owners.flatMap((owner) => objects(owner.references))) {
-    const url = scalarText(ref.url).trim(),
-      host = domain(scalarText(ref.domain) || url);
-    if (url && !references.has(url))
-      references.set(url, {
-        url,
+  for (const ref of owners.flatMap((owner) => owner.references)) {
+    const host = domain(ref.domain || ref.url);
+    if (ref.url && !references.has(ref.url))
+      references.set(ref.url, {
+        url: ref.url,
         domain: host,
-        title: scalarText(ref.title),
+        title: ref.title,
         source_origin: classifySourceOrigin(host),
       });
   }
   return references;
 }
 export function parseOverview(
+  engine: SerpEngine,
   payload: unknown,
   expectedId: string,
 ): OverviewResult | 'still_pending' {
-  const envelope = record(payload),
-    s = searchPolicy.surface;
-  const resolved = resolveOverviewTask(envelope, expectedId);
+  const s = searchPolicy.surface;
+  const resolved = resolveOverviewTask(engine, envelopeSchema.parse(payload), expectedId);
   if ('early' in resolved) return resolved.early;
   const { task, status, page } = resolved;
-  const block = objects(page.items).find((item) => item.type === 'ai_overview');
+  const block = (page?.items ?? []).find((item) => item.type === 'ai_overview');
   const base = {
     ...emptyOverview(
       block ? s.outcome_ai_overview_present : s.outcome_no_ai_overview,
-      task,
+      task.raw,
       status,
     ),
     aio_present: Boolean(block),
-    observed_at: observedAt(page, task),
-    provider_cost_microusd: costMicrousd(task.cost),
+    observed_at: page?.observed_at ?? task.observed_at,
+    provider_cost_microusd: task.cost,
   };
   if (!block) return base;
   try {
-    const walked = elements(block),
+    const walked = elements(engine, block),
       { parts, links } = overviewContent(walked);
     const references = overviewReferences(block, walked);
     return {
       ...base,
       answer_text: parts.join('\n\n'),
-      aio_markdown: scalarText(block.markdown),
-      aio_serp_position: integer(block.rank_absolute),
-      elements: walked.map(([, e]) => e),
+      aio_markdown: block.markdown,
+      aio_serp_position: block.rank_absolute,
+      elements: walked.map(([, element]) => element.raw),
       links: [...links.values()],
       references: [...references.values()],
     };
   } catch {
     return emptyOverview(
       s.outcome_parser_error,
-      { parse_error: 'unsupported overview structure', payload: task },
+      { parse_error: 'unsupported overview structure', payload: task.raw },
       status,
     );
   }
 }
-const emptyUsage = {
-  uncached_input_tokens: null,
-  cached_input_tokens: null,
-  output_tokens: null,
-  reasoning_tokens: null,
-  total_tokens: null,
-  web_search_requests: null,
-  provider_cost_microusd: null,
-};
-export function overviewAnswer(result: OverviewResult): ExecutionResult {
-  const route = providerPolicy.routes.google_ai_overview;
+export function overviewAnswer(engine: SerpEngine, result: OverviewResult): ExecutionResult {
+  const route = providerPolicy.routes[engine];
   return {
-    logical_engine: 'google_ai_overview',
+    logical_engine: engine,
     transport_provider: 'dataforseo',
     transport_model: route.transport_model,
     answer_text: result.answer_text,
@@ -285,261 +291,6 @@ export function overviewAnswer(result: OverviewResult): ExecutionResult {
       aio_markdown: result.aio_markdown,
       query_text_available: false,
       fanout_availability: 'unavailable',
-    },
-  };
-}
-const AD_ITEM_TYPE = 'chat_gpt_ad';
-const isAd = (node: Record<string, unknown>) => node.type === AD_ITEM_TYPE;
-function scraperSources(node: Record<string, unknown>, depth = 0): Record<string, unknown>[] {
-  if (depth > 128) throw new ProviderError('parse_error');
-  if (isAd(node)) return [];
-  return [
-    ...objects(node.sources),
-    ...objects(node.items).flatMap((child) => scraperSources(child, depth + 1)),
-  ];
-}
-function scraperRetrieved(results: unknown): RetrievedSource[] | null {
-  if (!Array.isArray(results)) return null;
-  const sources: RetrievedSource[] = [],
-    seen = new Set<string>();
-  for (const result of objects(results)) {
-    if (isAd(result)) continue;
-    const url = citationIdentity(text(result.url)).canonical_url;
-    if (!url || seen.has(url)) continue;
-    seen.add(url);
-    sources.push({ ordinal: sources.length, url, title: text(result.title), domain: domain(url) });
-  }
-  return sources;
-}
-function adNodes(node: Record<string, unknown>, depth = 0): Record<string, unknown>[] {
-  if (depth > 128) throw new ProviderError('parse_error');
-  return objects(node.items).flatMap((child) =>
-    isAd(child) ? [child] : adNodes(child, depth + 1),
-  );
-}
-const optionalText = z
-  .string()
-  .nullish()
-  .transform((value) => value?.trim() ?? '');
-const adItemSchema = z.object({
-  rank_absolute: z.number().int().nonnegative(),
-  rank_group: z.number().int().nullish(),
-  title: optionalText,
-  snippet: optionalText,
-  url: z.string().trim().min(1),
-  domain: optionalText,
-  image_url: optionalText,
-  advertiser: z
-    .object({ name: optionalText, url: optionalText })
-    .nullish()
-    .transform((value) => value ?? { name: '', url: '' }),
-});
-export type AdItem = {
-  rank_absolute: number;
-  rank_group: number | null;
-  advertiser_name: string;
-  advertiser_domain: string;
-  landing_url_raw: string;
-  landing_url_canonical: string;
-  title: string;
-  snippet: string;
-  image_url: string | null;
-};
-function webUrl(value: string): URL | null {
-  try {
-    const url = new URL(value);
-    return url.protocol === 'https:' || url.protocol === 'http:' ? url : null;
-  } catch {
-    return null;
-  }
-}
-function adItem(node: Record<string, unknown>): AdItem | null {
-  const parsed = adItemSchema.safeParse(node);
-  if (!parsed.success) return null;
-  const item = parsed.data,
-    landing = webUrl(item.url);
-  if (!landing) return null;
-  const advertiserDomain =
-    [item.advertiser.url, item.domain, landing.hostname].map(domain).find(Boolean) ?? '';
-  if (!advertiserDomain) return null;
-  return {
-    rank_absolute: item.rank_absolute,
-    rank_group: item.rank_group ?? null,
-    advertiser_name: item.advertiser.name || advertiserDomain,
-    advertiser_domain: advertiserDomain,
-    landing_url_raw: item.url,
-    landing_url_canonical: `${landing.protocol}//${landing.host}${landing.pathname}`,
-    title: item.title,
-    snippet: item.snippet,
-    image_url: item.image_url || null,
-  };
-}
-export function parseAds(envelope: unknown): { ads: AdItem[]; skipped: number } | null {
-  const task = onlyOf(objects(record(envelope).tasks));
-  const page = task ? onlyOf(objects(task.result)) : undefined;
-  if (!page) return null;
-  const ads: AdItem[] = [],
-    ranks = new Set<number>();
-  let skipped = 0;
-  for (const node of adNodes(page)) {
-    const item = adItem(node);
-    if (!item || ranks.has(item.rank_absolute)) {
-      skipped += 1;
-      continue;
-    }
-    ranks.add(item.rank_absolute);
-    ads.push(item);
-  }
-  return { ads, skipped };
-}
-const PRODUCTS_ITEM_TYPE = 'chat_gpt_products';
-const PRODUCT_CARD_TYPE = 'chat_gpt_products_element';
-const lenient = <T>(read: (value: unknown) => T) => z.unknown().optional().transform(read);
-const lenientText = lenient(text);
-const productCardSchema = z.object({
-  type: z.literal(PRODUCT_CARD_TYPE),
-  title: z.string().trim().min(1),
-  tag: lenientText,
-  price: lenient((value) =>
-    typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null,
-  ),
-  currency: lenientText,
-  merchants: lenientText,
-  url: lenientText,
-  domain: lenientText,
-  product_id: lenientText,
-  images: lenient(list),
-});
-export type ShoppingResult = {
-  position: number;
-  title: string;
-  tag: string | null;
-  price: number | null;
-  currency: string;
-  merchant_name: string | null;
-  url: string;
-  domain: string;
-  external_product_id: string | null;
-  image_url: string | null;
-};
-function shoppingResult(node: unknown, position: number): ShoppingResult | null {
-  const parsed = productCardSchema.safeParse(node);
-  if (!parsed.success) return null;
-  const card = parsed.data,
-    link = webUrl(card.url),
-    currency = card.currency.toUpperCase();
-  const image = card.images.find(
-    (value): value is string => typeof value === 'string' && webUrl(value) !== null,
-  );
-  return {
-    position,
-    title: card.title,
-    tag: card.tag || null,
-    price: card.price,
-    currency: /^[A-Z]{3}$/u.test(currency) ? currency : '',
-    merchant_name: card.merchants || null,
-    url: link ? card.url : '',
-    domain: (link?.hostname ?? card.domain).toLowerCase(),
-    external_product_id: card.product_id || null,
-    image_url: image ?? null,
-  };
-}
-function productBlocks(node: Record<string, unknown>, depth = 0): Record<string, unknown>[] {
-  if (depth > 128) return [];
-  return objects(node.items).flatMap((child) => {
-    if (isAd(child)) return [];
-    return child.type === PRODUCTS_ITEM_TYPE ? [child] : productBlocks(child, depth + 1);
-  });
-}
-export function parseShoppingResults(envelope: unknown): ShoppingResult[] {
-  const task = onlyOf(objects(record(envelope).tasks));
-  const page = task ? onlyOf(objects(task.result)) : undefined;
-  if (!page) return [];
-  return productBlocks(page).flatMap((block) => {
-    const organic = objects(block.items).filter((node) => !isAd(node));
-    return organic.flatMap((node, index) => {
-      const card = shoppingResult(node, index + 1);
-      return card ? [card] : [];
-    });
-  });
-}
-export function parseScraper(
-  payload: unknown,
-  expectedId: string,
-  engine: ScraperEngine,
-): ExecutionResult | 'still_pending' {
-  const envelope = record(payload);
-  if (envelope.status_code !== searchPolicy.constants.status_ok)
-    throw new ProviderError('parse_error');
-  const matched = objects(envelope.tasks).filter((t) => t.id === expectedId);
-  const task = onlyOf(matched);
-  if (!task) throw new ProviderError('parse_error');
-  if (pending(task.status_code)) return 'still_pending';
-  const pages = objects(task.result),
-    page = pages[0];
-  const answer = page
-    ? text(page.markdown) ||
-      objects(page.items)
-        .filter((item) => !isAd(item))
-        .map((item) => text(item.markdown) || text(item.text))
-        .filter(Boolean)
-        .join('\n\n')
-    : '';
-  if (task.status_code !== searchPolicy.constants.status_ok || pages.length !== 1 || !answer)
-    throw new ProviderError('parse_error');
-  const rawFanout = page!.fan_out_queries;
-  const valid =
-    Array.isArray(rawFanout) &&
-    rawFanout.every((value) => typeof value === 'string' && value.trim());
-  const events: SearchEvent[] = valid
-    ? rawFanout.map((query, index) => ({
-        sequence: index,
-        query,
-        call_id: '',
-        call_sequence: 0,
-        query_sequence: index,
-      }))
-    : [];
-  let availability: 'unavailable' | 'queries_available' | 'no_exposed_queries' = 'unavailable';
-  if (valid) availability = events.length ? 'queries_available' : 'no_exposed_queries';
-  const citations: Citation[] = [],
-    seen = new Set<string>();
-  for (const source of scraperSources(page!)) {
-    const url = citationIdentity(text(source.url)).canonical_url;
-    if (!url || seen.has(url)) continue;
-    seen.add(url);
-    citations.push({
-      ordinal: citations.length,
-      url,
-      title: text(source.title),
-      domain: domain(url),
-      start_index: null,
-      end_index: null,
-      cited_text: '',
-    });
-  }
-  const route = providerPolicy.routes[engine];
-  return {
-    logical_engine: engine,
-    transport_provider: 'dataforseo',
-    transport_model: route.transport_model,
-    answer_text: answer,
-    search_used: Boolean(
-      events.length || list(page!.search_results).length || list(page!.sources).length,
-    ),
-    search_events: events,
-    citations,
-    retrieved_sources: scraperRetrieved(page!.search_results),
-    finish_reason: 'stop',
-    raw_finish_reason: '',
-    latency_ms: 0,
-    normalized_usage: { ...emptyUsage, provider_cost_microusd: costMicrousd(task.cost) },
-    provider_metadata: {
-      raw_response: envelope,
-      provider_reported_model: page!.model ?? null,
-      fanout_availability: availability,
-      query_text_available: valid,
-      search_results: objects(page!.search_results),
     },
   };
 }

@@ -1,3 +1,4 @@
+import type { ServiceConfig } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import type { ToolCall } from '../models/conversation.ts';
 import { authorize } from './access.ts';
@@ -12,31 +13,49 @@ import {
   type BuiltinOutcome,
 } from './builtin-tools.ts';
 import type { SkillCatalog } from './contracts.ts';
+import { proposeChange, PROPOSE_CHANGE } from './change-proposals.ts';
 import { knownActions, proposeDeclaration, PROPOSE_DECLARATION } from './proposals.ts';
 import type { Turn } from './runtime.ts';
 import type { TurnState } from './turn-budget.ts';
 import { documentStep } from './turn-state.ts';
+import { showView, SHOW_VIEW } from './views.ts';
 
-/**
- * Runs one built-in call and records its step. Every built-in but
- * `propose_declaration` changes the turn's state before this returns, so
- * built-ins called in one response apply in the order written.
- */
-export function runBuiltin(
+type BuiltinCall = { turn: Turn; state: TurnState; call: ToolCall };
+
+function projectBuiltin(
   db: Database,
-  catalog: SkillCatalog,
-  { turn, state, call }: { turn: Turn; state: TurnState; call: ToolCall },
+  config: () => ServiceConfig,
+  { turn, state, call }: BuiltinCall,
+): Promise<BuiltinOutcome> | null {
+  switch (call.name) {
+    case PROPOSE_CHANGE:
+      return authorize(db, turn.scope).then(() =>
+        proposeChange(db, config(), { scope: turn.scope, state }, call.input),
+      );
+    case PROPOSE_DECLARATION:
+      return db.transaction().execute(async (trx) => {
+        await authorize(trx, turn.scope);
+        const proposal = {
+          scope: turn.scope,
+          known: knownActions(turn.manifest, state.read),
+          documents: turn.documents,
+        };
+        return proposeDeclaration(trx, proposal, state, call.input);
+      });
+    case SHOW_VIEW:
+      return authorize(db, turn.scope).then(() => showView(db, turn.scope, state, call.input));
+    default:
+      return null;
+  }
+}
+
+export async function runBuiltin(
+  db: Database,
+  { catalog, config }: { catalog: SkillCatalog; config: () => ServiceConfig },
+  { turn, state, call }: BuiltinCall,
 ): Promise<BuiltinOutcome> {
-  if (call.name === PROPOSE_DECLARATION)
-    return db.transaction().execute(async (trx) => {
-      await authorize(trx, turn.scope);
-      const proposal = {
-        scope: turn.scope,
-        known: knownActions(turn.manifest, state.read),
-        documents: turn.documents,
-      };
-      return proposeDeclaration(trx, proposal, state, call.input);
-    });
+  const project = projectBuiltin(db, config, { turn, state, call });
+  if (project) return project;
   if (call.name === LOAD_SKILL) {
     const before = state.skill;
     const outcome = loadSkill(catalog, state, call.input, turn.budget);

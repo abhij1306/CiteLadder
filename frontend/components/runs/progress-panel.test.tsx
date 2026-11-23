@@ -113,7 +113,7 @@ describe('ProgressPanel', () => {
   it('offers authenticated export actions for both formats', () => {
     renderPanel();
 
-    for (const name of ['Export CSV', 'Export MD']) {
+    for (const name of ['Export CSV', 'Export Markdown']) {
       expect(screen.getByRole('button', { name })).toBeEnabled();
     }
   });

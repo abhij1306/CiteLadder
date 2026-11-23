@@ -57,7 +57,7 @@ function AiReferralsDataRegion({
         kind="error"
         {...readErrorProps(query)}
         title="Couldn't load the AI referrals"
-        fallback="Check your connection and try again."
+        fallback="The request failed or timed out."
       />
     );
   }

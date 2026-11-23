@@ -18,6 +18,7 @@ import { VisibilityByMarket } from '@/components/visibility/visibility-by-market
 import { VisibilityByTopic } from '@/components/visibility/visibility-by-topic';
 import { BrandTrend, InsightsLede } from '@/components/visibility/visibility-trends';
 import { useProjectHref } from '@/lib/navigation/project-destination';
+import { useEngineCatalog } from '@/lib/providers/engines';
 import {
   useVisibilityFilters,
   useVisibilityQueries,
@@ -32,6 +33,7 @@ export function InsightsScreen() {
   const navigate = useNavigate();
   const { search } = useLocation();
   const projectHref = useProjectHref();
+  const catalog = useEngineCatalog();
   return (
     <ReportPage filters={selectionPageFilterBar(state, pageFilters)}>
       {queries.activeRun && state !== 'empty' ? <ActiveRunBanner run={queries.activeRun} /> : null}
@@ -63,7 +65,10 @@ export function InsightsScreen() {
                   }
                 />
                 {queries.surfaceEngine ? (
-                  <SurfaceRatesPanel query={queries.surfaceRatesQuery} />
+                  <SurfaceRatesPanel
+                    query={queries.surfaceRatesQuery}
+                    engineLabel={catalog.label(queries.surfaceEngine)}
+                  />
                 ) : null}
               </SectionStack>
             )}

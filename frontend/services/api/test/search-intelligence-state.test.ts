@@ -200,6 +200,37 @@ describe('durable paid acquisition boundaries', () => {
       ).toEqual({ status: 'published' });
     },
   );
+  it('skips a row whose keyword is too long to index and reports the page partial', async () => {
+    const t = await run(1000),
+      plan = t.plans[0]!,
+      prep = dispatched(await t.state.prepare(plan, 0));
+    await t.state.dispatch(prep);
+    const task = response.body.tasks[0]!;
+    const item = (keyword: string) => ({
+      keyword_data: { keyword, keyword_info: { search_volume: 12 } },
+      ranked_serp_element: { url: 'https://www.example.com/shoes', rank_group: 1 },
+    });
+    await t.state.saveResponse(prep.call.id, {
+      ...response,
+      body: {
+        ...response.body,
+        tasks: [
+          {
+            ...task,
+            result: [{ items: [item('shoes'), item('検'.repeat(700))], total_count: 2 }],
+          },
+        ],
+      },
+    });
+    await t.state.publish(plan, prep.call.id, []);
+    expect(
+      await db
+        .selectFrom('search_intelligence_datasets')
+        .select(['coverage', 'unique_rows_saved'])
+        .where('id', '=', prep.dataset.id)
+        .executeTakeFirst(),
+    ).toEqual({ coverage: 'partial', unique_rows_saved: 1 });
+  });
   it.each([null, '1.00'])(
     'closes collecting datasets when a saved receipt stops the run (cost %s)',
     async (cost) => {
@@ -278,7 +309,11 @@ describe('durable paid acquisition boundaries', () => {
     const task = response.body.tasks[0]!;
     const oversized = {
       keyword_data: { keyword: 'shoes' },
-      ranked_serp_element: { url: `https://www.example.com/${'a'.repeat(5000)}`, rank_group: 1 },
+      ranked_serp_element: {
+        url: 'https://www.example.com/shoes',
+        rank_group: 1,
+        etv: 1e15,
+      },
     };
     await t.state.saveResponse(prep.call.id, {
       ...response,

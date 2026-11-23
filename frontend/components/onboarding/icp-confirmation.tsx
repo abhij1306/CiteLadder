@@ -91,7 +91,7 @@ export function IcpCategory({ profile, onChange, note }: IcpPart & Readonly<{ no
         />
         {isOther ? (
           <Input
-            // oxlint-disable-next-line jsx-a11y/no-autofocus -- Choosing Other explicitly reveals this field; focus follows that user action.
+            // oxlint-disable-next-line jsx-a11y/no-autofocus
             autoFocus
             aria-label="Describe what you sell"
             value={choices.includes(profile.category) ? '' : profile.category}

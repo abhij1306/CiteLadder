@@ -1,7 +1,6 @@
 import type { VisibilityExecutionEvidence } from '@citeladder/contracts';
 import { groupByPrompt, queryTexts } from '@/lib/visibility/evidence';
 
-/** The `search` bound the fanout endpoint declares (`Query(max_length=512)`). */
 export const SEARCH_MAX_LENGTH = 512;
 
 export function normalizeSearch(value: string | null): string {

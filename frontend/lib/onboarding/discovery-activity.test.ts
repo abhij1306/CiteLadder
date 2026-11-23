@@ -43,7 +43,6 @@ function discovery(phase: BrandDiscovery['progress']['phase']): BrandDiscovery {
     },
     domains: [],
     competitors: [],
-    evidence: [],
     warnings: [],
     error_code: '',
     created_at: '2026-08-04T10:00:00Z',

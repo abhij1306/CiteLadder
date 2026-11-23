@@ -21,11 +21,6 @@ export function document(body: Buffer, charset = '') {
 }
 export const isElement = (node: HtmlNode): node is HtmlElement => 'tagName' in node;
 const isText = (node: HtmlNode): node is HtmlText => node.nodeName === '#text';
-/**
- * Pushes `items` last-first so the stack pops them in order. A loop, not a
- * spread: an element with very many children must not exceed the engine's
- * argument limit.
- */
 function pushReversed<T, U>(stack: U[], items: readonly T[], map: (item: T) => U) {
   for (let index = items.length - 1; index >= 0; index--) stack.push(map(items[index]!));
 }

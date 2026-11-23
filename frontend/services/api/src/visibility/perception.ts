@@ -2,6 +2,7 @@ import { z } from 'zod';
 import {
   perceptionLabelSchema,
   type ExecutionPerception,
+  type PerceptionAttribute,
   type PerceptionResponse,
 } from '@citeladder/contracts/visibility-perception';
 
@@ -38,6 +39,8 @@ import {
   evidenceScope,
   observedAt,
   perceptionCohorts,
+  selectedRuns,
+  TrendQueryError,
   type RunSelection,
 } from './selection.ts';
 
@@ -58,6 +61,7 @@ const aspectsSchema = z
   .array(
     z.object({
       theme_id: z.string().nullable().catch(null),
+      attribute: z.string().nullable().optional(),
       polarity: z.enum(['positive', 'negative']),
       quote: z.string(),
       start: z.number().int(),
@@ -89,14 +93,20 @@ async function themeNames(db: Database, workspaceId: string, projectIds: readonl
   return new Map(rows.map((row) => [row.id, row.name]));
 }
 
+function attributeOf(attribute: string | null | undefined): PerceptionAttribute {
+  if (attribute === undefined) return { kind: 'not_labelled' };
+  return attribute === null ? { kind: 'not_found' } : { kind: 'labelled', name: attribute };
+}
+
 function entityRow(row: unknown, names: ReadonlyMap<string, string>): EntityRow {
   const entity = entityRowSchema.parse(row);
   const fallback = policy.perception.project_themes.fallback;
   return {
     ...entity,
-    aspects: aspectsSchema.parse(entity.aspects).map(({ theme_id, ...aspect }) => ({
+    aspects: aspectsSchema.parse(entity.aspects).map(({ theme_id, attribute, ...aspect }) => ({
       ...aspect,
       theme: (theme_id === null ? undefined : names.get(theme_id)) ?? fallback,
+      attribute: attributeOf(attribute),
     })),
   };
 }
@@ -257,11 +267,27 @@ async function selectionAnswers(
   };
 }
 
+async function windowSelection(db: Database, selection: RunSelection): Promise<RunSelection> {
+  const scoped = await scopedSelection(db, selection);
+  if (scoped.auditId !== null || scoped.auditIds?.length) return scoped;
+  const runs = await selectedRuns(db, scoped)
+    .select('audit.id')
+    .orderBy(observedAt, 'desc')
+    .orderBy('audit.id', 'desc')
+    .limit(policy.visibility.selection_max_runs + 1)
+    .execute();
+  if (runs.length > policy.visibility.selection_max_runs)
+    throw new TrendQueryError(
+      `Select a narrower period: at most ${policy.visibility.selection_max_runs} runs per selection`,
+    );
+  return { ...scoped, auditIds: runs.map((run) => run.id) };
+}
+
 export async function getPerception(
   db: Database,
   selection: RunSelection,
 ): Promise<PerceptionResponse> {
-  const scoped = await scopedSelection(db, selection);
+  const scoped = await windowSelection(db, selection);
   const [{ answers, auditIds }, period] = await Promise.all([
     selectionAnswers(db, scoped, { citations: true, brandQuestions: true }),
     periodTrendSelection(db, scoped),
@@ -296,7 +322,7 @@ export async function groupedSentiments(
 }
 
 export function sentimentsOf(answers: readonly PerceptionAnswer[]) {
-  return entityScores(answers).map(({ name, is_brand, score, coverage }) => ({
+  return entityScores(answers, policy.perception).map(({ name, is_brand, score, coverage }) => ({
     name,
     is_brand,
     sentiment: {
@@ -379,7 +405,7 @@ export async function getPerceptionQuotes(
     polarity: filters.polarity,
   };
   const after = filters.cursor ? cursorPosition(filters.cursor, fingerprint) : null;
-  const { answers } = await selectionAnswers(db, selection, {
+  const { answers } = await selectionAnswers(db, await windowSelection(db, selection), {
     citations: false,
     brandQuestions: true,
   });

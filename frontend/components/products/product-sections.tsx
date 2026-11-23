@@ -1,6 +1,4 @@
-import { useState } from 'react';
-
-import { AnswerDialog } from '@/components/runs/answer-dialog';
+import { useAnswerDialog } from '@/components/runs/answer-link';
 import { BrandMark } from '@/components/ui/brand-mark';
 import { IconButton } from '@/components/ui/button';
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
@@ -239,7 +237,7 @@ const ANSWER_COLUMNS: readonly DataTableColumn[] = [
 ];
 
 export function Answers({ detail }: Readonly<{ detail: CommerceProductDetail }>) {
-  const [open, setOpen] = useState<Answer | null>(null);
+  const answerDialog = useAnswerDialog();
   const engines = useEngineCatalog();
   const more = detail.answer_total - detail.answers.length;
   return (
@@ -275,20 +273,14 @@ export function Answers({ detail }: Readonly<{ detail: CommerceProductDetail }>)
               <IconButton
                 icon={FileSearch}
                 variant="secondary"
-                onClick={() => setOpen(row)}
+                onClick={() => answerDialog.open({ id: row.task_id, prompt_text: row.prompt_text })}
                 label={`Open the answer to ${row.prompt_text}`}
               />
             </TableActionsCell>
           </TableRow>
         ))}
       </DataTable>
-      <AnswerDialog
-        execution={open ? { id: open.task_id, prompt_text: open.prompt_text } : null}
-        open={open !== null}
-        onOpenChange={(next) => {
-          if (!next) setOpen(null);
-        }}
-      />
+      {answerDialog.dialog}
     </>
   );
 }

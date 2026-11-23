@@ -11,7 +11,6 @@ export type TargetRef =
   | { kind: 'product'; product_id: string }
   | { kind: 'category'; category_id: string }
   | { kind: 'earned_page'; url_hash: string; url: string; theme: string | null }
-  /** A search competitors rank for; `url` is the owned page that covers it, if any. */
   | { kind: 'search_gap'; terms: string; keyword: string; url: string | null }
   | { kind: 'planned_page'; key: string; label: string };
 

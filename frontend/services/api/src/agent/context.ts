@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { currentInstructions } from './instructions.ts';
 import type { Database } from '../db/database.ts';
 import { jsonObject } from '../db/json.ts';
 import { targetAgentContext } from '../opportunities/targets/registry.ts';
@@ -7,6 +8,7 @@ import { statusView } from '../opportunities/action-status.ts';
 import { authorize } from './access.ts';
 import { actionScopes } from './action-scopes.ts';
 import { agentPolicy, AgentError, type Scope, type Json } from './contracts.ts';
+import { widen } from '../widen.ts';
 
 const actionSchema = z
   .object({
@@ -36,8 +38,6 @@ export const manifestSchema = z.object({
   workflow: z.object({ id: z.string(), format_id: z.string().nullable() }).optional(),
 });
 export type Manifest = z.infer<typeof manifestSchema>;
-/** Evidence owners authorize all origin IDs and return bounded persisted blocks.
- * No default adapter: a missing dependency must refuse admission, not drop origins. */
 export type ContextReader = (
   db: Database,
   scope: Scope,
@@ -93,14 +93,7 @@ export async function buildManifest(
       }),
     ]),
   );
-  const instructions = await db
-    .selectFrom('agent_instruction_revisions')
-    .select(['revision', 'text'])
-    .where('workspace_id', '=', scope.workspaceId)
-    .where('project_id', '=', scope.projectId)
-    .orderBy('revision', 'desc')
-    .limit(1)
-    .executeTakeFirst();
+  const { revision, text } = await currentInstructions(db, scope);
   const scoped = await actionScopes(db, scope, input.refs, input.actionId);
   const found = input.actionId ? actions.get(input.actionId) : undefined;
   const action = found ? { ...found, ...scoped.action } : null;
@@ -114,7 +107,7 @@ export async function buildManifest(
     ),
     action,
     mentions: input.mentionIds.map((id) => actions.get(id)),
-    instructions: instructions ?? null,
+    instructions: revision === null ? null : { revision, text },
   });
 }
 type SuppliedManifest = {
@@ -145,7 +138,7 @@ function trimOccurrences(
   if (!Array.isArray(occurrences) || !sample || typeof sample !== 'object' || Array.isArray(sample))
     return;
   const selected = [...occurrences];
-  const suppliedSample = { ...sample } as Record<string, Json>;
+  const suppliedSample = widen<Record<string, Json>>({ ...sample });
   supplied.package.sections.issue_group = {
     ...group,
     occurrences: selected,
@@ -173,7 +166,6 @@ function trimIssueGroup(supplied: SuppliedManifest, manifest: Manifest, over: ()
 function dropSections(supplied: SuppliedManifest, over: () => boolean) {
   for (const key of Object.keys(supplied.package.sections).reverse()) {
     if (!over()) break;
-    // Selected upstream documents must remain exact, even when they cannot fit.
     if (key === 'upstream_revision') continue;
     delete supplied.package.sections[key];
     supplied.omissions.push(`package.sections.${key}`);
@@ -213,24 +205,23 @@ const CONTEXT_PAGE_OMISSIONS = new Set([
   'background_candidate_limit',
 ]);
 
+const omissionSchema = z.object({ reason: z.string(), count: z.number().optional() });
+
 function modelSummary(summary: Record<string, Json>): Record<string, Json> {
   const supplied = { ...summary };
   for (const key of MANIFEST_ONLY_SUMMARY_KEYS) delete supplied[key];
-  const omissions = (Array.isArray(summary.omissions) ? summary.omissions : []).map(
-    (item): Record<string, Json> =>
-      item !== null && typeof item === 'object' && !Array.isArray(item) ? item : {},
-  );
+  const omissions = (Array.isArray(summary.omissions) ? summary.omissions : []).flatMap((item) => {
+    const omission = omissionSchema.safeParse(item);
+    return omission.success ? [omission.data] : [];
+  });
   const omitted = omissions.reduce<number>(
-    (total, row) =>
-      typeof row.reason === 'string' &&
-      CONTEXT_PAGE_OMISSIONS.has(row.reason) &&
-      typeof row.count === 'number'
-        ? total + row.count
-        : total,
+    (total, { reason, count }) =>
+      CONTEXT_PAGE_OMISSIONS.has(reason) && count !== undefined ? total + count : total,
     0,
   );
   if (omitted > 0) supplied.agent_context_pages_omitted = omitted;
-  if (omissions.some((row) => row.reason === 'no_usable_crawl')) supplied.crawl_unavailable = true;
+  if (omissions.some(({ reason }) => reason === 'no_usable_crawl'))
+    supplied.crawl_unavailable = true;
   return supplied;
 }
 
@@ -248,8 +239,6 @@ export function suppliedManifest(
     omissions,
   };
   const over = () => JSON.stringify(supplied).length > limit;
-  // Background loses its place before the evidence the user selected. JSONB
-  // key order is not selection priority.
   if (over() && Object.hasOwn(supplied.package.sections, 'related_site')) {
     delete supplied.package.sections.related_site;
     omissions.push('package.sections.related_site');
@@ -275,7 +264,6 @@ export function suppliedManifest(
   };
 }
 function contextCitations(manifest: Pick<Manifest, 'action' | 'mentions'>): Set<string> {
-  // Other context blocks are working context, not a record citation grant.
   return new Set(
     [manifest.action, ...manifest.mentions].flatMap((action) => {
       if (!action) return [];

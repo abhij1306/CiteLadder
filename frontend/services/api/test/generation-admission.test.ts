@@ -7,6 +7,7 @@ import { bindingFailure } from '../src/prompts/binding.ts';
 import type { GenerationContext } from '../src/prompts/generation-context.ts';
 import { admitDrafts, type Draft } from '../src/prompts/generation-drafts.ts';
 import { planSlots } from '../src/prompts/generation-plan.ts';
+import { planBrandSlots } from '../src/prompts/brand-slots.ts';
 import { generationInput } from '../src/prompts/generation-input.ts';
 import {
   applyQualityPolicy,
@@ -265,6 +266,48 @@ it('caps drafts at 16 words and drops near duplicates across topics, pending and
     ['near_duplicate', slots[2]!.slot_id],
     ['near_duplicate', slots[4]!.slot_id],
   ]);
+});
+
+it('plans no need angle without a confirmed facet and drops a brand draft that rewords a tracked prompt', () => {
+  const tracked = {
+    ...context,
+    prompts: [
+      {
+        id: 'p',
+        topic_id: 'topic',
+        text: 'Red Dress maxi dresses worth the money?',
+        normalized_text_hash: 'tracked',
+      },
+    ],
+  } as unknown as GenerationContext;
+  const slots = planBrandSlots(tracked, generationInput.parse({ mode: 'brand', count: 3 }), []);
+  const slot = (angle: string) => slots.find((row) => row.buyer_need.angle === angle)!.slot_id;
+  expect(new Set(slots.map((row) => row.buyer_need.angle))).toEqual(
+    new Set([
+      'pros_and_cons',
+      'compare_with_competitor',
+      'reasons_not_to_choose',
+      'worth_the_price',
+      'reviews',
+    ]),
+  );
+  const texts = [
+    ['worth_the_price', 'Are Red Dress maxi dresses worth the price?'],
+    ['reviews', 'What do reviews say about Red Dress maxi dresses?'],
+  ];
+  const result = admitDrafts(
+    texts.map(([angle, text]) => ({
+      text: text!,
+      slot_id: slot(angle!),
+      buyer_stage: 'decision',
+      prompt_intent: 'validate',
+    })),
+    slots,
+    tracked,
+    [],
+  );
+  expect(result.admitted.map((row) => row.text)).toEqual([texts[1]![1]]);
+  expect(result.drops).toEqual({ near_duplicate: 1 });
 });
 
 it('admits only planned stages for quick core rows, never after-purchase questions', () => {

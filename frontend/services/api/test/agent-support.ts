@@ -14,6 +14,7 @@ import {
 } from '../src/agent/model-calls.ts';
 import { AgentRuntime } from '../src/agent/runtime.ts';
 import { ToolRegistry } from '../src/agent/tools.ts';
+import { testConfig } from './support.ts';
 import { VisibilityFixtures } from './visibility-fixtures.ts';
 
 export const catalog: SkillCatalog = {
@@ -180,6 +181,7 @@ export class AgentFixtures extends VisibilityFixtures {
       tools: this.tools(scope),
       models: new ModelCalls(this.agentDb, modelAvailable),
       modelFor: () => model,
+      config: () => testConfig(),
       attachTarget: (_db, _chat, _output, payload) =>
         payload.target
           ? Promise.reject(

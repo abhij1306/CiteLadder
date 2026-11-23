@@ -1,6 +1,6 @@
 import { setTimeout } from 'node:timers/promises';
 import { sql } from 'kysely';
-import type { Database } from '../db/database.ts';
+import { inTransaction, type Database } from '../db/database.ts';
 import { isRetryableContention } from '../db/errors.ts';
 import { policy } from '../config.ts';
 import { notFound } from '../errors.ts';
@@ -10,6 +10,7 @@ import {
   InvalidCursorError,
 } from '../http/keyset-cursor.ts';
 import { parseUuid } from '../http/uuid.ts';
+import { pageRerunSql } from './page-rerun.ts';
 import { crawlSetting } from './planner-policy.ts';
 import { requireProject } from '../projects/access.ts';
 import { isTerminal } from './reads/crawl.ts';
@@ -28,7 +29,11 @@ export async function listCrawls(
   },
 ) {
   const filters = { workspace_id: workspaceId, project_id: input.project_id };
-  let query = db.selectFrom('site_crawls').selectAll().where('workspace_id', '=', workspaceId);
+  let query = db
+    .selectFrom('site_crawls')
+    .selectAll()
+    .where('workspace_id', '=', workspaceId)
+    .where(sql<boolean>`not ${pageRerunSql}`);
   if (input.project_id) {
     await requireProject(db, { workspaceId, projectId: input.project_id });
     query = query.where('project_id', '=', input.project_id);
@@ -58,7 +63,7 @@ export async function listCrawls(
 }
 
 function cancelOnce(db: Database, workspaceId: string, crawlId: string) {
-  return db.transaction().execute(async (trx) => {
+  return inTransaction(db, async (trx) => {
     const crawl = await trx
       .selectFrom('site_crawls')
       .selectAll()
@@ -69,7 +74,6 @@ function cancelOnce(db: Database, workspaceId: string, crawlId: string) {
     if (!crawl) throw notFound('Crawl');
     if (isTerminal(crawl)) return;
     const now = new Date();
-    // In-flight page commits hold the crawl share-locked, so this count is final.
     const analyzed = await analyzedPageCount(trx, crawl);
     await trx
       .updateTable('site_crawls')
@@ -101,8 +105,6 @@ function cancelOnce(db: Database, workspaceId: string, crawlId: string) {
         error_code: 'cancelled',
       })
       .where('workspace_id', '=', workspaceId)
-      // A row another transaction holds (a claim, a heartbeat) is skipped, not
-      // waited on: its worker cancels it on the stopped crawl and recounts.
       .where('id', 'in', (eb) =>
         eb
           .selectFrom('site_crawl_tasks')
@@ -133,6 +135,7 @@ async function cancelWithRetry(
     await cancelOnce(db, workspaceId, crawlId);
   } catch (error) {
     if (
+      db.isTransaction ||
       attempt >= policy.site_health.crawl.cancel_db_conflict_retries ||
       !isRetryableContention(error)
     )

@@ -1,12 +1,7 @@
-import {
-  Fragment,
-  isValidElement,
-  type ComponentProps,
-  type CSSProperties,
-  type ReactNode,
-} from 'react';
+import { Fragment, isValidElement, type ComponentProps, type ReactNode } from 'react';
 
 import { Absence } from '@/components/ui/absence';
+import { cssVars } from '@/lib/css-vars';
 import { Delta } from '@/components/ui/delta';
 import {
   cellWidth,
@@ -68,6 +63,7 @@ export function FigureStrip({
   lead,
   subLine = false,
   twoLineLabels = false,
+  textValues = false,
 }: Readonly<{
   segments: readonly FigureSegment[];
   label?: string;
@@ -75,13 +71,14 @@ export function FigureStrip({
   lead?: ReactNode;
   subLine?: boolean;
   twoLineLabels?: boolean;
+  textValues?: boolean;
 }>) {
   const { ref, width } = useStripWidth<HTMLDivElement>();
   const cells = figureRowCells({ count: segments.length, width });
   return (
     <div ref={ref} data-figure-strip-frame="" className="grid min-w-0 gap-4">
       {lead ? <div data-figure-lead="">{lead}</div> : null}
-      <dl // NOSONAR -- a <fieldset> would add form-group semantics and its own border to a grid of figures
+      <dl // NOSONAR
         role={label ? 'group' : undefined}
         aria-label={label}
         data-testid={testId}
@@ -95,6 +92,7 @@ export function FigureStrip({
               key={segment.key}
               segment={segment}
               subLine={subLine}
+              textValues={textValues}
               rowSize={size}
               narrow={twoLineLabels || cellWidth(width, size) < FIGURE_MIN_WIDTH}
             />
@@ -108,11 +106,13 @@ export function FigureStrip({
 function FigureCell({
   segment,
   subLine,
+  textValues,
   rowSize,
   narrow,
 }: Readonly<{
   segment: FigureSegment;
   subLine: boolean;
+  textValues: boolean;
   rowSize: number;
   narrow: boolean;
 }>) {
@@ -124,15 +124,14 @@ function FigureCell({
       data-label-lines={narrow && !segment.labelHidden ? 2 : undefined}
       data-pressable={pressable || undefined}
       data-selected={segment.selected || undefined}
-      // The cell's share of its row: `flex-basis` in globals.css reads `--row`.
-      style={{ '--row': rowSize } as CSSProperties}
+      style={cssVars({ '--row': rowSize })}
       className={cn(
         'relative min-w-0',
         pressable && !segment.selected && 'hover:overlay-hover active:overlay-pressed',
       )}
     >
       <FigureLabel segment={segment} subLine={subLine} />
-      <FigureValueLine segment={segment} subLine={subLine} />
+      <FigureValueLine segment={segment} subLine={subLine} textValues={textValues} />
       {subLine ? <FigureSub segment={segment} /> : null}
       {pressable ? (
         <button
@@ -147,7 +146,7 @@ function FigureCell({
   );
 }
 
-type FigurePart = Readonly<{ segment: FigureSegment; subLine?: boolean }>;
+type FigurePart = Readonly<{ segment: FigureSegment; subLine?: boolean; textValues?: boolean }>;
 
 function Block({ className }: Readonly<{ className: string }>) {
   return <span aria-hidden data-figure-block="" className={cn('bg-well block', className)} />;
@@ -173,11 +172,21 @@ function FigureLabel({ segment, subLine }: FigurePart) {
   const hint = segment.loading ? null : <FigureHint segment={segment} subLine={subLine} />;
   const Glyph = segment.icon;
   return (
-    <dt className="type-caption text-ink-2 phone:flex-wrap phone:gap-y-1 flex min-w-0 items-center gap-2">
-      {Glyph ? <Glyph aria-hidden className="size-3.5 shrink-0" /> : null}
+    <dt className="type-caption text-ink-2 phone:block flex min-w-0 items-center gap-2">
+      {Glyph ? (
+        <Glyph
+          aria-hidden
+          className="phone:inline phone:me-2 phone:align-middle size-3.5 shrink-0"
+        />
+      ) : null}
       {text}
       {segment.marker || hint ? (
-        <span className={cn('flex shrink-0 items-center gap-2', pressableLayer(segment))}>
+        <span
+          className={cn(
+            'phone:inline-flex phone:ms-2 phone:align-top flex shrink-0 items-center gap-2',
+            pressableLayer(segment),
+          )}
+        >
           {segment.marker}
           {hint}
         </span>
@@ -190,11 +199,14 @@ function pressableLayer(segment: FigureSegment) {
   return segment.onSelect ? 'relative z-10' : undefined;
 }
 
-function FigureValueLine({ segment, subLine }: FigurePart) {
+function FigureValueLine({ segment, subLine, textValues }: FigurePart) {
   const delta = segment.loading || !reportsChange(segment.delta) ? null : segment.delta;
   return (
-    <dd data-figure-value="" className="flex min-w-0 items-baseline gap-2 whitespace-nowrap">
-      <FigureValue segment={segment} />
+    <dd
+      data-figure-value=""
+      className="phone:flex-wrap flex min-w-0 items-baseline gap-2 whitespace-nowrap"
+    >
+      <FigureValue segment={segment} textValues={textValues} />
       {delta ? <span className="type-caption-strong shrink-0">{delta}</span> : null}
       {segment.labelHidden && !segment.loading ? (
         <span className="ms-auto shrink-0 self-center">
@@ -207,8 +219,7 @@ function FigureValueLine({ segment, subLine }: FigurePart) {
 
 function FigureSub({ segment }: FigurePart) {
   return (
-    <dd className="type-caption text-ink-2 min-w-0 truncate">
-      {/* A no-break space: a plain one collapses, and the line with it. */}
+    <dd className="type-caption text-ink-2 phone:whitespace-normal min-w-0 truncate">
       {segment.sub && !segment.loading ? segment.sub : ' '}
     </dd>
   );
@@ -221,9 +232,8 @@ function reportsChange(delta: ReactNode): boolean {
   return true;
 }
 
-const VALUE_TEXT = textRole('figure');
-
-function FigureValue({ segment }: FigurePart) {
+function FigureValue({ segment, textValues }: FigurePart) {
+  const valueText = textRole(textValues ? 'heading' : 'figure');
   if (segment.loading)
     return (
       <span className="flex items-center self-center">
@@ -236,11 +246,11 @@ function FigureValue({ segment }: FigurePart) {
   if (isAbsent(value)) return <Absence state={value.absent} label={segment.missingLabel} />;
   if (typeof value === 'string' || typeof value === 'number')
     return (
-      <span className={cn(VALUE_TEXT, 'min-w-0 truncate')} title={String(value)}>
+      <span className={cn(valueText, 'min-w-0 truncate')} title={String(value)}>
         {String(value)}
       </span>
     );
-  return <div className={cn(VALUE_TEXT, 'flex min-w-0 items-center gap-2')}>{value}</div>;
+  return <div className={cn(valueText, 'flex min-w-0 items-center gap-2')}>{value}</div>;
 }
 
 function FigureHint({ segment, subLine }: FigurePart) {

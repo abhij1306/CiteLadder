@@ -1,9 +1,3 @@
-/**
- * Page identity: the canonical page URL, a crawl-log path's identity and an
- * analytics landing page. The canonical text and its hash are persisted join
- * keys across traffic, referrals, crawl logs and source pages, so the output
- * never changes byte for byte.
- */
 import { domainToASCII } from 'node:url';
 
 import { crawlLogs } from './config/crawl-logs.ts';
@@ -29,8 +23,6 @@ export function canonicalPage(input: string, origin?: string | null): string | n
     const scheme = parsed.protocol.slice(0, -1);
     if (!siteHealth.web_fetch.schemes.includes(scheme) || parsed.username || parsed.password)
       return null;
-    // Site Health still stores the compared url_hash. Retain its raw path
-    // (including dot segments) and Unicode-folded hostname in this identity only.
     const raw = /^[a-z][a-z0-9+.-]*:\/\/([^/?#]*)([^?#]*)/iu.exec(value);
     if (!raw) return null;
     const [, rawAuthority, rawPath] = raw;
@@ -71,7 +63,6 @@ export function pathIdentity(path: string, origin: string) {
   const withoutQuery = path.split(/[?#]/u)[0]!;
   const canonical = canonicalPage(withoutQuery, origin);
   if (!canonical) return null;
-  // Inspect decoded segments to catch encoded secrets without changing exact identity.
   let display = new URL(canonical).pathname;
   try {
     display = decodeURIComponent(display);

@@ -1,9 +1,3 @@
-/**
- * Fanout queries (AV-8): every query an engine returned while answering,
- * exactly as it returned it (owner, 2026-11-18), counted per run at
- * finalization with the tracked brands it names and the previous comparable
- * run the Query fanouts table compares with.
- */
 import { randomUUID } from 'node:crypto';
 import type { Selectable } from 'kysely';
 import { z } from 'zod';

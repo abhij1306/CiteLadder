@@ -8,6 +8,7 @@ import {
 import { policy } from '../../config.ts';
 import { squash } from './policy.ts';
 import { regionText, type PageScope } from './regions.ts';
+import { widen } from '../../widen.ts';
 
 const MAX_BREADCRUMBS = policy.site_health.architecture.max_breadcrumb_items;
 const PRICE = /(?:[$£€₹]|AUD|USD|CAD|NZD|GBP|EUR|INR)\s*\d[\d,.]*(?:\.\d{1,2})?/iu;
@@ -21,10 +22,10 @@ const PRODUCT_SEGMENTS = new Set(['product', 'products']);
 type Link = { url: string; title: string };
 export function emptyCommerceFacts() {
   return {
-    breadcrumbs: [] as string[],
-    breadcrumb_links: [] as Link[],
-    product_cards: [] as Link[],
-    category_links: [] as Link[],
+    breadcrumbs: widen<string[]>([]),
+    breadcrumb_links: widen<Link[]>([]),
+    product_cards: widen<Link[]>([]),
+    category_links: widen<Link[]>([]),
     category_role: 'unknown',
     visible_price: '',
     visible_availability: '',

@@ -120,13 +120,10 @@ export function useBrandDiscovery(
     restart.mutate({ id: discoveryId, idempotencyKey: operationKey(), workspace: workspaceId });
   };
   const retry = () => {
-    // A failed rerun request repeats with its own key, so it creates at most one discovery.
     if (restart.error && restart.variables && !restart.isPending) {
       restart.mutate(restart.variables);
       return;
     }
-    // A failed progress read resumes the existing operation, even before its
-    // saved input has loaded. Creating another discovery would duplicate work.
     if (discoveryId && !create.error) {
       execution.retry();
       void query.refetch();

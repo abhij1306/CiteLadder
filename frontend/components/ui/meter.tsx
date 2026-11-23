@@ -53,8 +53,8 @@ function MeterTrack({
 }>) {
   const percent = percentOf(value, max);
   return (
-    <div // NOSONAR -- a native <meter> cannot draw the token fill or the unmeasured state
-      // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- A native <meter> cannot draw the token fill or the unmeasured state.
+    <div // NOSONAR
+      // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role
       role="meter"
       aria-labelledby={labelledBy}
       aria-label={labelledBy ? undefined : label}
@@ -71,7 +71,7 @@ function MeterTrack({
   );
 }
 
-export function MeterLabelRow({ children }: Readonly<{ children: ReactNode }>) {
+function MeterLabelRow({ children }: Readonly<{ children: ReactNode }>) {
   return (
     <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 [[data-public-surface]_&]:flex-nowrap">
       {children}
@@ -133,8 +133,8 @@ export function CellMeter({
   const shown = Math.min(max, Math.max(0, value));
   const percent = max > 0 ? (shown / max) * 100 : 100;
   return (
-    <div // NOSONAR -- a native <meter> cannot draw the token fill
-      // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- A native <meter> cannot draw the token fill.
+    <div // NOSONAR
+      // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role
       role="meter"
       aria-label={label}
       aria-valuemin={0}

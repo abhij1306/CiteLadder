@@ -22,6 +22,7 @@ import { createApp } from '../src/app.ts';
 import { policy } from '../src/config.ts';
 import { issueGroupId } from '../src/site-health/reads/rules.ts';
 import { issueDetail } from '../src/site-health/reads/issues.ts';
+import { contentHandoff } from '../src/site-health/reads/content-handoff.ts';
 import { refreshIssueCurrency } from '../src/site-health/issue-currency.ts';
 import { loadCrawl } from '../src/site-health/reads/crawl.ts';
 import { latestLinkCrawl } from '../src/site-health/internal-link-runs.ts';
@@ -31,6 +32,7 @@ import { record } from '../src/db/json.ts';
 import { encodeKeysetCursor } from '../src/http/keyset-cursor.ts';
 import { TEST_SESSION_COOKIE, sessionToken, testConfig, testDatabase } from './support.ts';
 import { SiteFixtures, type SiteSeed } from './site-health-fixtures.ts';
+import { readFixtures, type Page } from './site-health-read-support.ts';
 import type { Tenant } from './visibility-fixtures.ts';
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
@@ -63,29 +65,7 @@ async function json<Schema extends z.ZodType>(
   return schema.parse(await response.json());
 }
 
-async function observe(seed: SiteSeed, siteUrlId: string, crawlId = seed.crawlId) {
-  await db
-    .insertInto('site_url_observations')
-    .values({
-      id: randomUUID(),
-      workspace_id: seed.workspaceId,
-      project_id: seed.projectId,
-      crawl_id: crawlId,
-      site_url_id: siteUrlId,
-      observed_url: seed.root,
-      final_url: seed.root,
-      depth: 0,
-      source_kind: 'link',
-      content_type: 'text/html',
-      rewrite_reason: '',
-      rewrite_version: 'fixture',
-      title: '',
-      value_kind: 'page',
-      value_priority: 0,
-      created_at: new Date(),
-    })
-    .execute();
-}
+const { observe, page, issue } = readFixtures(db, fixtures);
 
 async function monitor(seed: SiteSeed, siteUrlId: string) {
   const now = new Date();
@@ -104,75 +84,6 @@ async function monitor(seed: SiteSeed, siteUrlId: string) {
       updated_at: now,
     })
     .execute();
-}
-
-type Page = Awaited<ReturnType<SiteFixtures['page']>>;
-
-async function page(
-  seed: SiteSeed,
-  path: string,
-  { facts = {}, ...options }: { current?: boolean; facts?: Record<string, unknown> } = {},
-) {
-  const row = await fixtures.page(seed, path, facts, options);
-  await observe(seed, row.id);
-  await db
-    .updateTable('site_page_analyses')
-    .set({
-      finalized_at: new Date(),
-      source_evaluation_ids: [],
-      web_fundamentals_state: 'measured',
-      aeo_measurement_state: 'not_measured',
-    })
-    .where('id', '=', row.analysisId)
-    .execute();
-  return row;
-}
-
-async function issue(
-  seed: SiteSeed,
-  target: Page,
-  ruleId: string,
-  evidence: object = {},
-  publish = true,
-) {
-  const rule = policy.site_health.rule_catalog.find((item) => item.rule_id === ruleId)!;
-  const [analysis] = await db
-    .selectFrom('site_page_analyses')
-    .select('source_evaluation_ids')
-    .where('id', '=', target.analysisId)
-    .execute();
-  const evaluationId = await fixtures.evaluation(seed, target, ruleId, 'missing');
-  await db
-    .updateTable('site_page_analyses')
-    .set({ source_evaluation_ids: [...(analysis?.source_evaluation_ids ?? []), evaluationId] })
-    .where('id', '=', target.analysisId)
-    .execute();
-  await db
-    .insertInto('site_issues')
-    .values({
-      id: randomUUID(),
-      workspace_id: seed.workspaceId,
-      project_id: seed.projectId,
-      crawl_id: seed.crawlId,
-      site_url_id: target.id,
-      analysis_id: target.analysisId,
-      evaluation_id: evaluationId,
-      source_artifact_id: target.artifactId,
-      rule_id: ruleId,
-      rule_version: rule.rule_version,
-      dimension: rule.dimension,
-      category: rule.category,
-      severity: rule.severity,
-      finding_class: rule.finding_class,
-      description: rule.description,
-      remediation: rule.remediation,
-      evidence: JSON.stringify(evidence),
-      analyzer_version: policy.site_health.versions.analyzer,
-      created_at: new Date(),
-    })
-    .execute();
-  if (publish) await refreshIssueCurrency(db, await loadCrawl(db, seed.workspaceId, seed.crawlId));
-  return evaluationId;
 }
 
 async function siteIssue(
@@ -253,7 +164,6 @@ async function architectureIssue(seed: SiteSeed, root: Page, ruleId: string) {
       dimension: rule.dimension,
       category: rule.category,
       severity: rule.severity,
-      finding_class: rule.finding_class,
       description: rule.description,
       remediation: rule.remediation,
       evidence: '{}',
@@ -323,6 +233,8 @@ describe('page projections', () => {
       word_count: 240,
       internal_link_count: 1,
       external_link_count: 1,
+      image_count: null,
+      image_missing_alt_count: null,
     });
     const never = await read(pending.siteUrlId);
     expect(never.analysis_status).not.toBe('completed');
@@ -491,12 +403,12 @@ describe('page projections', () => {
       ),
     ).toEqual({
       'technical.indexable': [
-        issueGroupId(seed.crawlId, 'technical.indexable', 'defect'),
+        issueGroupId(seed.crawlId, 'technical.indexable'),
         ['aeo_readiness', 'web_fundamentals'],
       ],
       'web.accessibility_form_names': [
-        issueGroupId(seed.crawlId, 'web.accessibility_form_names', 'defect'),
-        [],
+        issueGroupId(seed.crawlId, 'web.accessibility_form_names'),
+        ['web_fundamentals'],
       ],
     });
     const catalog = await json(seed, `/site-crawls/${seed.crawlId}/issues`, siteIssuesPageSchema);
@@ -570,21 +482,19 @@ describe('issue catalog', () => {
     const home = await page(seed, '/');
     const product = await page(seed, '/product');
     for (const target of [home, product]) await issue(seed, target, 'technical.indexable');
-    const groupId = issueGroupId(seed.crawlId, 'technical.indexable', 'defect');
-    const first = await issueDetail(db, seed.workspaceId, seed.crawlId, groupId, {
-      limit: 1,
-      cursor: null,
-    });
+    const groupId = issueGroupId(seed.crawlId, 'technical.indexable');
+    const detail = (paging: { limit: number; cursor: string | null }, scope = {}) =>
+      issueDetail(db, {
+        workspaceId: seed.workspaceId,
+        crawlId: seed.crawlId,
+        groupId,
+        paging,
+        ...scope,
+      });
+    const first = await detail({ limit: 1, cursor: null });
     expect(first.next_cursor).not.toBeNull();
     await expect(
-      issueDetail(
-        db,
-        seed.workspaceId,
-        seed.crawlId,
-        groupId,
-        { limit: 1, cursor: first.next_cursor! },
-        home.id,
-      ),
+      detail({ limit: 1, cursor: first.next_cursor! }, { siteUrlId: home.id }),
     ).rejects.toThrow('cursor');
     const cursor = encodeKeysetCursor(
       'issue_detail',
@@ -596,33 +506,16 @@ describe('issue catalog', () => {
       },
       ['https://example.test/zzz', randomUUID()],
     );
-    expect(
-      await issueDetail(db, seed.workspaceId, seed.crawlId, groupId, { limit: 1, cursor }, home.id),
-    ).toMatchObject({ occurrences: [], next_cursor: null });
-    await expect(
-      issueDetail(db, seed.workspaceId, seed.crawlId, groupId, { limit: 1, cursor }, product.id),
-    ).rejects.toThrow('cursor');
-    const products = await issueDetail(
-      db,
-      seed.workspaceId,
-      seed.crawlId,
-      groupId,
-      { limit: 10, cursor: null },
-      undefined,
-      'product',
-    );
+    expect(await detail({ limit: 1, cursor }, { siteUrlId: home.id })).toMatchObject({
+      occurrences: [],
+      next_cursor: null,
+    });
+    await expect(detail({ limit: 1, cursor }, { siteUrlId: product.id })).rejects.toThrow('cursor');
+    const products = await detail({ limit: 10, cursor: null }, { pageKind: 'product' });
     expect(products.occurrences.map((row) => row.site_url_id)).toEqual([product.id]);
     expect(products.affected_url_count).toBe(1);
     await expect(
-      issueDetail(
-        db,
-        seed.workspaceId,
-        seed.crawlId,
-        groupId,
-        { limit: 1, cursor: first.next_cursor! },
-        undefined,
-        'product',
-      ),
+      detail({ limit: 1, cursor: first.next_cursor! }, { pageKind: 'product' }),
     ).rejects.toThrow('cursor');
   });
 
@@ -665,7 +558,7 @@ describe('issue catalog', () => {
     });
     const rail = await json(
       seed,
-      `/site-crawls/${seed.crawlId}/issues/${issueGroupId(seed.crawlId, 'technical.sitewide_broken_link', 'defect')}?page_kind=product`,
+      `/site-crawls/${seed.crawlId}/issues/${issueGroupId(seed.crawlId, 'technical.sitewide_broken_link')}?page_kind=product`,
       siteIssueDetailSchema,
     );
     expect(rail.affected_url_count).toBe(2);
@@ -699,27 +592,32 @@ describe('issue catalog', () => {
       .concat('canonical_integrity', 'meta_description_present')
       .map((rule) => `technical.${rule}`);
     const body = await list();
-    expect(body.items.map((group) => [group.rule_id, group.finding_class])).toEqual([
-      [indexable, 'defect'],
-      [title, 'defect'],
-      [canonical, 'defect'],
-      [meta, 'advisory'],
+    expect(body.items.map((group) => [group.rule_id, group.severity, group.score_roles])).toEqual([
+      [indexable, 'critical', ['aeo_readiness', 'web_fundamentals']],
+      [title, 'high', ['web_fundamentals']],
+      [meta, 'medium', ['web_fundamentals']],
+      [canonical, 'medium', ['web_fundamentals']],
     ]);
+    expect(body.items.map((group) => Object.hasOwn(group, 'finding_class'))).toEqual(
+      Array(4).fill(false),
+    );
     expect([body.items[0]!.group_id, body.items[0]!.affected_url_count]).toEqual([
-      issueGroupId(seed.crawlId, indexable!, 'defect'),
+      issueGroupId(seed.crawlId, indexable!),
       2,
     ]);
-    expect(body.items[3]!.group_id).toBe(issueGroupId(seed.crawlId, meta!, 'advisory'));
+    expect(body.items[2]!.group_id).toBe(issueGroupId(seed.crawlId, meta!));
     expect(body.summary).toMatchObject({
-      issue_count: 3,
-      advisory_issue_type_count: 1,
+      issue_count: 4,
       occurrence_count: 6,
-      severity_counts: { critical: 0, high: 2, medium: 1 },
+      severity_counts: { critical: 0, high: 2, medium: 2 },
     });
-    const defects = await list('finding_class=defect');
-    expect([rules(defects), defects.summary.occurrence_count]).toEqual([
-      [indexable, title, canonical],
-      4,
+    expect(Object.keys(body.summary)).not.toContain('advisory_issue_type_count');
+    const medium = await list('severity=medium');
+    expect(rules(medium)).toEqual([meta, canonical]);
+    const refused = await get(seed, `/site-crawls/${seed.crawlId}/issues?finding_class=advisory`);
+    expect([refused.status, await refused.json()]).toMatchObject([
+      422,
+      { error: { details: { errors: [{ loc: ['finding_class'], type: 'extra_forbidden' }] } } },
     ]);
     const byPages = await list('sort=pages&limit=2');
     const resumed = await list(`sort=pages&limit=2&cursor=${byPages.next_cursor}`);
@@ -747,16 +645,87 @@ describe('issue catalog', () => {
     const csv = await (
       await get(seed, `/site-crawls/${seed.crawlId}/export.csv?view=issues`)
     ).text();
-    const [header, first] = csv.split('\r\n');
-    expect(header!.split(',')[0]).toBe('group_id');
+    const [header, first, , third] = csv.split('\r\n');
+    expect(header!.split(',').slice(0, 7)).toEqual([
+      'group_id',
+      'rule_id',
+      'title',
+      'dimension',
+      'category',
+      'severity',
+      'page_kind',
+    ]);
     expect(first).toContain('"homepage, product"');
+    expect(third).toContain(
+      `${issueGroupId(seed.crawlId, meta!)},${meta},Missing meta description,technical,metadata,medium,`,
+    );
+    const filtered = await (
+      await get(
+        seed,
+        `/site-crawls/${seed.crawlId}/export.csv?view=issues&severity=medium&sort=pages`,
+      )
+    ).text();
+    expect(filtered.split('\r\n').map((line) => line.split(',')[1])).toEqual([
+      'rule_id',
+      meta,
+      canonical,
+      undefined,
+    ]);
+    expect(
+      (await get(seed, `/site-crawls/${seed.crawlId}/export.csv?view=pages&sort=severity`)).status,
+    ).toBe(422);
+  });
+
+  it('reads each affected page’s value and exports one issue’s pages as CSV, in its workspace only', async () => {
+    const seed = await fixtures.crawl();
+    const rule = 'technical.meta_description_length';
+    const short = { min_chars: 70, max_chars: 160, reason: 'too_short' };
+    const home = await page(seed, '/');
+    const shop = await page(seed, '/shop');
+    await issue(seed, home, rule, { ...short, length: 10, meta_description: '  Short \n text ' });
+    await issue(seed, shop, rule, { ...short, length: 4, meta_description: 'Tiny' });
+    await issue(seed, home, 'technical.canonical_integrity');
+    const groupId = issueGroupId(seed.crawlId, rule);
+    const detail = await json(
+      seed,
+      `/site-crawls/${seed.crawlId}/issues/${groupId}`,
+      siteIssueDetailSchema,
+    );
+    expect(detail.occurrences.map((row) => [row.normalized_url, row.value])).toEqual([
+      ['https://example.test/', { kind: 'meta_description', text: 'Short text', length: 10 }],
+      ['https://example.test/shop', { kind: 'meta_description', text: 'Tiny', length: 4 }],
+    ]);
+    const canonical = await json(
+      seed,
+      `/site-crawls/${seed.crawlId}/issues/${issueGroupId(seed.crawlId, 'technical.canonical_integrity')}`,
+      siteIssueDetailSchema,
+    );
+    expect(canonical.occurrences.map((row) => row.value)).toEqual([{ kind: 'none' }]);
+
+    const exportPath = `/site-crawls/${seed.crawlId}/export.csv?view=issue&group_id=${groupId}`;
+    const lines = (await (await get(seed, exportPath)).text()).split('\r\n');
+    expect(lines[0]).toBe(
+      'normalized_url,page_kind,value,value_length,evidence.max_chars,evidence.min_chars,evidence.reason,remediation',
+    );
+    expect(lines.slice(1).map((line) => line.split(',').slice(0, 7))).toEqual([
+      ['https://example.test/', 'homepage', 'Short text', '10', '160', '70', 'too_short'],
+      ['https://example.test/shop', 'product', 'Tiny', '4', '160', '70', 'too_short'],
+      [''],
+    ]);
+    const outsider = await fixtures.crawl();
+    await issue(outsider, await page(outsider, '/other'), rule, { ...short, length: 5 });
+    expect((await get(outsider, exportPath)).status).toBe(404);
+    expect((await get(seed, `${exportPath}&sort=pages`)).status).toBe(422);
+    expect((await get(seed, `/site-crawls/${seed.crawlId}/export.csv?view=issue`)).status).toBe(
+      422,
+    );
   });
 
   it('serves an issue’s affected pages to an API key, inside the key’s project only', async () => {
     const seed = await fixtures.crawl();
     const home = await page(seed, '/');
     await issue(seed, home, 'technical.indexable');
-    const groupId = issueGroupId(seed.crawlId, 'technical.indexable', 'defect');
+    const groupId = issueGroupId(seed.crawlId, 'technical.indexable');
     const created = await app.request('/api/v1/api-keys', {
       method: 'POST',
       headers: {
@@ -895,27 +864,21 @@ describe('issue catalog', () => {
     const catalog = async () =>
       db
         .selectFrom('site_issue_catalogs')
-        .select(['finding_class', 'items', 'summary'])
+        .select(['items', 'summary'])
         .where('crawl_id', '=', seed.crawlId)
-        .orderBy('finding_class')
         .execute();
     await issue(seed, home, 'technical.indexable', {}, false);
     expect(await catalog()).toEqual([]);
     await issue(seed, product, 'technical.indexable');
     expect(
       (await catalog()).map((row) => [
-        row.finding_class,
         z
           .array(z.object({ rule_id: z.string() }))
           .parse(row.items)
           .map((item) => item.rule_id),
         record(row.summary).affected_url_count,
       ]),
-    ).toEqual([
-      ['advisory', [], 0],
-      ['all', ['technical.indexable'], 2],
-      ['defect', ['technical.indexable'], 2],
-    ]);
+    ).toEqual([[['technical.indexable'], 2]]);
     const late = await issue(seed, home, 'technical.title_present', {}, false);
     await db
       .updateTable('site_issues')
@@ -1078,7 +1041,7 @@ describe('crawl events', () => {
     for (let index = 0; index < 4; index++) {
       const next = await get(seed, `/site-crawls/${seed.crawlId}/events?stream=true`);
       statuses.push(next.status);
-      await next.text(); // NOSONAR: each stream finishes before the next opens.
+      await next.text(); // NOSONAR
     }
     expect(statuses).toEqual([200, 200, 200, 200]);
   });
@@ -1213,7 +1176,6 @@ describe('snapshot projections', () => {
         top_issues: JSON.stringify([
           {
             rule_id: 'technical.indexable',
-            finding_class: 'defect',
             severity: 'critical',
             category: 'indexing',
             description: '',
@@ -1223,7 +1185,6 @@ describe('snapshot projections', () => {
           },
           {
             rule_id: 'technical.title_present',
-            finding_class: 'defect',
             severity: 'high',
             category: 'metadata',
             description: '',
@@ -1233,7 +1194,6 @@ describe('snapshot projections', () => {
           },
           {
             rule_id: 'fixture.retired_rule',
-            finding_class: 'defect',
             severity: 'low',
             category: 'technical',
             description: '',
@@ -1448,7 +1408,7 @@ describe('snapshot projections', () => {
     expect(summary).toMatchObject({ state: 'unavailable', snapshot_id: null });
   });
 
-  it('render the architecture tree without dropping pages in a parent cycle', async () => {
+  it('reads no orphans in an architecture whose pages form a parent cycle', async () => {
     const seed = await fixtures.crawl();
     const snapshot = await fixtures.snapshot(seed, 'complete');
     const node = (id: string, url: string, parent: string | null) => ({
@@ -1503,13 +1463,6 @@ describe('snapshot projections', () => {
       architectureSchema,
     );
     expect(model.internal_linking.orphan_page_count).toBe(0);
-    const tree = await (
-      await get(seed, `/site-crawls/${seed.crawlId}/export.md?view=architecture`)
-    ).text();
-    for (const path of ['/a', '/b']) {
-      const line = tree.split('\n').find((line) => line.includes(`https://example.test${path}`));
-      expect(line).toContain('[product]');
-    }
   });
 });
 
@@ -1558,6 +1511,44 @@ describe('issue history', () => {
   });
 });
 
+describe('content handoff', () => {
+  it('hands a too-short meta description to content generation with its current text', async () => {
+    const seed = await fixtures.crawl();
+    const target = await page(seed, '/short-meta');
+    const evaluationId = await fixtures.evaluation(
+      seed,
+      target,
+      'technical.meta_description_length',
+      'missing',
+    );
+    await db
+      .updateTable('site_rule_evaluations')
+      .set({
+        evidence: JSON.stringify({ reason: 'too_short', length: 6, meta_description: 'Short.' }),
+      })
+      .where('id', '=', evaluationId)
+      .execute();
+    const ref = {
+      project_id: seed.projectId,
+      crawl_id: seed.crawlId,
+      site_url_id: target.id,
+      source_analysis_id: target.analysisId,
+      dimension: 'metadata',
+      checkpoint_ids: ['technical.meta_description_length', 'technical.h1_present'],
+    };
+    const handoff = await contentHandoff(
+      db,
+      { workspaceId: seed.workspaceId, projectId: seed.projectId },
+      ref,
+    );
+    expect([handoff.checkpoint_ids, handoff.target_fields, handoff.captured_values]).toEqual([
+      ['technical.meta_description_length'],
+      ['meta_description'],
+      ['Short.'],
+    ]);
+  });
+});
+
 describe('workspace authorization', () => {
   it('answers 404 for another workspace’s crawl and project', async () => {
     const seed = await fixtures.crawl();
@@ -1568,7 +1559,7 @@ describe('workspace authorization', () => {
       `/site-crawls/${seed.crawlId}/issues`,
       `/site-crawls/${seed.crawlId}/issues?section=aeo&sort=pages`,
       `/site-crawls/${seed.crawlId}/events`,
-      `/site-crawls/${seed.crawlId}/export.csv`,
+      `/site-crawls/${seed.crawlId}/export.csv?view=pages`,
     ])
       expect((await get(foreign, path)).status, path).toBe(404);
     const refusals = [];

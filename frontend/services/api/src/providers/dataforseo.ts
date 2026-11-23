@@ -26,10 +26,8 @@ type DataforseoTransport = {
 
 export function envelopeStatusError(status: number): ProviderError {
   if (status === constants.status_unauthorized) return new ProviderError('auth_failure');
-  // A paused, unfunded or unsubscribed account refuses every request until it is restored.
   if (constants.account_unavailable_status_codes.includes(status))
     return new ProviderError(constants.error_account_unavailable);
-  // DataForSEO reports rate limits in the body, never as HTTP 429; nothing was created.
   if (constants.rate_limit_status_codes.includes(status))
     return new ProviderError('rate_limit', true);
   return new ProviderError('client_error');

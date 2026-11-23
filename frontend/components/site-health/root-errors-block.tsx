@@ -55,8 +55,6 @@ export function RootErrorsBlock({ errors }: Readonly<{ errors: RootError[] }>) {
                 )}
               </span>
               <span className="type-body text-ink-2 tabular-nums">
-                {/* 0 ms is an unmeasured hop (DNS failure never reached the
-                  wire), not an instant response — show the placeholder. */}
                 {error.latency_ms !== null && error.latency_ms > 0 ? (
                   `${formatCount(error.latency_ms)} ms`
                 ) : (

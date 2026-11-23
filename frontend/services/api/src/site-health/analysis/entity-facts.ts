@@ -24,6 +24,7 @@ import {
   visibleTextNodes,
   type PageScope,
 } from './regions.ts';
+import { widen } from '../../widen.ts';
 
 const e = analysisPolicy.entity;
 const PRICE = new RegExp(e.price_pattern, 'i');
@@ -69,7 +70,7 @@ export function emptyEntityFacts() {
       has_purchase_control: false,
       has_variant_control: false,
       has_sku_marker: false,
-      brand_names: [] as string[],
+      brand_names: widen<string[]>([]),
     },
     listing: {
       largest_card_list_size: 0,
@@ -88,8 +89,8 @@ export function emptyEntityFacts() {
 type Affordance = { class: string; relation: string; text: string };
 const emptyCollection = () => ({
   container: { tag: '', label: '', item_count: 0, distinct_targets: 0 },
-  affordances: [] as Affordance[],
-  items: [] as { title: string; url: string }[],
+  affordances: widen<Affordance[]>([]),
+  items: widen<{ title: string; url: string }[]>([]),
 });
 
 const wordTokens = (value: string) => value.toLowerCase().match(/[a-z0-9]+/gu) ?? [];

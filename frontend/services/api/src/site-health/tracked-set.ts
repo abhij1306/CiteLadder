@@ -30,11 +30,6 @@ export function orderedUnique(candidates: Candidate[]) {
   return [...unique.values()];
 }
 
-/**
- * Lock the project's memberships, after the runtime and before the crawl and
- * profile in the Site Health lock order, so admission and re-audits never fit,
- * fill or read the set while another writer changes it.
- */
 export async function lockTrackedSet(db: Database, workspaceId: string, projectId: string) {
   await db
     .selectFrom('monitored_site_urls')
@@ -63,8 +58,6 @@ async function trackedPages(trx: Database, crawl: Crawl, hashes: string[]) {
     .where('active', '=', true)
     .executeTakeFirstOrThrow();
   if (!hashes.length) return { hashes: new Set<string>(), active: Number(active.count) };
-  // Driven from the candidates through both unique (project, ...) keys: a join
-  // led by the tracked set grew per chunk to 25 s at 30,000 pages.
   const rows = await trx
     .selectFrom('site_urls as u')
     .select('u.url_hash')
@@ -111,10 +104,6 @@ export async function trackedRoom(trx: Database, crawl: Crawl) {
   return trackedTarget(crawl) - (await trackedPages(trx, crawl, [])).active;
 }
 
-/**
- * A walked page's discovery showed a page: track it while the set has room.
- * The caller holds the workspace runtime lock, so walks fill in turn.
- */
 export async function trackWalkedPage(trx: Database, crawl: Crawl, siteUrlId: string) {
   const row = await trx
     .selectFrom('monitored_site_urls')

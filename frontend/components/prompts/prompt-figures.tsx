@@ -6,7 +6,7 @@ import { Delta } from '@/components/ui/delta';
 import { EngineMark, engineMarkKey } from '@/components/ui/engine-mark';
 import { FigureStrip, type FigureSegment } from '@/components/ui/figure-strip';
 import { Inline } from '@/components/ui/layout';
-import { TableCell, TableCellLines, TableRow } from '@/components/ui/table';
+import { TableCell, TableRow } from '@/components/ui/table';
 import { useDisplayTimeZone } from '@/lib/display-timezone';
 import { formatCount, formatDisplayDate, formatMean, formatPercent } from '@/lib/format';
 import { ANSWER_STATES } from '@/lib/prompts/history';
@@ -130,14 +130,11 @@ export function PromptEngineCoverage({ latest }: Readonly<{ latest: PromptMetric
       {outcomes.map((outcome) => {
         const mark = engineMarkKey(outcome.logical_engine);
         return (
-          <TableRow key={`${outcome.logical_engine}:${outcome.transport_model}`}>
+          <TableRow key={outcome.logical_engine}>
             <TableCell>
               <Inline gap="item">
                 {mark ? <EngineMark engine={mark} /> : null}
-                <TableCellLines
-                  primary={engines.label(outcome.logical_engine)}
-                  secondary={engines.modelLabel(outcome.logical_engine, outcome.transport_model)}
-                />
+                {engines.label(outcome.logical_engine)}
               </Inline>
             </TableCell>
             <TableCell numeric>{answered(outcome)}</TableCell>

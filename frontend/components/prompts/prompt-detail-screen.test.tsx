@@ -1,13 +1,10 @@
-import { QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { Route, Routes } from 'react-router-dom';
 import { beforeEach, expect, it, vi } from 'vite-plus/test';
 
-import { TooltipProvider } from '@/components/ui/tooltip';
-import { ActiveProjectScopeProvider } from '@/lib/project/active-project-scope';
 import { makeProject } from '@/test/fixtures/project';
-import { testQueryClient } from '@/test/render';
+import { projectScope, renderWithProviders } from '@/test/render';
 import type { PromptHistory } from '@citeladder/contracts';
 
 const WORKSPACE = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -29,14 +26,6 @@ vi.mock('@/lib/api/visibility', () => ({
 vi.mock('@/lib/project/use-project-markets', () => ({
   useProjectMarkets: () => [],
 }));
-vi.mock('@/lib/project/project-context', () => {
-  const context = () => ({ activeProjectId: PROJECT, activeWorkspaceId: WORKSPACE });
-  return {
-    useProjectContext: context,
-    useOptionalProjectContext: context,
-    useWorkspaceCapability: () => true,
-  };
-});
 
 import { ApiError } from '@/lib/api/errors';
 import { promptsApi } from '@/lib/api/prompts';
@@ -150,20 +139,14 @@ function history(latestStates: PromptHistory['points'][number]['answer_states'])
 }
 
 function renderScreen(path = `/prompts/${PROMPT}`) {
-  return render(
-    <MemoryRouter initialEntries={[path]}>
-      <QueryClientProvider client={testQueryClient()}>
-        <TooltipProvider>
-          <ActiveProjectScopeProvider
-            project={makeProject({ id: PROJECT, workspace_id: WORKSPACE })}
-          >
-            <Routes>
-              <Route path="/prompts/:promptId" element={<PromptDetailScreen />} />
-            </Routes>
-          </ActiveProjectScopeProvider>
-        </TooltipProvider>
-      </QueryClientProvider>
-    </MemoryRouter>,
+  return renderWithProviders(
+    <Routes>
+      <Route path="/prompts/:promptId" element={<PromptDetailScreen />} />
+    </Routes>,
+    {
+      initialEntries: [path],
+      projectSelection: projectScope(makeProject({ id: PROJECT, workspace_id: WORKSPACE })),
+    },
   );
 }
 

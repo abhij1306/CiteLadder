@@ -77,7 +77,6 @@ export async function actionTree(db: Database, scope: Scope, raw: TreeFilters) {
       .execute(),
     filtered
       .select([key.as('key'), groupingSql.as('grouping'), sql<number>`count(*)::int`.as('count')])
-      // By position: each expression binds its values afresh in each clause.
       .groupBy([sql`1`, sql`2`])
       .execute(),
     matchingActions(db, scope, { ...rest, grouping: null, status: null })

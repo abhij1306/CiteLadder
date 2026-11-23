@@ -32,7 +32,7 @@ type Result = Awaited<ReturnType<typeof researchBrand>>;
 type WorkerDependencies = Omit<ResearchDependencies, 'meter'> & {
   meter?: (workspaceId: string) => Meter;
 };
-function siteFailure(error: unknown): error is FetchError {
+function isSiteFailure(error: unknown): error is FetchError {
   return (
     error instanceof FetchError &&
     ['invalid_url', 'site_not_found', 'ssrf_blocked', 'out_of_scope'].includes(error.code)
@@ -40,10 +40,10 @@ function siteFailure(error: unknown): error is FetchError {
 }
 function retryable(error: unknown, attempt: number, maximum: number) {
   if (error instanceof ResearchFailure && !error.retryable) return false;
-  return error != null && !siteFailure(error) && attempt < maximum;
+  return error != null && !isSiteFailure(error) && attempt < maximum;
 }
 function failureCode(error: unknown) {
-  if (siteFailure(error)) return error.code;
+  if (isSiteFailure(error)) return error.code;
   return error instanceof ResearchFailure ? error.code : cfg.error_brand_discovery;
 }
 function terminalStatus(retry: boolean, error: unknown) {
@@ -90,7 +90,6 @@ export class DiscoveryWorker {
     const task = await this.claim(owner, target);
     if (!task) return false;
     const heartbeat = maintainLease(
-      // At the claimed attempt: recovery charges one, so a re-claim never renews this slot.
       () => this.queue.heartbeat(task.id, owner, task.workspace_id, task.attempt_count),
       this.settings.heartbeat_interval_seconds * 1000,
       (error) => logger.exception('discovery_heartbeat_failed', error, { task_id: task.id }),
@@ -212,10 +211,9 @@ export class DiscoveryWorker {
             research_version: cfg.brand_discovery_version,
             provider: result.provider,
             model: result.model,
-            method: 'first_party+keenable+structured_models',
+            method: 'first_party+keenable_search+structured_models',
             extracted_fields: JSON.stringify(result.snapshot),
             field_confidence: JSON.stringify(result.profile.field_confidence),
-            evidence: JSON.stringify(result.evidence),
             warnings: JSON.stringify(result.warnings),
             created_at: now,
           })
@@ -227,7 +225,6 @@ export class DiscoveryWorker {
             stage: 'review',
             profile: JSON.stringify(result.profile),
             competitors: JSON.stringify(result.competitors),
-            evidence: JSON.stringify(result.evidence),
             warnings: JSON.stringify(result.warnings),
             error_code: '',
             error_detail: '',

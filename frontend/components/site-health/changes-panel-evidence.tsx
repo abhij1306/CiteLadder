@@ -29,7 +29,7 @@ function ChangeValue({ value, depth = 0 }: Readonly<{ value: unknown; depth?: nu
       <ul className={treeBranchClasses()}>
         {value.slice(0, CHANGE_EVIDENCE_LIMIT).map((item, index) => (
           <li
-            key={index} // NOSONAR -- an immutable evidence array that never reorders and may repeat values; position is the identity
+            key={index} // NOSONAR
           >
             <ChangeValue value={item} depth={depth + 1} />
           </li>

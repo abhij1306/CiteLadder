@@ -21,6 +21,10 @@ const CODED: {
     message: 'The Agent model changed on the server. Send your message again.',
     recovery: null,
   },
+  agent_model_locked: {
+    message: 'The model is set once the chat has replied. Start a new chat to use another model.',
+    recovery: 'new-chat',
+  },
   agent_run_active: {
     message: 'Wait for the agent to finish its current turn, then try again.',
     recovery: null,

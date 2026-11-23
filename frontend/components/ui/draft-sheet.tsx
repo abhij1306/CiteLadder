@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { ReactNode, RefCallback } from 'react';
 
 import { Inline, Stack } from './layout';
 import { Tag as DraftTag } from './tag';
@@ -43,6 +43,8 @@ export function DraftSheet({
   actions,
   as: Tag = 'section',
   id,
+  ref,
+  tabIndex,
   className,
   children,
   ...aria
@@ -53,6 +55,8 @@ export function DraftSheet({
   actions?: ReactNode;
   as?: 'section' | 'li' | 'div';
   id?: string;
+  ref?: RefCallback<HTMLElement>;
+  tabIndex?: -1;
   className?: string;
   children?: ReactNode;
   'aria-current'?: boolean;
@@ -60,6 +64,8 @@ export function DraftSheet({
   return (
     <Tag
       id={id}
+      ref={ref}
+      tabIndex={tabIndex}
       aria-label={Tag === 'section' ? title : undefined}
       aria-current={aria['aria-current']}
       data-draft={draftAttribute(state)}

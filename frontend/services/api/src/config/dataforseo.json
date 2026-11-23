@@ -351,8 +351,6 @@
     }
   },
   "constants": {
-    "path_task_post": "/v3/serp/google/organic/task_post",
-    "path_task_get_advanced": "/v3/serp/google/organic/task_get/advanced",
     "path_id_list": "/v3/serp/id_list",
     "status_ok": 20000,
     "pending_task_status_codes": [40601, 40602],
@@ -372,8 +370,6 @@
     "batch_size": 100,
     "tag_max_chars": 255,
     "keyword_max_chars": 700,
-    "default_depth": 10,
-    "load_async_ai_overview": true,
     "supported_devices": ["desktop", "mobile"],
     "os_for_device": {
       "desktop": "windows",
@@ -385,6 +381,10 @@
       "google_ai_overview": {
         "locations": "/v3/serp/google/locations",
         "languages": "/v3/serp/google/languages"
+      },
+      "google_ai_mode": {
+        "locations": "/v3/serp/google/locations",
+        "languages": "/v3/serp/google/ai_mode/languages"
       },
       "chatgpt_search": {
         "locations": "/v3/ai_optimization/chat_gpt/llm_scraper/locations",
@@ -413,6 +413,44 @@
     "products": {
       "chatgpt_search": "chat_gpt",
       "gemini_consumer": "gemini"
+    }
+  },
+  "serp": {
+    "products": {
+      "google_ai_overview": "organic",
+      "google_ai_mode": "ai_mode"
+    },
+    "request_settings": {
+      "google_ai_overview": {
+        "depth": 10,
+        "load_async_ai_overview": true
+      },
+      "google_ai_mode": {}
+    },
+    "answer_element_types": {
+      "google_ai_overview": [
+        "ai_overview_element",
+        "ai_overview_expanded_element",
+        "ai_overview_table_element",
+        "ai_overview_video_element"
+      ],
+      "google_ai_mode": [
+        "ai_overview_element",
+        "ai_overview_expanded_element",
+        "ai_overview_table_element",
+        "ai_overview_video_element",
+        "ai_overview_shopping",
+        "ai_overview_shopping_element",
+        "ai_overview_code_block_element"
+      ]
+    },
+    "skipped_element_types": {
+      "google_ai_overview": [],
+      "google_ai_mode": ["ai_overview_paid"]
+    },
+    "absent_status_codes": {
+      "google_ai_overview": [],
+      "google_ai_mode": [40102]
     }
   }
 }

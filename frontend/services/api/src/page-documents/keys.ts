@@ -7,10 +7,6 @@ import { enqueueTask } from '../queue/enqueue.ts';
 
 export const PAGE_FETCH_KIND = 'page_fetch';
 
-/**
- * What the fetch needs to read the page and then queue the chat's first turn.
- * Not strict: terminal compensation adds its own bookkeeping to a failed task.
- */
 export const pageFetchPayloadSchema = z.object({
   chat_id: z.uuid(),
   url: z.url(),

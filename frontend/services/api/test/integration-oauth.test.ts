@@ -251,7 +251,6 @@ describe('integration OAuth state and persistence', () => {
     await disconnectConnection(db, { workspaceId, connectionId: gsc.id });
     const claim = { workspaceId, grantId: gsc.grant_id, claimId: crypto.randomUUID() };
     const claimed = await claimRevocation(db, claim);
-    // The provider returns no refresh token on a repeat consent.
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => Response.json({ access_token: 'second-access', expires_in: 3600 })),

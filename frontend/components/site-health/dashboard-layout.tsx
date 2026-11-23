@@ -12,8 +12,6 @@ export function SiteHealthDashboardLayout({
   if (!crawl) return null;
 
   return (
-    // `min-w-0` so a wide table inside a section scrolls in its own wrapper
-    // instead of widening this column (and every ancestor) to its max-content.
     <Stack gap="workspace" className="min-w-0" data-testid="site-health-canonical">
       <ScoreSection crawl={crawl} dashboard={dashboardQuery.data} />
 
@@ -21,7 +19,7 @@ export function SiteHealthDashboardLayout({
         mode={inventoryMode}
         crawl={crawl}
         active={active}
-        exportPages={{ onExport: () => void runExport('csv', 'pages'), exporting }}
+        exportPages={{ onExport: (filters) => void runExport('csv', 'pages', filters), exporting }}
       />
 
       <PageKindScores crawl={crawl} dashboard={dashboardQuery.data} />

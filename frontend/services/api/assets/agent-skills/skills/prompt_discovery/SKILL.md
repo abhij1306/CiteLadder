@@ -3,7 +3,7 @@ id: prompt_discovery
 label: Prompt discovery
 group: demand
 order: 4
-version: 5
+version: 6
 output_kind: prompt_plan
 description: Plan the next prompt run for the Prompt Builder from CiteLadder business, topic and search evidence: the facts to fix, the topics to keep or change, the mix and the search queries to ground on. Use for prompt coverage and generation planning; not ordinary task-prompt writing.
 ---
@@ -26,6 +26,7 @@ Help the person set up the Prompt Builder in Prompts so its next run generates b
 - Keep existing topics; suggest a rename, merge or deletion only with a reason, and new topics only for gaps.
 - Change the builder's default mix (branded share, competitors, intents, personas, count) only when the data supports it.
 - A search query steers wording only; its impressions are never AI prompt volume.
+- Suggest the builder's brand prompts choice when few tracked prompts make answers describe the brand: it asks about the brand directly (recommendation, pros and cons, price, reviews, a tracked competitor). Over MCP it is `generate_prompts` with `mode: brand`, at most a small count per run and per project.
 
 ## Deliver
 

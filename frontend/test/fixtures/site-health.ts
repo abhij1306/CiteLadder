@@ -174,6 +174,8 @@ export function makePageSummary(overrides: Partial<PageSummary> = {}): PageSumma
     aeo_readiness_score: 64,
     aeo_measurement_coverage: 0.8,
     aeo_measurement_state: 'measured',
+    web_fundamentals_checks: null,
+    aeo_readiness_checks: null,
     aeo_measurement_reason: '',
     main_content_indexable: true,
     robots_excluded: false,

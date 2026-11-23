@@ -26,6 +26,7 @@ export function MissingPrompts({
       id="missing-prompts"
       title="Where you're missing"
       link={rows.length > SHOWN ? { href: '/prompts', label: 'All prompts' } : null}
+      card={rows.length > 0}
     >
       <MissingBody query={query} rows={rows} />
     </WidgetFrame>
@@ -75,11 +76,13 @@ function MissingRow({ row }: Readonly<{ row: MissingPrompt }>) {
     <LedgerItem
       title={
         <TextLink href={promptHistoryHref(row.promptId)} underline="hover" className="flex min-w-0">
-          <ClampText>{row.text}</ClampText>
+          <ClampText phoneWrap>{row.text}</ClampText>
         </TextLink>
       }
       caption={
-        <ClampText>{`${row.engines.map(engines.label).join(', ')} named ${row.competitors.join(', ')}`}</ClampText>
+        <ClampText
+          phoneWrap
+        >{`${row.engines.map(engines.label).join(', ')} named ${row.competitors.join(', ')}`}</ClampText>
       }
       meta={
         row.actionId ? (

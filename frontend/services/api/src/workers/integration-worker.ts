@@ -26,12 +26,12 @@ import {
 } from '../integrations/sync-state.ts';
 import { enqueuePostSyncProjections } from '../integrations/projections.ts';
 import { INTEGRATION_LANE, TaskQueue, type TaskFor } from '../queue/task-queue.ts';
+import { fitsIndexKey } from '../db/index-key.ts';
 
 const logger = getLogger('workers.integrations');
 const statuses = policy.task_queue.statuses;
 const templates = Object.values(integrationPolicy.datasets);
 const excluded = new Set(integrationPolicy.excluded_datasets);
-// 13 bound parameters a row stays well inside PostgreSQL's 65,535 limit.
 const METRIC_INSERT_BATCH = 2_000;
 const DEADLINE = Symbol('deadline');
 
@@ -139,8 +139,6 @@ export class IntegrationWorker {
         scope &&
         ((column) =>
           sql<boolean>`${column('workspace_id')} = ${scope.workspaceId} and ${column('id')} = ${scope.runId}`),
-      // The started event and the run's date bounds commit with the claim, so
-      // a failed read rolls the claim (and its attempt charge) back.
       onClaimed: async (trx, claimed) => {
         await startedEvents(trx, claimed);
         const [run] = claimed;
@@ -371,7 +369,7 @@ export class IntegrationWorker {
       startRow: offset,
       partition_complete: provider === 'bing' || page.rawRowCount < this.#settings.sync_page_size,
     };
-    const { rows, invalid, received } = normalizedRows(
+    const normalized = normalizedRows(
       provider,
       template.dataset,
       template,
@@ -379,8 +377,9 @@ export class IntegrationWorker {
       valueDate(run.window_start),
       valueDate(run.window_end),
     );
-    // Rows the provider sent that never became a payload row (Bing parses before
-    // persisting) are invalid too; rows merely dated outside the window are not.
+    const rows = normalized.rows.filter((row) => fitsIndexKey(run.property_ref, row.dimension_key));
+    const invalid = normalized.invalid + normalized.rows.length - rows.length;
+    const { received } = normalized;
     const metadata = extractMetadata(
       page.payload,
       invalid > 0 || received !== page.rawRowCount,

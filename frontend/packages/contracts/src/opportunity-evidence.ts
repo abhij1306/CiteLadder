@@ -73,7 +73,6 @@ export const siteIssueEvidenceSchema = z.object({
 export const issueFamilyCohortSchema = z.object({
   rule_id: z.string(),
   rule_label: z.string(),
-  finding_class: z.string(),
   crawl_id: z.string(),
   group_id: z.string(),
   page_count: z.number().int(),

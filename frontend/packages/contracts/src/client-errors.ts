@@ -81,11 +81,6 @@ const CSP_REPORT_BATCH_LIMIT = 20;
 
 const reportUrl = z.string().max(2048);
 
-/**
- * One `csp-violation` report as the Reporting API sends it. Fields a browser
- * adds beyond these are dropped. Of `sample`, which can hold page text or
- * code, only a Trusted Types sink name (`Element innerHTML` before the `|`) is kept.
- */
 const cspViolationSchema = z.object({
   type: z.literal('csp-violation'),
   body: z.object({

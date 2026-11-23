@@ -29,7 +29,6 @@ export function FilterTrigger({
 >) {
   const name = value === undefined ? label : `${label}: ${value}`;
   return (
-    // Always wrapped, so moving off the default keeps the same button (and its focus).
     <Tooltip content={name} describe={false}>
       <button
         ref={ref}
@@ -123,7 +122,7 @@ export function FilterChip({
 export function ValueChip({ filter }: Readonly<{ filter: FilterDefinition }>) {
   return (
     <Tooltip content={filter.label}>
-      <span className="face bg-raised border-rule rounded-control type-body text-ink inline-flex min-h-[var(--control-md)] max-w-full min-w-0 shrink-0 items-center gap-1 border ps-3 pe-1">
+      <span className="face bg-raised rounded-control type-body text-ink inline-flex min-h-[var(--control-md)] max-w-full min-w-0 shrink-0 items-center gap-1 border border-transparent ps-3 pe-1">
         <span className="min-w-0 truncate">{filter.valueLabel}</span>
         <button
           type="button"

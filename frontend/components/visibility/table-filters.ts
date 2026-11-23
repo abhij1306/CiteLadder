@@ -14,13 +14,10 @@ const PAGING = { clearKeys: ['source_cursor', 'source_offset', 'source_as_of'] }
 
 function useSourceTableScope(view: VisibilityView) {
   const [url] = useUrlState('source_url', optionalStringUrlCodec);
-  const [domain] = useUrlState('source_domain', optionalStringUrlCodec);
-  const [domainView] = useUrlState('source_view', optionalStringUrlCodec);
   const sourcesTab = view === 'domains' || view === 'urls' || view === 'read-not-cited';
   if (!sourcesTab || url) return null;
-  if (domain) return domainView === 'prompts' ? null : { dimension: 'url' as const, domain };
   if (view === 'read-not-cited') return null;
-  return { dimension: view === 'domains' ? ('domain' as const) : ('url' as const), domain: null };
+  return { dimension: view === 'domains' ? ('domain' as const) : ('url' as const) };
 }
 
 export function useTableFilters({
@@ -38,8 +35,8 @@ export function useTableFilters({
   const [standing, setStanding] = useUrlState('source_standing', optionalStringUrlCodec, PAGING);
   const [picked, setPicked] = useUrlState('source_pick', optionalStringUrlCodec, PAGING);
   const dimension = scope?.dimension ?? 'domain';
-  const domainOptions = useSourceDomains(filters, queries, dimension === 'url' && !scope?.domain);
-  const activeDomain = scope?.domain ?? (dimension === 'url' ? picked : null);
+  const domainOptions = useSourceDomains(filters, queries, dimension === 'url');
+  const activeDomain = dimension === 'url' ? picked : null;
   const types = useSourceTypes(filters, queries, {
     dimension,
     domain: activeDomain,
@@ -51,6 +48,6 @@ export function useTableFilters({
     dimension,
     type: { value: sourceType, options: types, onChange: setSourceType },
     standing: { gapOnly: standing === 'gap', onChange: setStanding },
-    domain: scope.domain ? null : { value: picked, options: domainOptions, onChange: setPicked },
+    domain: { value: picked, options: domainOptions, onChange: setPicked },
   });
 }

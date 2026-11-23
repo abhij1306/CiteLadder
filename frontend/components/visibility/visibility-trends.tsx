@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { FilterChoice } from '@/components/ui/filter-bar';
 import { SegmentedControl } from '@/components/ui/tabs';
@@ -46,7 +47,7 @@ import { Notice, readErrorProps } from '@/components/ui/notice';
 import { Section, SectionContent, SectionHeader, SectionTitle } from '@/components/ui/section';
 import { FigureStrip, type FigureSegment } from '@/components/ui/figure-strip';
 
-type Metric = (typeof VISIBILITY_METRICS)[number]['value'];
+export type Metric = (typeof VISIBILITY_METRICS)[number]['value'];
 
 export const metricCodec = stringUrlCodec(
   VISIBILITY_METRICS.map((item) => item.value),
@@ -176,6 +177,34 @@ export function BrandTrend({
 }>) {
   const [metric, setMetric] = useUrlState('metric', metricCodec);
   const [focused, setFocused] = useUrlState('brand', optionalStringUrlCodec);
+  return (
+    <BrandTrendPanel
+      query={query}
+      selected={selected}
+      metric={metric}
+      onMetric={setMetric}
+      focused={focused}
+      onFocus={setFocused}
+    />
+  );
+}
+
+export function BrandTrendPanel({
+  query,
+  selected,
+  metric,
+  onMetric,
+  focused,
+  onFocus,
+}: Readonly<{
+  query: UseQueryResult<VisibilityTrendPoint[], unknown>;
+  selected: Visibility;
+  metric: Metric;
+  onMetric: (metric: Metric) => void;
+  focused: string | null;
+  onFocus: (brand: string | null) => void;
+}>) {
+  const titleId = useId();
   const brands = orderByVisibility(selected.rankings);
   const focusedBrand = brands.some((row) => row.name === focused) ? focused : null;
   const brandName = selected.rankings.find((row) => row.is_brand)?.name ?? null;
@@ -190,7 +219,7 @@ export function BrandTrend({
     series: focusedBrand === null ? toCompetitorSeries(points, metric) : [],
   });
   return (
-    <Section aria-labelledby="insights-trend">
+    <Section aria-labelledby={titleId}>
       <SectionHeader
         actions={
           <>
@@ -198,7 +227,7 @@ export function BrandTrend({
               ariaLabel="Plotted metric"
               value={metric}
               options={VISIBILITY_METRICS}
-              onChange={setMetric}
+              onChange={onMetric}
             />
             <FilterChoice
               label="Focus"
@@ -208,12 +237,12 @@ export function BrandTrend({
                 { value: ALL_BRANDS, label: 'All brands' },
                 ...brands.map((row) => ({ value: row.name, label: row.name })),
               ]}
-              onChange={(value) => setFocused(value === ALL_BRANDS ? null : value)}
+              onChange={(value) => onFocus(value === ALL_BRANDS ? null : value)}
             />
           </>
         }
       >
-        <SectionTitle id="insights-trend">Your brand over time</SectionTitle>
+        <SectionTitle id={titleId}>Your brand over time</SectionTitle>
       </SectionHeader>
       <SectionContent>
         <TrendSection query={query} metric={metric} lines={lines} keyed lonePoint="plot" />
@@ -248,7 +277,7 @@ export function TrendSection({ query, keyed, ...chart }: TrendSectionProps) {
         kind="read"
         {...readErrorProps(query)}
         title="Couldn't load the history"
-        fallback="Check your connection and try again."
+        fallback="The request failed or timed out."
       />
     );
   if (!query.data.length)

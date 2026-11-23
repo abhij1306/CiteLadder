@@ -50,7 +50,7 @@ export const contextualLinkCheck: CheckModule<'contextual_link'> = {
     const checks: MemberCheck[] = [];
     for (const member of members) {
       const evidence = record(member.evidence);
-      const run = await db // NOSONAR -- One transaction connection.
+      const run = await db // NOSONAR
         .selectFrom('site_internal_link_runs')
         .select(['id', 'crawl_id', 'result'])
         .where('workspace_id', '=', scope.workspaceId)

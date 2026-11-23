@@ -77,7 +77,6 @@ describe('Answer dialog', () => {
 
     const dialog = await screen.findByRole('dialog', { name: 'Prompt #3' });
     expect(within(dialog).getAllByText(/Prompt #3/)).toHaveLength(1);
-    // The first import transforms the markdown renderer, so it gets a cold budget.
     const strong = await within(dialog).findByText('Acme Plumbing', {}, { timeout: 15_000 });
     expect(strong.tagName).toBe('STRONG');
     const list = within(dialog).getByText('Fast').closest('ul');
@@ -255,29 +254,30 @@ describe('Answer dialog', () => {
     }, 20_000);
   });
 
-  it("reports a measured AI Overview absence from the read's persisted outcome", async () => {
-    mswServer.use(
-      http.get(`/api/v1/executions/${ID}`, () =>
-        HttpResponse.json({
-          ...evidence,
-          logical_engine: 'google_ai_overview',
-          answer_text: '',
-          search_surface_outcome: 'no_ai_overview',
-        }),
-      ),
-    );
-    renderWithProviders(
-      <AnswerDialog execution={{ id: ID, prompt_index: 0 }} open onOpenChange={() => {}} />,
-      runRoute,
-    );
+  it.each([
+    ['google_ai_overview', 'No AI Overview was shown for this search.'],
+    ['google_ai_mode', 'No AI Mode answer was shown for this search.'],
+  ])(
+    "reports a measured %s absence from the read's persisted outcome",
+    async (engine, note) => {
+      mswServer.use(
+        http.get(`/api/v1/executions/${ID}`, () =>
+          HttpResponse.json({
+            ...evidence,
+            logical_engine: engine,
+            answer_text: '',
+            search_surface_outcome: 'no_ai_overview',
+          }),
+        ),
+      );
+      renderWithProviders(
+        <AnswerDialog execution={{ id: ID, prompt_index: 0 }} open onOpenChange={() => {}} />,
+        runRoute,
+      );
 
-    const dialog = await screen.findByRole('dialog', { name: 'Prompt #1' });
-    expect(
-      await within(dialog).findByText(
-        'No AI Overview was shown for this search.',
-        {},
-        { timeout: 15_000 },
-      ),
-    ).toBeInTheDocument();
-  }, 20_000);
+      const dialog = await screen.findByRole('dialog', { name: 'Prompt #1' });
+      expect(await within(dialog).findByText(note, {}, { timeout: 15_000 })).toBeInTheDocument();
+    },
+    20_000,
+  );
 });

@@ -12,7 +12,6 @@ export type McpPrincipal = {
   grantId: string;
   workspaceIds: string[];
   tokenHash: string;
-  canWrite: boolean;
 };
 export type EvidencePrincipal =
   | McpPrincipal

@@ -16,8 +16,6 @@ const versionsSchema = z.object({
   extractor_version: z.string().min(1),
   template_version: z.string().min(1),
   metrics_version: z.string().min(1),
-  // The gateway model at admission (empty when none was configured): the audit
-  // is classified by this model or not at all, so its results never mix models.
   model: z.string(),
 });
 export type PerceptionVersions = z.infer<typeof versionsSchema>;

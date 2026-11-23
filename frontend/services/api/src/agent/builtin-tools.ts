@@ -11,11 +11,17 @@ import {
   type SkillCatalog,
 } from './contracts.ts';
 import {
+  PROPOSE_CHANGE,
+  PROPOSE_CHANGE_DESCRIPTION,
+  proposeChangeArguments,
+} from './change-proposals.ts';
+import {
   PROPOSE_DECLARATION,
   PROPOSE_DESCRIPTION,
   proposeDeclarationArguments,
 } from './proposals.ts';
 import { fetchesPage, usesFormats } from './skills.ts';
+import { SHOW_VIEW, SHOW_VIEW_DESCRIPTION, showViewArguments } from './views.ts';
 import { scrubRecordRefs } from './sources.ts';
 import {
   checkSuggestion,
@@ -145,7 +151,6 @@ const EDIT_DESCRIPTION =
 const SUGGEST_DESCRIPTION =
   'Propose changes to a page document for the person to apply or dismiss, instead of changing it: each names old_string (exact text matching once), an SEO field, or neither for the whole page, with new_string, or needs_input when a fact is missing. All are staged or none are. They are saved together with your reply.';
 
-/** The model's full tool list: the reads plus the built-ins, sorted, so the cached prefix is stable. */
 export function agentToolList(
   registry: ToolRegistry,
   catalog: SkillCatalog,
@@ -158,10 +163,16 @@ export function agentToolList(
     { name: EDIT_DOCUMENT, description: EDIT_DESCRIPTION, arguments: edit },
     { name: SUGGEST_EDITS, description: SUGGEST_DESCRIPTION, arguments: suggest },
     {
+      name: PROPOSE_CHANGE,
+      description: PROPOSE_CHANGE_DESCRIPTION,
+      arguments: proposeChangeArguments,
+    },
+    {
       name: PROPOSE_DECLARATION,
       description: PROPOSE_DESCRIPTION,
       arguments: proposeDeclarationArguments,
     },
+    { name: SHOW_VIEW, description: SHOW_VIEW_DESCRIPTION, arguments: showViewArguments },
   ]).map((tool) => (tool.name === SAVE_DOCUMENT ? { ...tool, stream_input: true } : tool));
   return [...registry.catalog(), ...builtins].toSorted((a, b) => compareText(a.name, b.name));
 }
@@ -171,7 +182,9 @@ const BUILTINS: ReadonlySet<string> = new Set([
   SAVE_DOCUMENT,
   EDIT_DOCUMENT,
   SUGGEST_EDITS,
+  PROPOSE_CHANGE,
   PROPOSE_DECLARATION,
+  SHOW_VIEW,
 ]);
 export function isBuiltin(name: string) {
   return BUILTINS.has(name);

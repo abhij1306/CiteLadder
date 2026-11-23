@@ -1,11 +1,6 @@
 import type { IssueSeverity, IssueDimension } from '@citeladder/contracts';
 import type { PriorityValue } from '@/components/ui/status-mark';
 
-/**
- * A ranked action's severity read as its priority (High, Medium, Low): the
- * priority badge's accent-or-neutral scale, never the error red, which stays
- * with Site Health's own issue severities (owner, 2026-11-06).
- */
 export function severityPriority(severity: IssueSeverity): PriorityValue {
   switch (severity) {
     case 'critical':

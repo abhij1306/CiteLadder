@@ -17,7 +17,6 @@ export const runnerLanes = {
   idlePollMs: 5000,
 };
 
-/** About one Cloud Run cold start: a runner starts its successor this long before its deadline. */
 export const handoverLeadMs = 180_000;
 
 const defaults = {
@@ -25,7 +24,11 @@ const defaults = {
   drainLockPollMs: 250,
 };
 
-const integer = (name: string, value: number, maximum: number): SettingSpec => ({
+const integer = (
+  name: string,
+  value: number,
+  maximum: number,
+): SettingSpec & { default: number } => ({
   env: [name],
   type: 'int',
   default: value,
@@ -40,16 +43,15 @@ export const executionSpecs = {
 };
 
 export function executionSettings(source: SettingSource) {
-  const setting = (name: keyof typeof executionSpecs) =>
+  const setting = <K extends keyof typeof executionSpecs>(name: K) =>
     resolveSpec(name, executionSpecs[name], source);
   return {
     // How long a later execution waits for an active drain before leaving it the work.
     drainLockWaitMs: defaults.drainLockWaitMs,
     drainLockPollMs: defaults.drainLockPollMs,
-    budgetSeconds: setting('budget_seconds') as number,
-    poolSize: setting('pool_size') as number,
+    budgetSeconds: setting('budget_seconds'),
+    poolSize: setting('pool_size'),
   };
 }
 
-// hashtextextended(DRAIN_LOCK, 0): one drain per database at a time.
 export const DRAIN_LOCK = 'citeladder-runner-drain';

@@ -238,10 +238,9 @@ async function landAuditBatch(
     if (newer.has(audit.siteUrlId) || states.some((row) => row.last_audit_at > auditAt)) return [];
     return nextIssueStates(scope, audit, states, landing);
   });
-  // Chunked only to stay under PostgreSQL's 65535 bind-parameter limit.
   const chunk = Math.floor(65_535 / Object.keys(rows[0] ?? { id: '' }).length);
   for (let offset = 0; offset < rows.length; offset += chunk)
-    await db // NOSONAR: in order in the caller's one landing transaction.
+    await db // NOSONAR
       .insertInto('site_issue_states')
       .values(rows.slice(offset, offset + chunk))
       .onConflict((conflict) =>
@@ -293,7 +292,6 @@ async function releaseUntrackedStates(db: Database, scope: Scope, now: Date) {
     .execute();
 }
 
-/** Orders a project's landings and marks: each reads the states the one before it wrote. */
 const lockIssueStates = (db: Database, scope: Scope) =>
   subjectXactLock(db, `site-issue-states:${scope.workspaceId}:${scope.projectId}`);
 

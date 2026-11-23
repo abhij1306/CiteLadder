@@ -8,7 +8,6 @@ import { cn } from '@/lib/utils';
 
 const EMPTY_VALUE = '__citeladder_empty_value__';
 
-/** An empty value with no empty option shows the placeholder (Radix's `''`). */
 function shownValue(
   value: string | undefined,
   options: readonly { value: string }[],
@@ -80,7 +79,7 @@ export function Select<T extends string>({
         className={cn(
           'focus-input press',
           TRIGGER_BOX,
-          'data-[placeholder]:text-ink-2 flex w-auto min-w-0 items-center justify-between gap-2 text-start disabled:cursor-not-allowed disabled:opacity-60',
+          'data-[placeholder]:text-ink-3 flex w-auto min-w-0 items-center justify-between gap-2 text-start disabled:cursor-not-allowed disabled:opacity-60',
           className,
         )}
       >

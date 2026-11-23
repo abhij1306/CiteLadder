@@ -51,7 +51,7 @@ export function PromptDetailScreen() {
           kind="error"
           {...readErrorProps(query)}
           title="Couldn't load this prompt"
-          fallback="Check your connection and try again."
+          fallback="The request failed or timed out."
         />
       </RecordPage>
     );

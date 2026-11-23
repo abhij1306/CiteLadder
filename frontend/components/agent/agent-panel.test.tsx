@@ -6,6 +6,7 @@ import { Route, Routes, useParams } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vite-plus/test';
 
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { ToastProvider } from '@/components/ui/toast';
 import { AgentPanelProvider, useAgentPanelSeed } from '@/lib/agent/panel-context';
 import { refreshAgentChat } from '@/lib/api/agent';
 import { AGENT_PASTE_ATTACHMENT_MIN_CHARS } from '@/lib/config/agent';
@@ -17,6 +18,7 @@ import { expectThreadFollowsLatest } from '@/test/chat-follow';
 
 import { AgentPanel } from './agent-panel';
 import { AgentPanelTrigger } from './agent-panel-host';
+import { AGENT_MODELS, CHAT_MODEL } from '@/test/agent-chat-fixture';
 
 const PROJECT = '11111111-1111-4111-8111-111111111111';
 const CHAT = '22222222-2222-4222-8222-222222222222';
@@ -50,6 +52,7 @@ const DETAIL = {
     running: false,
   },
   pinned_skill_id: null,
+  model: CHAT_MODEL,
   context: {},
   messages: [
     {
@@ -102,21 +105,23 @@ function ChatLanding() {
 function renderShell(path: string) {
   return renderWithProviders(
     <AgentPanelProvider>
-      <TooltipProvider>
-        <AgentPanelTrigger />
-        <Routes>
-          <Route
-            path="/site"
-            element={
-              <Profiler id="issue-screen" onRender={countIssueRender}>
-                <IssueScreen />
-              </Profiler>
-            }
-          />
-          <Route path="/agent/chats/:chatId" element={<ChatLanding />} />
-        </Routes>
-        <AgentPanel />
-      </TooltipProvider>
+      <ToastProvider>
+        <TooltipProvider>
+          <AgentPanelTrigger />
+          <Routes>
+            <Route
+              path="/site"
+              element={
+                <Profiler id="issue-screen" onRender={countIssueRender}>
+                  <IssueScreen />
+                </Profiler>
+              }
+            />
+            <Route path="/agent/chats/:chatId" element={<ChatLanding />} />
+          </Routes>
+          <AgentPanel />
+        </TooltipProvider>
+      </ToastProvider>
     </AgentPanelProvider>,
     {
       initialEntries: [path],
@@ -140,7 +145,14 @@ afterAll(() => mswServer.close());
 
 const EMPTY_CATALOG = {
   skills: [],
-  limits: { mentions_max: 5, attachments_max: 3, attachment_max_chars: 40000 },
+  models: AGENT_MODELS,
+  limits: {
+    message_max_chars: 50000,
+    mentions_max: 5,
+    attachments_max: 3,
+    attachment_max_chars: 40000,
+    attachments_total_max_chars: 40000,
+  },
 };
 
 describe('AgentPanel', () => {
@@ -187,6 +199,40 @@ describe('AgentPanel', () => {
     await user.click(within(panel).getByRole('link', { name: 'Open in Agent' }));
     expect(await screen.findByText(`Workspace chat ${CHAT}`)).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
+  it('refuses a message over the catalog limit with a plain limit notice and sends nothing', async () => {
+    const bodies: unknown[] = [];
+    mswServer.use(
+      http.get('/api/v1/agent/skills', () =>
+        HttpResponse.json({
+          ...EMPTY_CATALOG,
+          limits: { ...EMPTY_CATALOG.limits, message_max_chars: 12 },
+        }),
+      ),
+      http.post(`/api/v1/projects/${PROJECT}/agent/chats`, async ({ request }) => {
+        bodies.push(await request.json());
+        return HttpResponse.json({ chat_id: CHAT, run: RUN }, { status: 202 });
+      }),
+      http.get(`/api/v1/agent/chats/${CHAT}`, () => HttpResponse.json(DETAIL)),
+    );
+    const user = userEvent.setup();
+    renderShell('/site');
+    await user.click(await screen.findByRole('button', { name: 'Ask agent' }));
+    const panel = await screen.findByRole('dialog', { name: 'Agent' });
+    await user.click(within(panel).getByRole('button', { name: 'Send' }));
+
+    expect(await screen.findByText('Messages hold up to 12 characters')).toBeInTheDocument();
+    expect(
+      screen.getByText('This one has 33. Shorten it, or attach the text as a file.'),
+    ).toBeInTheDocument();
+    const message = within(panel).getByLabelText('Message the agent');
+    await user.clear(message);
+    await user.type(message, 'Fix it');
+    await user.click(within(panel).getByRole('button', { name: 'Send' }));
+    await waitFor(() =>
+      expect(bodies).toEqual([{ message: 'Fix it', context: { target_site_url_id: PAGE } }]),
+    );
   });
 
   it('keeps an unsent draft when the screen context changes while open', async () => {

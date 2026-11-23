@@ -1,5 +1,6 @@
 import { providerNumber } from './client.ts';
 import { integrationPolicy, type Dataset } from './config.ts';
+import { isRecord } from '../db/json.ts';
 
 function isoDate(raw: unknown): string | null {
   if (typeof raw !== 'string') return null;
@@ -15,11 +16,6 @@ function isoDate(raw: unknown): string | null {
 function values(row: Record<string, unknown>): unknown[] {
   return Array.isArray(row.keys) ? row.keys : [];
 }
-/**
- * Parse one provider page into metric rows. `invalid` counts rows that could not
- * be parsed; a valid row dated outside the window is dropped without counting,
- * because Bing always returns its whole history whatever window is requested.
- */
 export function normalizedRows(
   provider: string,
   dataset: string,
@@ -42,8 +38,8 @@ export function normalizedRows(
 }
 
 function parsedRow(provider: string, dataset: string, template: Dataset, item: unknown) {
-  if (item === null || typeof item !== 'object' || Array.isArray(item)) return null;
-  let row = item as Record<string, unknown>;
+  if (!isRecord(item)) return null;
+  let row = item;
   if (provider === 'ga4') {
     const dimensions = Array.isArray(row.dimensionValues) ? row.dimensionValues : [];
     const metrics = Array.isArray(row.metricValues) ? row.metricValues : [];

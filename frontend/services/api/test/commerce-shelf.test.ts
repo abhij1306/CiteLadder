@@ -140,7 +140,6 @@ describe('frozen Commerce shelf projections', () => {
     expect(observedPrice('$1,299.50', 'en-US')).toEqual({ price: 1299.5, currency: 'USD' });
     expect(observedPrice('$12.50', 'en')).toEqual({ price: 12.5, currency: '' });
   });
-  // The narrow no-break space `Intl.NumberFormat('fr-FR')` groups thousands with.
   const NARROW_NBSP = String.fromCodePoint(0x202f);
   it.each([
     ['Grab it for $59.', 'en-US', 59, 'USD'],

@@ -58,7 +58,6 @@ export async function getRankedVisibility(
 ): Promise<VisibilityResponse> {
   const view = await getVisibility(db, scope, query);
   const pooled = view.selection_mode === 'range' ? (view.source_audit_ids ?? []) : null;
-  // An empty pool reads nothing; an empty list would select the latest run.
   if (pooled?.length === 0) return view;
   const answers = await perceivedAnswers(
     db,

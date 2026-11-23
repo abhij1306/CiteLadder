@@ -111,8 +111,6 @@ async function selectedDates(
     return [compareText(row.start, floor) > 0 ? row.start : floor, row.end];
   }
   if (range in extended) {
-    // The preset family ends at the refresh's partition anchor; a display-only
-    // custom snapshot (possibly ending later) must not move this range.
     const anchor = await query
       .where('preset_window_days', 'is not', null)
       .orderBy('id', 'desc')

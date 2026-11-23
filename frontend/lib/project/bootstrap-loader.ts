@@ -119,8 +119,6 @@ function guessScope(client: QueryClient, url: URL): Guess | null {
   const workspaceId = urlWorkspaceId ?? readStoredActiveWorkspaceId();
   if (!workspaceId) return null;
   void client.prefetchQuery(projectQueries.list(workspaceId));
-  // A remembered project belongs to the remembered workspace, not to one the
-  // address names.
   const projectId =
     url.searchParams.get('project') || (urlWorkspaceId ? null : readStoredActiveProjectId());
   if (!projectId || isWorkspaceOnlyRoute(url.pathname)) return { workspaceId, project: null };

@@ -63,11 +63,6 @@ export async function readSchedule(db: Database, workspaceId: string, projectId:
   );
 }
 
-/**
- * `last_outcome` describes the plan the person last chose, so turning the
- * schedule off or replanning it clears it; only the scheduler turns a
- * schedule off with a `failed` outcome left in place.
- */
 function scheduleChange(current: CrawlScheduleRow, request: CrawlScheduleUpdateRequest, at: Date) {
   const { cadence } = request;
   if (!request.enabled) return { cadence, enabled: false, next_run_at: null, last_outcome: null };
@@ -158,7 +153,6 @@ export function claimDueCrawlSchedules(
       id: row.id,
       workspaceId: row.workspace_id,
       projectId: row.project_id,
-      // The due filter excludes schedules without a next run.
       scheduledFor: row.next_run_at ?? options.at,
     }));
   });

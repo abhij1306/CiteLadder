@@ -1,21 +1,13 @@
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import {
-  afterAll,
-  afterEach,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  vi,
-} from 'vite-plus/test';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vite-plus/test';
 
 import type { IntegrationConnection } from '@/lib/api/integrations';
 
 import { mswServer } from '@/test/msw-server';
-import { renderWithProviders } from '@/test/render';
+import { projectScope, renderWithProviders } from '@/test/render';
+import type { ProjectContextValue } from '@/lib/project/project-scope';
 import { makeProject } from '@/test/fixtures/project';
 
 const WS = '11111111-1111-4111-8111-111111111111';
@@ -27,20 +19,6 @@ const activeProject = makeProject({
   workspace_id: WS,
   name: 'Example.com',
 });
-
-let hasProject = true;
-let mayDiscover = true;
-vi.mock('@/lib/project/project-context', () => ({
-  useWorkspaceCapability: () => mayDiscover,
-  useActiveWorkspaceId: () => 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-  useProjectContext: () => ({
-    projects: hasProject ? [activeProject] : [],
-    activeProject: hasProject ? activeProject : null,
-    activeProjectId: hasProject ? activeProject.id : null,
-    setActiveProjectId: vi.fn(),
-    isLoading: false,
-  }),
-}));
 
 import { SelectedPropertyMark, usePropertyPicker } from './property-picker';
 
@@ -64,8 +42,11 @@ function Picker({ connection }: Readonly<{ connection: IntegrationConnection }>)
   );
 }
 
-function renderPicker(subject: IntegrationConnection) {
-  return renderWithProviders(<Picker connection={subject} />);
+function renderPicker(
+  subject: IntegrationConnection,
+  projectSelection: Partial<ProjectContextValue> = projectScope(activeProject),
+) {
+  return renderWithProviders(<Picker connection={subject} />, { projectSelection });
 }
 
 function connection(overrides: Partial<IntegrationConnection> = {}): IntegrationConnection {
@@ -125,18 +106,13 @@ function mockMappings(rows: unknown[] = []) {
 
 beforeAll(() => mswServer.listen({ onUnhandledFrame: 'error' }));
 beforeEach(() => mockMappings());
-afterEach(() => {
-  mswServer.resetHandlers();
-  hasProject = true;
-  mayDiscover = true;
-});
+afterEach(() => mswServer.resetHandlers());
 afterAll(() => mswServer.close());
 
 describe('PropertyPicker', () => {
   it('shows saved mappings without discovery controls for members and viewers', async () => {
-    mayDiscover = false;
     mockMappings([mapping('sc-domain:example.com')]);
-    renderPicker(connection());
+    renderPicker(connection(), projectScope(activeProject, 'member'));
     expect(await screen.findByText('sc-domain:example.com')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Change Search Console property' })).toBeNull();
   });
@@ -269,9 +245,8 @@ describe('PropertyPicker', () => {
 
   it('blocks selection when there is no active project to import into', async () => {
     const ue = userEvent.setup();
-    hasProject = false;
     mockProperties();
-    renderPicker(connection());
+    renderPicker(connection(), {});
 
     await ue.click(screen.getByRole('button', { name: 'Select Search Console property' }));
 

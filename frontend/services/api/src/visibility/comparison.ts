@@ -273,7 +273,7 @@ export async function loadComparisonCells(
 }
 
 export function cellPrompt(key: string): string {
-  const [identity, text] = JSON.parse(key) as [string, string];
+  const [identity, text]: unknown[] = JSON.parse(key);
   return JSON.stringify([identity, text]);
 }
 

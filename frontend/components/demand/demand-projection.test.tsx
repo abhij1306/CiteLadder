@@ -1,25 +1,18 @@
-import { QueryClientProvider, type QueryClient } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import type { QueryClient } from '@tanstack/react-query';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { DemandDetectorState } from '@citeladder/contracts';
 import type { ReactNode } from 'react';
-import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 
-import { TooltipProvider } from '@/components/ui/tooltip';
 import { ApiError } from '@/lib/api/errors';
 import { createAppQueryClient } from '@/lib/api/query-client';
 import { ActiveProjectScopeProvider } from '@/lib/project/active-project-scope';
 import { makeProject } from '@/test/fixtures/project';
-import { focusByKeyboard } from '@/test/keyboard-focus';
-import { roles } from '@/services/api/src/config/workspaces.json';
+import { projectScope, renderWithProviders, type TestRole } from '@/test/render';
 
 import { ReportPage } from '@/components/templates/report-page';
 import { DemandActions, DemandPanel, demandControls, useDemand } from './demand-projection';
-
-function RouterTestWrapper({ children }: Readonly<{ children: ReactNode }>) {
-  return <MemoryRouter initialEntries={['/search-intelligence']}>{children}</MemoryRouter>;
-}
 
 function signalTable() {
   return screen.getByRole('table');
@@ -44,32 +37,14 @@ function rankOf(row: HTMLElement) {
   return within(row).getAllByRole('cell').at(-2)!.textContent;
 }
 
-// Mutable so a test can switch projects mid-render; `vi.hoisted` keeps it
-// legal inside the hoisted mock factory.
-const project = vi.hoisted(() => ({
-  id: '11111111-1111-4111-8111-111111111111',
-  workspace_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-  capabilities: ['read', 'run', 'write'] as readonly string[],
-}));
+const PROJECT_ID = '11111111-1111-4111-8111-111111111111';
+const WORKSPACE_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 
 vi.mock('@/components/integrations/data-source-setup', () => ({
   DataSourceSetup: ({ title, whenReady }: { title: string; whenReady?: ReactNode }) => (
     <section aria-label={title}>{whenReady}</section>
   ),
 }));
-vi.mock('@/lib/project/project-context', () => {
-  const context = () => ({
-    activeProject: { id: project.id, workspace_id: project.workspace_id },
-    activeProjectId: project.id,
-    isLoading: false,
-  });
-  return {
-    useActiveWorkspaceId: () => 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-    useOptionalProjectContext: context,
-    useProjectContext: context,
-    useWorkspaceCapability: (capability: string) => project.capabilities.includes(capability),
-  };
-});
 
 function DemandTab() {
   const demand = useDemand();
@@ -80,10 +55,10 @@ function DemandTab() {
   );
 }
 
-function DemandRoute() {
+function DemandRoute({ projectId = PROJECT_ID }: Readonly<{ projectId?: string }>) {
   return (
     <ActiveProjectScopeProvider
-      project={makeProject({ id: project.id, workspace_id: project.workspace_id })}
+      project={makeProject({ id: projectId, workspace_id: WORKSPACE_ID })}
     >
       <DemandTab />
     </ActiveProjectScopeProvider>
@@ -201,36 +176,39 @@ beforeEach(() => {
   });
 });
 
-const findSignalCount = (text: string) =>
+const findLatentDemand = (text: string) =>
   screen.findByText((_, element) => element?.tagName === 'SPAN' && element.textContent === text);
 
 describe('Demand tab', () => {
   beforeEach(() => {
     window.history.replaceState(null, '', '/search-intelligence');
-    project.id = '11111111-1111-4111-8111-111111111111';
-    project.capabilities = roles.member;
     vi.mocked(demandApi.getLatest).mockResolvedValue(snapshot);
   });
 
   let client: QueryClient;
 
-  function renderProjection() {
-    client = createAppQueryClient();
-    return render(
-      <QueryClientProvider client={client}>
-        <TooltipProvider>
-          <DemandRoute />
-        </TooltipProvider>
-      </QueryClientProvider>,
-      { wrapper: RouterTestWrapper },
-    );
+  function renderDemand(role: TestRole = 'member') {
+    return renderWithProviders(<DemandRoute />, {
+      queryClient: client,
+      initialEntries: ['/search-intelligence'],
+      projectSelection: projectScope(
+        makeProject({ id: PROJECT_ID, workspace_id: WORKSPACE_ID }),
+        role,
+      ),
+    });
   }
 
-  it('renders the top-strip filters carrying counts, detector status on the summary line and a flat table', async () => {
+  function renderProjection(role: TestRole = 'member') {
+    client = createAppQueryClient();
+    return renderDemand(role);
+  }
+
+  it('renders the top-strip filters carrying counts, latent demand and a flat table without caption rows', async () => {
     renderProjection();
 
-    const summary = await findSignalCount('2 signals observed');
-    expect(summary.parentElement).toHaveTextContent('350 impressions on non-branded signals');
+    expect(await findLatentDemand('350 impressions on non-branded signals')).toBeVisible();
+    expect(screen.queryByText(/signals observed/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Data caveats' })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Signals' })).not.toBeInTheDocument();
 
     const filters = within(screen.getByRole('radiogroup', { name: 'Signal type' }))
@@ -243,14 +221,6 @@ describe('Demand tab', () => {
       'CTR gaps (1)',
       'Trends (0)',
     ]);
-    expect(
-      screen.getByText('Unavailable: Cannibalization, CTR gap · Needs more history: Trends'),
-    ).toBeVisible();
-    expect(screen.getByRole('button', { name: 'How each detector works' })).toBeVisible();
-    const caveats = screen.getByRole('button', { name: 'Data caveats' });
-    expect(caveats).toBeVisible();
-    expect(caveats).toHaveAccessibleDescription('Privacy-filtered queries may be omitted.');
-    expect(screen.getByText('Privacy-filtered queries may be omitted.')).not.toBeVisible();
     expect(screen.queryByText('Latent demand')).not.toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'Detectors' })).not.toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'Act on this' })).not.toBeInTheDocument();
@@ -276,20 +246,6 @@ describe('Demand tab', () => {
     expect(cells).not.toContain('85');
     expect(cells).not.toContain('50');
     expect(screen.queryByText(/Demand overview/i)).not.toBeInTheDocument();
-  });
-
-  it('explains the signal types before the table, unchanged by the filter', async () => {
-    renderProjection();
-
-    const hint = await screen.findByRole('button', { name: 'Signal types' });
-    expect(
-      hint.compareDocumentPosition(signalTable()) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    fireEvent.click(screen.getByRole('radio', { name: /^Striking distance/i }));
-    focusByKeyboard(screen.getByRole('button', { name: 'Signal types' }));
-    expect((await screen.findByRole('tooltip')).textContent).toMatch(
-      /Striking distance: .*Low CTR: Earns many impressions but few clicks/,
-    );
   });
 
   it('keeps the reading and query relevance in the evidence drawer, quoting no unobserved benchmark', async () => {
@@ -343,7 +299,7 @@ describe('Demand tab', () => {
       within(drawer)
         .getByRole('link', { name: 'Open the Action for ai marketing tools' })
         .getAttribute('href'),
-    ).toBe(`/actions/66666666-6666-4666-8666-666666666666?project=${project.id}`);
+    ).toBe(`/actions/66666666-6666-4666-8666-666666666666?project=${PROJECT_ID}`);
     await user.keyboard('{Escape}');
 
     await user.click(await findSignalRow('school fees'));
@@ -446,52 +402,6 @@ describe('Demand tab', () => {
     expect(rankOf(signalRows()[0]!)).toBe('1');
   });
 
-  it('explains every detector in one info hint with its rule and what limited it', async () => {
-    vi.mocked(demandApi.getLatest).mockResolvedValue({
-      ...snapshot,
-      summary: {
-        ...snapshot.summary,
-        detectors: {
-          ...snapshot.summary.detectors,
-          query_trends: detector('insufficient_history', [
-            'At least 42 days of coverage are required.',
-          ]),
-        },
-      },
-    });
-    const user = userEvent.setup();
-    renderProjection();
-
-    await user.click(await screen.findByRole('button', { name: 'How each detector works' }));
-
-    expect((await screen.findByRole('tooltip')).textContent).toContain(
-      'Trends: Queries whose impressions grew 1.5× or more, or fell to 0.67× or less, between the last two 21-day windows. Needs 42 days of continuous Search Console coverage. At least 42 days of coverage are required.',
-    );
-  });
-
-  it('drops a detector from the status line once it ran, keeping its rule in the hint', async () => {
-    vi.mocked(demandApi.getLatest).mockResolvedValue({
-      ...snapshot,
-      summary: {
-        ...snapshot.summary,
-        detectors: {
-          ...snapshot.summary.detectors,
-          property_relative_ctr_gap: detector('available', ['No cohort reached 20 queries.']),
-        },
-      },
-    });
-    const user = userEvent.setup();
-    renderProjection();
-
-    expect(
-      await screen.findByText('Unavailable: Cannibalization · Needs more history: Trends'),
-    ).toBeVisible();
-    await user.click(screen.getByRole('button', { name: 'How each detector works' }));
-    expect((await screen.findByRole('tooltip')).textContent).toMatch(
-      /CTR gap: Queries with .*, and 3 points, below .* No cohort reached 20 queries\.Low CTR: Non-branded queries and pages /,
-    );
-  });
-
   it('allows filtering by signal type filter chips and searching by query text', async () => {
     renderProjection();
 
@@ -555,14 +465,7 @@ describe('Demand tab', () => {
     first.unmount();
     const readsBeforeRevisit = vi.mocked(demandApi.getLatest).mock.calls.length;
 
-    render(
-      <QueryClientProvider client={client}>
-        <TooltipProvider>
-          <DemandRoute />
-        </TooltipProvider>
-      </QueryClientProvider>,
-      { wrapper: RouterTestWrapper },
-    );
+    renderDemand();
     expect(screen.getByRole('region', { name: 'Connect Search Console' })).toBeInTheDocument();
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
     expect(vi.mocked(demandApi.getLatest).mock.calls).toHaveLength(readsBeforeRevisit);
@@ -585,9 +488,7 @@ describe('Demand tab', () => {
     });
     renderProjection();
 
-    expect((await findSignalCount('2 signals observed')).parentElement).toHaveTextContent(
-      '250 impressions on 1 of 2 non-branded signals',
-    );
+    expect(await findLatentDemand('250 impressions on 1 of 2 non-branded signals')).toBeVisible();
   });
 
   it('opens the evidence drawer with provenance counts and no internal IDs', async () => {
@@ -622,7 +523,7 @@ describe('Demand tab', () => {
   it('reports that recompute was queued rather than implying a finished rebuild', async () => {
     renderProjection();
 
-    expect(await findSignalCount('2 signals observed')).toBeInTheDocument();
+    expect(await findLatentDemand('350 impressions on non-branded signals')).toBeVisible();
 
     const fetchesBeforeRecompute = vi.mocked(demandApi.getLatest).mock.calls.length;
     fireEvent.click(screen.getByRole('button', { name: /Recompute Signals/i }));
@@ -634,7 +535,7 @@ describe('Demand tab', () => {
           window_start: '2026-07-01',
           window_end: '2026-07-07',
         },
-        { workspaceId: project.workspace_id },
+        { workspaceId: WORKSPACE_ID },
       );
     });
 
@@ -643,10 +544,9 @@ describe('Demand tab', () => {
   });
 
   it('shows a viewer the signals without offering a recompute', async () => {
-    project.capabilities = roles.viewer;
-    renderProjection();
+    renderProjection('viewer');
 
-    expect(await findSignalCount('2 signals observed')).toBeInTheDocument();
+    expect(await findLatentDemand('350 impressions on non-branded signals')).toBeVisible();
     expect(screen.queryByRole('button', { name: /Recompute signals/i })).toBeNull();
   });
 
@@ -655,14 +555,7 @@ describe('Demand tab', () => {
     expect(await screen.findByText('ai marketing tools')).toBeInTheDocument();
 
     vi.mocked(demandApi.getLatest).mockImplementation(() => new Promise(() => {}));
-    project.id = '99999999-9999-4999-8999-999999999999';
-    rerender(
-      <QueryClientProvider client={client}>
-        <TooltipProvider>
-          <DemandRoute />
-        </TooltipProvider>
-      </QueryClientProvider>,
-    );
+    rerender(<DemandRoute projectId="99999999-9999-4999-8999-999999999999" />);
 
     await waitFor(() => {
       expect(screen.getByRole('status')).toHaveAccessibleName('Loading search demand…');
@@ -674,7 +567,7 @@ describe('Demand tab', () => {
     vi.mocked(demandApi.recompute).mockRejectedValueOnce(new Error('boom'));
     renderProjection();
 
-    expect(await findSignalCount('2 signals observed')).toBeInTheDocument();
+    expect(await findLatentDemand('350 impressions on non-branded signals')).toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: /Recompute Signals/i }));
 
     expect(await screen.findByRole('button', { name: /Try again/i })).toBeInTheDocument();

@@ -51,7 +51,7 @@ export function StackedBarChart({
       <div className="flex min-w-0 flex-col gap-4">
         <div
           ref={plotRef}
-          // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- no native element names a plot as one group
+          // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role
           role="group"
           aria-label={`${label}. Focus the chart and use the arrow keys to read each bar.`}
           className="w-full"
@@ -85,7 +85,8 @@ export function StackedBarChart({
               cursor={BAR_CURSOR}
               isAnimationActive={false}
               content={({ active, payload }) => {
-                const key = (payload?.[0]?.payload as { key?: string } | undefined)?.key;
+                const row: Readonly<{ key?: string }> | undefined = payload?.[0]?.payload;
+                const key = row?.key;
                 const bar = bars.find((entry) => entry.key === key);
                 if (!active || !bar) return null;
                 return (

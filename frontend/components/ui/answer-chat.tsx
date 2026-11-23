@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 
 import { ExternalHttpLink } from '@/components/ui/external-http-link';
+import { TextLink } from '@/components/ui/text-link';
 import { textRole } from '@/components/ui/typography';
 import { ArrowUpRight } from '@/lib/icons';
 import { cn } from '@/lib/utils';
@@ -132,7 +133,10 @@ export function CitationChip({
     <ExternalHttpLink
       {...data}
       href={href}
-      className={cn(CHIP, 'border-rule text-ink hover:overlay-hover no-underline')}
+      className={cn(
+        CHIP,
+        'border-transparent bg-state-hover text-ink hover:overlay-hover no-underline',
+      )}
     >
       {mark}
       <span className="min-w-0 [overflow-wrap:anywhere]">{children}</span>
@@ -145,15 +149,15 @@ export function CitationChip({
 
 export function RailSection({
   title,
-  trailing,
+  count,
   children,
-}: Readonly<{ title: string; trailing?: ReactNode; children: ReactNode }>) {
+}: Readonly<{ title: string; count?: number; children: ReactNode }>) {
   return (
-    <section className="flex min-w-0 flex-col gap-3">
-      <header className="flex items-baseline justify-between gap-2">
-        <h3 className={textRole('emphasis')}>{title}</h3>
-        {trailing ? <span className="type-caption text-ink-2">{trailing}</span> : null}
-      </header>
+    <section className="border-rule flex min-w-0 flex-col gap-3 border-t pt-4 first:border-t-0 first:pt-0">
+      <h3 className={textRole('emphasis')}>
+        {title}
+        {count ? <span className="text-ink-2 tabular-nums"> ({count})</span> : null}
+      </h3>
       {children}
     </section>
   );
@@ -179,12 +183,38 @@ export function RailItem({ children }: Readonly<{ children: ReactNode }>) {
   return <li className="flex min-w-0 flex-col gap-1">{children}</li>;
 }
 
+export function RailUrl({
+  href,
+  text,
+  trailing,
+}: Readonly<{ href: string | null; text: string; trailing?: ReactNode }>) {
+  return (
+    <span className="flex min-w-0 items-center justify-between gap-2">
+      <TextLink
+        variant="external"
+        text="caption"
+        underline="hover"
+        href={href}
+        title={text}
+        className="text-ink-2 flex min-w-0 items-center [&>svg]:shrink-0"
+      >
+        <span className="min-w-0 truncate">{text}</span>
+      </TextLink>
+      {trailing ? <span className="shrink-0">{trailing}</span> : null}
+    </span>
+  );
+}
+
 export function RailRank({ children }: Readonly<{ children: ReactNode }>) {
   return <span className="type-caption text-ink-2 w-6 shrink-0 tabular-nums">{children}</span>;
 }
 
-export function RailNote({ children }: Readonly<{ children: ReactNode }>) {
-  return <span className="type-caption text-ink-2 ms-auto shrink-0 tabular-nums">{children}</span>;
+export function RailCount({ label, children }: Readonly<{ label: string; children: number }>) {
+  return (
+    <span title={label} className="type-caption text-ink-2 shrink-0 tabular-nums">
+      ({children})
+    </span>
+  );
 }
 
 export function QueryItem({ children }: Readonly<{ children: ReactNode }>) {

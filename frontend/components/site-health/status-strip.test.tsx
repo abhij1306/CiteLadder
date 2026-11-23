@@ -41,6 +41,8 @@ function crawl(overrides: Partial<SiteCrawl> = {}): SiteCrawl {
       aeo_readiness_score: null,
       aeo_measurement_coverage: 0,
       aeo_measurement_state: 'not_measured',
+      web_fundamentals_checks: null,
+      aeo_readiness_checks: null,
       search_eligibility: 'unknown',
       selected_count: 3,
       analyzed_count: 1,

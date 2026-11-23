@@ -1,4 +1,4 @@
-import type { Database } from '../db/database.ts';
+import { inTransaction, type Database } from '../db/database.ts';
 import { buyerPrompts, candidates, commerceMissing, type CommerceScope } from './reads.ts';
 import { firstOf } from '../lists.ts';
 import { recordCatalogRevision } from './catalog-revisions.ts';
@@ -10,7 +10,7 @@ export function decideCandidate(
   id: string,
   decision: 'approved' | 'rejected',
 ) {
-  return db.transaction().execute(async (trx) => {
+  return inTransaction(db, async (trx) => {
     const candidate = await trx
       .selectFrom('commerce_competitor_candidates')
       .select('id')
@@ -38,9 +38,7 @@ export function decideBuyerPrompt(
   id: string,
   approved: boolean,
 ) {
-  return db.transaction().execute(async (trx) => {
-    // The prompt's own writer first (project lock, then the prompt row), then
-    // its Commerce target: creation uses the same parent-before-child order.
+  return inTransaction(db, async (trx) => {
     const prompt = await trx
       .selectFrom('prompts as p')
       .innerJoin('prompt_sets as ps', 'ps.id', 'p.prompt_set_id')

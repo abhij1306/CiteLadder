@@ -77,11 +77,6 @@ export async function bulkUpdateActionStatus(
   });
 }
 
-/**
- * Work with Agent: a chat started on a New Action accepts it. Any other
- * status is left as it is. Caller owns the transaction; the non-key lock
- * leaves the chat's own foreign key to the Action unblocked.
- */
 export async function acceptForAgent(db: Database, scope: Scope, actionId: string, userId: string) {
   const action = await db
     .selectFrom('actions')

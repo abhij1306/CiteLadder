@@ -4,7 +4,7 @@ import { sql } from 'kysely';
 import type { Database } from '../db/database.ts';
 import { strings } from '../db/json.ts';
 import { policy } from '../config.ts';
-import { resolveSettingSpec, type SettingSource } from '../config/settings.ts';
+import { settingValues, type SettingSource } from '../config/settings.ts';
 import { createAuditsInTransaction } from '../audits/creation.ts';
 import { marketIds } from '../projects/markets.ts';
 import { auditInput } from '../audits/inputs.ts';
@@ -15,12 +15,7 @@ import { ApiError } from '../errors.ts';
 import { claimDueSchedules } from '../queue/audit-queue.ts';
 
 export function schedulerSettings(env: SettingSource = process.env) {
-  return Object.fromEntries(
-    Object.entries(policy.audit_schedules.settings).map(([name, spec]) => [
-      name,
-      Number(resolveSettingSpec(spec, env)),
-    ]),
-  ) as Record<keyof typeof policy.audit_schedules.settings, number>;
+  return settingValues(policy.audit_schedules.settings, env);
 }
 type ScheduleClaim = Awaited<ReturnType<typeof claimDueSchedules>>[number];
 const logger = getLogger('workers.audit_scheduler');
@@ -112,10 +107,6 @@ export class AuditScheduler {
         await sql`rollback to savepoint schedule_planning`.execute(trx);
         await sql`release savepoint schedule_planning`.execute(trx);
         if (error instanceof ApiError && error.isRetryable()) {
-          // A transient refusal (active-launch limit, daily task budget) is not the
-          // owner's to fix: try the same occurrence again without counting a failure.
-          // `next_run_at` stays the occurrence (it anchors the cadence); an ownerless
-          // lease until `Retry-After` keeps claims away until then.
           await trx
             .updateTable('audit_schedules')
             .set({
@@ -167,9 +158,9 @@ export class AuditScheduler {
   private async planUntilBudget(at: Date, canAdmit: () => boolean) {
     let created = 0;
     for (let count = 0; count < this.settings.claim_batch_size && canAdmit(); count++) {
-      const [claim] = await this.claimDue(at, 1); // NOSONAR -- Lease one occurrence before checking the next admission.
+      const [claim] = await this.claimDue(at, 1); // NOSONAR
       if (!claim) break;
-      if (await this.planClaim(claim, this.now())) created++; // NOSONAR -- Finish the leased occurrence before claiming another.
+      if (await this.planClaim(claim, this.now())) created++; // NOSONAR
     }
     return created;
   }
