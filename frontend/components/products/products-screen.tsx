@@ -282,7 +282,7 @@ function ProductsContent({
             <ColumnSettings shown={columns.shown} onToggle={columns.toggle} />
             <Button variant="secondary" onClick={exportRows} disabled={rows.length === 0}>
               <Icon icon={Download} />
-              Export
+              Export CSV
             </Button>
           </>
         }

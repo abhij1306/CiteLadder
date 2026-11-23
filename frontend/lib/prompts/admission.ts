@@ -1,3 +1,4 @@
+import { isOneOf } from '@/lib/utils';
 import type { PromptAdmissionDropReason } from '@citeladder/contracts/project';
 
 const DROP_REASON_COPY: Record<PromptAdmissionDropReason, string> = {
@@ -27,7 +28,7 @@ export function admissionDropSummary(
   const parts = Object.entries(drops)
     .filter(
       (entry): entry is [PromptAdmissionDropReason, number] =>
-        !exclude.includes(entry[0] as PromptAdmissionDropReason) && Number(entry[1]) > 0,
+        !isOneOf(exclude, entry[0]) && Number(entry[1]) > 0,
     )
     .sort((left, right) => right[1] - left[1])
     .map(([reason, count]) => `${count} ${DROP_REASON_COPY[reason] ?? 'failing checks'}`);

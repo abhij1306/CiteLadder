@@ -36,7 +36,7 @@ export function Sparkline({
   const last = points.at(-1);
   const chartTone = SPARK_TONE[tone];
   return (
-    <svg // NOSONAR -- an inline SVG drawing is named with role="img", not an <img> file
+    <svg // NOSONAR
       role={label ? 'img' : undefined}
       aria-label={label}
       aria-hidden={label ? undefined : true}

@@ -62,7 +62,7 @@ export const trafficMetricCheck: CheckModule<'traffic_metric'> = {
   async freeze(members, context) {
     const checks = [];
     for (const member of members) {
-      const check = await freezeOne(context, member); // NOSONAR -- One transaction connection.
+      const check = await freezeOne(context, member); // NOSONAR
       if (check) checks.push({ member, check });
     }
     return checks;

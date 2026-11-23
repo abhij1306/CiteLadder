@@ -4,7 +4,7 @@ import { Icon } from '@/components/ui/icon';
 import { SearchField } from '@/components/ui/search-field';
 import { Download } from '@/lib/icons';
 import { downloadCsv } from '@/lib/csv/download';
-import { standingLabel } from '@/lib/visibility/source-pages';
+import { standingLabel } from '@citeladder/contracts/page-labels';
 import { typeLabel, type SourceItem } from '@/lib/visibility/sources';
 
 const DOMAIN_HEADERS = [

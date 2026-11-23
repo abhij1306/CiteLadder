@@ -6,11 +6,6 @@ function total(counts: CountByKind) {
   return Object.values(counts).reduce((sum, count) => sum + count, 0);
 }
 
-/**
- * A kind's share moved by at least `shareShiftPoints` percentage points.
- * Compared by cross-multiplication so integer counts never meet float rounding:
- * |c/C - p/P| * 100 >= t  ⇔  |c·P - p·C| * 100 >= t·P·C.
- */
 function shareShifted(
   previous: number,
   previousTotal: number,

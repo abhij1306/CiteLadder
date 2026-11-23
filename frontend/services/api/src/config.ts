@@ -3,12 +3,16 @@ import { ConfigError } from './config/config-error.ts';
 import { executionSettings, executionSpecs } from './config/execution.ts';
 import { loadWorkerSettings } from './config/analytics.ts';
 import {
+  choiceSetting,
   Settings,
   resolveSettingSpec,
   resolveSpec,
+  settingSpecSchema,
+  settingValues,
   type Env,
   type SettingSource,
   type SettingSpec,
+  type SettingValue,
 } from './config/settings.ts';
 export { ConfigError } from './config/config-error.ts';
 export { resolveSettingSpec, type SettingSource } from './config/settings.ts';
@@ -21,6 +25,7 @@ import modelGateway from './config/model-gateway.json' with { type: 'json' };
 import { discovery } from './config/discovery.ts';
 import promptLibrary from './config/prompt-library.json' with { type: 'json' };
 import api from './config/api.json' with { type: 'json' };
+import storage from './config/storage.json' with { type: 'json' };
 import searchIntelligence from './config/search-intelligence.json' with { type: 'json' };
 import demand from './config/demand.json' with { type: 'json' };
 import { audits, visibility, selectableEngines } from './config/audits.ts';
@@ -55,6 +60,7 @@ import { projectReads } from './config/projects.ts';
 import { agentSkills } from './config/agent-skills.ts';
 import { mcp } from './config/mcp.ts';
 import { promptGeneration } from './config/prompt-generation.ts';
+import { brandPrompts } from './config/brand-prompts.ts';
 import { brandLogos } from './config/brand-logos.ts';
 import { internalLinks } from './config/internal-links.ts';
 import { perception } from './config/perception.ts';
@@ -91,6 +97,7 @@ export const policy = {
   errors,
   agent: { ...agentRuntime },
   abuse,
+  storage,
   audit_schedules: {
     ...auditSchedules,
     selectable_engines: selectableEngines,
@@ -156,6 +163,7 @@ export const policy = {
   prompts: {
     ...promptLibrary.prompts,
     generation: promptGeneration,
+    brand: brandPrompts,
     candidate: {
       ...promptLibrary.prompts.candidate,
       quality_gates_reported: qualityGatesReported,
@@ -178,15 +186,8 @@ const listenSpecs = {
   port: { env: ['PORT'], type: 'str', default: '' },
 } satisfies Record<string, SettingSpec>;
 
-function isSettingSpec(value: object): value is SettingSpec {
-  return (
-    'env' in value &&
-    Array.isArray(value.env) &&
-    'type' in value &&
-    typeof value.type === 'string' &&
-    'default' in value
-  );
-}
+const isSettingSpec = (value: unknown): value is SettingSpec =>
+  settingSpecSchema.safeParse(value).success;
 
 function settingCatalog(): [string, SettingSpec][] {
   const catalog: [string, SettingSpec][] = [];
@@ -208,33 +209,32 @@ function resolveSettings(env: Env): Settings {
 }
 
 export function databaseSettings(source: SettingSource) {
-  const setting = (name: keyof typeof policy.settings) => resolveSetting(name, source);
+  const setting = <K extends keyof typeof policy.settings>(name: K) => resolveSetting(name, source);
   return {
-    poolSize: setting('db_pool_size') as number,
-    maxOverflow: setting('db_max_overflow') as number,
-    poolRecycleSeconds: setting('db_pool_recycle_seconds') as number,
-    poolTimeoutSeconds: setting('db_pool_timeout_seconds') as number,
-    connectTimeoutSeconds: setting('db_connect_timeout_seconds') as number,
-    commandTimeoutSeconds: setting('db_command_timeout_seconds') as number,
-    statementTimeoutMs: setting('db_statement_timeout_ms') as number,
-    lockTimeoutMs: setting('db_lock_timeout_ms') as number,
-    idleTransactionTimeoutMs: setting('db_idle_transaction_timeout_ms') as number,
-    sslMode: setting('db_ssl_mode') as 'disable' | 'require',
+    poolSize: setting('db_pool_size'),
+    maxOverflow: setting('db_max_overflow'),
+    poolRecycleSeconds: setting('db_pool_recycle_seconds'),
+    poolTimeoutSeconds: setting('db_pool_timeout_seconds'),
+    connectTimeoutSeconds: setting('db_connect_timeout_seconds'),
+    commandTimeoutSeconds: setting('db_command_timeout_seconds'),
+    statementTimeoutMs: setting('db_statement_timeout_ms'),
+    lockTimeoutMs: setting('db_lock_timeout_ms'),
+    idleTransactionTimeoutMs: setting('db_idle_transaction_timeout_ms'),
+    sslMode: choiceSetting(policy.settings.db_ssl_mode, source, ['disable', 'require']),
   };
 }
 
-/**
- * Bounds on each migration statement: a lock wait that would queue the serving
- * revision's queries behind DDL fails fast, and no statement outlasts the job.
- */
 export function migrationTimeouts(source: SettingSource) {
   return {
-    lockTimeoutMs: resolveSetting('migration_lock_timeout_ms', source) as number,
-    statementTimeoutMs: resolveSetting('migration_statement_timeout_ms', source) as number,
+    lockTimeoutMs: resolveSetting('migration_lock_timeout_ms', source),
+    statementTimeoutMs: resolveSetting('migration_statement_timeout_ms', source),
   };
 }
 
-function resolveSetting(name: keyof typeof policy.settings, source: SettingSource): unknown {
+function resolveSetting<K extends keyof typeof policy.settings>(
+  name: K,
+  source: SettingSource,
+): SettingValue<(typeof policy.settings)[K]> {
   return resolveSpec(name, policy.settings[name], source);
 }
 
@@ -321,11 +321,6 @@ function isDevelopmentEnv(appEnv: AppEnv): boolean {
   return policy.development_env_names.includes(appEnv);
 }
 
-/**
- * The startup environment, or a refusal (AR-1): an unset APP_ENV must not fall
- * back to development, which would switch off every production assertion. The
- * setting itself already refuses an unknown or misspelled name.
- */
 function appEnvironment(settings: Settings): AppEnv {
   const appEnv = resolveSetting('app_env', settings);
   if (appEnv === 'development' || appEnv === 'test' || appEnv === 'production') return appEnv;
@@ -393,36 +388,33 @@ export function assertDeployable(config: ServiceConfig, force = false): void {
 export function loadConfig(env: Env = process.env): ServiceConfig {
   const settings = resolveSettings(env);
   const appEnv = appEnvironment(settings);
-  const values = <K extends string>(specs: Record<K, SettingSpec>) =>
-    Object.fromEntries(
-      Object.entries<SettingSpec>(specs).map(([name, spec]) => [name, settings.of(spec)]),
-    ) as Record<K, unknown>;
-  validateSiteHealthSettings(values(siteHealth.settings));
-  validateJevSettings(values(jev));
+  validateSiteHealthSettings(settingValues(siteHealth.settings, settings));
+  validateJevSettings(settingValues(jev, settings));
   loadWorkerSettings(settings);
-  const setting = (name: keyof typeof policy.settings) => resolveSetting(name, settings);
+  const setting = <K extends keyof typeof policy.settings>(name: K) =>
+    resolveSetting(name, settings);
   const config: ServiceConfig = {
     settings,
     execution: executionSettings(settings),
-    appName: setting('app_name') as string,
+    appName: setting('app_name'),
     appEnv,
     // Loopback by default: there is no login, so binding every interface is an
     // explicit choice (the Docker image sets HOST=0.0.0.0 behind a loopback port).
     host: String(settings.of(listenSpecs.host)).trim() || '127.0.0.1',
     port: parsePort(String(settings.of(listenSpecs.port))),
-    databaseUrl: setting('database_url') as string,
+    databaseUrl: setting('database_url'),
     database: databaseSettings(settings),
-    requestIdHeader: setting('request_id_header') as string,
+    requestIdHeader: setting('request_id_header'),
     auth: {
-      frontendUrl: setting('frontend_url') as string,
-      publicApiUrl: setting('public_api_url') as string,
+      frontendUrl: setting('frontend_url'),
+      publicApiUrl: setting('public_api_url'),
       allowedHosts: allowedHosts([
-        setting('frontend_url') as string,
-        setting('public_api_url') as string,
+        setting('frontend_url'),
+        setting('public_api_url'),
         ...String(setting('allowed_hosts')).split(','),
       ]),
-      apiKeyPepper: setting('api_key_pepper') as string,
-      limits: values(policy.abuse) as ServiceConfig['auth']['limits'],
+      apiKeyPepper: setting('api_key_pepper'),
+      limits: settingValues(policy.abuse, settings),
     },
     readinessTimeoutMs: policy.api.readiness_timeout_seconds * 1000,
   };

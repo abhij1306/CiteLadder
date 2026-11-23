@@ -153,12 +153,14 @@ export function echoDependencies({
   onRequest,
   topics = [],
   maps = [],
+  write,
 }: {
   fail?: number[];
   onCall?: (call: number) => void;
   onRequest?: (request: DraftRequest) => void;
   topics?: { name: string; offerings: string[] }[];
   maps?: { offering: string; attributes: string[]; situations: string[]; audiences: string[] }[];
+  write?: (slot: DraftRequest['slots'][number]) => { text: string; prompt_intent: string };
 } = {}) {
   let calls = 0;
   const answer = (init?: RequestInit): Response => {
@@ -186,9 +188,12 @@ export function echoDependencies({
     const named = typeof brand === 'string' && brand ? brand + ' ' : '';
     const prompts = user.slots.map((slot) => ({
       slot_id: slot.slot_id,
-      text: `Which ${named}running shoes suit ${slot.slot_id}style runners on ${slot.slot_id}grade trails?`,
-      buyer_stage: 'consideration',
-      prompt_intent: 'recommend',
+      buyer_stage: String(slot.target_buyer_stage ?? 'consideration'),
+      ...(write?.(slot) ?? {
+        text: `Which ${named}running shoes suit ${slot.slot_id}style runners on ${slot.slot_id}grade trails?`,
+        buyer_stage: 'consideration',
+        prompt_intent: 'recommend',
+      }),
     }));
     return Response.json({ choices: [{ message: { content: JSON.stringify({ prompts }) } }] });
   };

@@ -35,11 +35,39 @@ const ISSUE_KEY_PARAMS = [
   'page_kind',
   'section',
   'sort',
-  'finding_class',
 ] as const satisfies ReadonlyArray<keyof IssuesParams>;
 
-function issueKeyFilters(params: IssuesParams = {}) {
-  return Object.fromEntries(ISSUE_KEY_PARAMS.map((name) => [name, params[name] ?? null]));
+const PAGE_KEY_PARAMS = [
+  'cursor',
+  'limit',
+  'status',
+  'monitored',
+  'page_kind',
+  'query',
+  'sort',
+  'rule',
+  'with_issues',
+  'indexable',
+  'min_depth',
+  'max_depth',
+  'score_role',
+  'max_score',
+] as const satisfies ReadonlyArray<keyof PagesParams>;
+
+const INVENTORY_KEY_PARAMS = [
+  'cursor',
+  'limit',
+  'query',
+  'status',
+  'monitored',
+  'page_kind',
+] as const satisfies ReadonlyArray<keyof InventoryParams>;
+
+function keyFilters<Params extends object>(
+  names: ReadonlyArray<keyof Params & string>,
+  params: Partial<Params> = {},
+) {
+  return Object.fromEntries(names.map((name) => [name, params[name] ?? null]));
 }
 
 export const siteHealthQueries = {
@@ -126,29 +154,22 @@ export const siteHealthQueries = {
     }),
   inventory: (workspaceId: string | null, crawlId: string, params?: InventoryParams) =>
     queryOptions({
-      queryKey: queryKeys.siteHealth.inventory(workspaceId, crawlId, {
-        cursor: params?.cursor ?? null,
-        limit: params?.limit ?? null,
-        query: params?.query ?? null,
-        status: params?.status ?? null,
-        monitored: params?.monitored ?? null,
-        page_kind: params?.page_kind ?? null,
-      }),
+      queryKey: queryKeys.siteHealth.inventory(
+        workspaceId,
+        crawlId,
+        keyFilters<InventoryParams>(INVENTORY_KEY_PARAMS, params),
+      ),
       queryFn: ({ signal }) => siteHealthApi.getInventory(crawlId, params, { signal, workspaceId }),
       placeholderData: (previousData, previousQuery) =>
         retainPreviousDataForScope(crawlId, previousData, previousQuery),
     }),
   pages: (workspaceId: string | null, crawlId: string, params?: PagesParams) =>
     queryOptions({
-      queryKey: queryKeys.siteHealth.pages(workspaceId, crawlId, {
-        cursor: params?.cursor ?? null,
-        limit: params?.limit ?? null,
-        status: params?.status ?? null,
-        monitored: params?.monitored ?? null,
-        page_kind: params?.page_kind ?? null,
-        query: params?.query ?? null,
-        sort: params?.sort ?? null,
-      }),
+      queryKey: queryKeys.siteHealth.pages(
+        workspaceId,
+        crawlId,
+        keyFilters<PagesParams>(PAGE_KEY_PARAMS, params),
+      ),
       queryFn: ({ signal }) => siteHealthApi.getPages(crawlId, params, { signal, workspaceId }),
       placeholderData: (previousData, previousQuery) =>
         retainPreviousDataForScope(crawlId, previousData, previousQuery),
@@ -160,7 +181,11 @@ export const siteHealthQueries = {
     }),
   issues: (workspaceId: string | null, crawlId: string, params?: IssuesParams) =>
     queryOptions({
-      queryKey: queryKeys.siteHealth.issues(workspaceId, crawlId, issueKeyFilters(params)),
+      queryKey: queryKeys.siteHealth.issues(
+        workspaceId,
+        crawlId,
+        keyFilters<IssuesParams>(ISSUE_KEY_PARAMS, params),
+      ),
       queryFn: ({ signal }) => siteHealthApi.getIssues(crawlId, params, { signal, workspaceId }),
       placeholderData: (previousData, previousQuery) =>
         retainPreviousDataForScope(crawlId, previousData, previousQuery),
@@ -221,23 +246,12 @@ export function refreshCrawlViews(client: QueryClient, crawlId: string) {
   ]);
 }
 
-/**
- * The project's crawl + phase projection, in every workspace and for every
- * selected crawl. The dashboard's own poll must not call this: it is the
- * trigger.
- */
 export const refreshSiteHealthDashboard = (client: QueryClient, projectId: string) =>
   client.invalidateQueries({ queryKey: queryKeys.siteHealth.resource(projectId, 'dashboard') });
 
 export const refreshMonitoredUrls = (client: QueryClient, projectId: string) =>
   client.invalidateQueries({ queryKey: queryKeys.siteHealth.resource(projectId, 'monitored') });
 
-/**
- * What a created crawl changes: the project's projection, and the monitored
- * set automatic admission adds the root to. Any in-flight dashboard read stops
- * first, so a pre-create answer cannot commit after creation and read as the
- * acknowledgement.
- */
 async function refreshWhenRerunLands(
   client: QueryClient,
   scope: ProjectScope,
@@ -258,7 +272,7 @@ async function refreshWhenRerunLands(
       ]);
       return;
     }
-    await /* NOSONAR -- Poll interval between rerun checks. */ new Promise<void>((resolve) => {
+    await /* NOSONAR */ new Promise<void>((resolve) => {
       setTimeout(resolve, RERUN_POLL_INTERVAL_MS);
     });
   }

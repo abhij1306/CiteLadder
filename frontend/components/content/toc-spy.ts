@@ -93,7 +93,6 @@ export function mountTocSpy(root: Document = document): void {
   const end = root.createElement('div');
   end.setAttribute('aria-hidden', 'true');
   root.body.append(end);
-  // The 4px of slack lets a fractional final scroll position still count as the end.
   new IntersectionObserver(
     (entries) => {
       atEnd = entries.some((entry) => entry.isIntersecting) && view.scrollY > 0;

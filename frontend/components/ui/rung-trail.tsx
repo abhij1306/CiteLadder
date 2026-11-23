@@ -306,7 +306,6 @@ export function FoldedTrail({
         </div>
       </details>
       {live ? (
-        // Outside the summary: a live region inside a button is not reliably announced.
         <output aria-live="polite" className="sr-only">
           {live.status}
         </output>

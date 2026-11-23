@@ -20,9 +20,8 @@ vi.mock('@/lib/auth/session-guard', () => ({
   }),
 }));
 
-vi.mock('@/lib/project/project-context', () => ({
-  useProjectContext: () => ({ activeWorkspaceId: WORKSPACE }),
-}));
+import { ProjectSelectionProvider } from '@/lib/project/project-scope';
+import { testProjectSelection } from '@/test/render';
 
 import { UserMenuController, UserMenuTrigger } from './user-menu';
 
@@ -30,13 +29,15 @@ function renderMenu(presenters: readonly ('sidebar' | 'compact')[], path = '/vis
   return render(
     <MemoryRouter initialEntries={[path]}>
       <TooltipProvider>
-        <UserMenuController>
-          <>
-            {presenters.map((presenter) => (
-              <UserMenuTrigger key={presenter} presenter={presenter} />
-            ))}
-          </>
-        </UserMenuController>
+        <ProjectSelectionProvider value={testProjectSelection()}>
+          <UserMenuController>
+            <>
+              {presenters.map((presenter) => (
+                <UserMenuTrigger key={presenter} presenter={presenter} />
+              ))}
+            </>
+          </UserMenuController>
+        </ProjectSelectionProvider>
       </TooltipProvider>
     </MemoryRouter>,
   );

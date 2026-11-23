@@ -66,10 +66,8 @@ export async function deletePrompts(
 ): Promise<{ count: number }> {
   const promptIds = [...new Set(input.prompt_ids)];
   return inTransaction(db, async (trx) => {
-    // Every prompt-set lock holder takes this lock first, so it excludes them all.
     await acquireProjectLock(trx, scope.projectId);
     await scopedPrompts(trx, scope, promptIds);
-    // A single delete takes no lock, so one can win the race; the rest roll back.
     if ((await deleteScopedPrompts(trx, scope, promptIds)) !== promptIds.length)
       throw new ApiError(404, 'Prompt(s) not found in this project');
     return { count: promptIds.length };

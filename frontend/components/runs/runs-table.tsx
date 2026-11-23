@@ -98,7 +98,6 @@ export function RunsTable({
   return (
     <TitledSection
       title="All runs"
-      // Mounted while idle (empty), so the first polling note is announced.
       actions={
         <Inline as="output" className="type-caption">
           {status}

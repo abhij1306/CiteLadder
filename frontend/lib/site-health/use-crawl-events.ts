@@ -1,5 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';
+import { z } from 'zod';
 
 import { siteHealthApi } from '@/lib/api/site-health';
 import { refreshCrawlViews, refreshSiteHealthDashboard } from '@/lib/api/site-health-queries';
@@ -12,13 +13,14 @@ import type { RawSseFrame } from '@/lib/sse/frames';
 import { useSseEventStream } from '@/lib/sse/use-event-stream';
 import { useActiveWorkspaceId } from '@/lib/project/project-context';
 
+const crawlFrameSchema = z.object({ event_type: z.string() });
+
 function shouldInvalidateCrawl(frame: RawSseFrame): boolean {
   if (!frame.data) return false;
   try {
-    const payload = JSON.parse(frame.data) as { event_type?: unknown };
-    return typeof payload.event_type !== 'string' || !payload.event_type.endsWith('.progress');
+    const payload = crawlFrameSchema.safeParse(JSON.parse(frame.data));
+    return !payload.success || !payload.data.event_type.endsWith('.progress');
   } catch {
-    // An unfamiliar frame is never data, but it may announce a lifecycle change.
     return true;
   }
 }
@@ -45,6 +47,5 @@ export function useCrawlEvents(
     reconnectMaxMs: SITE_HEALTH_STREAM_RECONNECT_MAX_MS,
     onFrame: shouldInvalidateCrawl,
     onInvalidate,
-    streamName: 'site-health',
   });
 }

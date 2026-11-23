@@ -146,7 +146,6 @@ it('judges Apple’s search crawler in both checks and its training token in the
     ['missing', ['Applebot']],
     ['missing', ['Applebot']],
   ]);
-  // Opting out of Apple's model training does not hide the site from Apple search.
   expect(access('User-agent: Applebot-Extended\nDisallow: /')).toEqual([
     ['satisfied', []],
     ['missing', ['Applebot-Extended']],

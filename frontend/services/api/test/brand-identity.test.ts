@@ -718,8 +718,6 @@ describe('logos', () => {
   const png = Buffer.from('89504e470d0a1a0a6173736574', 'hex');
 
   it('serves cached marks through the path project, with validators and sandboxing', async () => {
-    // A project in a second workspace the caller joined: an <img> sends no
-    // workspace header. It belongs there before its brand rows exist.
     const owner = await fixtures.user();
     const second = await fixtures.ownedWorkspace(owner);
     await fixtures.member(second, t.userId, 'viewer');

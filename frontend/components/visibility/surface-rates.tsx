@@ -15,7 +15,7 @@ import { FigureStrip, type FigureSegment } from '@/components/ui/figure-strip';
 
 const DENOMINATOR_COPY: Record<string, string> = {
   successful_observations: 'searches we successfully observed',
-  observations_with_ai_overview: 'searches that showed an overview',
+  observations_with_ai_overview: 'searches where it was shown',
 };
 
 function denominatorCopy(rate: AioRate): string {
@@ -77,14 +77,15 @@ function CompetitorRates({ rates }: Readonly<{ rates: SurfaceRates['competitor_m
 
 export function SurfaceRatesPanel({
   query,
-}: Readonly<{ query: UseQueryResult<SurfaceRates, unknown> }>) {
+  engineLabel,
+}: Readonly<{ query: UseQueryResult<SurfaceRates, unknown>; engineLabel: string }>) {
   const data = query.data;
   if (query.isError)
     return (
       <Notice
         kind="read"
         {...readErrorProps(query)}
-        title="Couldn't load the AI Overview rates"
+        title={`Couldn't load the ${engineLabel} rates`}
         fallback="The request failed or timed out."
       />
     );
@@ -92,21 +93,21 @@ export function SurfaceRatesPanel({
     return (
       <StateBlock
         kind="loading"
-        label="Loading AI Overview rates…"
+        label={`Loading ${engineLabel} rates…`}
         shape={{ kind: 'figures', count: 4 }}
       />
     );
   return (
     <Section className="relative" aria-busy={query.isFetching}>
-      <BusyRung active={query.isFetching} label="Updating AI Overview rates" />
+      <BusyRung active={query.isFetching} label={`Updating ${engineLabel} rates`} />
       <SectionHeader>
-        <SectionTitle>Google AI Overview</SectionTitle>
+        <SectionTitle>{engineLabel}</SectionTitle>
       </SectionHeader>
       <SectionContent>
         <Stack gap="workspace">
           <FigureStrip
             segments={[
-              rateStat({ key: 'trigger', label: 'Overview shown', rate: data.trigger_rate }),
+              rateStat({ key: 'trigger', label: 'Shown', rate: data.trigger_rate }),
               rateStat({
                 key: 'named',
                 label: 'Named, when shown',

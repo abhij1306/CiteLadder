@@ -10,7 +10,8 @@ import { ledgerClasses, ledgerItemClasses } from '@/components/ui/workspace';
 import type { ActionDetail } from '@/lib/api/actions';
 import { formatCount, pluralCount, readableUrl } from '@/lib/format';
 import { promptHistoryHref } from '@/lib/prompts/history';
-import { classificationBadgeValue, classificationLabel } from '@/lib/runs/status';
+import { classificationLabel } from '@citeladder/contracts/page-labels';
+import { classificationBadgeValue } from '@/lib/runs/status';
 import { citationClassificationSchema } from '@citeladder/contracts/audits';
 import type { ContentGapEvidence } from '@citeladder/contracts/opportunity-evidence';
 
@@ -137,6 +138,7 @@ function CitedPage({ page }: Readonly<{ page: ContentGapEvidence['members'][numb
           name={page.matched_competitor || page.domain}
           websiteUrl={page.domain}
           placement="inline"
+          entity="site"
         />
         <span className={textRole('caption')}>
           {site} · {pluralCount(page.citation_count, 'citation')}

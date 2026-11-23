@@ -10,7 +10,7 @@
 import { asApiErrorCode, type ApiErrorCode } from '@citeladder/contracts/error-codes';
 
 import { policy } from '../config.ts';
-import type { Database } from '../db/database.ts';
+import { inTransaction, type Database } from '../db/database.ts';
 import { jsonObjects } from '../db/json.ts';
 import { ApiError, notFound } from '../errors.ts';
 import { enqueueTask, taskKey } from '../queue/enqueue.ts';
@@ -28,7 +28,6 @@ const RUN_QUEUED = 'queued';
 const RUN_SUCCEEDED = 'succeeded';
 const RUN_CANCELLED = 'cancelled';
 const ACTIVE_RUN_STATUSES = [RUN_QUEUED, 'running'];
-// An uncertain run may have spent money; cancelling must not relabel it.
 const FINISHED_RUN_STATUSES = new Set([
   RUN_SUCCEEDED,
   'failed',
@@ -96,8 +95,7 @@ async function enqueueAcquisition(trx: Database, scope: Scope, runId: string): P
 }
 
 export function confirmRun(db: Database, scope: Scope, runId: string) {
-  return db.transaction().execute(async (trx) => {
-    // The project lock serializes confirmations, so one acquisition is active.
+  return inTransaction(db, async (trx) => {
     await scope.workspace
       .selectFrom(trx, 'projects')
       .select('id')
@@ -129,7 +127,7 @@ export function confirmRun(db: Database, scope: Scope, runId: string) {
 
 /** Cancel an unfinished run and its unfinished acquisition task. */
 export function cancelRun(db: Database, scope: Scope, runId: string) {
-  return db.transaction().execute(async (trx) => {
+  return inTransaction(db, async (trx) => {
     const run = await lockRun(trx, scope, runId);
     if (run === undefined) throw notFound('Run');
     if (FINISHED_RUN_STATUSES.has(run.status)) return runView(run);
@@ -149,7 +147,6 @@ export function cancelRun(db: Database, scope: Scope, runId: string) {
         .where('status', 'not in', TERMINAL_TASK_STATUSES)
         .execute();
     }
-    // The worker stops on a cancelled run, so nothing else would end its datasets.
     await closeCollecting(
       trx,
       { workspaceId: run.workspace_id, projectId: run.project_id, runId },

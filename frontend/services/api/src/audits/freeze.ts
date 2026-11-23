@@ -231,8 +231,6 @@ function validateSearchRequests(
       location_code: project.serp_location_code,
       language_code: project.serp_language_code || searchPolicy.constants.default_language_code,
       device: project.serp_device as 'desktop' | 'mobile',
-      depth: searchPolicy.constants.default_depth,
-      load_async_ai_overview: searchPolicy.constants.load_async_ai_overview,
       timeout_seconds: settings.audit_timeout_seconds,
       provider_submission_ref: 'admission-validation',
       request_settings: {},
@@ -342,7 +340,6 @@ function frameInstruction(mode: string, project: { country_code: string; languag
   else if (mode === 'controlled_localized') framing = localized;
   return [framing, auditPolicy.constants.audit_answer_instruction].filter(Boolean).join(' ');
 }
-/** Panel identity: sorted keys, UTF-8, default JSON separators. */
 function promptPanelHash(promptRows: Record<string, unknown>[]) {
   const panelJson = `[${promptRows
     .map(
@@ -472,9 +469,6 @@ export async function prepareAudit(
     answer_instruction: auditPolicy.constants.audit_answer_instruction,
     max_attempts: settings.max_attempts,
   };
-  // The panel is what is asked and how it is counted. Tags (theme, intent,
-  // buyer stage, persona) describe a prompt without changing either, so
-  // correcting one never starts a new comparison series.
   const promptRows = prompts.map((prompt) => ({ text: prompt.text, cohort: prompt.cohort }));
   const panelHash = promptPanelHash(promptRows);
   const seed = parseSeed(input.random_seed);

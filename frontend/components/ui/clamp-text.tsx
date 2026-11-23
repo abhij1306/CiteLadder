@@ -43,12 +43,14 @@ export function ClampText({
   tooltip,
   className,
   rowTitle = false,
+  phoneWrap = false,
 }: Readonly<{
   children: ReactNode;
   lines?: 1 | 2;
   tooltip?: ReactNode;
   className?: string;
   rowTitle?: boolean;
+  phoneWrap?: boolean;
 }>) {
   const ref = useRef<HTMLSpanElement>(null);
   const cut = useCut(ref);
@@ -64,11 +66,12 @@ export function ClampText({
         ref={ref}
         data-truncated={cut || undefined}
         data-row-title={rowTitle || undefined}
-        // oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- a cut value is a tab stop so its full text (the tooltip) is reachable by keyboard.
+        // oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex
         tabIndex={cut ? 0 : undefined}
         className={cn(
           'block min-w-0',
           lines === 1 ? 'truncate' : 'line-clamp-2',
+          phoneWrap && 'phone:whitespace-normal phone:break-words',
           cut && 'rounded-mark',
           className,
         )}

@@ -1,10 +1,10 @@
 import { screen, fireEvent, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vite-plus/test';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vite-plus/test';
 import { mswServer } from '@/test/msw-server';
 import { chooseFilterOption, openFilterOptions, openFilterRow } from '@/test/all-filters';
-import { renderWithProviders } from '@/test/render';
+import { projectScope, renderWithProviders } from '@/test/render';
 import { makeProject } from '@/test/fixtures/project';
 import { AiTrafficScreen } from './ai-traffic-screen';
 import { InsightStrip } from './insight-strip';
@@ -13,12 +13,6 @@ const project = makeProject({
   id: '88888888-8888-4888-8888-888888888888',
   workspace_id: '11111111-1111-4111-8111-111111111111',
 });
-vi.mock('@/lib/project/project-context', () => ({
-  useProjectContext: () => ({ activeProject: project, isLoading: false }),
-  useOptionalProjectContext: () => ({ activeProjectId: project.id }),
-  useWorkspaceCapability: () => true,
-  useActiveWorkspaceId: () => project.workspace_id,
-}));
 const root = '/api/v1/projects/' + project.id;
 const crawl = {
   unit: 'requests' as const,
@@ -57,7 +51,7 @@ const sourceBody = (availability: string, items: Record<string, unknown>[] = [])
 });
 async function openEmptySetup() {
   const user = userEvent.setup();
-  renderWithProviders(<CrawlLogConnections />);
+  renderWithProviders(<CrawlLogConnections />, { projectSelection: projectScope(project) });
   await screen.findByRole('heading', { name: 'No crawl logs connected' });
   await user.click(screen.getByRole('button', { name: 'Connect crawl logs' }));
   return user;
@@ -97,7 +91,7 @@ describe('AI Traffic state and navigation', () => {
     mswServer.use(
       http.get(root + '/crawl-logs/sources', () => HttpResponse.json(sourceBody('disabled'))),
     );
-    renderWithProviders(<CrawlLogConnections />);
+    renderWithProviders(<CrawlLogConnections />, { projectSelection: projectScope(project) });
     expect(await screen.findByText(/Collection is paused on this server/)).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Connect crawl logs' })).not.toBeInTheDocument();
   });
@@ -107,7 +101,7 @@ describe('AI Traffic state and navigation', () => {
         HttpResponse.json(sourceBody('available', [STALLED_SOURCE])),
       ),
     );
-    renderWithProviders(<CrawlLogConnections />);
+    renderWithProviders(<CrawlLogConnections />, { projectSelection: projectScope(project) });
     expect(await screen.findByText(/Custom webhook · Connected · Stalled/)).toBeVisible();
     expect(
       screen.getByText('A batch over 5 MiB was dropped. Lower the stream buffer size.'),
@@ -118,7 +112,7 @@ describe('AI Traffic state and navigation', () => {
       http.get(root + '/crawl-logs/sources', () => new HttpResponse(null, { status: 500 })),
     );
     const user = userEvent.setup();
-    renderWithProviders(<CrawlLogConnections />);
+    renderWithProviders(<CrawlLogConnections />, { projectSelection: projectScope(project) });
     await user.click(screen.getByRole('button', { name: 'Connect crawl logs' }));
     const dialog = screen.getByRole('dialog');
     const retry = await within(dialog).findByRole('button', { name: /retry/i }, { timeout: 5000 });
@@ -211,6 +205,7 @@ describe('AI Traffic state and navigation', () => {
       );
       renderWithProviders(
         <InsightStrip projectId={project.id} workspaceId={project.workspace_id} range="30d" />,
+        { projectSelection: projectScope(project) },
       );
       expect(await screen.findByText(shown)).toBeVisible();
       expect(screen.getByText('Observed patterns')).toBeVisible();
@@ -398,7 +393,7 @@ describe('AI Traffic state and navigation', () => {
       }),
     );
     const user = userEvent.setup();
-    renderWithProviders(<CrawlLogConnections />);
+    renderWithProviders(<CrawlLogConnections />, { projectSelection: projectScope(project) });
     expect(
       await screen.findByText(
         /The subscription failed its check\. Fix it, then verify again\. CiteLadder’s reader lacks subscriber and viewer roles/,
@@ -465,6 +460,7 @@ describe('AI Traffic state and navigation', () => {
     );
     renderWithProviders(
       <InsightStrip projectId={project.id} workspaceId={project.workspace_id} range="90d" />,
+      { projectSelection: projectScope(project) },
     );
     const link = await screen.findByRole('link', { name: /Inspect pages/ });
     const destination = new URL(link.getAttribute('href')!, window.location.origin);
@@ -494,7 +490,7 @@ describe('AI Traffic state and navigation', () => {
         }),
       ),
     );
-    renderWithProviders(<AiTrafficScreen />, { projectSelection: { activeProject: project } });
+    renderWithProviders(<AiTrafficScreen />, { projectSelection: projectScope(project) });
     expect(await screen.findByRole('heading', { name: 'Connect a traffic source' })).toBeVisible();
     expect(screen.getByRole('link', { name: 'Connect Google Analytics 4' })).toBeVisible();
     expect(screen.queryByRole('group', { name: 'AI traffic key figures' })).not.toBeInTheDocument();
@@ -626,7 +622,7 @@ describe('AI Traffic state and navigation', () => {
       }),
     );
     const view = renderWithProviders(<AiTrafficScreen />, {
-      projectSelection: { activeProject: project },
+      projectSelection: projectScope(project),
     });
     await screen.findByText(/No matching requests were observed/);
     expect(await screen.findByText(/Absence-based insights are unavailable/)).toBeVisible();
@@ -742,7 +738,7 @@ describe('AI Traffic state and navigation', () => {
       ),
     );
     window.history.replaceState(null, '', '/ai-traffic?tab=activity&range=90d');
-    renderWithProviders(<AiTrafficScreen />, { projectSelection: { activeProject: project } });
+    renderWithProviders(<AiTrafficScreen />, { projectSelection: projectScope(project) });
     expect(await screen.findByText(/covers last 90 days/)).toBeVisible();
     expect(screen.getByRole('tab', { name: 'Referrals' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByText(/Collection is paused on this server/)).toBeVisible();

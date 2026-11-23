@@ -100,8 +100,6 @@ async function readSelection(host: Host, input: AnalyticsSelection) {
 export function createController(host: Host) {
   let generation = 0;
   let projectRequest = 0;
-  // Initial hosts may send only a result. Subsequent results must belong to
-  // a tool-input generation, never to a local selection or disconnected view.
   let hostGeneration: number | null = 0;
   let requestedSelection: Partial<AnalyticsSelection> | null = null;
   // The application links of the last server result; survives a failed read.
@@ -153,9 +151,10 @@ export function createController(host: Host) {
       const resolved = result.selection;
       if (requestedSelection) {
         if (!resolved) throw new Error('Missing requested selection');
+        const actual = new Map(Object.entries(resolved));
         const matches = Object.entries(requestedSelection).every(([key, expected]) => {
           if ((key === 'audit_id' || key === 'snapshot_id') && expected == null) return true;
-          return (resolved[key as keyof AnalyticsSelection] ?? null) === (expected ?? null);
+          return (actual.get(key) ?? null) === (expected ?? null);
         });
         if (!matches) throw new Error('Result does not match requested selection');
       }
@@ -302,8 +301,6 @@ export function createController(host: Host) {
       hostGeneration = ++generation;
       requestedSelection = parsed.success ? parsed.data : null;
       if (parsed.success && !toolName && args.success && args.data.view === undefined) {
-        // toolInfo is optional. Project-only arguments are shared by Overview
-        // and Site Health; the authenticated result determines the actual view.
         const { view: _view, ...selection } = parsed.data;
         requestedSelection = selection;
       }

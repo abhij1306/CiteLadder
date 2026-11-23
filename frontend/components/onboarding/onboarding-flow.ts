@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useForm, type FieldErrors } from 'react-hook-form';
 
@@ -13,6 +13,12 @@ import {
 } from '@/lib/api/brand-discoveries';
 import { refreshAfterProjectCreated, refreshBrandLogos } from '@/lib/api/projects';
 import { projectDestination } from '@/lib/navigation/project-destination';
+import {
+  readUrlParam,
+  useUrlParam,
+  useUrlSearch,
+  withUrlParams,
+} from '@/lib/navigation/url-params';
 import {
   brandStepSchema,
   emptyBrandStep,
@@ -50,13 +56,13 @@ function resumedStep(discoveryId: string | null, stepParameter: string | null): 
   return stepParameter === 'review' ? 2 : 1;
 }
 
-function stepQueryValue(step: OnboardingStep): 'brand' | 'discovery' | 'review' {
-  return ['brand', 'discovery', 'review'][step] as 'brand' | 'discovery' | 'review';
-}
+const STEP_QUERY_VALUES = ['brand', 'discovery', 'review'] as const;
 
 function persistedBrand(input: Record<string, unknown>): BrandStepValues {
-  const text = (key: string, fallback = '') =>
-    typeof input[key] === 'string' ? (input[key] as string) : fallback;
+  const text = (key: string, fallback = '') => {
+    const value = input[key];
+    return typeof value === 'string' ? value : fallback;
+  };
   return {
     brand_name: text('brand_name'),
     website_url: text('website_url'),
@@ -78,7 +84,7 @@ function isOrphanedCompletion(
 export function useOnboardingFlow(transactionKey: string) {
   const router = useNavigate();
   const queryClient = useQueryClient();
-  const searchParams = useSearchParams()[0];
+  const searchParams = useUrlSearch();
   const { activeWorkspaceId, setActiveProjectId } = useProjectContext();
   const openingProject = useRef<string | null>(null);
   const mounted = useRef(false);
@@ -88,9 +94,9 @@ export function useOnboardingFlow(transactionKey: string) {
       mounted.current = false;
     };
   }, []);
-  const isAdditional = searchParams?.get('new') === '1';
-  const initialDiscoveryId = searchParams?.get('discovery') ?? null;
-  const initialStepParameter = searchParams?.get('step') ?? null;
+  const isAdditional = useUrlParam('new');
+  const initialDiscoveryId = useUrlParam('discovery');
+  const initialStepParameter = useUrlParam('step');
   const [step, setStep] = useState<OnboardingStep>(() =>
     resumedStep(initialDiscoveryId, initialStepParameter),
   );
@@ -126,17 +132,15 @@ export function useOnboardingFlow(transactionKey: string) {
   const orphanedCompletion = isOrphanedCompletion(initialDiscoveryId, discoveryState);
   useEffect(() => {
     if (!orphanedCompletion && !brand && discoveryState) {
-      // oxlint-disable-next-line react-hooks/set-state-in-effect -- hydrate the persisted draft once.
+      // oxlint-disable-next-line react-hooks/set-state-in-effect
       setBrand(persistedBrand(discoveryState.input_data));
     }
   }, [brand, discoveryState, orphanedCompletion]);
 
   useEffect(() => {
     if (!orphanedCompletion) return;
-    // Project deletion preserves discovery provenance by nulling project_id.
-    // A bookmarked completion URL must not resurrect that old transaction.
     if (initialDiscoveryId) clearReviewDraft(initialDiscoveryId);
-    // oxlint-disable-next-line react-hooks/set-state-in-effect -- discard the stale route-owned draft.
+    // oxlint-disable-next-line react-hooks/set-state-in-effect
     setResumeDiscoveryId(null);
     setBrand(null);
     setDomains([]);
@@ -144,9 +148,8 @@ export function useOnboardingFlow(transactionKey: string) {
     setProfile(null);
     form.reset(emptyBrandStep);
     setStep(0);
-    const reset = new URLSearchParams({ new: '1' });
-    const workspace = searchParams?.get('workspace') ?? activeWorkspaceId;
-    if (workspace) reset.set('workspace', workspace);
+    const workspace = readUrlParam(searchParams, 'workspace') ?? activeWorkspaceId;
+    const reset = withUrlParams(null, { new: true, workspace: workspace || null });
     router(`/onboarding?${reset.toString()}`, { replace: true, preventScrollReset: true });
   }, [activeWorkspaceId, form, initialDiscoveryId, orphanedCompletion, router, searchParams]);
 
@@ -157,7 +160,7 @@ export function useOnboardingFlow(transactionKey: string) {
   );
   useEffect(() => {
     if (discoveryState?.status !== 'ready') return;
-    // oxlint-disable-next-line react-hooks/set-state-in-effect -- seed an editable persisted draft.
+    // oxlint-disable-next-line react-hooks/set-state-in-effect
     setDomains((current) =>
       current.length
         ? current
@@ -173,7 +176,7 @@ export function useOnboardingFlow(transactionKey: string) {
 
   useEffect(() => {
     if (discoveryState?.status !== 'ready' || maximumCompetitors === undefined) return;
-    // oxlint-disable-next-line react-hooks/set-state-in-effect -- seed an editable persisted draft.
+    // oxlint-disable-next-line react-hooks/set-state-in-effect
     setCompetitors((current) =>
       current.length
         ? current
@@ -239,9 +242,6 @@ export function useOnboardingFlow(transactionKey: string) {
       if (activeWorkspaceId) refreshBrandLogos(queryClient, result.project_id, activeWorkspaceId);
       await openProject(result.project_id);
     },
-    // A request the browser abandoned may still have committed. Re-read the
-    // draft: if it now names its project, the effect below opens it, instead
-    // of leaving the reader on a review whose project already exists.
     onError: () => {
       if (discoveryState)
         void refreshBrandDiscovery(queryClient, activeWorkspaceId, discoveryState.id);
@@ -256,14 +256,14 @@ export function useOnboardingFlow(transactionKey: string) {
     const discoveryId = discoveryState?.id ?? resumeDiscoveryId;
     if (!discoveryId) return;
     if (resumeDiscoveryId !== discoveryId) {
-      // oxlint-disable-next-line react-hooks/set-state-in-effect -- mirror the persisted discovery id.
+      // oxlint-disable-next-line react-hooks/set-state-in-effect
       setResumeDiscoveryId(discoveryId);
     }
-    const params = new URLSearchParams(searchParams?.toString() ?? '');
-    params.set('discovery', discoveryId);
-    params.set('step', stepQueryValue(step));
-    const next = params.toString();
-    if (next !== searchParams?.toString())
+    const next = withUrlParams(searchParams, {
+      discovery: discoveryId,
+      step: STEP_QUERY_VALUES[step],
+    }).toString();
+    if (next !== searchParams.toString())
       router(`/onboarding?${next}`, {
         replace: true,
         preventScrollReset: true,

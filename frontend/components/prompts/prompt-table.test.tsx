@@ -126,8 +126,6 @@ describe('PromptTable pagination', () => {
   });
 
   it('carries the whole question in a tooltip when the row cuts it', async () => {
-    // jsdom lays nothing out; report the question as wider than its line and
-    // the table as fitting its frame, so the frame takes no tab stop.
     const scrollWidth = vi
       .spyOn(HTMLElement.prototype, 'scrollWidth', 'get')
       .mockImplementation(function (this: HTMLElement) {

@@ -6,6 +6,8 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vite-plus/
 
 import { actionStatusUpdateRequestSchema } from '@citeladder/contracts/actions';
 
+import type { AgentHandoff } from '@/lib/agent/handoff';
+import { AgentPanelProvider, useAgentPanel } from '@/lib/agent/panel-context';
 import type { Action } from '@/lib/api/actions';
 import { mswServer } from '@/test/msw-server';
 import { makeProject } from '@/test/fixtures/project';
@@ -47,7 +49,6 @@ const action: Action = {
   member_count: 1,
   declarable_member_count: 1,
   page_count: null,
-  finding_class: null,
   summary: null,
   handoff: { context: 'action', message: MESSAGE },
   evidence_cleared_at: null,
@@ -148,11 +149,33 @@ const GROUP_URLS = {
   cohort: null,
 };
 
+function PanelSeedProbe() {
+  const panel = useAgentPanel();
+  return (
+    <>
+      <button type="button" onClick={() => panel?.setOpen(!panel.open)}>
+        Toggle agent panel
+      </button>
+      <output data-testid="panel-seed">{JSON.stringify(panel?.seed ?? null)}</output>
+    </>
+  );
+}
+
+async function openedSeed(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole('button', { name: 'Toggle agent panel' }));
+  const seed = JSON.parse(screen.getByTestId('panel-seed').textContent!) as AgentHandoff;
+  await user.click(screen.getByRole('button', { name: 'Toggle agent panel' }));
+  return { actionId: seed.actionId, context: seed.context };
+}
+
 function renderDetail() {
   return renderWithProviders(
-    <Routes>
-      <Route path="/actions/:actionId" element={<ActionDetailScreen />} />
-    </Routes>,
+    <AgentPanelProvider>
+      <Routes>
+        <Route path="/actions/:actionId" element={<ActionDetailScreen />} />
+      </Routes>
+      <PanelSeedProbe />
+    </AgentPanelProvider>,
     { initialEntries: [`/actions/${ACTION}`], projectSelection: selection },
   );
 }
@@ -210,6 +233,7 @@ describe('An issue-group Action page', () => {
 
     const all = await screen.findByRole('link', { name: 'Fix all 12 with Agent' });
     expect(chatOf(all)).toEqual({ path: '/agent', action_id: ACTION, project: PROJECT });
+    expect(await openedSeed(user)).toEqual({ actionId: ACTION, context: {} });
 
     await user.click(screen.getByRole('checkbox', { name: 'Select https://acme.test/shop/p02' }));
     await user.click(screen.getByRole('checkbox', { name: 'Select https://acme.test/shop/p05' }));
@@ -218,6 +242,10 @@ describe('An issue-group Action page', () => {
       action_id: ACTION,
       action_url_id: [urlId(1), urlId(4)],
       project: PROJECT,
+    });
+    expect(await openedSeed(user)).toEqual({
+      actionId: ACTION,
+      context: { action_url_ids: [urlId(1), urlId(4)] },
     });
   });
 });
@@ -412,10 +440,8 @@ describe('An Action page’s sections and hand-off', () => {
     expect(within(why).getByText('Pricing comparison')).toBeVisible();
     expect(within(why).getByText('Globex (globex.com) · 5 citations')).toBeVisible();
     expect(
-      within(screen.getByRole('region', { name: 'What to do' })).getByRole('checkbox', {
-        name: 'Cover the angle.',
-      }),
-    ).not.toBeChecked();
+      within(screen.getByRole('region', { name: 'What to do' })).getByText('Cover the angle.'),
+    ).toBeVisible();
     expect(chatOf(screen.getByRole('link', { name: 'Work with Agent' }))).toEqual({
       path: '/agent',
       action_id: ACTION,

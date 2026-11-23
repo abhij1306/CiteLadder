@@ -1,4 +1,5 @@
-import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
+import { cssVars } from '@/lib/css-vars';
 
 import type { ChartHeight } from '@/components/ui/chart';
 import { figureRowCells, useStripWidth } from '@/components/ui/figure-rows';
@@ -190,7 +191,7 @@ export function FigureBlocks({ count = 3 }: Readonly<{ count?: number }>) {
   return (
     <span ref={ref} data-figure-strip="" className="flex min-w-0 flex-wrap">
       {cells.map((size, index) => (
-        <span key={index} data-figure-cell="" style={{ '--row': size } as CSSProperties}>
+        <span key={index} data-figure-cell="" style={cssVars({ '--row': size })}>
           <span className="flex h-4 items-center">
             <SkeletonBlock className="h-3 w-1/2" />
           </span>

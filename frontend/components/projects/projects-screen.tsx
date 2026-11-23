@@ -1,4 +1,4 @@
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,7 @@ import { FolderOpen, Plus } from '@/lib/icons';
 import { useProjectContext } from '@/lib/project/project-context';
 import { finishOnboardingNavigationHandoff } from '@/lib/onboarding/timing';
 import { newProjectDestination } from '@/lib/navigation/project-destination';
+import { useUrlParam } from '@/lib/navigation/url-params';
 
 import { ProjectEditPanel } from './project-edit-panel';
 import { DashboardScreen } from './dashboard-screen';
@@ -19,8 +20,7 @@ import { StateBlock } from '@/components/ui/state-block';
 
 export function ProjectsScreen() {
   const { projects, projectsSettled, activeProject, status } = useProjectContext();
-  const searchParams = useSearchParams()[0];
-  const requestedProjectId = searchParams?.get('project') ?? null;
+  const requestedProjectId = useUrlParam('project');
   const [editing, setEditing] = useState<Project | null>(null);
   const navigate = useNavigate();
   const { activeWorkspaceId, canAddProject, mayCreate } = useProjectCreation();

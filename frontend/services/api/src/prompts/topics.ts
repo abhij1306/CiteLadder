@@ -283,9 +283,6 @@ export async function confirmTopics(
       if (input.delete.length)
         await trx.deleteFrom('topics').where('id', 'in', input.delete).execute();
       if (input.rename.length) {
-        // The unique name index is checked row by row, so a swap or a chain of
-        // renames would collide midway: park every renamed topic on its own id
-        // first, then apply the final names in one statement.
         const ids = input.rename.map((item) => item.id);
         await trx
           .updateTable('topics')

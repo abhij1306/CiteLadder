@@ -125,9 +125,13 @@ function serveSearches(searches: Searches | null) {
   );
 }
 
-function renderAnswer(subject: Partial<ExecutionEvidence>) {
+function renderAnswer(subject: Partial<ExecutionEvidence>, attributes = false) {
   return renderWithProviders(
-    <AnswerEvidence evidence={{ ...evidence, ...subject }} promptText="best plumber" />,
+    <AnswerEvidence
+      evidence={{ ...evidence, ...subject }}
+      promptText="best plumber"
+      attributes={attributes}
+    />,
     { projectSelection: { activeProject: project } },
   );
 }
@@ -186,7 +190,7 @@ describe('Answer transcript', () => {
     expect(link).toHaveAttribute('data-source-chip', 'plumb.example');
     const sources = screen.getByRole('list', { name: 'Sources' });
     expect(within(sources).getAllByRole('listitem')).toHaveLength(2);
-    expect(within(sources).getByText('Cited 2 times')).toBeVisible();
+    expect(within(sources).getByText('(2)')).toBeVisible();
     expect(within(sources).getAllByText('You')).toHaveLength(1);
 
     const searches = await screen.findByRole('list', { name: 'Searches the engine ran' });
@@ -212,8 +216,8 @@ describe('Answer transcript', () => {
         .getAllByRole('listitem')
         .map((item) => item.textContent),
     ).toEqual([
-      'Rrival.exampleLinked 2 timeshttps://rival.example/a (opens in a new tab)',
-      'Aacme.exampleYouLinked oncehttps://www.acme.example/plans (opens in a new tab)',
+      'Rrival.example(2)https://rival.example/a (opens in a new tab)',
+      'Aacme.exampleYou(1)https://www.acme.example/plans (opens in a new tab)',
     ]);
     unmount();
 
@@ -285,8 +289,8 @@ describe('Brand match evidence', () => {
 });
 
 describe('Answer perception evidence', () => {
-  it('labels each named business and marks its verified quotes in the answer', () => {
-    renderAnswer({
+  it('labels each named business, marks its verified quotes and lists attributes only when asked', () => {
+    const subject: Partial<ExecutionEvidence> = {
       answer_text: 'Acme support is slow. Rival is fine.',
       perception: [
         {
@@ -299,7 +303,14 @@ describe('Answer perception evidence', () => {
           extractor_version: 'x1',
           template_version: 't1',
           aspects: [
-            { theme: 'Support', polarity: 'negative', quote: 'support is slow', start: 5, end: 20 },
+            {
+              theme: 'Support',
+              attribute: { kind: 'labelled', name: 'Slow support' },
+              polarity: 'negative',
+              quote: 'support is slow',
+              start: 5,
+              end: 20,
+            },
           ],
         },
         {
@@ -314,11 +325,17 @@ describe('Answer perception evidence', () => {
           aspects: [],
         },
       ],
-    });
+    };
+    const { unmount } = renderAnswer(subject);
+    expect(screen.queryByRole('list', { name: 'Attributes' })).toBeNull();
     expect(screen.getByText('Negative')).toBeVisible();
     expect(screen.getByText('Classifying…')).toBeVisible();
     expect(screen.getByText('Support (negative): “support is slow”')).toBeVisible();
     expect(document.querySelector('mark')?.textContent).toBe('support is slow');
+    unmount();
+    renderAnswer(subject, true);
+    const listed = screen.getByRole('list', { name: 'Attributes' });
+    expect(listed.textContent).toBe('Slow supportNegative');
   });
 });
 

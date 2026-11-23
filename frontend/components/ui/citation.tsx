@@ -24,20 +24,29 @@ export function Citation({
         <span
           className={cn(
             'inline-grid min-h-5 min-w-5 place-items-center rounded-full px-1 text-eyebrow tabular-nums font-normal tracking-normal',
-            own ? 'bg-surface text-accent-ink' : 'bg-surface-sunken text-ink-secondary',
+            'bg-surface',
+            own ? 'text-accent-ink' : 'text-ink-secondary',
           )}
         >
           {index}
         </span>
       )}
-      <BrandMark name={host} logoUrl={favicon} websiteUrl={`https://${host}`} placement="inline" />
+      {favicon ? (
+        <BrandMark
+          name={host}
+          logoUrl={favicon}
+          websiteUrl={`https://${host}`}
+          placement="inline"
+          entity="site"
+        />
+      ) : null}
       <span className="whitespace-nowrap">{host}</span>
       {title ? <span className="text-ink-muted min-w-0 truncate">{title}</span> : null}
     </>
   );
   const classes = cn(
-    'text-ink border-line border inline-flex min-h-[var(--control-sm)] max-w-full items-center gap-1 rounded-sm ps-1 pe-3 align-middle text-body-sm no-underline',
-    own ? 'bg-accent-soft' : 'bg-surface',
+    'text-ink inline-flex min-h-[var(--control-sm)] max-w-full items-center gap-1 rounded-sm ps-1 pe-3 align-middle text-body-sm no-underline',
+    own ? 'bg-accent-soft' : 'bg-state-selected',
     index === undefined && 'ps-2',
   );
   return href ? (

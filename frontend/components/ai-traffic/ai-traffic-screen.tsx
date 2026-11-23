@@ -40,9 +40,6 @@ export function AiTrafficScreen() {
   const { workspaceId, projectId } = useProjectScope();
   const sources = useCrawlSources(projectId, workspaceId);
   const [requested, setTab] = useUrlState('tab', tabCodec);
-  // Unknown while the sources read is pending; a failed read keeps every view,
-  // also while it is retried (a retry without data reads as pending again, and
-  // unmounting the views it remounts would retry it forever).
   let crawlAvailable: boolean | null = null;
   if (sources.data) crawlAvailable = crawlLogsAvailable(sources.data);
   else if (sources.isError || sources.errorUpdatedAt > 0) crawlAvailable = true;
@@ -123,7 +120,7 @@ function TrafficDataView({
           kind="error"
           {...readErrorProps(summary)}
           title="Couldn't load AI traffic"
-          fallback="Check your connection and try again."
+          fallback="The request failed or timed out."
         />
       </ReportPage>
     );

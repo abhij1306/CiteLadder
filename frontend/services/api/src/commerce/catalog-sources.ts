@@ -12,6 +12,7 @@ import { record } from '../db/json.ts';
 import { ApiError } from '../errors.ts';
 import { groupBy, type NonEmpty } from '../lists.ts';
 import { canonicalUrl } from '../site-health/url-identity.ts';
+import { fitsIndexKey } from '../db/index-key.ts';
 import { fragmentText } from '../web-evidence/html.ts';
 import { categoryKey, isCategoryName } from './projection-facts.ts';
 
@@ -23,7 +24,8 @@ export const catalogValuesSchema = z
   .object({
     canonical_url: z
       .url()
-      .refine((value) => canonicalUrl(value) !== null, 'Unsupported product URL'),
+      .refine((value) => canonicalUrl(value) !== null, 'Unsupported product URL')
+      .refine((value) => fitsIndexKey(canonicalUrl(value) ?? value), 'Product URL is too long'),
     name: z.string().max(512),
     description: z.string().max(policy.commerce.edit.description_max_chars),
     brand: z.string().max(255),
@@ -137,7 +139,7 @@ function delimitedRecords(content: string): { header: string[]; rows: Record<str
       skip_empty_lines: true,
       relax_column_count: true,
       max_record_size: policy.commerce.import_max_bytes,
-    }) as string[][];
+    });
   } catch {
     refuse(delimiter === '\t' ? 'Invalid tab-separated file' : 'Invalid comma-separated file');
   }
@@ -200,10 +202,6 @@ const xml = new XMLParser({
   isArray: (name) => name === 'item' || name === 'entry' || name === 'product_type',
 });
 
-/**
- * An XML field's text. A repeated tag (an Atom entry's `<link href>` beside
- * its `g:link`, both `link` without their prefix) gives its first text.
- */
 const xmlText = (value: unknown): string =>
   Array.isArray(value) ? (value.map(text).find(Boolean) ?? '') : text(value);
 

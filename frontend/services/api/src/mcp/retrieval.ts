@@ -25,8 +25,6 @@ function descriptor<T extends keyof DB>(
 ): Descriptor {
   return { table, columns, title };
 }
-// Only these persisted projections can be fetched. No provider transports or
-// credentials enter a retrieval document, even if the owning table grows.
 const records = {
   opportunity: descriptor('opportunities', 'Opportunity', [
     'id',
@@ -111,7 +109,6 @@ const records = {
     'dimension',
     'category',
     'severity',
-    'finding_class',
     'evidence',
     'description',
     'remediation',

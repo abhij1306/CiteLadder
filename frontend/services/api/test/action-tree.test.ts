@@ -25,36 +25,24 @@ const seeds: SiteSeed[] = [];
 
 type Rule = Readonly<{
   rule_id: string;
-  finding_class: string;
   severity: string;
   dimension: string;
   category: string;
 }>;
 const DEFECT: Rule = {
   rule_id: 'web.mobile_viewport',
-  finding_class: 'defect',
   severity: 'high',
   dimension: 'technical',
   category: 'content',
 };
-const ADVISORY: Rule = {
+const STRUCTURED_DATA: Rule = {
   rule_id: 'aeo.structured_data_present',
-  finding_class: 'advisory',
   severity: 'medium',
   dimension: 'aeo',
   category: 'structured_data',
 };
-const DIAGNOSTIC: Rule = {
-  rule_id: 'technical.hsts_present',
-  finding_class: 'diagnostic',
-  severity: 'low',
-  dimension: 'technical',
-  category: 'security',
-};
-
 const UNKNOWN_SITE_LEVEL: Rule = {
   rule_id: 'architecture.fixture_unknown',
-  finding_class: 'defect',
   severity: 'high',
   dimension: 'technical',
   category: 'architecture',
@@ -72,19 +60,19 @@ async function failingPage(trx: Database, seed: SiteSeed, path: string, rules: r
       dimension: rule.dimension,
       category: rule.category,
       severity: rule.severity,
-      finding_class: rule.finding_class,
       evidence: '{}',
       analyzer_version: 'v1',
       rule_version: 'v1',
       created_at: at,
     };
-    await trx // NOSONAR -- One transaction: fixture statements run in order.
+    await trx // NOSONAR
       .insertInto('site_rule_evaluations')
       .values({
         ...shared,
         id,
         analysis_id: page.analysisId,
         source_artifact_id: page.artifactId,
+        finding_class: 'defect',
         weight: 1,
         outcome: 'missing',
         extractor_version: '',
@@ -96,7 +84,7 @@ async function failingPage(trx: Database, seed: SiteSeed, path: string, rules: r
         readiness_weight: 0,
       })
       .execute();
-    await trx // NOSONAR -- One transaction: fixture statements run in order.
+    await trx // NOSONAR
       .insertInto('site_issues')
       .values({
         ...shared,
@@ -129,11 +117,10 @@ async function crawledProject() {
     for (let index = 0; index < 12; index += 1) {
       const rules = [
         DEFECT,
-        ...(index < 3 ? [ADVISORY] : []),
-        ...(index < 2 ? [DIAGNOSTIC] : []),
+        ...(index < 3 ? [STRUCTURED_DATA] : []),
         ...(index < 1 ? [UNKNOWN_SITE_LEVEL] : []),
       ];
-      // NOSONAR -- One transaction: fixture statements run in order.
+      // NOSONAR
       pages.push(await failingPage(trx, seed, `/p${String(index).padStart(2, '0')}`, rules));
     }
     return { seed, pages };
@@ -184,13 +171,13 @@ afterAll(async () => {
 });
 
 describe('issue-group Actions', () => {
-  it('files one Action per defect and advisory group, never a diagnostic or unknown site-level rule, with its URLs', async () => {
+  it('files one Action per issue rule, never an unknown site-level rule, with its URLs', async () => {
     const actions = await issueActions(own.seed);
     expect(
       actions.map((row) => [row.target_label, row.goal, row.goal_grouping, row.priority_score]),
     ).toEqual([
       ['Missing structured data', 'read_site', 'aeo', 20],
-      ['Mobile viewport missing', 'read_site', 'content', 30.3],
+      ['Mobile viewport missing', 'read_site', 'content', 30],
     ]);
     const ids = (pages: { id: string }[]) => pages.map((page) => page.id).sort();
     expect([await urlsOf(actions[0]!.id), await urlsOf(actions[1]!.id)]).toEqual([
@@ -213,19 +200,11 @@ describe('issue-group Actions', () => {
     const read = urlActionsSchema.parse(await (await request(own.seed, path)).json());
     const labels = Object.fromEntries((await issueActions(own.seed)).map((a) => [a.id, a]));
     expect(
-      read.items.map((item) => [
-        labels[item.id]?.target_label ?? item.id,
-        item.summary,
-        item.finding_class,
-      ]),
+      read.items.map((item) => [labels[item.id]?.target_label ?? item.id, item.summary]),
     ).toEqual([
-      ['Mobile viewport missing', 'Add a responsive viewport meta declaration.', 'defect'],
-      [
-        'Missing structured data',
-        'Add schema.org structured data (JSON-LD preferred).',
-        'advisory',
-      ],
-      [agentPage.id, null, null],
+      ['Mobile viewport missing', 'Add a responsive viewport meta declaration.'],
+      ['Missing structured data', 'Add schema.org structured data (JSON-LD preferred).'],
+      [agentPage.id, null],
     ]);
     expect(read.page_kind).toBe('product');
     expect(Date.parse(read.last_crawled_at)).toBeGreaterThan(Date.parse('2026-01-01'));
@@ -256,7 +235,7 @@ describe('issue-group Actions', () => {
   });
 
   it('resyncs an Action by writing only the URL pairs that changed, never a foreign URL', async () => {
-    const [advisory] = await issueActions(own.seed);
+    const [structuredData] = await issueActions(own.seed);
     const [p0, p1, , p3] = own.pages.map((page) => page.id);
     const rolledBack = new Error('roll back');
     let rows: { site_url_id: string; rewritten: boolean }[] = [];
@@ -266,7 +245,7 @@ describe('issue-group Actions', () => {
         const pages = [p0!, p1!, p3!, foreign.pages[0]!.id].map((site_url_id) => ({ site_url_id }));
         await writeActionUrls(trx, scopeOf(own.seed), [
           {
-            actionId: advisory!.id,
+            actionId: structuredData!.id,
             kind: 'issue_family',
             url: null,
             cohort: { whole_site: false, pages },
@@ -275,7 +254,7 @@ describe('issue-group Actions', () => {
         rows = (
           await sql<{ site_url_id: string; rewritten: boolean }>`
             select site_url_id, xmin = pg_current_xact_id()::xid as rewritten
-            from action_urls where action_id = ${advisory!.id}`.execute(trx)
+            from action_urls where action_id = ${structuredData!.id}`.execute(trx)
         ).rows;
         throw rolledBack;
       })
@@ -310,7 +289,7 @@ describe('Agent hand-off scopes', () => {
     );
 
   it('gives ticked URLs of an Action and every Action on one URL, never a URL beyond them', async () => {
-    const [advisory, defect] = await issueActions(own.seed);
+    const [structuredData, defect] = await issueActions(own.seed);
     const ticked = await manifest(
       own.seed,
       { action_url_ids: [own.pages[1]!.id, own.pages[0]!.id] },
@@ -318,7 +297,7 @@ describe('Agent hand-off scopes', () => {
     );
     expect(ticked.action?.selected_urls).toEqual([own.pages[0]!.url, own.pages[1]!.url]);
     await expect(
-      manifest(own.seed, { action_url_ids: [own.pages[4]!.id] }, advisory!.id),
+      manifest(own.seed, { action_url_ids: [own.pages[4]!.id] }, structuredData!.id),
     ).rejects.toMatchObject({ code: 'agent_context_unavailable' });
 
     const one = await manifest(
@@ -351,7 +330,6 @@ describe('the Actions tree', () => {
       JSON.stringify({
         rule_id: rule,
         rule_label: rule,
-        finding_class: 'defect',
         crawl_id: 'c',
         group_id: 'g',
         page_count: 0,

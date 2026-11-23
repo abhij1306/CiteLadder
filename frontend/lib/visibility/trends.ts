@@ -35,6 +35,8 @@ export const GRANULARITY_OPTIONS: readonly { value: TrendGranularity; label: str
 
 export type TrendRange = 'all' | '30d' | '90d' | '1y';
 
+export const DEFAULT_TREND_RANGE: TrendRange = '90d';
+
 export const RANGE_OPTIONS: readonly { value: TrendRange; label: string }[] = [
   { value: '30d', label: 'Last 30 days' },
   { value: '90d', label: 'Last 90 days' },

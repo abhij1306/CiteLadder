@@ -202,7 +202,6 @@ export class PdfReport {
       let end = start;
       let used = 0;
       for (const height of heights.slice(start)) {
-        // A fresh page always takes its first line, even one taller than the page.
         if (
           this.y + pad + used + height > this.bottom &&
           (end > start || this.y > CONTINUATION_TOP)

@@ -67,8 +67,6 @@ export function DemandEvidenceDrawer({
       <Stack gap="workspace">
         <SignalInsight signal={signal} policy={policy} />
 
-        {/* Cannibalization only. Bounded by the rule itself: each competing
-            page holds at least a 10% share, so there are never more than 10. */}
         {details.pages.length > 0 && (
           <Stack as="section">
             <Inline as="h3" className={textRole('body', 'text-ink-2')}>

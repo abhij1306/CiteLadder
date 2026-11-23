@@ -48,8 +48,6 @@ async function changeSummary(db: Database, crawl: Crawl, projection: Measurement
     .select(['c.root_url', 'c.configuration'])
     .where('s.workspace_id', '=', crawl.workspace_id)
     .where('s.project_id', '=', crawl.project_id)
-    // Only crawls created before this one, so a late publication never compares
-    // with a newer crawl (Changes picks its predecessor the same way).
     .where('c.created_at', '<', crawl.created_at)
     .where('c.status', 'in', USABLE_CRAWL_STATUSES)
     .where('c.analyzed_url_count', '>', 0)
@@ -67,7 +65,6 @@ async function changeSummary(db: Database, crawl: Crawl, projection: Measurement
     .where('s.classification_formula_version', '=', reads.classification_formula_version)
     .orderBy('c.created_at', 'desc')
     .orderBy('c.id', 'desc')
-    // Scope is compared in code, so search as many earlier crawls as Changes does.
     .limit(policy.site_health.change_intel.max_crawl_candidates)
     .execute();
   const previous = candidates.find((row) => sameScope(row, crawl));
@@ -103,6 +100,8 @@ async function pageColumns(db: Database, crawl: Crawl, projection: MeasurementPr
   const {
     readiness_dimensions: dimensions,
     scoring_version: _scoring,
+    web_fundamentals_checks: _webChecks,
+    aeo_readiness_checks: _aeoChecks,
     ...aggregate
   } = projection.aggregate;
   return {
@@ -132,7 +131,6 @@ async function pageColumns(db: Database, crawl: Crawl, projection: MeasurementPr
   };
 }
 
-/** Rows per statement, far under PostgreSQL's 65535 bind parameters. */
 const ANALYSIS_ROW_CHUNK = 5000;
 
 async function writeAnalysisSet(
@@ -151,7 +149,7 @@ async function writeAnalysisSet(
     analysis_id: analysisId,
   }));
   for (let offset = 0; offset < rows.length; offset += ANALYSIS_ROW_CHUNK)
-    await db // NOSONAR -- In order, in the caller's one publication transaction.
+    await db // NOSONAR
       .insertInto('site_health_snapshot_analyses')
       .values(rows.slice(offset, offset + ANALYSIS_ROW_CHUNK))
       .execute();

@@ -14,8 +14,6 @@ function releaseId(): string {
   return /^[\w.-]{1,64}$/u.test(value) ? value : '';
 }
 
-// Explicit return type: without it, tsc compares the inferred literal against
-// every defineConfig overload and dies with TS2321 "Excessive stack depth".
 export default defineConfig(({ command, mode }): ViteUserConfig => {
   const environment = loadEnv(mode, frontendRoot, '');
   // Every public value is BAKED into the bundle here, so an empty one is a
@@ -49,8 +47,6 @@ export default defineConfig(({ command, mode }): ViteUserConfig => {
       react(),
       {
         name: 'citeladder:report-empty-public-values',
-        // `configResolved` rather than the factory body: `define` above has
-        // run by then, so the list is complete.
         configResolved() {
           if (command !== 'build' || !emptyPublicValues.length) return;
           console.warn(
@@ -60,9 +56,6 @@ export default defineConfig(({ command, mode }): ViteUserConfig => {
         },
       },
       {
-        // The commit error reports name (lib/client-errors.ts), written into the
-        // unhashed index.html rather than a script chunk: a value in a chunk would
-        // change that chunk's hash, and the boot cache with it, on every deploy.
         name: 'citeladder:release-meta',
         transformIndexHtml() {
           const release = releaseId();
@@ -133,7 +126,7 @@ export default defineConfig(({ command, mode }): ViteUserConfig => {
               { name: 'app-boot', tags: ['$initial'], priority: 20 },
               {
                 name: 'ui',
-                test: /\/components\/ui\//,
+                test: /\/components\/ui\/(?!(?:area-chart|stacked-bar-chart|part-donut)\.tsx)/,
                 minShareCount: 2,
                 priority: 10,
                 entriesAware: true,

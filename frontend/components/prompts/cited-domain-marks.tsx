@@ -25,7 +25,12 @@ export function CitedDomainMarks({
         >
           <Pressable className="inline-flex w-auto">
             <span className="sr-only">{domain}</span>
-            <BrandMark name={domain} websiteUrl={`https://${domain}`} placement="inline" />
+            <BrandMark
+              name={domain}
+              websiteUrl={`https://${domain}`}
+              placement="inline"
+              entity="site"
+            />
           </Pressable>
         </Tooltip>
       ))}

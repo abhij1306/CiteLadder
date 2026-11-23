@@ -42,7 +42,7 @@ export type RouteLoading =
   | Readonly<{
       kind: 'cards';
       tabs?: HeldTabs;
-      rail?: HeldTabs & Readonly<{ wide?: readonly string[] }>;
+      rail?: HeldTabs;
       filters?: boolean;
       intro?: boolean;
       stacked?: boolean;

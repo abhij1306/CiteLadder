@@ -15,7 +15,7 @@ import type { ReactNode } from 'react';
 
 import { makeProject } from '@/test/fixtures/project';
 import { mswServer } from '@/test/msw-server';
-import { renderWithProviders } from '@/test/render';
+import { projectScope, renderWithProviders } from '@/test/render';
 import type { PerformanceDashboard } from '@/lib/api/performance';
 import { useRangeProjection } from './use-range-projection';
 
@@ -29,12 +29,6 @@ vi.mock('@/components/integrations/data-source-setup', () => ({
   DataSourceSetup: ({ title, whenReady }: { title: string; whenReady?: ReactNode }) => (
     <section aria-label={title}>{whenReady}</section>
   ),
-}));
-vi.mock('@/lib/project/project-context', () => ({
-  useActiveWorkspaceId: () => WORKSPACE,
-  useProjectContext: () => ({ activeProject, isLoading: false }),
-  useWorkspaceCapability: (capability: string) =>
-    (['read', 'run', 'write'] as const).some((granted) => granted === capability),
 }));
 vi.mock('./use-performance-sync', () => ({
   usePerformanceSync: () => ({
@@ -51,7 +45,9 @@ vi.mock('./use-performance-sync', () => ({
 import { PerformanceScreen } from './performance-screen';
 
 function renderPerformance() {
-  return renderWithProviders(<PerformanceScreen />, { projectSelection: { activeProject } });
+  return renderWithProviders(<PerformanceScreen />, {
+    projectSelection: projectScope(activeProject, 'member'),
+  });
 }
 
 const emptyTotals: PerformanceDashboard['selected']['totals'] = {
@@ -315,13 +311,12 @@ describe('PerformanceScreen evidence states', () => {
     expect(await screen.findByTestId('readiness-ladder')).toBeVisible();
   });
 
-  it('states the covered history on the Google Search card, and a notice only when there is one', async () => {
+  it('states the covered history on the Google Search card, with no notice for flagged days', async () => {
     const covered = {
       earliest_date: '2026-08-01',
       latest_date: '2026-08-28',
       covered_days: 28,
     };
-    let flagged = false;
     mswServer.use(
       http.get(`/api/v1/projects/${PROJECT}/performance`, () =>
         HttpResponse.json(
@@ -329,9 +324,9 @@ describe('PerformanceScreen evidence states', () => {
             selected: measuredWindow({ ...emptyTotals, clicks: 4, impressions: 90 }),
             coverage: {
               ...covered,
-              analytics_quality: flagged
-                ? { sessions: [{ day: '2026-08-02', revision: 1, flags: ['missing'] }] }
-                : {},
+              analytics_quality: {
+                sessions: [{ day: '2026-08-02', revision: 1, flags: ['missing'] }],
+              },
             },
           }),
         ),
@@ -341,21 +336,12 @@ describe('PerformanceScreen evidence states', () => {
       ),
     );
 
-    const { unmount } = renderPerformance();
+    renderPerformance();
     expect(await screen.findByTestId('performance-coverage')).toHaveTextContent(
       'Aug 1, 2026 – Aug 28, 2026 · 28 days',
     );
-    expect(screen.queryByTestId('performance-status')).toBeNull();
     expect(screen.getByText('Data through Aug 28, 2026')).toBeVisible();
-    expect(screen.queryAllByRole('alert')).toHaveLength(0);
-    unmount();
-
-    flagged = true;
-    renderPerformance();
-    expect(await screen.findByTestId('performance-status')).toHaveTextContent(
-      'Some imported days are missing or flagged, or come from an earlier complete import. Days without a usable import show no value, not zero.',
-    );
-    expect(screen.queryAllByRole('alert')).toHaveLength(0);
+    expect(screen.queryByTestId('performance-status')).toBeNull();
   });
 
   it('shows no metric or table scaffolding before the first import', async () => {

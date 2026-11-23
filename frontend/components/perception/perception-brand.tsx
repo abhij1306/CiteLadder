@@ -1,216 +1,160 @@
 import type { PerceptionResponse } from '@citeladder/contracts/visibility-perception';
 
-import { CompetitorThemes } from '@/components/perception/competitor-themes';
+import { AttributeRanks } from '@/components/perception/attribute-ranks';
 import { PerceptionBreakdown } from '@/components/perception/perception-breakdown';
 import { AppGrid } from '@/components/ui/app-grid';
-import { FigureStrip, type FigureSegment } from '@/components/ui/figure-strip';
-import { Stack } from '@/components/ui/layout';
-import { Meter } from '@/components/ui/meter';
-import { PartDonut } from '@/components/ui/part-donut';
-import { Section, SectionContent, SectionStack, TitledSection } from '@/components/ui/section';
-import { StateBlock } from '@/components/ui/state-block';
-import { SegmentedControl } from '@/components/ui/tabs';
 import { AreaChart } from '@/components/ui/area-chart';
+import { Card, CardHeader } from '@/components/ui/card';
+import { FigureStrip, type FigureSegment } from '@/components/ui/figure-strip';
+import { Notice } from '@/components/ui/notice';
+import { PartDonut, type Part } from '@/components/ui/part-donut';
+import { SectionStack } from '@/components/ui/section';
+import { Tag } from '@/components/ui/tag';
+import { TextLink } from '@/components/ui/text-link';
 import { textRole } from '@/components/ui/typography';
-import {
-  EntityTable,
-  NegativeQuotes,
-  PerceptionState,
-} from '@/components/visibility/visibility-perception';
+import { PerceptionState } from '@/components/visibility/visibility-perception';
 import { useDisplayTimeZone } from '@/lib/display-timezone';
-import { formatDisplayDate } from '@/lib/format';
-import { stringUrlCodec, useUrlState } from '@/lib/navigation/url-state';
+import { availabilityLabel, formatDisplayDate } from '@/lib/format';
+import { BRAND_PROMPTS_HREF } from '@/lib/prompts/routes';
 import {
   coverageExtras,
+  describesTooFew,
   formatNet,
-  gatedFigure,
-  negativeHeadline,
-  shareReading,
-  rankThemes,
+  sampleNote,
+  sampleShare,
   sentimentTrend,
+  SMALL_SAMPLE,
 } from '@/lib/visibility/perception';
 
-const THEME_LIST_LIMIT = 8;
+type Score = PerceptionResponse['entities'][number]['score'];
 
 export function PerceptionView({
   data,
   factFigure,
 }: Readonly<{ data: PerceptionResponse; factFigure?: FigureSegment }>) {
+  const nudge = describesTooFew(data) ? <BrandPromptsNudge /> : null;
   if (data.state !== 'value')
-    return <PerceptionState state={data.state} reason={data.reason} coverage={data.coverage} />;
+    return (
+      <SectionStack>
+        {nudge}
+        <PerceptionState state={data.state} reason={data.reason} coverage={data.coverage} />
+      </SectionStack>
+    );
+  const categories = data.brand?.categories ?? [];
+  const score = data.brand?.score;
+  const ranks = categories.some((category) => category.negative > 0 || category.positive > 0) ? (
+    <AttributeRanks categories={categories} />
+  ) : null;
+  const ring = score?.classified ? <SentimentCard score={score} /> : null;
   return (
     <SectionStack>
-      <Lede data={data} factFigure={factFigure} />
-      <AppGrid layout="main-aside">
-        <ThemeList themes={data.themes} />
-        <SentimentRing data={data} />
-      </AppGrid>
-      <SentimentTrend trend={data.trend} />
-      <AppGrid layout="halves">
-        <EntityTable entities={data.entities} />
-        <NegativeQuotes quotes={data.negative_quotes} />
-      </AppGrid>
-      <PerceptionBreakdown data={data} />
-      {data.entities.some((entity) => !entity.is_brand) ? (
-        <CompetitorThemes entities={data.entities} />
-      ) : null}
+      {nudge}
+      <FigureStrip
+        label="Brand perception"
+        segments={[...headlineFigures(data), ...(factFigure ? [factFigure] : [])]}
+      />
+      {ranks && ring ? (
+        <AppGrid layout="main-aside">
+          {ranks}
+          {ring}
+        </AppGrid>
+      ) : (
+        (ranks ?? ring)
+      )}
+      {data.trend.length > 1 ? <SentimentTrend trend={data.trend} /> : null}
+      <PerceptionBreakdown data={data} categories={categories} />
     </SectionStack>
   );
 }
 
-function Lede({
-  data,
-  factFigure,
-}: Readonly<{ data: PerceptionResponse; factFigure?: FigureSegment }>) {
+function BrandPromptsNudge() {
+  return (
+    <Notice tone="info">
+      Few answers describe you: <TextLink href={BRAND_PROMPTS_HREF}>add brand prompts</TextLink>
+    </Notice>
+  );
+}
+
+function headlineFigures(data: PerceptionResponse): FigureSegment[] {
   const score = data.brand?.score;
-  const { recommended, coverage } = data;
-  const share = (key: 'positive' | 'negative', label: string): FigureSegment =>
-    score
-      ? {
-          key,
-          label,
-          ...gatedFigure(shareReading(score[`${key}_share`], score.classified)),
-          sub: `${score[key]} of ${score.classified} classified mentions`,
-        }
-      : { key, label, value: null, missingState: 'unavailable' };
-  const segments: FigureSegment[] = [
+  const { coverage } = data;
+  return [
     {
       key: 'describing',
       label: 'Describing you',
       value: `${coverage.classified} / ${coverage.mentions}`,
       sub: coverageExtras(coverage).join(' · ') || undefined,
     },
-    share('positive', 'Positive'),
-    share('negative', 'Negative'),
-    {
-      key: 'recommended',
-      label: 'Recommended',
-      ...gatedFigure(shareReading(recommended.rate, recommended.mentioned), 'answers'),
-      sub:
-        `${recommended.recommended} of ${recommended.mentioned} answers naming you` +
-        (recommended.recommended_against
-          ? `; ${recommended.recommended_against} advised against`
-          : ''),
-    },
+    shareFigure({ key: 'positive', label: 'Positive answers', score }),
+    shareFigure({ key: 'negative', label: 'Negative answers', score }),
   ];
-  return (
-    <Section>
-      <SectionContent>
-        <Stack gap="item">
-          <h2 className={textRole('heading')}>
-            {negativeHeadline(score) ?? 'How AI describes you'}
-          </h2>
-          <FigureStrip
-            label="Brand perception"
-            segments={factFigure ? [...segments, factFigure] : segments}
-          />
-        </Stack>
-      </SectionContent>
-    </Section>
-  );
 }
 
-type ThemeOrder = 'negative' | 'positive';
-
-const ORDER_CODEC = stringUrlCodec<ThemeOrder>(['negative', 'positive'], 'negative');
-
-function ThemeList({ themes }: Readonly<{ themes: PerceptionResponse['themes'] }>) {
-  const [order, setOrder] = useUrlState('theme_order', ORDER_CODEC, { history: 'replace' });
-  const ranked = rankThemes(themes, order, THEME_LIST_LIMIT);
-  const most = ranked[0]?.[order] ?? 0;
-  return (
-    <TitledSection
-      title="Themes in answers"
-      actions={
-        <SegmentedControl
-          value={order}
-          onChange={setOrder}
-          ariaLabel="Order themes"
-          options={[
-            { value: 'negative', label: 'Most negative' },
-            { value: 'positive', label: 'Most positive' },
-          ]}
-        />
-      }
-    >
-      <SectionContent>
-        {ranked.length ? (
-          <Stack as="ul">
-            {ranked.map((theme) => (
-              <li key={theme.theme}>
-                <Meter
-                  label={theme.theme}
-                  value={(theme[order] / most) * 100}
-                  valueLabel={`${theme[order]} ${order}`}
-                  tone={order === 'negative' ? 'negative' : 'accent'}
-                />
-              </li>
-            ))}
-          </Stack>
-        ) : (
-          <StateBlock kind="empty" inline message={`No ${order} themes in these answers.`} />
-        )}
-      </SectionContent>
-    </TitledSection>
-  );
-}
-
-function SentimentRing({ data }: Readonly<{ data: PerceptionResponse }>) {
-  return (
-    <TitledSection title="How AI judges you">
-      <SectionContent>
-        <SentimentParts score={data.brand?.score} />
-      </SectionContent>
-    </TitledSection>
-  );
-}
-
-function SentimentParts({
+function shareFigure({
+  key,
+  label,
   score,
-}: Readonly<{ score: PerceptionResponse['entities'][number]['score'] | undefined }>) {
-  if (!score?.classified)
-    return <StateBlock kind="empty" inline message="No classified mentions of you." />;
-  const reading = shareReading(score.positive_share, score.classified);
-  if (reading.kind === 'too_few')
-    return (
-      <StateBlock
-        kind="empty"
-        inline
-        message={`Too few classified (${reading.basis} of the ${reading.minimum} needed).`}
-      />
-    );
+}: Readonly<{
+  key: 'positive' | 'negative';
+  label: string;
+  score: Score | undefined;
+}>): FigureSegment {
+  if (!score) return { key, label, value: null, missingState: 'unavailable' };
+  const reading = sampleShare({ count: score[key], basis: score.classified });
+  if (reading.kind === 'empty')
+    return { key, label, value: null, missingLabel: `${availabilityLabel('too_few')} classified` };
+  return {
+    key,
+    label,
+    value: reading.text,
+    marker: reading.small ? <Tag>{SMALL_SAMPLE}</Tag> : undefined,
+    sub: sampleNote(reading, 'classified mentions'),
+  };
+}
+
+function SentimentCard({ score }: Readonly<{ score: Score }>) {
+  const parts = (
+    [
+      { label: 'Negative', value: score.negative, status: 'negative' },
+      { label: 'Mixed', value: score.mixed, status: 'warning' },
+      { label: 'Positive', value: score.positive, status: 'positive' },
+      { label: 'Neutral', value: score.neutral, status: 'neutral' },
+    ] satisfies Part[]
+  ).filter((part) => part.value > 0);
   return (
-    <PartDonut
-      label="Sentiment of classified mentions"
-      totalLabel="classified"
-      total={score.classified}
-      parts={[
-        { label: 'Positive', value: score.positive, status: 'positive' },
-        { label: 'Neutral', value: score.neutral, status: 'neutral' },
-        { label: 'Negative', value: score.negative, status: 'negative' },
-        { label: 'Mixed', value: score.mixed, status: 'warning' },
-      ]}
-    />
+    <Card aria-label="Sentiment" className="flex min-w-0 flex-col">
+      <CardHeader>
+        <h3 className={textRole('subheading')}>Sentiment</h3>
+      </CardHeader>
+      <div className="flex flex-1 items-center justify-center">
+        <PartDonut
+          layout="stacked"
+          label="Sentiment of classified mentions"
+          totalLabel="mentions"
+          total={score.classified}
+          parts={parts}
+        />
+      </div>
+    </Card>
   );
 }
 
 function SentimentTrend({ trend }: Readonly<{ trend: PerceptionResponse['trend'] }>) {
   const timeZone = useDisplayTimeZone();
   return (
-    <TitledSection title="Net sentiment over time">
-      <SectionContent>
-        {trend.length > 1 ? (
-          <AreaChart
-            label="Net sentiment over time"
-            data={sentimentTrend(trend, (iso) => formatDisplayDate(iso, timeZone))}
-            yMin={-100}
-            yMax={100}
-            yFormat={(value) => formatNet(value) ?? ''}
-          />
-        ) : (
-          <StateBlock kind="empty" inline message="Only one run in this period." />
-        )}
-      </SectionContent>
-    </TitledSection>
+    <Card aria-label="Net sentiment">
+      <CardHeader>
+        <h3 className={textRole('subheading')}>Net sentiment</h3>
+      </CardHeader>
+      <AreaChart
+        label="Net sentiment over time"
+        name="Net sentiment"
+        empty="Too few classified mentions to score"
+        data={sentimentTrend(trend, (iso) => formatDisplayDate(iso, timeZone))}
+        yMin={-100}
+        yMax={100}
+        yFormat={(value) => formatNet(value) ?? ''}
+      />
+    </Card>
   );
 }

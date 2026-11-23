@@ -5,9 +5,9 @@ import {
   apiKeySchema,
 } from '@citeladder/contracts/api-keys';
 
-import { createApiKey, listApiKeys, revokeApiKey } from '../api-keys/keys.ts';
+import { createApiKey, deleteApiKey, listApiKeys, revokeApiKey } from '../api-keys/keys.ts';
 import { readBody } from '../http/body.ts';
-import { defineGetRoute, definePostRoute, type ProductRoute } from './define.ts';
+import { defineDeleteRoute, defineGetRoute, definePostRoute, type ProductRoute } from './define.ts';
 
 const root = '/api/v1/api-keys';
 const keys = { family: 'api-keys', capability: 'manage_credentials' } as const;
@@ -43,5 +43,12 @@ export const API_KEY_ROUTES: readonly ProductRoute[] = [
     response: apiKeySchema,
     handle: ({ c, db }, { path }) =>
       revokeApiKey(db, c.get('workspace').workspaceId, c.get('user').id, path.key_id),
+  }),
+  defineDeleteRoute({
+    ...keys,
+    path: `${root}/{key_id}`,
+    params: { path: { key_id: { scalar: { kind: 'uuid' }, required: true } }, query: {} },
+    handle: ({ c, db }, { path }) =>
+      deleteApiKey(db, c.get('workspace').workspaceId, c.get('user').id, path.key_id),
   }),
 ];

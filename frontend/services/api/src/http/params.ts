@@ -53,6 +53,9 @@ export const UUID_MESSAGE = 'Expected a UUID';
 
 const failure = (type: string, message: string): Outcome => ({ ok: false, type, message });
 
+const parsedOr = (value: unknown, type: string, message: string): Outcome =>
+  value === null ? failure(type, message) : { ok: true, value };
+
 function validateInt(scalar: Extract<Scalar, { kind: 'int' }>, raw: string): Outcome {
   const text = raw.trim();
   if (!/^[+-]?\d+$/u.test(text) || !Number.isSafeInteger(Number(text)))
@@ -67,7 +70,6 @@ function validateInt(scalar: Extract<Scalar, { kind: 'int' }>, raw: string): Out
   return { ok: true, value };
 }
 
-// Decimal notation only: `Number` would also read hex, octal and binary literals.
 const DECIMAL = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/iu;
 
 function validateFloat(raw: string): Outcome {
@@ -89,7 +91,6 @@ function validateBool(raw: string): Outcome {
 }
 
 function validateStr(scalar: Extract<Scalar, { kind: 'str' }>, raw: string): Outcome {
-  // Lengths count code points, not UTF-16 units.
   const length = [...raw].length;
   if (scalar.minLength !== undefined && length < scalar.minLength) {
     return failure('string_too_short', `Must contain at least ${scalar.minLength} characters`);
@@ -102,22 +103,20 @@ function validateStr(scalar: Extract<Scalar, { kind: 'str' }>, raw: string): Out
 
 function validateScalar(scalar: Scalar, raw: string): Outcome {
   switch (scalar.kind) {
-    case 'uuid': {
-      const value = parseUuid(raw);
-      return value === null ? failure('uuid_parsing', UUID_MESSAGE) : { ok: true, value };
-    }
-    case 'date': {
-      const value = parseRequestDate(raw);
-      return value === null
-        ? failure('date_parsing', 'Expected a date in YYYY-MM-DD format')
-        : { ok: true, value };
-    }
-    case 'datetime': {
-      const value = parseDatetime(raw);
-      return value === null
-        ? failure('datetime_parsing', 'Expected an ISO 8601 date or datetime')
-        : { ok: true, value };
-    }
+    case 'uuid':
+      return parsedOr(parseUuid(raw), 'uuid_parsing', UUID_MESSAGE);
+    case 'date':
+      return parsedOr(
+        parseRequestDate(raw),
+        'date_parsing',
+        'Expected a date in YYYY-MM-DD format',
+      );
+    case 'datetime':
+      return parsedOr(
+        parseDatetime(raw),
+        'datetime_parsing',
+        'Expected an ISO 8601 date or datetime',
+      );
     case 'int':
       return validateInt(scalar, raw);
     case 'float':
@@ -130,6 +129,10 @@ function validateScalar(scalar: Scalar, raw: string): Outcome {
       return scalar.values.includes(raw)
         ? { ok: true, value: raw }
         : failure('literal_error', `Expected one of: ${scalar.values.join(', ')}`);
+    default: {
+      const unhandled: never = scalar;
+      return unhandled;
+    }
   }
 }
 
@@ -185,14 +188,22 @@ export type RequestParams<Path extends ParamSpecs, Query extends ParamSpecs> = {
   query: ParamValues<Query>;
 };
 
+function unknownKeys(specs: ParamSpecs, params: URLSearchParams): ValidationEntry[] {
+  const known = new Set(Object.entries(specs).map(([name, spec]) => spec.alias ?? name));
+  return [...new Set(params.keys())]
+    .filter((key) => !known.has(key))
+    .map((key) => ({ loc: [key], message: 'Unknown query parameter', type: 'extra_forbidden' }));
+}
+
 export function validateParams<Path extends ParamSpecs, Query extends ParamSpecs>(
-  specs: { path: Path; query: Query },
+  specs: { path: Path; query: Query; closed?: true },
   input: { path: Readonly<Record<string, string>>; search: string },
 ): RequestParams<Path, Query> {
   const errors: ValidationEntry[] = [];
   const path = read(specs.path, (key) => (key in input.path ? [input.path[key]!] : []), errors);
   const params = new URLSearchParams(input.search);
   const query = read(specs.query, (key) => params.getAll(key), errors);
+  if (specs.closed) errors.push(...unknownKeys(specs.query, params));
   if (errors.length > 0) throw new RequestValidationError(errors);
   return { path, query };
 }

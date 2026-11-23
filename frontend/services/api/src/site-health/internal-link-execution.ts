@@ -31,7 +31,6 @@ export async function executeLinkRun(
       taskScope: { workspaceId: scope.workspaceId, taskIds: rows.map((row) => row.id) },
       executors: { [kind]: executor },
     });
-    // A fixed list bounds this pass; leases exclude concurrent requests and the runner.
     await worker.runUntilIdle(rows.length);
   };
   await run(
@@ -41,7 +40,5 @@ export async function executeLinkRun(
       job_deadline_seconds: policy.internal_links.interactive_deadline_seconds,
     }),
   );
-  // Publication tasks are committed successors and need no second cold job start.
-  // Keep work observation active so further successors still wake the background runner.
   await run('internal_link_publish', publishInternalLinks);
 }

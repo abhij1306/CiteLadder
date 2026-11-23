@@ -39,7 +39,6 @@ export async function enqueueTerminalAnalyticsRefresh(
   );
   await enqueueContentAngles(db, scope, { kind: 'site_crawl', id: crawl.id });
   if (!traffic) return;
-  // Demand keys a revision by its first 24 characters.
   const revision = `${triggerKind}:${triggerId}`.slice(0, 24);
   await enqueueTask(db, {
     ...scope,

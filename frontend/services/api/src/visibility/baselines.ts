@@ -21,14 +21,13 @@ export async function persistComparisonBaselines(
     await subjectXactLock(db, `comparison-baselines:${scope.projectId}`);
   });
   if (!written) return;
-  // A later run that finalized first walked without this one.
   const later = await loadMeasuredRuns(db, written, {
     fromAt: null,
     toAt: null,
     newerThan: input.auditId,
     oldest: visibility.selection_max_runs,
   });
-  for (const run of later) await writeRunBaselines(db, input.workspaceId, run.auditId); // NOSONAR -- One transaction connection: runs rewrite in order.
+  for (const run of later) await writeRunBaselines(db, input.workspaceId, run.auditId); // NOSONAR
 }
 
 async function writeRunBaselines(
@@ -88,7 +87,7 @@ async function writeRunBaselines(
       const found =
         key === null
           ? emptyComparison({ status: 'identity_unavailable' })
-          : await nearestBaseline(db, current, selector, { key, candidates }); // NOSONAR -- One transaction connection: selectors walk in order.
+          : await nearestBaseline(db, current, selector, { key, candidates }); // NOSONAR
       rows.push({
         id: randomUUID(),
         workspace_id: workspaceId,

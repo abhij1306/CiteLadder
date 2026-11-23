@@ -74,11 +74,6 @@ const EVIDENCE_HEADERS = [
   'last-modified',
   'strict-transport-security',
 ];
-/**
- * Headers whose separate lines carry separate scopes: an agent-scoped
- * `X-Robots-Tag` line does not cover a generic one. Their lines are kept apart,
- * one per line, rather than comma-joined.
- */
 const LINE_SCOPED_HEADERS = new Set(['x-robots-tag']);
 export type WebsiteFetcher = (url: string, options: FetchOptions) => Promise<FetchedPage>;
 type Dns = (host: string) => Promise<readonly { address: string; family: number }[]>;
@@ -116,10 +111,8 @@ export function websiteIdentity(value: string) {
   return { url: url.href, domain };
 }
 
-// IANA special-purpose IPv4 blocks that ipaddr labels ordinary unicast.
-// These fixed CIDRs deny outbound targets; they are not server addresses to connect to.
 const SPECIAL_PURPOSE_IPV4 = [
-  '192.0.0.0/24', // NOSONAR: a denied SSRF target, not a connection address.
+  '192.0.0.0/24', // NOSONAR
   '192.0.2.0/24',
   '198.51.100.0/24',
   '203.0.113.0/24',
@@ -184,7 +177,6 @@ export async function pinnedRequest(
           accept: options.contentTypes.includes('*') ? '*/*' : options.contentTypes.join(', '),
           'accept-encoding': 'gzip, deflate, br',
         },
-        // Keep the URL hostname for Host, TLS SNI and certificate verification.
         lookup: (_host, _options, callback) => callback(null, target.address, target.family),
       },
       (response) => {

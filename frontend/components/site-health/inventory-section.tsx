@@ -1,5 +1,4 @@
 import { useState, type ReactNode } from 'react';
-import { useSearchParams } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
@@ -11,14 +10,21 @@ import { TableCell, TableRow, UrlText } from '@/components/ui/table';
 import { SegmentedControl } from '@/components/ui/tabs';
 import { Absence } from '@/components/ui/absence';
 import { pageKindFilter } from '@/components/site-health/page-kind-select';
+import {
+  PAGES_FILTER_URL_KEYS,
+  pagesFilterParams,
+  usePagesFilters,
+  usePagesFilterState,
+} from '@/components/site-health/pages-filters';
 import { PagesTable } from '@/components/site-health/pages-table';
 import { RootErrorsBlock } from '@/components/site-health/root-errors-block';
 import { SubmittedSearch } from '@/components/site-health/submitted-search';
 import { Download, FileText } from '@/lib/icons';
-import { type PagesParams, type PagesSort } from '@/lib/api/site-health';
+import { type PageFilterParams, type PagesParams, type PagesSort } from '@/lib/api/site-health';
 import { siteHealthQueries } from '@/lib/api/site-health-queries';
 import type { SiteCrawl } from '@citeladder/contracts';
 import { sharedOrigin } from '@/lib/format';
+import { useUrlParam } from '@/lib/navigation/url-params';
 import { stringUrlCodec, useUrlState, type UrlCodec } from '@/lib/navigation/url-state';
 import { PAGE_KINDS } from '@/lib/site-health/page-kinds';
 import { useCursorTableQuery } from '@/lib/table/use-cursor-table-query';
@@ -34,7 +40,7 @@ export function InventorySection({
   mode: InventoryMode;
   crawl: SiteCrawl | null;
   active: boolean;
-  exportPages?: Readonly<{ onExport: () => void; exporting: boolean }>;
+  exportPages?: ExportPages;
 }>) {
   let content: ReactNode;
   if (mode === 'none' || !crawl) {
@@ -94,18 +100,22 @@ const DISCOVERED_COLUMNS: readonly DataTableColumn[] = [
   { key: 'source', label: 'Source', kind: 'text', width: 'name' },
 ];
 
-type ViewKey = 'monitored' | 'all' | 'errors';
+type ViewKey = 'monitored' | 'all' | 'errors' | 'with_issues' | 'not_indexable';
 
 const VIEWS: ReadonlyArray<{ key: ViewKey; label: string }> = [
   { key: 'monitored', label: 'Monitored' },
   { key: 'all', label: 'All discovered' },
   { key: 'errors', label: 'Errors' },
+  { key: 'with_issues', label: 'With issues' },
+  { key: 'not_indexable', label: 'Not indexable' },
 ];
 
 const VIEW_PARAMS: Readonly<Record<ViewKey, PagesParams>> = {
   monitored: { monitored: true },
   all: {},
   errors: { status: 'error_or_blocked' },
+  with_issues: { with_issues: true },
+  not_indexable: { indexable: false },
 };
 
 const VIEW_CODEC = stringUrlCodec<ViewKey>(
@@ -123,7 +133,12 @@ const SEARCH_CODEC: UrlCodec<string> = {
   serialize: (value) => value.trim() || null,
 };
 
-export const PAGES_INVENTORY_URL_KEYS = ['pages_view', 'page_kind', 'pages_query'] as const;
+export const PAGES_INVENTORY_URL_KEYS = [
+  'pages_view',
+  'page_kind',
+  'pages_query',
+  ...PAGES_FILTER_URL_KEYS,
+] as const;
 
 function usePagesInventoryState() {
   const [view, setView] = useUrlState(PAGES_INVENTORY_URL_KEYS[0], VIEW_CODEC);
@@ -132,10 +147,28 @@ function usePagesInventoryState() {
   return { view, setView, pageKind, setPageKind, query, setQuery };
 }
 
-type ExportPages = Readonly<{ onExport: () => void; exporting: boolean }>;
+type ExportPages = Readonly<{
+  onExport: (filters: PageFilterParams) => void;
+  exporting: boolean;
+}>;
 
-function usePagesToolbar(active: boolean, exportPages: ExportPages | undefined): FilterBarProps {
+function usePagesToolbar({
+  crawl,
+  active,
+  exportPages,
+  filters,
+}: Readonly<{
+  crawl: SiteCrawl;
+  active: boolean;
+  exportPages: ExportPages | undefined;
+  filters: PageFilterParams;
+}>): FilterBarProps {
   const { view, setView, pageKind, setPageKind, query, setQuery } = usePagesInventoryState();
+  const pageFilters = usePagesFilters({
+    workspaceId: crawl.workspace_id,
+    crawlId: crawl.id,
+    indexableFixed: view === 'not_indexable',
+  });
   return {
     view: (
       <SegmentedControl
@@ -157,9 +190,16 @@ function usePagesToolbar(active: boolean, exportPages: ExportPages | undefined):
         label="Search pages"
       />
     ),
-    filters: [pageKindFilter({ value: pageKind, onChange: (next) => setPageKind(next) })],
+    filters: [
+      pageKindFilter({ value: pageKind, onChange: (next) => setPageKind(next) }),
+      ...pageFilters,
+    ],
     actions: exportPages ? (
-      <Button variant="secondary" onClick={exportPages.onExport} pending={exportPages.exporting}>
+      <Button
+        variant="secondary"
+        onClick={() => exportPages.onExport(filters)}
+        pending={exportPages.exporting}
+      >
         <Icon icon={Download} />
         Export CSV
       </Button>
@@ -176,7 +216,7 @@ function ScoredInventory({
   active: boolean;
   exportPages: ExportPages | undefined;
 }>) {
-  const requestedSort = useSearchParams()[0].get('sort');
+  const requestedSort = useUrlParam('sort');
   return (
     <ScoredInventoryState
       key={requestedSort ?? ''}
@@ -200,26 +240,28 @@ function ScoredInventoryState({
   exportPages: ExportPages | undefined;
 }>) {
   const { view, pageKind, query } = usePagesInventoryState();
-  const toolbar = usePagesToolbar(active, exportPages);
+  const { rule, indexable, depth, score } = usePagesFilterState();
   const [sort, setSort] = useState<PagesSort>(() => initialPagesSort(requestedSort));
 
   const activeViewParams: PagesParams =
     active && view === 'monitored'
       ? { ...VIEW_PARAMS.monitored, status: 'completed' }
       : VIEW_PARAMS[view];
+  const filters: PageFilterParams = {
+    ...pagesFilterParams({ rule, indexable, depth, score }),
+    ...activeViewParams,
+    page_kind: pageKind || undefined,
+    query: query || undefined,
+    sort,
+  };
+  const toolbar = usePagesToolbar({ crawl, active, exportPages, filters });
 
   const { page, table } = useCursorTableQuery({
     workspaceId: crawl.workspace_id,
     scopeId: crawl.id,
-    scope: [view, activeViewParams, pageKind, query, sort],
+    scope: [view, filters],
     query: (request) =>
-      siteHealthQueries.pages(crawl.workspace_id, crawl.id, {
-        ...activeViewParams,
-        page_kind: pageKind || undefined,
-        query: query || undefined,
-        sort,
-        ...request,
-      }),
+      siteHealthQueries.pages(crawl.workspace_id, crawl.id, { ...filters, ...request }),
     noun: 'pages',
     loading: 'Loading pages…',
     subject: 'the pages for this view',

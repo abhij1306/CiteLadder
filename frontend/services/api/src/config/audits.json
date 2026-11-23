@@ -182,13 +182,13 @@
     "audit_max_output_tokens": {
       "env": ["AUDIT_AUDIT_MAX_OUTPUT_TOKENS"],
       "type": "int",
-      "default": 800,
+      "default": 4096,
       "exclusive_minimum": 0
     },
     "audit_timeout_seconds": {
       "env": ["AUDIT_AUDIT_TIMEOUT_SECONDS"],
       "type": "float",
-      "default": 60.0,
+      "default": 120.0,
       "exclusive_minimum": 0
     },
     "audit_repetitions": {
@@ -238,7 +238,7 @@
     "audit_active_statuses": ["analyzing", "draft", "queued", "running", "validating"],
     "audit_triggers": ["manual", "repair", "scheduled", "system"],
     "audit_scope_commerce": "commerce",
-    "audit_answer_instruction": "Answer the question directly in 150 to 250 words. Use concise paragraphs or bullets, avoid repetition, and include citations to the most relevant sources when web search is available.",
+    "audit_answer_instruction": "",
     "event_audit_created": "audit.created",
     "event_audit_queued": "audit.queued",
     "event_audit_running": "audit.running",
@@ -269,6 +269,7 @@
     "claude": {},
     "gemini": {},
     "google_ai_overview": {},
+    "google_ai_mode": {},
     "chatgpt_search": {},
     "gemini_consumer": {}
   },

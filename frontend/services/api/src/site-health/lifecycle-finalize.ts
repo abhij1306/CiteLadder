@@ -334,7 +334,7 @@ async function readCurrent(db: Database, crawl: Crawl, options: PrepareOptions) 
   let after: string | null = null;
   let full = true;
   while (full) {
-    const rows: Current[] = await currentAfter(db, crawl, after, options.crossPage); // NOSONAR -- Keyset pages, in order.
+    const rows: Current[] = await currentAfter(db, crawl, after, options.crossPage); // NOSONAR
     for (const { facts, final_url: finalUrl, ...row } of rows) {
       after = row.id;
       if (options.retiring.has(row.url_hash)) continue;

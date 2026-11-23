@@ -137,7 +137,7 @@ async function catalogRows(db: Database, scope: CommerceScope, executions: Execu
   let cursor: string | null = null;
   do {
     const query = { ...catalogQuery(executions), cursor, limit: m.PAGE_SIZE };
-    const page: CommerceProductPage = await productMetrics(db, scope, query); // NOSONAR -- Each page continues from the previous cursor.
+    const page: CommerceProductPage = await productMetrics(db, scope, query); // NOSONAR
     total = page.executions;
     rows.push(...page.items);
     cursor = page.next_cursor;

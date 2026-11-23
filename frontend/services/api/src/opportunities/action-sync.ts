@@ -129,8 +129,6 @@ function groupFields(group: Group, snapshotId: string) {
   } satisfies Record<GroupColumn, unknown>;
 }
 
-// PostgreSQL binds at most 65,535 parameters per statement. Each row binds its
-// id plus every group column; the statement adds updated_at and workspace_id.
 const MAX_BIND_PARAMETERS = 65_535;
 const UPDATE_BATCH_ROWS = Math.floor((MAX_BIND_PARAMETERS - 2) / (GROUP_COLUMNS.length + 1));
 const INSERT_BATCH = Math.floor(MAX_BIND_PARAMETERS / (GROUP_COLUMNS.length + 10));
@@ -210,8 +208,7 @@ export async function syncActions(
   }
   for (let start = 0; start < created.length; start += INSERT_BATCH) {
     const batch = created.slice(start, start + INSERT_BATCH);
-    // One transaction connection runs one statement at a time.
-    const inserted = await trx // NOSONAR -- Batches share the refresh transaction.
+    const inserted = await trx // NOSONAR
       .insertInto('actions')
       .values(
         batch.map((group) => ({

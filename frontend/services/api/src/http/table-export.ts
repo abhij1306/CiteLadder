@@ -3,8 +3,8 @@ import { getLogger } from '../logging.ts';
 
 const logger = getLogger('api.table_export');
 
-export function assertExportBound(count: number, max: number) {
-  if (count > max) throw new ApiError(422, 'Export exceeds configured bound; narrow the filters');
+export function assertExportBound(count: number, max: number, advice = 'narrow the filters') {
+  if (count > max) throw new ApiError(422, `Export exceeds configured bound; ${advice}`);
 }
 
 export async function* keysetBatches<T>({

@@ -1,164 +1,20 @@
-import { randomUUID } from 'node:crypto';
-
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { createApp } from '../src/app.ts';
+import { policy } from '../src/config.ts';
 import { perceivedAnswers, sentimentsOf } from '../src/visibility/perception.ts';
-import { TEST_SESSION_COOKIE, sessionToken, testConfig, testDatabase } from './support.ts';
-import { VisibilityFixtures, type Tenant } from './visibility-fixtures.ts';
+import {
+  aspect,
+  CONFIGURATION,
+  PRICING,
+  perceptionReads,
+  SUPPORT,
+  type Body,
+  VERSIONS,
+} from './perception-read-fixtures.ts';
+import type { Tenant } from './visibility-fixtures.ts';
 import { frozen } from './visibility-read-support.ts';
 
-const config = testConfig();
-const db = testDatabase(config);
-const fixtures = new VisibilityFixtures(db);
-const app = createApp(config, db);
-const VERSIONS = {
-  extractor_version: 'perception-extract-test',
-  template_version: 'perception-template-test',
-  metrics_version: 'perception-metrics-test',
-  model: 'test',
-};
-const CONFIGURATION = {
-  brand_name: 'Acme',
-  competitors: [{ name: 'Rival', domains: [] }],
-  perception: VERSIONS,
-};
-
-type Body = Record<string, unknown>;
-
-async function get(tenant: Tenant, path: string, query: Record<string, string> = {}) {
-  const token = await sessionToken({ sub: tenant.userId, ver: 0 });
-  const search = new URLSearchParams(query);
-  const response = await app.request(`${path}${search.size ? `?${search}` : ''}`, {
-    headers: { cookie: `${TEST_SESSION_COOKIE}=${token}` },
-  });
-  return { status: response.status, body: (await response.json()) as Body };
-}
-
-type Entity = {
-  name: string;
-  kind: 'brand' | 'competitor';
-  state?: string;
-  label?: string;
-  confidence?: number;
-  aspects?: {
-    theme_id: string | null;
-    polarity: string;
-    quote: string;
-    start: number;
-    end: number;
-  }[];
-};
-
-async function answer(
-  tenant: Tenant,
-  auditId: string,
-  input: {
-    entities: Entity[];
-    outcome?: string;
-    reason?: string;
-    citations?: string[];
-    engine?: string;
-    cohort?: string;
-  },
-) {
-  const { taskId, analysisId } = await fixtures.execution(tenant, {
-    auditId,
-    engine: input.engine,
-    cohort: input.cohort,
-    promptText: 'best tools?',
-    theme: 'Tools',
-    analysis: { citations: (input.citations ?? []).map((url) => ({ url })) },
-  });
-  await db
-    .updateTable('response_analyses')
-    .set({
-      entity_assessments: JSON.stringify(
-        input.entities.map((entity) => ({
-          entity_id: `${entity.kind}:${entity.name.toLowerCase()}`,
-          entity_name: entity.name,
-          entity_kind: entity.kind,
-          state: entity.state ?? 'mentioned',
-        })),
-      ),
-    })
-    .where('id', '=', analysisId!)
-    .execute();
-  if (!input.outcome) return taskId;
-  const analysis = await db
-    .selectFrom('response_analyses')
-    .select(['artifact_id'])
-    .where('id', '=', analysisId!)
-    .executeTakeFirstOrThrow();
-  const perceptionId = randomUUID();
-  await db
-    .insertInto('answer_perceptions')
-    .values({
-      id: perceptionId,
-      workspace_id: tenant.workspaceId,
-      project_id: tenant.projectId,
-      audit_id: auditId,
-      task_id: taskId,
-      analysis_id: analysisId!,
-      artifact_id: analysis.artifact_id,
-      extractor_version: VERSIONS.extractor_version,
-      template_version: VERSIONS.template_version,
-      outcome: input.outcome,
-      outcome_reason: input.reason ?? null,
-      created_at: new Date(),
-    })
-    .execute();
-  const labelled = input.entities.filter((entity) => entity.label);
-  if (labelled.length)
-    await db
-      .insertInto('entity_sentiments')
-      .values(
-        labelled.map((entity) => ({
-          id: randomUUID(),
-          workspace_id: tenant.workspaceId,
-          perception_id: perceptionId,
-          entity_id: `${entity.kind}:${entity.name.toLowerCase()}`,
-          entity_name: entity.name,
-          entity_kind: entity.kind,
-          label: entity.label!,
-          confidence: entity.confidence ?? 0.9,
-          low_confidence: (entity.confidence ?? 0.9) < 0.6,
-          passage_spans: JSON.stringify([]),
-          aspects: JSON.stringify(entity.aspects ?? []),
-        })),
-      )
-      .execute();
-  return taskId;
-}
-
-const SUPPORT = randomUUID();
-const PRICING = randomUUID();
-
-async function themes(tenant: Tenant, rows: [id: string, name: string][]) {
-  await db
-    .insertInto('project_themes')
-    .values(
-      rows.map(([id, name], position) => ({
-        id,
-        workspace_id: tenant.workspaceId,
-        project_id: tenant.projectId,
-        name,
-        position,
-        source: 'user',
-        created_at: new Date(),
-        updated_at: new Date(),
-      })),
-    )
-    .execute();
-}
-
-const aspect = (polarity: string, quote: string, start = 0) => ({
-  theme_id: SUPPORT as string | null,
-  polarity,
-  quote,
-  start,
-  end: start + quote.length,
-});
+const { db, fixtures, get, answer, themes } = perceptionReads();
 
 afterAll(async () => {
   await fixtures.cleanup();
@@ -535,6 +391,7 @@ describe('GET /visibility/perception', () => {
         aspects: [
           {
             theme: 'Support',
+            attribute: { kind: 'not_labelled' },
             polarity: 'negative',
             quote: 'Acme support is slow',
             start: 0,
@@ -596,6 +453,84 @@ describe('GET /visibility/perception', () => {
       [pooled, true],
       [other, false],
     ]);
+  });
+
+  it("counts every answer of each run completed in a date window, and no other run's", async () => {
+    const owner = await fixtures.tenant();
+    const outsider = await fixtures.tenant();
+    const run = async (who: Tenant, at: string, labels: string[]) => {
+      const id = await fixtures.audit(who, {
+        completedAt: new Date(at),
+        configuration: { ...frozen({ panel_hash: at }), ...CONFIGURATION },
+      });
+      await fixtures.metricSnapshot(who, id, { metrics: { total_completed: labels.length } });
+      for (const label of labels)
+        await answer(who, id, {
+          outcome: 'classified',
+          entities: [
+            {
+              name: 'Acme',
+              kind: 'brand',
+              label,
+              state: label === 'positive' ? 'recommended' : 'mentioned',
+              aspects: label === 'neutral' ? [] : [aspect(label, `Acme is ${label} on ${at}`)],
+            },
+          ],
+        });
+      return id;
+    };
+    await run(owner, '2026-05-01T00:00:00Z', ['negative', 'negative', 'negative']);
+    const first = await run(owner, '2026-05-10T00:00:00Z', ['positive', 'negative']);
+    const second = await run(owner, '2026-05-20T00:00:00Z', ['positive', 'positive', 'neutral']);
+    await run(outsider, '2026-05-15T00:00:00Z', ['negative', 'negative']);
+
+    const { status, body } = await get(
+      owner,
+      `/api/v1/projects/${owner.projectId}/visibility/perception`,
+      { from: '2026-05-05T00:00:00Z', to: '2026-05-31T00:00:00Z' },
+    );
+
+    expect(status).toBe(200);
+    expect(body).toMatchObject({
+      state: 'value',
+      source_audit_ids: [first, second].sort(),
+      coverage: { mentions: 5, classified: 5 },
+      brand: {
+        score: { positive: 3, neutral: 1, negative: 1, classified: 5, net_sentiment: 40 },
+      },
+      themes: [{ theme: 'Other', positive: 3, negative: 1 }],
+      recommended: { mentioned: 5, recommended: 3, rate: 0.6 },
+    });
+    expect((body.negative_quotes as { text: string }[]).map((quote) => quote.text)).toEqual([
+      'Acme is negative on 2026-05-10T00:00:00Z',
+    ]);
+    expect((body.trend as { audit_id: string }[]).map((point) => point.audit_id)).toEqual([
+      first,
+      second,
+    ]);
+  });
+
+  it('asks for a narrower period when the window holds more runs than one read covers', async () => {
+    const owner = await fixtures.tenant();
+    const cap = policy.visibility.selection_max_runs;
+    const day = (offset: number) => new Date(Date.UTC(2026, 4, 1) + offset * 3_600_000);
+    await Promise.all(
+      Array.from({ length: cap + 1 }, (_, index) =>
+        fixtures.audit(owner, { completedAt: day(index), configuration: CONFIGURATION }),
+      ),
+    );
+    const path = `/api/v1/projects/${owner.projectId}/visibility/perception`;
+
+    const [over, within] = await Promise.all([
+      get(owner, path, { from: day(0).toISOString(), to: day(cap).toISOString() }),
+      get(owner, path, { from: day(1).toISOString(), to: day(cap).toISOString() }),
+    ]);
+
+    expect([over.status, (over.body.error as { message: string }).message]).toEqual([
+      422,
+      `Select a narrower period: at most ${cap} runs per selection`,
+    ]);
+    expect(within.status).toBe(200);
   });
 
   it('is not found from another workspace', async () => {

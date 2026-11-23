@@ -30,7 +30,7 @@ export function ExternalHttpLink({
     <a
       {...anchorProps}
       className={cn(
-        'underline underline-offset-2 [:root:not([data-public-surface])_&]:decoration-transparent [:root:not([data-public-surface])_&]:hover:decoration-current [:root:not([data-public-surface])_&]:focus-visible:decoration-current',
+        'underline underline-offset-2 [:root:not([data-public-surface])_&]:hover:decoration-current [:root:not([data-public-surface])_&]:focus-visible:decoration-current',
         anchorProps.className,
       )}
       href={url.toString()}

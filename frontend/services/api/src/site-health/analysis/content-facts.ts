@@ -20,12 +20,11 @@ import {
   outsideContainers,
   type PageScope,
 } from './regions.ts';
+import { widen } from '../../widen.ts';
 
 const facts = analysisPolicy.facts;
 const tableBounds = policy.content_differentiation;
 const HEADINGS = new Set(['h1', 'h2', 'h3', 'h4', 'h5', 'h6']);
-// A capitalized name of up to six words, then a provider verb. Every
-// quantifier is bounded, so matching stays linear in the sentence length.
 const NAME = String.raw`[A-Z][A-Za-z0-9&'.-]*(?:\s+[A-Z][A-Za-z0-9&'.-]*){0,5}`;
 const OFFER_VERBS = String.raw`provides?|offers?|delivers?|builds?|manages?|specializes\s+in`;
 const PROVIDER_VERBS = String.raw`${OFFER_VERBS}|measures?|turns?|brings\s+together|helps?|enables?`;
@@ -58,10 +57,10 @@ export function emptyContentFacts() {
       audience_or_outcome: '',
       next_action: '',
     },
-    primary_heading_outline: [] as { level: number; text: string }[],
-    primary_table_headers: [] as string[][],
-    primary_paragraph_word_counts: [] as number[],
-    question_answer_relationships: [] as ReturnType<typeof questionAnswerRelationships>,
+    primary_heading_outline: widen<{ level: number; text: string }[]>([]),
+    primary_table_headers: widen<string[][]>([]),
+    primary_paragraph_word_counts: widen<number[]>([]),
+    question_answer_relationships: widen<ReturnType<typeof questionAnswerRelationships>>([]),
   };
 }
 

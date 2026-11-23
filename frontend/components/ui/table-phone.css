@@ -1,0 +1,22 @@
+@media (max-width: 767px) {
+  [data-data-table-frame] td .truncate,
+  .table-frame th[scope='row'] .truncate {
+    white-space: normal;
+    overflow-wrap: break-word;
+    text-overflow: clip;
+  }
+
+  [data-data-table-frame] td [data-cell-lines] {
+    flex-wrap: wrap;
+  }
+
+  [data-data-table-frame] td [data-url-text] {
+    display: block;
+    white-space: normal;
+  }
+
+  [data-data-table-frame] td [data-url-text] > span {
+    display: inline;
+    overflow-wrap: break-word;
+  }
+}

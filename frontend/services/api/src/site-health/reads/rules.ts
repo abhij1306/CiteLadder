@@ -54,25 +54,14 @@ export function ruleSection(ruleId: string): IssueSection | null {
   return rule ? issueSection(rule) : null;
 }
 
-export function issueImpact(ruleId: string, findingClass: string, severity: string) {
-  const bands: Record<string, number> = reads.defect_impact_bands;
-  if (findingClass === 'defect') {
-    const label = severity.replaceAll('_', ' ').replace(/\b\w/gu, (c) => c.toUpperCase());
-    return { band: bands[severity] ?? 0, label };
-  }
-  const pillar = (reads.aeo_check_pillar as Record<string, string>)[ruleId];
-  if (findingClass !== 'advisory' || !RULES.has(ruleId) || pillar === undefined)
-    return { band: 0, label: 'Advisory' };
-  const weight = (reads.readiness_dimension_weights as Record<string, number>)[pillar]!;
-  const label = (reads.aeo_dimension_labels as Record<string, string>)[pillar]!;
-  return {
-    band: Math.max(1, Math.round(weight * 10)),
-    label: `${label} · ${Math.round(weight * 100)}%`,
-  };
+export function issueImpact(severity: string) {
+  const bands: Record<string, number> = reads.severity_impact_bands;
+  const label = severity.replaceAll('_', ' ').replace(/\b\w/gu, (c) => c.toUpperCase());
+  return { band: bands[severity] ?? 0, label };
 }
 
-export function issueGroupId(crawlId: string, ruleId: string, findingClass: string) {
-  return uuidV5(crawlId, `site-issue-group:${ruleId}:${findingClass}`);
+export function issueGroupId(crawlId: string, ruleId: string) {
+  return uuidV5(crawlId, `site-issue-group:${ruleId}`);
 }
 
 const sitewideLinkRules: readonly string[] = [
@@ -91,6 +80,9 @@ export function siteLevelScope(
   const counted = record(record(evidence).page_kind_counts)[pageKind];
   return { ...scope, affected: typeof counted === 'number' ? counted : 0 };
 }
+
+export const isSiteLevelRule = (ruleId: string) =>
+  ruleId.startsWith('architecture.') || SITEWIDE_LINK_RULES.has(ruleId);
 
 export const siteLevelRuleOf = (alias: string) => {
   const rule = sql.ref(`${alias}.rule_id`);
@@ -147,7 +139,6 @@ export type IssueRow = {
   dimension: string;
   category: string;
   severity: string;
-  finding_class: string;
   description: string;
   remediation: string;
   evidence: unknown;
@@ -179,7 +170,6 @@ export const issueOccurrence = (
   dimension: issue.dimension,
   category: issue.category,
   severity: issue.severity,
-  finding_class: issue.finding_class,
   issue_title: ruleTitle(issue.rule_id),
   description: issue.description,
   remediation: issue.remediation,

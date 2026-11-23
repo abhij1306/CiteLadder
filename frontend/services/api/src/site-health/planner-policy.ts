@@ -33,11 +33,6 @@ export const robotsDecisionSchema = z.object({
 });
 export type RobotsDecision = z.infer<typeof robotsDecisionSchema>;
 
-/**
- * A crawl to admit: the request plus the robots decision behind an `ignore`.
- * The decision comes from the signed-in person on Start crawl, or is kept from
- * the shown crawl (`crawlRequest`); never from the request body.
- */
 export type CrawlAdmission = CreateCrawlRequest & { robots_decision?: RobotsDecision | null };
 
 export function controls(request: CrawlAdmission) {
@@ -54,7 +49,6 @@ export function controls(request: CrawlAdmission) {
 
 export function projectWebsiteRoot(websiteUrl: string | null) {
   const root = classifyUrlAdmission(websiteUrl ?? '');
-  // A private suffix (`a.github.io`) is its own site, not every tenant of `github.io`.
   const domain = root.url
     ? getDomain(new URL(root.url).hostname, { allowPrivateDomains: true })
     : null;

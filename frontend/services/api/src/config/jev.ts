@@ -1,8 +1,3 @@
-/** Versioned bounded quality judgments; decisions retain their original thresholds.
- * Thresholds are provisional and calibrated from user outcomes. Change policy_version
- * with thresholds. A blank API key disables the judge; deployments must authorize
- * this customer-data processor before configuring a key.
- */
 import { ConfigError } from './config-error.ts';
 
 export const jev = {

@@ -7,7 +7,7 @@ import {
 import type { Selectable, Updateable } from 'kysely';
 
 import { policy } from '../config.ts';
-import type { Database } from '../db/database.ts';
+import { inTransaction, type Database } from '../db/database.ts';
 import { jsonObject, jsonObjects } from '../db/json.ts';
 import type { CommerceCsvImports, CommerceProducts } from '../generated/db-schema.ts';
 import {
@@ -34,6 +34,7 @@ import {
 } from './catalog-sources.ts';
 import { categorySet, comparable, editHolds, importedBaseline } from './edits.ts';
 import { categoryKey } from './projection-facts.ts';
+import { widen } from '../widen.ts';
 
 type Outcome = CatalogImport['row_outcomes'][number];
 type ImportRow = Selectable<CommerceCsvImports>;
@@ -55,7 +56,7 @@ function editAware(
   if (applied.price === undefined) delete applied.price_max;
   const keys = categorySet(categories);
   if (!keys.length || editHolds(sources, 'categories', keys))
-    return { applied, added: [] as string[], replaces: false };
+    return { applied, added: widen<string[]>([]), replaces: false };
   const replaces = editedField(sources, 'categories');
   sources.categories = { ...provenance, keys };
   return { applied, added: [...categories], replaces };
@@ -68,8 +69,8 @@ async function writeCategories(
   write: { productId: string; observationId: string; added: string[]; replaces: boolean },
 ) {
   const ids: string[] = [];
-  for (const name of write.added) ids.push(await index.category(db, scope, name)); // NOSONAR -- Index creates missing categories on the import transaction.
-  for (const id of ids) await addMembership(db, scope, write.productId, id, write.observationId); // NOSONAR -- One import transaction: statements run in order.
+  for (const name of write.added) ids.push(await index.category(db, scope, name)); // NOSONAR
+  for (const id of ids) await addMembership(db, scope, write.productId, id, write.observationId); // NOSONAR
   if (!write.replaces) return;
   await db
     .deleteFrom('commerce_product_categories')
@@ -326,7 +327,7 @@ async function writeParents(
     const childId = written.get(node.key);
     const parentId = node.parent_key ? written.get(node.parent_key) : undefined;
     if (childId && parentId)
-      await setCategoryParent(db, scope, { childId, parentId, replace: true }); // NOSONAR -- One import transaction: statements run in order.
+      await setCategoryParent(db, scope, { childId, parentId, replace: true }); // NOSONAR
   }
 }
 
@@ -381,7 +382,7 @@ type CatalogSource = {
 export async function stageImport(db: Database, scope: CommerceScope, source: CatalogSource) {
   const items = catalogItems(source.format, source.content);
   const hash = createHash('sha256').update(`${source.format}\n${source.content}`).digest('hex');
-  const row = await db.transaction().execute(async (trx) => {
+  const row = await inTransaction(db, async (trx) => {
     await lockCatalog(trx, scope);
     const prior = await trx
       .selectFrom('commerce_csv_imports')
@@ -425,7 +426,7 @@ export function applyImport(
   importId: string,
   excluded: readonly string[],
 ) {
-  return db.transaction().execute(async (trx) => {
+  return inTransaction(db, async (trx) => {
     await lockCatalog(trx, scope);
     const row = await trx
       .selectFrom('commerce_csv_imports')
@@ -446,7 +447,7 @@ export function applyImport(
       outcomes.push(
         item.kind === 'rejected'
           ? rejected(item.row_number, 'invalid_row', item.detail)
-          : await importItem(trx, scope, run, item), // NOSONAR -- One transaction; rows share the product index in file order.
+          : await importItem(trx, scope, run, item), // NOSONAR
       );
     await writeParents(trx, scope, items, index.written());
     outcomes.sort(

@@ -1,4 +1,5 @@
-import { useLayoutEffect, type CSSProperties, type ReactNode, type RefObject } from 'react';
+import { useLayoutEffect, type ReactNode, type RefObject } from 'react';
+import { cssVars } from '@/lib/css-vars';
 
 import { LiveVerb, SkeletonBlock } from '@/components/ui/skeleton-block';
 import { StateBlock, type StateBlockProps } from '@/components/ui/state-block';
@@ -58,7 +59,7 @@ export function DataTableBody({
       <TableBody>{children}</TableBody>
       {rest > 0 ? (
         <TableBody>
-          <tr // NOSONAR -- blank space holding a reserved page's height; nothing in it is focusable
+          <tr // NOSONAR
             aria-hidden="true"
             data-table-spacer=""
             style={footprint(rest)}
@@ -109,7 +110,7 @@ function InFrame({ children }: Readonly<{ children: ReactNode }>) {
   );
 }
 
-const footprint = (rows: number) => ({ '--data-table-rows': rows }) as CSSProperties;
+const footprint = (rows: number) => cssVars({ '--data-table-rows': rows });
 
 const LOADING_ROWS = 5;
 

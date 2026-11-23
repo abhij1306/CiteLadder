@@ -9,7 +9,8 @@ import { EngineMark } from './engine-mark';
 import { Field } from './field';
 import { Input } from './input';
 import { Kbd } from './kbd';
-import { BusyRung, RungMeter } from '@/components/ui/rung-meter';
+import { ProgressMeter } from '@/components/ui/progress-meter';
+import { BusyRung } from '@/components/ui/rung-meter';
 import { Rungs } from './rungs';
 import { Skeleton } from './skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './table';
@@ -130,18 +131,18 @@ describe('Skeleton', () => {
   });
 });
 
-describe('RungMeter', () => {
+describe('ProgressMeter', () => {
   it('names the bar by its label and speaks its value as a percentage, clamped to 100', () => {
-    const { container, rerender } = render(<RungMeter label="Progress" value={48} />);
+    const { container, rerender } = render(<ProgressMeter label="Progress" value={48} />);
     const bar = screen.getByRole('progressbar', { name: 'Progress' });
     expect(bar).toHaveAttribute('value', '48');
     expect(bar).toHaveAttribute('max', '100');
     expect(bar).toHaveAttribute('aria-valuetext', '48.0%');
     expect(bar).not.toHaveAttribute('aria-busy');
     expect(screen.getByText('48.0%')).toBeInTheDocument();
-    expect(container.querySelectorAll('.bg-ink')).toHaveLength(5);
+    expect(container.querySelector<HTMLElement>('.bg-data-you')?.style.width).toBe('48%');
 
-    rerender(<RungMeter label="Progress" value={130} />);
+    rerender(<ProgressMeter label="Progress" value={130} />);
     expect(screen.getByRole('progressbar', { name: 'Progress' })).toHaveAttribute('value', '100');
   });
 
@@ -181,7 +182,7 @@ describe('Citation', () => {
     );
     const link = screen.getByRole('link', { name: /example\.com/ });
     expect(link).toHaveAttribute('href', 'https://www.example.com/shoes');
-    expect(link).toHaveTextContent('2Eexample.comBest running shoes');
+    expect(link).toHaveTextContent('2example.comBest running shoes');
   });
 });
 

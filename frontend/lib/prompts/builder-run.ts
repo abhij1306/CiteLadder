@@ -1,8 +1,16 @@
-import type { PromptGenerateRequest } from '@citeladder/contracts/prompt-requests';
+import type {
+  PromptGenerateRequest,
+  promptGenerationModeSchema,
+} from '@citeladder/contracts/prompt-requests';
+import type { z } from 'zod';
 import type { PromptCandidate, PromptFormLimits, SeedQueries, Topic } from '@citeladder/contracts';
 import { PROMPT_BUILDER } from '@/lib/config/prompts';
 
-export type RunLimits = Pick<PromptFormLimits, 'generation_count_max' | 'seed_query_ids_max'>;
+export type RunLimits = Pick<
+  PromptFormLimits,
+  'generation_count_max' | 'brand_prompts_max' | 'seed_query_ids_max'
+>;
+export type GenerationMode = z.infer<typeof promptGenerationModeSchema>;
 
 export type SeedChoice = SeedQueries['sources'][number]['source'] | 'none';
 type IntentKey = keyof typeof PROMPT_BUILDER.defaultIntentMix;
@@ -70,15 +78,27 @@ function seedFields(
   return { seed_source: source, seed_query_ids: ticked };
 }
 
+function brandRequest(settings: RunSettings, max: number): Built {
+  const count = whole(settings.count, 1, max);
+  if (count === null) return { ok: false, problem: `Choose between 1 and ${max} brand prompts.` };
+  const note = settings.runContext.trim();
+  return {
+    ok: true,
+    request: { mode: 'brand', count, topic_ids: [], ...(note ? { run_context: note } : {}) },
+  };
+}
+
 export function runRequest(
   settings: RunSettings,
   context: {
+    mode: GenerationMode;
     seeds: SeedQueries | null;
     hasCompetitors: boolean;
     personaChoices: readonly string[];
     limits: RunLimits;
   },
 ): Built {
+  if (context.mode === 'brand') return brandRequest(settings, context.limits.brand_prompts_max);
   const countMax = context.limits.generation_count_max;
   const count = whole(settings.count, 1, countMax);
   if (count === null) return { ok: false, problem: `Choose between 1 and ${countMax} prompts.` };
@@ -183,6 +203,7 @@ export function segmentCoverage(
   request: PromptGenerateRequest,
   drafted: readonly PromptCandidate[],
 ): SegmentCoverageRow[] {
+  if (request.mode === 'brand') return [];
   const branded = request.distribution?.branded_share ?? 0;
   const comparison = request.distribution?.comparison_share ?? 0;
   const targets = apportion(request.count ?? 0, [

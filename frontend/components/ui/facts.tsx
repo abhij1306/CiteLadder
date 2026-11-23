@@ -84,8 +84,6 @@ export function FactList({
       aria-label={label}
       data-fact-list={layout}
       data-ruled={facts.length > RULED_FROM || undefined}
-      // A grid or flex item's automatic minimum is its content's width, so a
-      // long one-line value (a URL) would widen the list past its column.
       className={cn('min-w-0', LIST[layout])}
     >
       {facts.map((fact, index) => (

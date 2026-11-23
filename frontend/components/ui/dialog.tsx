@@ -196,7 +196,6 @@ function overlayWidth(width: 'narrow' | 'wide' | 'prose'): string {
     case 'wide':
       return 'max-w-form';
     case 'prose':
-      // Tailwind's own `max-w-prose` is 65ch, not the 720 token.
       return 'max-w-[var(--container-prose)]';
     default: {
       const unhandled: never = width;

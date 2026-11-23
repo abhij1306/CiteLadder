@@ -197,6 +197,7 @@ function propertyCheck(facts: Facts, recommended: boolean): CheckResult {
   const expectation = expectationFor(facts);
   const selection = primarySelection(facts, expectation);
   if (selection.outcome === 'unknown') return ['unknown', selection.evidence];
+  if (selection.outcome === 'missing' && !recommended) return ['missing', selection.evidence];
   if (selection.outcome !== 'satisfied')
     return ['not_applicable', { ...selection.evidence, reason: 'no_expected_type_block' }];
   const candidates = selection.blocks.flatMap((block) => {

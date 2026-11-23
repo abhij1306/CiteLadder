@@ -85,7 +85,6 @@ export async function recordCatalogRevision(
       triggerKind: `commerce_catalog_${source.kind}`,
       triggerId: source.id ?? scope.projectId,
     });
-  // Revision numbers are per project; concurrent writers take them in turn.
   await subjectXactLock(db, `commerce_catalog_revision:${scope.workspaceId}:${scope.projectId}`);
   const identity = await catalogIdentity(db, scope);
   if (!identity.products.length && !identity.approved_competitors.length) return null;

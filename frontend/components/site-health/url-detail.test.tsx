@@ -34,7 +34,6 @@ function resolvedIssue(id: string, title: string) {
     dimension: 'technical',
     category: 'metadata',
     severity: 'medium',
-    finding_class: 'defect',
     title,
     description: 'The page has no title.',
     remediation: 'Add a title.',
@@ -227,6 +226,7 @@ describe('UrlDetail', () => {
     expect(
       screen
         .getAllByText('Acme Retail Online')
+        .filter((node) => !node.closest('dl[aria-label="Page facts"]'))
         .map((node) => (node.closest('nav') ? 'trail' : node.tagName)),
     ).toEqual(['trail', 'H1']);
     expect(screen.getByText('Product')).toBeInTheDocument();
@@ -274,6 +274,72 @@ describe('UrlDetail', () => {
       'page',
     );
     expect(screen.queryByRole('link', { name: /^Back to/ })).not.toBeInTheDocument();
+  });
+
+  it('lists every shown check as passed, failed or not checked under its score', async () => {
+    const check = (
+      id: string,
+      title: string,
+      fields: Partial<PageDetail['evaluations'][number]>,
+    ): PageDetail['evaluations'][number] => ({
+      id,
+      rule_id: `rule.${id.slice(0, 4)}`,
+      title,
+      dimension: 'technical',
+      category: 'metadata',
+      severity: 'medium',
+      finding_class: 'defect',
+      outcome: 'satisfied',
+      display_applicability: true,
+      score_applicability: true,
+      checklist_membership: true,
+      reason_code: '',
+      score_roles: [],
+      aeo_pillar: '',
+      weight: 1,
+      evidence: {},
+      analyzer_version: 'a1',
+      rule_version: 'r1',
+      created_at: '2026-07-16T00:00:00Z',
+      ...fields,
+    });
+    mswServer.use(
+      ...handlers(
+        detail({
+          evaluations: [
+            check('11111111-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'Title present', {
+              score_roles: ['web_fundamentals'],
+            }),
+            check('22222222-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'Schema matches content', {
+              outcome: 'missing',
+              score_roles: ['aeo_readiness'],
+              aeo_pillar: 'machine-readability',
+            }),
+            check('33333333-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'Sitemap lists page', {
+              outcome: 'unknown',
+            }),
+            check('44444444-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'Product price shown', {
+              outcome: 'not_applicable',
+              display_applicability: false,
+            }),
+          ],
+        }),
+      ),
+    );
+    renderUrlDetail(<UrlDetail crawlId={CRAWL} siteUrlId={URL_ID} />);
+
+    const rows = (name: string) =>
+      within(screen.getByRole('table', { name }))
+        .getAllByRole('row')
+        .slice(1)
+        .map((row) => row.textContent);
+    await screen.findByRole('heading', { name: 'Checks' });
+    expect(rows('Web fundamentals (1)')).toEqual(['Title presentPassed']);
+    expect(rows('AEO readiness · Machine readability (1)')).toEqual([
+      'Schema matches contentFailed',
+    ]);
+    expect(rows('Site (1)')).toEqual(['Sitemap lists pageNot checked']);
+    expect(screen.queryByText('Product price shown')).not.toBeInTheDocument();
   });
 
   it('says an unknown compression is not measured rather than "none"', async () => {
@@ -579,7 +645,7 @@ describe('UrlDetail', () => {
     expect(screen.getByText("Internal links weren't counted for this page.")).toBeVisible();
   });
 
-  it('lists every issue once, worst first, each row opening its fix, and advisories apart', async () => {
+  it('lists every issue once in one list, worst first, with its severity, each row opening its fix', async () => {
     const [low, high] = detail().issues;
     mswServer.use(
       ...handlers(
@@ -593,7 +659,6 @@ describe('UrlDetail', () => {
               rule_id: 'technical.meta_description_present',
               issue_title: 'Missing meta description',
               severity: 'medium',
-              finding_class: 'advisory',
               evidence: { present: false },
             },
           ],
@@ -604,18 +669,19 @@ describe('UrlDetail', () => {
     const user = userEvent.setup();
     renderUrlDetail(<UrlDetail crawlId={CRAWL} siteUrlId={URL_ID} />);
 
-    await screen.findByRole('heading', { name: 'All issues (2)' });
-    const list = allIssues('All issues (2)');
+    await screen.findByRole('heading', { name: 'All issues (3)' });
+    const list = allIssues('All issues (3)');
     const rows = within(list).getAllByRole('button', { expanded: false });
     expect(rows.map((row) => row.textContent)).toEqual([
       'WebSite schema is missingHighAEO',
+      'Missing meta descriptionMediumAEO',
       'FAQ schema not presentLowAEO',
     ]);
-    await user.click(rows[1]!);
+    await user.click(rows[2]!);
     await user.click(rows[0]!);
     for (const title of ['WebSite schema is missing', 'FAQ schema not present'])
       expect(screen.getAllByText(title)).toHaveLength(1);
-    const faq = document.getElementById(rows[1]!.getAttribute('aria-controls')!)!;
+    const faq = document.getElementById(rows[2]!.getAttribute('aria-controls')!)!;
     expect(within(faq).getByText('Add FAQPage markup to the questions.')).toBeInTheDocument();
     const website = document.getElementById(rows[0]!.getAttribute('aria-controls')!)!;
     expect(
@@ -623,11 +689,7 @@ describe('UrlDetail', () => {
         .getAllByText(/^(AEO readiness|Web fundamentals)$/)
         .map((badge) => badge.textContent),
     ).toEqual(['AEO readiness', 'Web fundamentals']);
-    expect(screen.getByText('Advisories (1)')).toBeInTheDocument();
-    const advisory = screen.getByText('Missing meta description').closest('li')!;
-    expect(within(advisory).queryByText('Advisory')).toBeNull();
-    expect(within(advisory).queryByText('Medium')).not.toBeInTheDocument();
-    expect(within(advisory).getByText('AEO')).toBeInTheDocument();
+    expect(screen.queryByText(/^Advisories/)).toBeNull();
     expect(figureText('Web fundamentals')).toBe('46');
     const score = document.querySelector('[data-figure-strip]')!;
     expect(score.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();

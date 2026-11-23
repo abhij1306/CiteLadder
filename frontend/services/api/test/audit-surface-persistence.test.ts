@@ -125,6 +125,7 @@ describe('durable surface evidence', () => {
       .where('id', '=', t.task.id)
       .execute();
     const result = parseOverview(
+      'google_ai_overview',
       {
         status_code: 20000,
         tasks: [
@@ -204,6 +205,7 @@ describe('durable surface evidence', () => {
   it('records a parser failure as unavailable, retaining paid submission evidence without a successful raw artifact', async () => {
     const t = await seed();
     const result = parseOverview(
+      'google_ai_overview',
       {
         status_code: 20000,
         tasks: [

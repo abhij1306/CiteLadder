@@ -36,13 +36,13 @@ import {
   searchIntelligenceQueries,
   type SearchIntelligenceDataset,
   type SearchIntelligenceReadiness,
-  type SearchIntelligenceRun,
 } from '@/lib/api/search-intelligence';
 import type { SearchReviewAction } from '@citeladder/contracts/search-intelligence-requests';
 import { Layers, Play, Receipt, RefreshCw, Settings2 } from '@/lib/icons';
 import { searchMarketLabel } from '@/lib/config/search-intelligence';
 import { pollSearchRun } from '@/lib/search-intelligence/status';
 import { SEARCH_INTELLIGENCE_TABS } from '@/lib/search-intelligence/tabs';
+import { isOneOf } from '@/lib/utils';
 import { stringUrlCodec, useUrlState } from '@/lib/navigation/url-state';
 import { useProjectScope } from '@/lib/project/active-project-scope';
 import { useWorkspaceCapability } from '@/lib/project/project-context';
@@ -54,9 +54,9 @@ type Tab = Exclude<PageTab, 'demand'>;
 const RESEARCH_TABS = SEARCH_INTELLIGENCE_TABS.flatMap(({ value }) =>
   value === 'demand' ? [] : [value],
 );
-const TAB_CODEC = stringUrlCodec(
+const TAB_CODEC = stringUrlCodec<PageTab>(
   SEARCH_INTELLIGENCE_TABS.map(({ value }) => value),
-  'demand' as PageTab,
+  'demand',
 );
 const DEMAND_KEYS = ['view', 'signal', 'page', 'page_size'];
 function selectDatasets(
@@ -67,9 +67,7 @@ function selectDatasets(
   const latestDatasets = readiness?.datasets ?? [];
   const offered = readiness?.markets ?? [];
   const scopes = [...new Set(latestDatasets.map((item) => item.research_scope ?? 'exact_host'))];
-  const activeScope = scopes.includes(scope as 'exact_host' | 'domain_subdomains')
-    ? scope
-    : scopes[0];
+  const activeScope = isOneOf(scopes, scope) ? scope : scopes[0];
   const markets = [
     ...new Map(
       latestDatasets
@@ -206,9 +204,7 @@ function useKeywordResearch({
           action={action}
           readiness={data}
           onOpenChange={setDrawerOpen}
-          onReview={(payload) =>
-            reviewMutation.mutateAsync(payload) as Promise<SearchIntelligenceRun>
-          }
+          onReview={(payload) => reviewMutation.mutateAsync(payload)}
           onConfirm={async (runId) => {
             await confirmMutation.mutateAsync(runId);
             setDrawerOpen(false);
@@ -326,8 +322,6 @@ function researchView({
       tab === 'demand' ? undefined : (
         <FilterBar
           {...pageControls({
-            data: loaded,
-            tab,
             datasets,
             collection: empty ? null : collection,
             onSeed: actions.onSeed,
@@ -480,28 +474,18 @@ function PageActions({
 }
 
 function pageControls({
-  data,
-  tab,
   datasets,
   collection,
   savedView,
   ...actions
 }: Readonly<
   {
-    data: SearchIntelligenceReadiness;
-    tab: Tab;
     datasets: SearchIntelligenceDataset[];
     collection: SearchCollection | null;
     savedView: FilterDefinition[];
   } & CollectionActions
 >) {
-  const newest = datasets.find((item) =>
-    tab === 'backlinks' ? item.location_code === null : item.location_code !== null,
-  );
   return scopeControls({
-    data,
-    tab,
-    latest: collection?.dataset ?? newest,
     savedView,
     collection: collection ?? undefined,
     action: collection ? (

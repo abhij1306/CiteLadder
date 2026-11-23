@@ -79,8 +79,6 @@ export function MenuSubTrigger({
   return (
     <MenuPrimitive.SubTrigger
       className={menuItemClasses({ className: cn('data-[state=open]:overlay-hover', className) })}
-      // Named as it reads, "Surface: All surfaces": a name built from the two
-      // spans differs by browser (Chromium spaces them as "Surface : …").
       aria-label={value ? `${children}: ${value}` : undefined}
       {...props}
     >

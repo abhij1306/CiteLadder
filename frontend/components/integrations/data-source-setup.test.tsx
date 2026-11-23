@@ -14,7 +14,7 @@ import {
 
 import { hardNavigate } from '@/lib/navigation/hard-navigate';
 import { mswServer } from '@/test/msw-server';
-import { renderWithProviders } from '@/test/render';
+import { projectScope, renderWithProviders, type TestRole } from '@/test/render';
 import { makeProject } from '@/test/fixtures/project';
 
 const WS = '11111111-1111-4111-8111-111111111111';
@@ -25,14 +25,8 @@ const PROJECT = '88888888-8888-4888-8888-888888888888';
 const OTHER_PROJECT = '77777777-7777-4777-8777-777777777777';
 
 const activeProject = makeProject({ id: PROJECT, workspace_id: WS, name: 'Example' });
-let canManage = true;
 
 vi.mock('@/lib/navigation/hard-navigate', () => ({ hardNavigate: vi.fn() }));
-vi.mock('@/lib/project/project-context', () => ({
-  useWorkspaceCapability: () => canManage,
-  useActiveWorkspaceId: () => WS,
-  useProjectContext: () => ({ activeProject, activeWorkspaceId: WS, isLoading: false }),
-}));
 
 import { DataSourceSetup } from './data-source-setup';
 
@@ -75,7 +69,11 @@ function serve(connections: unknown[], mappings: Record<string, unknown[]> = {})
   );
 }
 
-function renderSetup(path = `/performance?project=${PROJECT}`, whenReady?: string) {
+function renderSetup({
+  path = `/performance?project=${PROJECT}`,
+  whenReady,
+  role = 'owner',
+}: { path?: string; whenReady?: string; role?: TestRole } = {}) {
   return renderWithProviders(
     <DataSourceSetup
       required={['gsc']}
@@ -83,23 +81,20 @@ function renderSetup(path = `/performance?project=${PROJECT}`, whenReady?: strin
       title="Connect Search Console"
       whenReady={whenReady}
     />,
-    { initialEntries: [path] },
+    { initialEntries: [path], projectSelection: projectScope(activeProject, role) },
   );
 }
 
 beforeAll(() => mswServer.listen({ onUnhandledFrame: 'error' }));
 beforeEach(() => vi.mocked(hardNavigate).mockClear());
-afterEach(() => {
-  mswServer.resetHandlers();
-  canManage = true;
-});
+afterEach(() => mswServer.resetHandlers());
 afterAll(() => mswServer.close());
 
 describe('DataSourceSetup', () => {
   it('starts one Google consent for both sources and returns to this screen', async () => {
     const ue = userEvent.setup();
     serve([]);
-    renderSetup('/performance?project=' + PROJECT + '&range=28d');
+    renderSetup({ path: '/performance?project=' + PROJECT + '&range=28d' });
 
     const connect = await screen.findByRole('button', { name: 'Connect Google' });
     expect(screen.getAllByRole('button', { name: /^Connect/ })).toHaveLength(1);
@@ -125,6 +120,7 @@ describe('DataSourceSetup', () => {
     serve([]);
     const first = renderWithProviders(page, {
       initialEntries: [`/performance?project=${PROJECT}`],
+      projectSelection: projectScope(activeProject),
     });
 
     expect(await screen.findByRole('heading', { name: 'Connect Google and Bing' })).toBeVisible();
@@ -136,7 +132,10 @@ describe('DataSourceSetup', () => {
     first.unmount();
 
     serve([connection(GA4, 'bing')]);
-    renderWithProviders(page, { initialEntries: [`/performance?project=${PROJECT}`] });
+    renderWithProviders(page, {
+      initialEntries: [`/performance?project=${PROJECT}`],
+      projectSelection: projectScope(activeProject),
+    });
     expect(await screen.findByTestId('data-source-setup')).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Connect Google and Bing' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Connect Google' })).toBeInTheDocument();
@@ -163,7 +162,7 @@ describe('DataSourceSetup', () => {
         HttpResponse.json([{ property_ref: '123', label: 'Main GA4', matches_project: null }]),
       ),
     );
-    renderSetup(`/performance?project=${PROJECT}&connected=gsc`);
+    renderSetup({ path: `/performance?project=${PROJECT}&connected=gsc` });
 
     expect(await screen.findByText('Google connected.')).toBeInTheDocument();
     await ue.click(
@@ -211,9 +210,8 @@ describe('DataSourceSetup', () => {
   });
 
   it('asks a member to involve an admin instead of offering consent', async () => {
-    canManage = false;
     serve([]);
-    renderSetup();
+    renderSetup({ role: 'member' });
 
     const setup = await screen.findByTestId('data-source-setup');
     expect(await within(setup).findByText('Ask a workspace owner or admin')).toBeInTheDocument();
@@ -250,7 +248,7 @@ describe('DataSourceSetup', () => {
         }),
       ),
     );
-    renderSetup(undefined, 'Waiting for the first import.');
+    renderSetup({ whenReady: 'Waiting for the first import.' });
     expect(await screen.findByText('Waiting for the first import.')).toBeInTheDocument();
     expect(screen.queryByTestId('data-source-setup')).toBeNull();
   });

@@ -38,7 +38,7 @@ import { Icon } from '@/components/ui/icon';
 import { SearchableSelect, type SearchableSelectOption } from '@/components/ui/searchable-select';
 import type { MarketOption } from '@citeladder/contracts/markets';
 
-const COUNTRY_FLAGS = {
+const COUNTRY_FLAGS: Readonly<Record<string, typeof AE | undefined>> = {
   AE,
   AR,
   AT,
@@ -71,7 +71,7 @@ const COUNTRY_FLAGS = {
   SG,
   US,
   ZA,
-} as const;
+};
 
 export function MarketSelect({
   options,
@@ -117,7 +117,7 @@ function CountryFlag({ code }: Readonly<{ code: string }>) {
       </span>
     );
   }
-  const Flag = COUNTRY_FLAGS[code as keyof typeof COUNTRY_FLAGS];
+  const Flag = COUNTRY_FLAGS[code];
   return Flag ? (
     <Flag
       data-country-flag={code}

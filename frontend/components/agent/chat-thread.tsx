@@ -19,7 +19,6 @@ export function useChatThread(workspaceId: string, detail: AgentChatDetail) {
   const runActive = isRunActive(detail.latest_run) || isPageReading(detail.page_fetch);
   const turn = useFollowUp(workspaceId, detail);
   const cancel = useCancelRun(workspaceId);
-  // Capture the run: a closure does not keep the narrowing of `detail.latest_run`.
   const activeRun = isRunActive(detail.latest_run) ? detail.latest_run : null;
   const stop = activeRun ? () => cancel.mutate({ chatId, runId: activeRun.id }) : undefined;
   return { workspaceId, access, runActive, turn, stop, stopping: cancel.isPending };
@@ -98,6 +97,7 @@ export function ReplyComposer({
       placeholder={placeholder}
       commands={turn.commands}
       skill={skill}
+      model={turn.model}
     />
   );
 }

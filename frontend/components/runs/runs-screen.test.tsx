@@ -67,6 +67,33 @@ it('opens on the status a deep link names', async () => {
   expect(screen.getByRole('tab', { name: /Failed/ })).toHaveAttribute('aria-selected', 'true');
 });
 
+it('counts every run under exactly one status tab', async () => {
+  vi.spyOn(runsApi, 'listAudits').mockResolvedValue([
+    audit(1, 'completed', '2026-08-04T00:00:00Z'),
+    audit(2, 'partially_completed', '2026-08-03T00:00:00Z'),
+    audit(3, 'cancelled', '2026-08-02T00:00:00Z'),
+    audit(4, 'failed', '2026-08-01T00:00:00Z'),
+  ]);
+  vi.spyOn(runsApi, 'listSchedules').mockResolvedValue([]);
+  renderWithProviders(<RunsScreen />, {
+    projectSelection: {
+      projects: [project],
+      activeProject: project,
+      activeProjectId: project.id,
+      status: 'ready',
+    },
+  });
+
+  await screen.findByRole('table', { name: 'All runs' });
+  expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
+    'All (4)',
+    'Completed (1)',
+    'Partial (1)',
+    'Running (0)',
+    'Failed or cancelled (2)',
+  ]);
+});
+
 it.each([
   ['no active prompt', 'archived', { role: 'link', name: 'Add prompts' }, false],
   ['an active prompt', 'active', { role: 'button', name: 'Launch run' }, true],

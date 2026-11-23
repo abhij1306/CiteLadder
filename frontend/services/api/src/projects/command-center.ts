@@ -331,7 +331,6 @@ export async function commandCenter(
   scope: ProjectScope,
   auditId: string | null,
 ): Promise<View> {
-  // The project read authorizes the scope before anything else is read.
   const project = await readProject(db, scope);
   const audits = await comparableAudits(db, scope, auditId);
   const order = readOpportunityOrder(db, scope);

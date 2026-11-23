@@ -27,7 +27,6 @@ class IslandBoundary extends Component<BoundaryProps, { error: { thrown: unknown
       component: this.props.label,
     });
     if (chunk || this.props.defects === 'contain') return;
-    // An update that throws hands the original error to the nearest boundary above.
     this.setState(() => {
       throw error;
     });

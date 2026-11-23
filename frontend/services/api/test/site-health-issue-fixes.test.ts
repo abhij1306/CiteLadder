@@ -101,7 +101,6 @@ async function fileIssue({
       dimension: rule.dimension,
       category: rule.category,
       severity: rule.severity,
-      finding_class: rule.finding_class,
       evidence: JSON.stringify(evidence),
       description: rule.description,
       remediation: rule.remediation,

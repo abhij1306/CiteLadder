@@ -4,7 +4,6 @@ import { ProjectLink } from '@/components/ui/project-link';
 import { CohortCompositionContext } from './cohort-composition-context';
 import { AppGrid } from '@/components/ui/app-grid';
 import { StatusMark } from '@/components/ui/status-mark';
-import { Tag } from '@/components/ui/tag';
 import { ActionButton } from '@/components/ui/actions';
 import { Button } from '@/components/ui/button';
 import { Delta } from '@/components/ui/delta';
@@ -17,7 +16,7 @@ import { TextLink } from '@/components/ui/text-link';
 import { Absence } from '@/components/ui/absence';
 import type { SiteHealthOverview } from '@citeladder/contracts';
 import { issueTitle } from '@/lib/site-health/issues';
-import { formatScore, statusLabel } from '@/lib/site-health/status';
+import { checksRunLabel, formatScore, statusLabel, type ChecksRun } from '@/lib/site-health/status';
 import { textRole } from '@/components/ui/typography';
 import { Inline, Stack } from '@/components/ui/layout';
 import {
@@ -32,7 +31,7 @@ import { availabilityLabel, formatCount, formatPercent, pluralCount } from '@/li
 
 const MEASUREMENT_LABELS: Record<string, string> = {
   measured: 'Measured',
-  limited_evidence: 'Limited evidence',
+  limited_evidence: 'Not every check ran',
   not_measured: 'Not checked',
   excluded: 'Excluded',
   not_applicable: availabilityLabel('not_applicable'),
@@ -160,24 +159,21 @@ function TopIssues({ issues }: Readonly<{ issues: SiteHealthOverview['top_issues
       }
     >
       {issues.map((issue) => (
-        <TableRow key={`${issue.rule_id}-${issue.finding_class}`}>
+        <TableRow key={issue.rule_id}>
           <TableCell className="whitespace-nowrap">
             <StatusMark variant="severity" value={impactSeverity(issue.impact_band)}>
               {impactLabel(issue.impact_band)}
             </StatusMark>
           </TableCell>
           <TableCell>
-            <Inline>
-              <TextLink
-                text="body"
-                underline="hover"
-                href={issueHref(issue)}
-                className="inline-flex min-h-6 min-w-0 items-center"
-              >
-                <ClampText lines={1}>{issueTitle(issue)}</ClampText>
-              </TextLink>
-              {issue.finding_class === 'advisory' ? <Tag>Advisory</Tag> : null}
-            </Inline>
+            <TextLink
+              text="body"
+              underline="hover"
+              href={issueHref(issue)}
+              className="inline-flex min-h-6 min-w-0 items-center"
+            >
+              <ClampText lines={1}>{issueTitle(issue)}</ClampText>
+            </TextLink>
           </TableCell>
           <TableCell numeric>{formatCount(issue.affected_pages)}</TableCell>
         </TableRow>
@@ -198,7 +194,7 @@ function WebFundamentalsCard({
             {data.areas.map((area) => (
               <Inline as="li" key={area.key} className={ledgerItemClasses('justify-between')}>
                 <span className={textRole('body', 'text-ink-2 capitalize')}>{area.key}</span>
-                <MeasurementMark state={area.state} />
+                <MeasurementMark state={area.state} checks={areaChecks(area)} />
               </Inline>
             ))}
           </ul>
@@ -240,10 +236,6 @@ function OpenIssuesTrendCard({
   );
 }
 
-/**
- * Change-summary labels are frozen into the snapshot at build time, so a
- * Presentation resolves change-summary labels from the stable metric key.
- */
 const CHANGE_METRIC_LABELS: Record<string, string> = {
   web_fundamentals_score: 'Web fundamentals',
   web_fundamentals_coverage: 'Web fundamentals coverage',
@@ -272,10 +264,6 @@ function ChangeSummaryCard({ data }: Readonly<{ data: SiteHealthOverview['change
   );
 }
 
-/**
- * Every change-summary metric is a score or a coverage share, so a rise is an
- * improvement. Coverage is a 0–1 share; its change reads in percentage points.
- */
 function ChangeDelta({ metricKey, delta }: Readonly<{ metricKey: string; delta: number | null }>) {
   const coverage = metricKey.endsWith('_coverage');
   const scale = coverage ? 100 : 1;
@@ -306,12 +294,19 @@ function measurementTone(state: string): 'success' | 'warning' | 'info' {
   return 'info';
 }
 
-function MeasurementMark({ state }: Readonly<{ state: string }>) {
+type Area = SiteHealthOverview['web_fundamentals']['areas'][number];
+
+const areaChecks = (area: Area): ChecksRun => ({
+  run: area.passed_count + area.missing_count,
+  total: area.passed_count + area.missing_count + area.unknown_count + area.unavailable_count,
+});
+
+function MeasurementMark({ state, checks }: Readonly<{ state: string; checks: ChecksRun }>) {
   if (state === 'not_measured' || state === 'not_applicable')
     return <Absence state={state} label={measurementLabel(state)} />;
   return (
     <StatusMark variant="status" value={measurementTone(state)}>
-      {measurementLabel(state)}
+      {(state === 'limited_evidence' ? checksRunLabel(checks) : null) ?? measurementLabel(state)}
     </StatusMark>
   );
 }
@@ -349,7 +344,7 @@ function WebFundamentalsDrawer({
                   {formatCount(area.missing_count)} missing
                 </>
               }
-              actions={<MeasurementMark state={area.state} />}
+              actions={<MeasurementMark state={area.state} checks={areaChecks(area)} />}
             />
             <Stack>
               {area.top_findings.length === 0 ? (

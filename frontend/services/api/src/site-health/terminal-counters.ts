@@ -20,11 +20,6 @@ export async function refreshTerminalCounters(db: Database, crawl: Crawl): Promi
   if (isTerminal(crawl)) await persistTerminalCounters(db, crawl);
 }
 
-/**
- * Recount an active crawl's live counters onto its row, without the crawl
- * lock: a crawl that went terminal meanwhile keeps its row untouched. One
- * connection, so the recount's parallel queries never crowd the runner's slots.
- */
 export async function persistLiveCounters(
   db: Database,
   target: { workspace_id: string; crawl_id: string },

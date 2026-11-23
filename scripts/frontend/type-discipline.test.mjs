@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { typeDisciplineFindings } from '../../frontend/scripts/type-discipline-checks.mjs';
+import {
+  nonNullCount,
+  nonNullRatchetFailures,
+  typeDisciplineFindings,
+} from '../../frontend/scripts/type-discipline-checks.mjs';
 
 const rules = (source, label = 'lib/example.ts') =>
   typeDisciplineFindings(source, label).map(({ rule, line }) => `${rule}@${line}`);
@@ -39,5 +43,40 @@ test('flags a cast in a value-change handler outside the generic controls', () =
   assert.deepEqual(
     rules('<Select value={scope} onValueChange={setScope} />', 'components/settings/scope.tsx'),
     [],
+  );
+});
+
+test('flags a switch on a discriminant unless its default proves exhaustiveness', () => {
+  assert.deepEqual(
+    rules(
+      [
+        "function f() { switch (event.kind) { case 'a': return 1; default: return 0; } }",
+        "function f() { switch (status) { case 'a': return 1; } }",
+        "function f() { switch (phase) { case 'a': return 1; default: { const unhandled: never = phase; return unhandled; } } }",
+        "function f() { switch (row.type) { case 'a': break; default: assertNever(row); } }",
+        "function f() { switch (name) { case 'a': return 1; default: return 0; } }",
+        "function f() { switch (state) { case 'a': return 1; default: return state satisfies never; } }",
+        "function f() { switch (kind) { case 'a': return 1; default: { const check = (x: Kind) => x satisfies never; return 0; } } }",
+        "function f() { switch (mode) { case 'a': return 1; default: { const empty: never[] = []; return empty.length; } } }",
+      ].join('\n'),
+    ),
+    ['exhaustive-switch@1', 'exhaustive-switch@2', 'exhaustive-switch@7', 'exhaustive-switch@8'],
+  );
+});
+
+test('counts non-null assertions and fails only a file whose count rose past its baseline', () => {
+  assert.equal(
+    nonNullCount('const a = map.get(k)!;\nconst b = rows[0]!.id!;\nconst c = d ?? e;', 'x.ts'),
+    3,
+  );
+  assert.deepEqual(
+    nonNullRatchetFailures(
+      { 'services/api/src/a.ts': 3, 'services/api/src/b.ts': 1, 'services/api/src/new.ts': 1 },
+      { 'services/api/src/a.ts': 2, 'services/api/src/b.ts': 4 },
+    ),
+    [
+      'services/api/src/a.ts: 3 non-null assertions, baseline 2; narrow the value instead of asserting it',
+      'services/api/src/new.ts: 1 non-null assertions, baseline 0; narrow the value instead of asserting it',
+    ],
   );
 });

@@ -92,6 +92,8 @@ function inventoryRow(id: string, url: string) {
     aeo_readiness_score: null,
     aeo_measurement_coverage: null,
     aeo_measurement_state: 'not_measured',
+    web_fundamentals_checks: null,
+    aeo_readiness_checks: null,
     aeo_measurement_reason: '',
     main_content_indexable: null,
     robots_excluded: false,

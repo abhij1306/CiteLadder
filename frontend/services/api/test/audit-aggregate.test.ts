@@ -82,6 +82,37 @@ describe('versioned audit aggregates', () => {
       cost: { provider_reported_cost_usd: null },
     });
   });
+  it('prices each engine from its frozen route', () => {
+    const routed = scoringConfig({
+      brand_name: 'Acme',
+      engine_routes: {
+        claude: {
+          logical_engine: 'claude',
+          transport_provider: 'anthropic',
+          transport_model: 'claude-sonnet-5-5',
+          connection_id: null,
+          base_url: 'https://api.anthropic.com',
+        },
+      },
+    });
+    const answer = (logical_engine: string, usage: Record<string, number>) => ({
+      ...execution('Acme'),
+      logical_engine,
+      usage,
+    });
+    const claude = answer('claude', { uncached_input_tokens: 1_000_000, output_tokens: 100_000 });
+    expect(aggregateRun([claude], routed).cost).toMatchObject({
+      paid_list_token_estimate_usd: 3,
+      grounding_cost_if_billable_usd: 0.01,
+      cost_status: 'complete',
+    });
+    expect(
+      aggregateRun([claude, answer('chatgpt', { output_tokens: 10 })], routed).cost,
+    ).toMatchObject({
+      paid_list_token_estimate_usd: null,
+      cost_status: 'unknown',
+    });
+  });
   it('names first only the tracked roster, through aliases, and counts wins over answers naming one', () => {
     const answers = [
       execution('Zeta, then Acme, then Rival'),

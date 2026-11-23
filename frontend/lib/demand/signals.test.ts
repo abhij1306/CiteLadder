@@ -40,8 +40,6 @@ describe('safePageUrl', () => {
   it('rejects unsafe and non-absolute values', () => {
     expect(safePageUrl('javascript:alert(1)')).toBeNull();
     expect(safePageUrl('data:text/html,<script>')).toBeNull();
-    // Protocol-relative URLs inherit the app's scheme and would pass a
-    // post-parse protocol check while navigating off-site.
     expect(safePageUrl('//evil.example/x')).toBeNull();
     expect(safePageUrl('/relative/path')).toBeNull();
     expect(safePageUrl('')).toBeNull();

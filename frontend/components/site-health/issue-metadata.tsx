@@ -3,17 +3,13 @@ import { Tag } from '@/components/ui/tag';
 import type { SiteIssue } from '@citeladder/contracts';
 import { dimensionLabel, severityLabel } from '@/lib/site-health/issues';
 
-type IssueFacts = Pick<SiteIssue, 'finding_class' | 'severity' | 'dimension'>;
+type IssueFacts = Pick<SiteIssue, 'severity' | 'dimension'>;
 
-export function IssueSeverityMark({
-  issue,
-}: Readonly<{ issue: Pick<IssueFacts, 'finding_class' | 'severity'> }>) {
-  return issue.finding_class === 'defect' ? (
+export function IssueSeverityMark({ issue }: Readonly<{ issue: Pick<IssueFacts, 'severity'> }>) {
+  return (
     <StatusMark variant="severity" value={issue.severity}>
       {severityLabel(issue.severity)}
     </StatusMark>
-  ) : (
-    <Tag>Advisory</Tag>
   );
 }
 

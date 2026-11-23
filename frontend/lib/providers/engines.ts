@@ -11,7 +11,6 @@ type EngineCatalog = {
   surfaceKind: (key: string) => SurfaceKind | null;
   isObserved: (key: string) => boolean;
   isSearchSurface: (key: string) => boolean;
-  modelLabel: (engine: string, model: string | null | undefined) => string | null;
 };
 
 export function engineCatalog(catalog: ProviderCatalog | undefined): EngineCatalog {
@@ -30,7 +29,6 @@ export function engineCatalog(catalog: ProviderCatalog | undefined): EngineCatal
     surfaceKind,
     isObserved,
     isSearchSurface: (key) => surfaceKind(key) === 'search_ai',
-    modelLabel: (engine, model) => (model && surfaceKind(engine) === 'llm' ? model : null),
   };
 }
 

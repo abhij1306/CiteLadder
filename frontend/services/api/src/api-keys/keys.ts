@@ -182,6 +182,27 @@ export function revokeApiKey(
   });
 }
 
+export function deleteApiKey(
+  db: Database,
+  workspaceId: string,
+  userId: string,
+  keyId: string,
+): Promise<void> {
+  return db.transaction().execute(async (trx) => {
+    await lockAuthorizedWorkspace(trx, workspaceId, userId, 'manage_credentials');
+    const deleted = await trx
+      .deleteFrom('api_keys')
+      .where('workspace_id', '=', workspaceId)
+      .where('id', '=', keyId)
+      .returning('revoked_at')
+      .executeTakeFirst();
+    if (!deleted) throw notFound('API key');
+    if (deleted.revoked_at === null)
+      await recordSecurityEvent(trx, 'api_key.revoke', userId, workspaceId, keyId);
+    await recordSecurityEvent(trx, 'api_key.delete', userId, workspaceId, keyId);
+  });
+}
+
 function invalidKey(message = 'A valid API key is required'): ApiError {
   return new ApiError(401, message, {
     code: 'invalid_api_key',

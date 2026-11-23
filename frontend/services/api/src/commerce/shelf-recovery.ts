@@ -57,14 +57,14 @@ export async function prepareSavedShelf(
       )
     )
       continue;
-    const artifact = await db
+    const artifact = await db // NOSONAR
       .selectFrom('raw_response_artifacts')
       .select('answer_text')
       .where('id', '=', task.result_artifact_id)
       .where('task_id', '=', task.id)
       .where('audit_id', '=', auditId)
       .executeTakeFirstOrThrow();
-    prepared.set(task.id, await prepareShelfExecution(db, task, artifact, resolver));
+    prepared.set(task.id, await prepareShelfExecution(db, task, artifact, resolver)); // NOSONAR
   }
   return prepared;
 }

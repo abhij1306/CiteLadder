@@ -5,9 +5,9 @@ import { beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 import { BrowserRouter } from 'react-router-dom';
 
 import { createAppQueryClient } from '@/lib/api/query-client';
+import { ProjectSelectionProvider } from '@/lib/project/project-scope';
 import { makeProject } from '@/test/fixtures/project';
-
-const { roleState } = vi.hoisted(() => ({ roleState: { mayDelete: true } }));
+import { projectScope, testProjectSelection, type TestRole } from '@/test/render';
 
 const activeProject = makeProject({
   id: '00000000-0000-4000-8000-0000000000p1',
@@ -21,25 +21,6 @@ const nextProject = {
   name: 'Beta Storage',
 };
 const setActiveProjectId = vi.fn();
-vi.mock('@/lib/project/project-context', () => ({
-  useOptionalProjectContext: () => null,
-  useActiveWorkspaceId: () => 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-  useWorkspaceCapability: (capability: string) =>
-    capability !== 'delete_projects' || roleState.mayDelete,
-  useProjectContext: () => ({
-    projects: [activeProject],
-    activeProject,
-    activeProjectId: activeProject.id,
-    setActiveProjectId,
-    activeWorkspace: {
-      id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-      name: 'Test Workspace',
-      role: 'owner',
-      capabilities: ['manage_credentials', 'read', 'run', 'write'],
-    },
-    isLoading: false,
-  }),
-}));
 
 const deleteProject = vi.fn().mockResolvedValue(undefined);
 const listProjects = vi.fn().mockResolvedValue([]);
@@ -62,11 +43,18 @@ vi.mock('@/components/settings/integration-settings', () => ({
 
 import { SettingsScreen } from './settings-screen';
 
-function renderScreen() {
+function renderScreen({ role = 'owner' }: { role?: TestRole } = {}) {
+  const queryClient = createAppQueryClient();
+  const selection = testProjectSelection({
+    ...projectScope(activeProject, role),
+    setActiveProjectId,
+  });
   return render(
     <BrowserRouter>
-      <QueryClientProvider client={createAppQueryClient()}>
-        <SettingsScreen />
+      <QueryClientProvider client={queryClient}>
+        <ProjectSelectionProvider value={selection}>
+          <SettingsScreen />
+        </ProjectSelectionProvider>
       </QueryClientProvider>
     </BrowserRouter>,
   );
@@ -78,7 +66,6 @@ describe('SettingsScreen', () => {
     listProjects.mockReset();
     listProjects.mockResolvedValue([]);
     setActiveProjectId.mockClear();
-    roleState.mayDelete = true;
     window.history.replaceState(null, '', '/settings');
   });
 
@@ -154,8 +141,7 @@ describe('SettingsScreen', () => {
   });
 
   it('hides project deletion from a role that may not delete', () => {
-    roleState.mayDelete = false;
-    renderScreen();
+    renderScreen({ role: 'member' });
 
     expect(screen.queryByRole('button', { name: /delete project/i })).not.toBeInTheDocument();
   });

@@ -16,9 +16,6 @@ const incompatibleLanding = (alias: string) => {
   and ${snapshot} ? 'dimensions' and ${snapshot}->'dimensions' <> ${landingDimensions}::jsonb`;
 };
 
-// A successful run completed every selected dataset. A terminal page can also
-// complete one dataset before another dataset in that run fails. Raw artifacts
-// stay immutable: completion is recorded on the terminal fetched page.
 const complete = sql<boolean>`a.id is not null and (r.status = 'succeeded' or a.query_snapshot->>'partition_complete' = 'true')
   and not exists (select 1 from integration_import_artifacts bad
     where bad.workspace_id=r.workspace_id and bad.sync_run_id=r.id and bad.dataset=a.dataset
@@ -85,8 +82,6 @@ export async function importedDayCount(
 }
 
 const searchConsoleDay = policy.traffic.DATASET_GSC_DAY_DAILY;
-// Search Console finalizes days late and returns no rows until then, so a
-// complete but empty trailing day is not evidence of zero.
 const latestSearchConsoleRow = (workspaceId: string, projectId: string) =>
   sql<string | null>`(select max(m.date) from integration_metric_rows m
     where m.workspace_id=${workspaceId}::uuid and m.project_id=${projectId}::uuid
@@ -120,8 +115,6 @@ export async function mappedProviders(
 
 export const datasetProvider = (dataset: string) => dataset.split('_')[0] ?? dataset;
 
-// Flags naming which revision was selected rather than describing the selected
-// partition: a fallback to an older complete revision still observes its zeros.
 const revisionNotes = new Set(['partition_fallback', 'extract_contract_mismatch']);
 
 export type DayQuality = {
@@ -141,8 +134,6 @@ export function observesZero(quality: DayQuality) {
 
 export async function partitionQuality(db: Database, scope: PartitionScope, dataset: string) {
   const provider = datasetProvider(dataset);
-  // Search Console imports final data only, so days after its latest reported
-  // row are not yet reported: a distinct state, not a missing partition.
   const lagging =
     provider === 'gsc'
       ? sql<boolean>`coalesce(d.day > (select day from search_console),false)`

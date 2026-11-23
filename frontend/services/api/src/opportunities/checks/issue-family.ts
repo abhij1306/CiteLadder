@@ -161,7 +161,6 @@ async function readCohort(
   crawlId: string,
   check: { rule_id: string; baseline_crawl_id: string; site_url_ids: string[]; page_count: number },
 ): Promise<CheckOutcome> {
-  // One verification connection runs one statement at a time.
   const baseline = await crawlVersions(ctx, check.baseline_crawl_id);
   const current = await crawlVersions(ctx, crawlId);
   if (!baseline) return outcome(ctx.reading, 'unavailable', 'baseline_crawl_unavailable');

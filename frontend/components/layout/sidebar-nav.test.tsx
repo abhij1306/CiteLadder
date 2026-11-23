@@ -34,22 +34,6 @@ vi.mock('@tanstack/react-query', () => ({
   queryOptions: <T,>(options: T) => options,
 }));
 
-vi.mock('@/lib/project/project-context', () => {
-  const context = {
-    activeProject: {
-      id: '11111111-1111-4111-8111-111111111111',
-      workspace_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-    },
-    activeProjectId: '11111111-1111-4111-8111-111111111111',
-    activeWorkspaceId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-  };
-  return {
-    useActiveWorkspaceId: () => 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-    useProjectContext: () => context,
-    useOptionalProjectContext: () => context,
-  };
-});
-
 let pathname = '/site';
 let searchParams = new URLSearchParams();
 
@@ -65,17 +49,31 @@ import { INITIAL_VISIBILITY_PARAMS } from '@/lib/api/visibility';
 import { visibilityQueries } from '@/lib/api/visibility-queries';
 import { INITIAL_DASHBOARD_PARAMS } from '@/lib/performance/performance';
 import { navigationMode } from '@/lib/navigation/app-routes';
+import { ProjectSelectionProvider } from '@/lib/project/project-scope';
+import { makeProject } from '@/test/fixtures/project';
+import { projectScope, testProjectSelection } from '@/test/render';
 import { AgentNav } from '@/components/agent/agent-nav';
 import { ModeSwitch } from './mode-switch';
 import { DashboardNav, SidebarFootNav } from './sidebar-nav';
 
+const selection = testProjectSelection(
+  projectScope(
+    makeProject({
+      id: '11111111-1111-4111-8111-111111111111',
+      workspace_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    }),
+  ),
+);
+
 function SidebarNav() {
   return (
-    <div data-sidebar-state="expanded">
-      <ModeSwitch rail={false} />
-      {navigationMode(pathname) === 'agent' ? <AgentNav /> : <DashboardNav />}
-      <SidebarFootNav rail={false} />
-    </div>
+    <ProjectSelectionProvider value={selection}>
+      <div data-sidebar-state="expanded">
+        <ModeSwitch rail={false} />
+        {navigationMode(pathname) === 'agent' ? <AgentNav /> : <DashboardNav />}
+        <SidebarFootNav rail={false} />
+      </div>
+    </ProjectSelectionProvider>
   );
 }
 

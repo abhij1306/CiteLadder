@@ -5,7 +5,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vite-p
 
 import { mswServer } from '@/test/msw-server';
 import { chooseFilterOption } from '@/test/all-filters';
-import { renderWithProviders } from '@/test/render';
+import { projectScope, renderWithProviders } from '@/test/render';
 import { makeProject } from '@/test/fixtures/project';
 
 const PROJECT = '88888888-8888-4888-8888-888888888888';
@@ -16,14 +16,6 @@ const activeProject = makeProject({
 
 vi.mock('@/components/integrations/data-source-setup', () => ({
   DataSourceSetup: ({ title }: { title: string }) => <section aria-label={title} />,
-}));
-vi.mock('@/lib/project/project-context', () => ({
-  useActiveWorkspaceId: () => 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-  useProjectContext: () => ({
-    activeProject,
-    activeWorkspaceId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-    isLoading: false,
-  }),
 }));
 
 import { AiReferralsScreen } from './referrals-screen';
@@ -68,7 +60,7 @@ describe('AiReferralsScreen', () => {
         }),
       ),
     );
-    renderWithProviders(<AiReferralsScreen />, { projectSelection: { activeProject } });
+    renderWithProviders(<AiReferralsScreen />, { projectSelection: projectScope(activeProject) });
 
     expect(
       await screen.findByRole('region', { name: 'Connect Google Analytics 4' }),
@@ -84,7 +76,7 @@ describe('AiReferralsScreen', () => {
         return HttpResponse.json(dashboard);
       }),
     );
-    renderWithProviders(<AiReferralsScreen />, { projectSelection: { activeProject } });
+    renderWithProviders(<AiReferralsScreen />, { projectSelection: projectScope(activeProject) });
 
     expect(await screen.findByRole('heading', { name: 'AI-referred sessions' })).toBeVisible();
     expect(ranges).toEqual(['30d']);
@@ -116,7 +108,7 @@ describe('AiReferralsScreen', () => {
       ),
     );
     const view = renderWithProviders(<AiReferralsScreen />, {
-      projectSelection: { activeProject },
+      projectSelection: projectScope(activeProject),
     });
     expect(
       await screen.findByText(/Landing rows excluded for out-of-scope hosts: not available\./),
@@ -138,7 +130,7 @@ describe('AiReferralsScreen', () => {
         }),
       ),
     );
-    renderWithProviders(<AiReferralsScreen />, { projectSelection: { activeProject } });
+    renderWithProviders(<AiReferralsScreen />, { projectSelection: projectScope(activeProject) });
     expect(
       await screen.findByText(/0 landing rows excluded for out-of-scope hosts\./),
     ).toBeVisible();
@@ -161,7 +153,7 @@ describe('AiReferralsScreen', () => {
         }),
       ),
     );
-    renderWithProviders(<AiReferralsScreen />, { projectSelection: { activeProject } });
+    renderWithProviders(<AiReferralsScreen />, { projectSelection: projectScope(activeProject) });
 
     await userEvent.setup().click(await screen.findByRole('tab', { name: 'Sources' }));
     expect(
@@ -188,7 +180,7 @@ describe('AiReferralsScreen', () => {
         }),
       ),
     );
-    renderWithProviders(<AiReferralsScreen />, { projectSelection: { activeProject } });
+    renderWithProviders(<AiReferralsScreen />, { projectSelection: projectScope(activeProject) });
     await userEvent.setup().click(await screen.findByRole('tab', { name: 'Sources' }));
     expect(
       await screen.findByText(/classification is not complete for this window/i),
@@ -206,7 +198,7 @@ describe('AiReferralsScreen', () => {
           }),
       ),
     );
-    renderWithProviders(<AiReferralsScreen />, { projectSelection: { activeProject } });
+    renderWithProviders(<AiReferralsScreen />, { projectSelection: projectScope(activeProject) });
 
     await waitFor(() => expect(release).toBeTypeOf('function'));
     expect(screen.queryByText('Updating data… Previous data shown.')).not.toBeInTheDocument();
@@ -228,7 +220,7 @@ describe('AiReferralsScreen', () => {
       }),
     );
     const user = userEvent.setup();
-    renderWithProviders(<AiReferralsScreen />, { projectSelection: { activeProject } });
+    renderWithProviders(<AiReferralsScreen />, { projectSelection: projectScope(activeProject) });
 
     expect(await screen.findAllByText('3 days')).toHaveLength(2);
     await chooseFilterOption(user, 'Chart interval', 'Month');

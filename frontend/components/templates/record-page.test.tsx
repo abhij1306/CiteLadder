@@ -34,7 +34,7 @@ describe('RecordPage', () => {
     expect(screen.queryByRole('link', { name: /back/i })).not.toBeInTheDocument();
   });
 
-  it('keeps a top-level page title in the masthead after its section, with no trail', async () => {
+  it('heads a top-level page with its title and names it in the masthead after its section, with no trail', async () => {
     renderWithProviders(
       <RecordPage>
         <p>Body</p>
@@ -44,7 +44,7 @@ describe('RecordPage', () => {
 
     const heading = await screen.findByRole('heading', { level: 1 });
     expect(heading).toHaveTextContent('Runs');
-    expect(masthead()).toContainElement(heading);
+    expect(masthead()).not.toContainElement(heading);
     expect(masthead().textContent).toBe('TrackingRuns');
     expect(screen.queryByRole('navigation', { name: 'Breadcrumb' })).not.toBeInTheDocument();
   });

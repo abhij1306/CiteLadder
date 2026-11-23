@@ -238,6 +238,7 @@ export const visibilityRoutes = [
   }),
   defineGetRoute({
     ...family,
+    authorize: 'project',
     path: '/api/v1/projects/{project_id}/visibility/accuracy/claims/export',
     params: { path: PROJECT_PATH, query: CLAIM_FILTERS },
     raw: true,

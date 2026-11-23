@@ -172,7 +172,7 @@ describe('ProductsTable', () => {
       '1.3',
       '$120.00+1 in other currencies',
       '$120.00',
-      'runnerstore.com (2), shoes.example.eu (1)',
+      'runnerstore.com (2)+1 more',
     ]);
     expect(cells('Zoom Glide')).toEqual([
       '0.0%',

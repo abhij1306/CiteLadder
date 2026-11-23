@@ -20,7 +20,6 @@ export async function recoverExpiredLeases(
       scope && sql<boolean>`workspace_id = ${scope.workspaceId} and crawl_id = ${scope.crawlId}`,
   });
   const failed = rows.filter((task) => task.status === 'failed');
-  // A failed task is terminal and its crawl never changes, so reading it after the commit is exact.
   const failedTasks = failed.length
     ? await db
         .selectFrom('site_crawl_tasks')

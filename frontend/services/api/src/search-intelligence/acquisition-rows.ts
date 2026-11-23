@@ -18,10 +18,12 @@ function datasetCoverage(o: {
   kind: DatasetKind;
   exhausted: boolean;
   saved: number;
+  dropped: number;
   requested: number;
 }) {
   if (!o.resultAvailable) return 'unknown';
   if (o.received === 0) return 'empty';
+  if (o.dropped > 0) return 'partial';
   const whole = SEARCH_DATASET_KINDS[o.kind].fixedDepth || o.exhausted || o.saved >= o.requested;
   return whole ? 'complete' : 'partial';
 }
@@ -153,6 +155,7 @@ export function publishedPage(o: {
   plan: ResearchPlan;
   later: ResearchPlan[];
   saved: number;
+  dropped: number;
   callId: string;
   at: Date;
 }) {
@@ -167,6 +170,7 @@ export function publishedPage(o: {
     kind,
     exhausted,
     saved,
+    dropped: o.dropped,
     requested: dataset.requested_rows,
   });
   const total = normalized.total ?? dataset.provider_total;

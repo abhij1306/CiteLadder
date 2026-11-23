@@ -5,8 +5,8 @@
   "microusd_per_usd": 1000000,
   "estimate_input_chars_per_token": 4,
   "estimate_search_calls": {
-    "chatgpt": 1,
-    "claude": 3,
+    "chatgpt": 2,
+    "claude": 2,
     "gemini": 1
   },
   "unverified_pricing": {
@@ -77,6 +77,23 @@
           "logical_engine": "google_ai_overview",
           "transport_provider": "dataforseo",
           "transport_model": "google-organic-serp"
+        },
+        "pricing": {
+          "uncached_input_microusd_per_million": null,
+          "cached_input_microusd_per_million": null,
+          "output_microusd_per_million": null,
+          "reasoning_microusd_per_million": null,
+          "search_fee_microusd": null,
+          "currency": "USD",
+          "effective_date": "",
+          "pricing_version": "official-2026-10-08-v1"
+        }
+      },
+      {
+        "identity": {
+          "logical_engine": "google_ai_mode",
+          "transport_provider": "dataforseo",
+          "transport_model": "google-ai-mode-serp"
         },
         "pricing": {
           "uncached_input_microusd_per_million": null,

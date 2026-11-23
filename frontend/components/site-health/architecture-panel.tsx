@@ -45,8 +45,6 @@ const COVERAGE_LABELS: Record<CoverageState, string> = {
   unknown: 'Coverage unknown',
 };
 
-// The tokens `assess_coverage` freezes onto the crawl. Naming a coverage state
-// without naming its cause leaves the reader with a caveat they cannot act on.
 const COVERAGE_REASON_LABELS: Record<string, string> = {
   requested_page_limit_reached: 'the crawl reached the page limit it was given',
   frontier_limit_reached: 'the crawl reached its maximum queue size',
@@ -367,8 +365,9 @@ function ArchitectureEvidence({ data }: Readonly<{ data: SiteArchitecture }>) {
             </ChartFrame>
             {data.structure_depth.unmeasured_page_count > 0 ? (
               <p className="type-caption">
-                {formatCount(data.structure_depth.unmeasured_page_count)} pages crawled have no
-                measured depth.
+                {data.structure_depth.unmeasured_page_count === 1
+                  ? '1 crawled page has no measured depth.'
+                  : `${formatCount(data.structure_depth.unmeasured_page_count)} crawled pages have no measured depth.`}
               </p>
             ) : null}
           </Stack>

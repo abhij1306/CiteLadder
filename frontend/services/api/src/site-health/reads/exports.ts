@@ -1,15 +1,34 @@
+import type { AffectedPage } from '@citeladder/contracts/site-health';
+
 import { policy } from '../../config.ts';
 import type { Database } from '../../db/database.ts';
 import { tableCsv, tableMarkdown } from '../../http/table-export.ts';
-import { onlyOf } from '../../lists.ts';
 import { compareText } from '../../text-order.ts';
 import { siteReadSettings } from '../runtime.ts';
-import { loadCrawl } from './crawl.ts';
-import { issues, pageKindsByRule } from './issues.ts';
-import { inventory, pages } from './pages.ts';
-import { architecture } from './projections.ts';
+import {
+  issueGroup,
+  issueOccurrences,
+  issues,
+  type IssueFilters,
+  type IssueView,
+  type Paging,
+} from './issues.ts';
+import type { PageRowFilters } from './page-filters.ts';
+import type { PageSort } from './page-rows.ts';
+import { pages } from './pages.ts';
 
-const MEASUREMENT = [
+export const VIEW_NAMES = ['pages', 'issues'] as const;
+const PAGE_COLUMNS = [
+  'site_url_id',
+  'normalized_url',
+  'display_url',
+  'title',
+  'monitored',
+  'analysis_status',
+  'error_code',
+  'page_kind',
+  'depth_from_home',
+  'inbound_count',
   'issue_count',
   'web_fundamentals_score',
   'aeo_readiness_score',
@@ -18,205 +37,117 @@ const MEASUREMENT = [
   'aeo_measurement_reason',
   'last_audited',
 ];
-const VIEW_NAMES = ['inventory', 'pages', 'issues'] as const;
-export type TableView = (typeof VIEW_NAMES)[number];
-export const TABLE_VIEWS: TableView[] = [...VIEW_NAMES];
-const VIEWS = {
-  inventory: {
-    title: 'Site Health — URL Inventory',
-    columns: [
-      'site_url_id',
-      'normalized_url',
-      'display_url',
-      'title',
-      'content_type',
-      'source',
-      'depth',
-      'monitored',
-      'page_kind',
-      ...MEASUREMENT,
-    ],
-  },
-  pages: {
-    title: 'Site Health — Analyzed Pages',
-    columns: [
-      'site_url_id',
-      'normalized_url',
-      'display_url',
-      'title',
-      'monitored',
-      'analysis_status',
-      'error_code',
-      'page_kind',
-      ...MEASUREMENT,
-    ],
-  },
-  issues: {
-    title: 'Site Health — Issues',
-    columns: [
-      'group_id',
-      'rule_id',
-      'title',
-      'dimension',
-      'category',
-      'severity',
-      'finding_class',
-      'page_kind',
-      'affected_url_count',
-      'description',
-      'remediation',
-      'analyzer_version',
-      'rule_version',
-      'created_at',
-    ],
-  },
-} as const satisfies Record<TableView, { title: string; columns: readonly string[] }>;
+const ISSUES_TITLE = 'Site Health — Issues';
+const ISSUE_COLUMNS = [
+  'group_id',
+  'rule_id',
+  'title',
+  'dimension',
+  'category',
+  'severity',
+  'page_kind',
+  'affected_url_count',
+  'description',
+  'remediation',
+  'analyzer_version',
+  'rule_version',
+  'created_at',
+];
 
 const EXPORT_PAGE = policy.site_health.reads.export_page_size;
 
-async function tableRows(db: Database, workspaceId: string, crawlId: string, view: TableView) {
+type ExportScope = { workspaceId: string; crawlId: string };
+export type TableExportRequest = ExportScope &
+  (
+    | { view: 'pages'; filters: PageRowFilters; sort: PageSort }
+    | { view: 'issues'; format: 'csv' | 'md'; filters: IssueFilters; issueView: IssueView }
+  );
+
+async function drain<T>(
+  read: (paging: Paging) => Promise<{ items: T[]; next_cursor: string | null }>,
+) {
   const max = siteReadSettings().maxExportItems;
-  const rows: Record<string, unknown>[] = [];
+  const rows: T[] = [];
   let cursor: string | null = null;
-  const paging = () => ({ limit: EXPORT_PAGE, cursor });
   for (;;) {
-    let page: { items: Record<string, unknown>[]; next_cursor: string | null };
-    if (view === 'inventory') page = await inventory(db, workspaceId, crawlId, {}, paging());
-    else if (view === 'pages') page = await pages(db, workspaceId, crawlId, {}, 'status', paging());
-    else
-      page = await issues(
-        db,
-        workspaceId,
-        crawlId,
-        {
-          query: null,
-          severity: null,
-          category: null,
-          dimension: null,
-          rule: null,
-          siteUrlId: null,
-          pageKind: null,
-          findingClass: 'defect',
-        },
-        paging(),
-      );
+    const page = await read({ limit: EXPORT_PAGE, cursor }); // NOSONAR
     rows.push(...page.items);
     cursor = page.next_cursor;
-    if (rows.length >= max)
+    if (rows.length >= max || cursor === null)
       return { rows: rows.slice(0, max), truncated: cursor !== null || rows.length > max };
-    if (cursor === null) return { rows, truncated: false };
   }
 }
 
-export async function tableExport(
-  db: Database,
-  workspaceId: string,
-  crawlId: string,
-  view: TableView,
-  format: 'csv' | 'md',
-) {
-  const { rows, truncated } = await tableRows(db, workspaceId, crawlId, view);
-  if (view === 'issues' && rows.length > 0) {
-    const kinds = await pageKindsByRule(db, await loadCrawl(db, workspaceId, crawlId), null, null);
-    for (const row of rows) row.page_kind = (kinds.get(String(row.rule_id)) ?? []).join(', ');
+export async function tableExport(db: Database, request: TableExportRequest) {
+  const { workspaceId, crawlId } = request;
+  if (request.view === 'pages') {
+    const { rows, truncated } = await drain((paging) =>
+      pages(db, workspaceId, crawlId, request.filters, request.sort, paging),
+    );
+    return { body: tableCsv(PAGE_COLUMNS, rows), truncated };
   }
-  const { title, columns } = VIEWS[view];
+  const { rows, truncated } = await drain((paging) =>
+    issues(db, workspaceId, crawlId, request.filters, paging, request.issueView),
+  );
+  const cells = rows.map((row) => ({ ...row, page_kind: row.page_kinds.join(', ') }));
   return {
-    body: format === 'csv' ? tableCsv(columns, rows) : tableMarkdown(title, columns, rows),
+    body:
+      request.format === 'csv'
+        ? tableCsv(ISSUE_COLUMNS, cells)
+        : tableMarkdown(ISSUES_TITLE, ISSUE_COLUMNS, cells),
     truncated,
   };
 }
 
-const COVERAGE_NOTES: Record<string, string> = {
-  complete: 'Coverage: complete — the discovery frontier was exhausted.',
-  partial:
-    'Coverage: partial — the crawl hit its page budget, so this is what CiteLadder observed, not the whole site.',
-  unknown: 'Coverage: unknown — the crawl could not prove it saw the whole site.',
+const ISSUE_PAGE_COLUMNS = ['normalized_url', 'page_kind', 'value', 'value_length'];
+const VALUE_EVIDENCE: Record<AffectedPage['value']['kind'], readonly string[]> = {
+  title: ['title', 'length'],
+  meta_description: ['meta_description', 'length'],
+  h1_count: ['h1_count'],
+  word_count: ['word_count'],
+  none: [],
+  unavailable: [],
 };
 
-type Node = {
-  site_url_id: string;
-  url: string;
-  page_kind: string;
-  parent_site_url_id: string | null;
-};
-
-const byUrl = (a: Node, b: Node) =>
-  compareText(a.url, b.url) || compareText(a.site_url_id, b.site_url_id);
-
-function rootedTree(nodes: Node[]) {
-  const children = new Map<string | null, Node[]>();
-  for (const node of nodes) {
-    const parent = node.parent_site_url_id || null;
-    children.set(parent, [...(children.get(parent) ?? []), node]);
-  }
-  for (const group of children.values()) group.sort(byUrl);
-  const known = new Set(nodes.map((node) => node.site_url_id));
-  const roots = [...(children.get(null) ?? [])];
-  for (const [parent, group] of children) {
-    if (parent === null) continue;
-    if (!known.has(parent)) roots.push(...group);
-    else roots.push(...group.filter((node) => node.site_url_id === parent));
-  }
-  const reached = new Set(roots.map((node) => node.site_url_id));
-  const queue = [...reached];
-  while (queue.length) {
-    for (const child of children.get(queue.pop()!) ?? []) {
-      if (child.site_url_id && !reached.has(child.site_url_id)) {
-        reached.add(child.site_url_id);
-        queue.push(child.site_url_id);
-      }
+function valueCells(value: AffectedPage['value']) {
+  switch (value.kind) {
+    case 'title':
+    case 'meta_description':
+      return { value: value.text, value_length: value.length };
+    case 'h1_count':
+    case 'word_count':
+      return { value: value.count, value_length: null };
+    case 'none':
+    case 'unavailable':
+      return { value: null, value_length: null };
+    default: {
+      const unhandled: never = value;
+      return unhandled;
     }
   }
-  roots.push(...nodes.filter((node) => !reached.has(node.site_url_id)));
-  children.set(null, roots.toSorted(byUrl));
-  return children;
 }
 
-function treeLines(
-  nodeId: string | null,
-  children: Map<string | null, Node[]>,
-  prefix: string,
-  seen: Set<string>,
-): string[] {
-  const group = children.get(nodeId) ?? [];
-  const kind = onlyOf(new Set(group.map((node) => node.page_kind)));
-  const collapse =
-    nodeId !== null &&
-    group.length >= policy.site_health.architecture.page_kind_collapse_min &&
-    kind !== undefined &&
-    kind !== '' &&
-    !group.some((node) => children.get(node.site_url_id)?.length);
-  if (collapse) return [`${prefix}\`-- [${group.length} ${kind}]`];
-  const lines: string[] = [];
-  group.forEach((node, index) => {
-    const last = index === group.length - 1;
-    if (!node.site_url_id || seen.has(node.site_url_id)) return;
-    seen.add(node.site_url_id);
-    const label = node.page_kind ? `${node.url}  [${node.page_kind}]` : node.url;
-    lines.push(
-      `${prefix}${last ? '`-- ' : '|-- '}${label}`,
-      ...treeLines(node.site_url_id, children, prefix + (last ? '    ' : '|   '), seen),
-    );
-  });
-  return lines;
-}
-
-export async function architectureMarkdown(db: Database, workspaceId: string, crawlId: string) {
-  const crawl = await loadCrawl(db, workspaceId, crawlId);
-  const model = await architecture(db, workspaceId, crawl.project_id, crawl.id);
-  const coverage = COVERAGE_NOTES[model.coverage_state] ?? COVERAGE_NOTES.unknown;
-  return [
-    '# Site Health — Observed architecture',
-    '',
-    `${model.nodes.length} pages sampled · ${coverage}`,
-    '',
-    '## Tree',
-    '',
-    '```',
-    '/',
-    ...treeLines(null, rootedTree(model.nodes), '', new Set()),
-    '```',
-    '',
-  ].join('\n');
+export async function issueExport(db: Database, request: ExportScope & { groupId: string }) {
+  const group = await issueGroup(db, request);
+  const { rows: shown, truncated } = await drain((paging) =>
+    issueOccurrences(db, group, { paging }),
+  );
+  const { remediation } = group.representative;
+  const repeated = new Set(shown.flatMap((page) => VALUE_EVIDENCE[page.value.kind]));
+  const evidenceKeys = [...new Set(shown.flatMap((page) => Object.keys(page.evidence)))]
+    .filter((key) => !repeated.has(key))
+    .sort(compareText);
+  const rows = shown.map((page) => ({
+    normalized_url: page.normalized_url,
+    page_kind: page.page_kind,
+    ...valueCells(page.value),
+    ...Object.fromEntries(evidenceKeys.map((key) => [`evidence.${key}`, page.evidence[key]])),
+    remediation,
+  }));
+  const columns = [
+    ...ISSUE_PAGE_COLUMNS,
+    ...evidenceKeys.map((key) => `evidence.${key}`),
+    'remediation',
+  ];
+  return { body: tableCsv(columns, rows), truncated };
 }

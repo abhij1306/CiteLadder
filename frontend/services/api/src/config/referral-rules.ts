@@ -1,7 +1,6 @@
 type Rule = { rule_id: string };
 type UtmRule = Rule & { utm_source: string | null; utm_medium: string | null };
 
-/** Rule IDs persist as provenance; unconstrained UTM rules would match every event. */
 export function validateReferralRules(rules: {
   host_rules: Rule[];
   utm_rules: UtmRule[];

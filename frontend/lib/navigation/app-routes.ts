@@ -177,8 +177,6 @@ export const APP_ROUTES = [
     }),
     nav: [listed('Keyword research', 'searchIntelligence', 'search')],
   }),
-  // Commerce: Shopping, then the Products table. Shopping is declared before
-  // `/products/:targetId`, which would otherwise match it.
   page({
     path: '/products/overview',
     title: 'Shopping',
@@ -299,7 +297,7 @@ export const APP_ROUTES = [
     width: 'narrow',
     title: 'Context',
     screen: screens.context,
-    loading: cards([facts(5)], { rail: { ...held('tab', CONTEXT_TABS), wide: ['map'] } }),
+    loading: cards([facts(5)], { rail: held('tab', CONTEXT_TABS) }),
     nav: [listed('Context', 'context', 'agent')],
   }),
   page({
@@ -312,7 +310,6 @@ export const APP_ROUTES = [
     }),
     nav: [listed('Prompts', 'prompts', 'tracking')],
   }),
-  // Before `/prompts/:promptId`, so `build` is never read as a prompt id.
   page({
     path: '/prompts/build',
     title: 'Prompt builder',
@@ -350,7 +347,7 @@ export const APP_ROUTES = [
   }),
   page({
     path: '/runs',
-    width: 'compact',
+    width: 'narrow',
     title: 'Runs',
     screen: screens.runs,
     loading: cards([table(5)], {
@@ -459,6 +456,16 @@ export function routeLoading(pathname: string): RouteLoading {
 
 export function routeWidth(pathname: string): NonNullable<AppRouteRecord['width']> | 'full' {
   return sectionRoute(pathname)?.width ?? 'full';
+}
+
+export function recoveryRoute(
+  pathname: string,
+): Readonly<{ title: string; path: string }> | undefined {
+  const route = sectionRoute(pathname);
+  const home = route?.collection ? findAppRoute(route.collection) : route;
+  if (!home?.shell || !home.title || home.path.includes(':')) return undefined;
+  if (home.path === pathname || home.path === HOME_PATH) return undefined;
+  return { title: home.title, path: home.path };
 }
 
 export function hasPageTitle(pathname: string): boolean {

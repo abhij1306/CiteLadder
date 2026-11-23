@@ -1,6 +1,7 @@
 import { sql } from 'kysely';
 import { afterAll, afterEach, describe, expect, it } from 'vitest';
-import { asOwner, testDatabase } from './support.ts';
+import { asOwner, ownerActor, testDatabase } from './support.ts';
+import { AUDITS_CANCEL, cancelAudit as cancelRun } from '../src/commands/audits.ts';
 import { VisibilityFixtures } from './visibility-fixtures.ts';
 import { auditTenant } from './audit-fixtures.ts';
 import { auditRuntime } from '../src/audits/config.ts';
@@ -206,6 +207,52 @@ describe('audit recovery against PostgreSQL', () => {
           .execute()
       ).every((row) => row.status === 'cancelled'),
     ).toBe(true);
+  });
+  it('finalizes a cancelled run that has an answer so its answered prompt reaches the dashboards', async () => {
+    const t = await seed(),
+      task = t.tasks[0]!;
+    await db
+      .updateTable('audits')
+      .set({ status: 'running', started_at: new Date() })
+      .where('id', '=', t.auditId)
+      .execute();
+    await db
+      .updateTable('audit_tasks')
+      .set({
+        status: 'running',
+        lease_owner: 'worker',
+        lease_expires_at: new Date(Date.now() + 120000),
+      })
+      .where('id', '=', task.id)
+      .execute();
+    await persistExecutionSuccess(db, task, 'worker', answer(task), deriveExecution);
+    const audit = await db
+      .transaction()
+      .execute((trx) =>
+        cancelRun(trx, ownerActor(t.workspaceId, t.userId, AUDITS_CANCEL), null, t.auditId),
+      );
+    expect(audit).toMatchObject({
+      status: 'partially_completed',
+      completed_count: 1,
+      failed_count: t.tasks.length - 1,
+    });
+    const statuses = await db
+      .selectFrom('audit_tasks')
+      .select(['status'])
+      .where('audit_id', '=', t.auditId)
+      .execute();
+    expect(statuses.filter((row) => row.status === 'cancelled')).toHaveLength(t.tasks.length - 1);
+    const answered = await db
+      .selectFrom('audit_prompt_snapshots')
+      .select('prompt_index')
+      .where('id', '=', task.prompt_snapshot_id)
+      .executeTakeFirstOrThrow();
+    const snapshots = await db
+      .selectFrom('prompt_metric_snapshots')
+      .select('prompt_index')
+      .where('audit_id', '=', t.auditId)
+      .execute();
+    expect(snapshots).toEqual([answered]);
   });
   it('repairs an artifact committed ahead of its queue transition without repeating evidence, then queues source inspection once after terminal commit', async () => {
     const t = await seed(),

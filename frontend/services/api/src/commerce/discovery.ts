@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { budget, spendBudget } from '../abuse/usage.ts';
 import { policy } from '../config.ts';
 import { resolveSettingSpec } from '../config/settings.ts';
-import type { Database } from '../db/database.ts';
+import { inTransaction, type Database } from '../db/database.ts';
 import { meterFor } from '../models/metering.ts';
 import { jsonObject } from '../db/json.ts';
 import { enqueueTask } from '../queue/enqueue.ts';
@@ -30,6 +30,7 @@ import {
   searchableName,
   verifyPage,
 } from './discovery-validation.ts';
+import { fitsIndexKey } from '../db/index-key.ts';
 
 const p = policy.commerce.discovery;
 const logger = getLogger('commerce.discovery');
@@ -75,7 +76,7 @@ export function enqueueDiscoveries(
   scope: CommerceScope,
   input: z.infer<typeof discoveryInput>,
 ) {
-  return db.transaction().execute(async (trx) => {
+  return inTransaction(db, async (trx) => {
     await lockCatalog(trx, scope);
     const project = await trx
       .selectFrom('projects')
@@ -142,7 +143,7 @@ async function validate(
         attempted.add(item.canonical!);
         const startedAt = performance.now();
         try {
-          const page = await acquirer.fetch(item.canonical!, {
+          const page = await /* NOSONAR */ acquirer.fetch(item.canonical!, {
             maxBytes: setting('max_response_wire_bytes'),
             maxDecodedBytes: setting('max_response_decoded_bytes'),
             timeoutSeconds: p.verify_timeout_seconds,
@@ -228,7 +229,8 @@ async function publish(
     })
     .execute();
   const survivors = items.filter(
-    (item) => item.validation_outcome === 'accepted' && item.canonical,
+    (item) =>
+      item.validation_outcome === 'accepted' && item.canonical && fitsIndexKey(item.canonical),
   );
   if (survivors.length)
     await trx

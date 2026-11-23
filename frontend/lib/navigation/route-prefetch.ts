@@ -141,10 +141,22 @@ const ROUTE_READS: Readonly<Partial<Record<AppRoutePath, RouteReads>>> = {
   '/visibility': routeReads(visibilitySelection, warmVisibilitySelection),
   '/insights': routeReads(visibilitySelection, warmVisibilitySelection),
   '/competitors': routeReads(visibilitySelection, warmVisibilitySelection),
-  '/perception': routeReads(visibilitySelection, (modules, client, scope, search) => {
-    warmQuery(client, modules[3].projectQueries.brandFacts(scope));
-    return warmVisibilitySelection(modules, client, scope, search);
-  }),
+  '/perception': routeReads(
+    () => Promise.all([visibilitySelection(), import('@/lib/visibility/trends')]),
+    ([[{ runsQueries }, , { visibilityQueries }, { projectQueries }], trends], client, scope) => {
+      warmQuery(client, projectQueries.brandFacts(scope));
+      warmQuery(client, runsQueries.list(scope));
+      warmQuery(client, projectQueries.markets(scope));
+      warmQuery(
+        client,
+        visibilityQueries.project(scope, {
+          cohort: 'core',
+          selection_mode: 'range',
+          from: trends.rangeToFrom(trends.DEFAULT_TREND_RANGE),
+        }),
+      );
+    },
+  ),
   '/runs': routeReads(
     () => import('@/lib/api/runs'),
     ({ runsQueries }, client, scope) => warmQuery(client, runsQueries.list(scope)),

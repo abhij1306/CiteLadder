@@ -1,8 +1,11 @@
+import { executionFailureReason } from '@/lib/runs/status';
+import { endSentence } from '@/lib/format';
 import { useId, useState } from 'react';
 
 import { StatusMark } from '@/components/ui/status-mark';
 import { BrandMark } from '@/components/ui/brand-mark';
 import { Button } from '@/components/ui/button';
+import { ConfirmDialog } from '@/components/ui/dialog';
 import { Inline, Stack } from '@/components/ui/layout';
 import { textRole } from '@/components/ui/typography';
 import type { ProviderConnection } from '@citeladder/contracts';
@@ -10,7 +13,6 @@ import {
   ENGINE_LOGOS,
   TRANSPORT_DOMAINS,
   isConfigured,
-  type EngineCardModel,
   type ProviderGroup,
 } from '@/lib/providers/catalog';
 import { useProviderConnection } from '@/lib/providers/use-provider-connection';
@@ -58,11 +60,6 @@ function StatusBadge({
   return compact ? null : <StatusMark>Not connected</StatusMark>;
 }
 
-function engineSummary(engine: EngineCardModel): string {
-  const model = engine.route?.surface_kind === 'llm' ? engine.route.model : null;
-  return model ? `${engine.label} · ${model}` : engine.label;
-}
-
 function LastFailure({ group }: Readonly<{ group: ProviderGroup }>) {
   const probe = group.engines.find(
     (engine) => engine.state === 'failed' && engine.latest_probe,
@@ -70,9 +67,10 @@ function LastFailure({ group }: Readonly<{ group: ProviderGroup }>) {
   if (!probe) return null;
   return (
     <p className="type-caption text-negative">
-      Last test failed
-      {probe.safe_reason ? `: ${probe.safe_reason}` : ''}
-      {probe.model ? ` (model ${probe.model})` : ''}.
+      Last test failed.
+      {probe.safe_reason
+        ? ` ${endSentence(executionFailureReason(probe.safe_reason, probe.safe_reason))}`
+        : ''}
     </p>
   );
 }
@@ -84,8 +82,10 @@ function CredentialForm({ id, state }: Readonly<{ id: string; state: ConnectionS
     hasPartialCredentialInput,
     saveMutation,
     testMutation,
+    removeMutation,
     busy,
   } = state;
+  const [confirming, setConfirming] = useState(false);
   const noun = state.credentialShape === 'basic' ? 'credentials' : 'key';
   const saveVerb = configured ? 'Update' : 'Save';
   const saveLabel = saveMutation.isPending ? 'Saving & testing…' : `${saveVerb} ${noun}`;
@@ -93,6 +93,17 @@ function CredentialForm({ id, state }: Readonly<{ id: string; state: ConnectionS
     <Stack gap="compact" id={id} className={wellClasses()}>
       <ProviderConnectionFields state={state} />
       <Inline className="flex-wrap justify-end">
+        {state.connection ? (
+          <Button
+            type="button"
+            variant="quiet"
+            className="mr-auto"
+            onClick={() => setConfirming(true)}
+            disabled={busy}
+          >
+            Remove {noun}
+          </Button>
+        ) : null}
         <Button
           type="button"
           variant="secondary"
@@ -110,6 +121,22 @@ function CredentialForm({ id, state }: Readonly<{ id: string; state: ConnectionS
           {saveLabel}
         </Button>
       </Inline>
+      <ConfirmDialog
+        request={
+          confirming
+            ? {
+                title: `Remove the saved ${noun}?`,
+                body: 'Runs stop using it. Past results are kept.',
+                confirmLabel: `Remove ${noun}`,
+                destructive: true,
+                onConfirm: () =>
+                  removeMutation.mutate(undefined, { onSettled: () => setConfirming(false) }),
+              }
+            : null
+        }
+        pending={removeMutation.isPending}
+        onCancel={() => setConfirming(false)}
+      />
     </Stack>
   );
 }
@@ -143,7 +170,9 @@ export function ProviderRow({
           <div className="grid min-w-0">
             <h3 className={textRole('subheading')}>{group.label}</h3>
             {compact ? null : (
-              <p className={textRole('caption')}>{group.engines.map(engineSummary).join(' · ')}</p>
+              <p className={textRole('caption')}>
+                {group.engines.map((engine) => engine.label).join(' · ')}
+              </p>
             )}
           </div>
         </Inline>

@@ -25,7 +25,11 @@ function presence(entityKind: string, state: string): ReadingPresence {
   };
 }
 
-const editorial = { source_class: 'editorial_third_party', inspection_state: 'inspected' };
+const editorial = {
+  source_class: 'editorial_third_party',
+  registrable_domain: 'news.example',
+  inspection_state: 'inspected',
+};
 const rivalWithoutYou = [presence('brand', 'not_detected'), presence('competitor', 'present')];
 
 describe('where you stand on a cited page', () => {
@@ -50,6 +54,22 @@ describe('where you stand on a cited page', () => {
     expect(
       pageStanding({ ...editorial, source_class: 'competitor_owned' }, reading, rivalWithoutYou),
     ).toBe('competitor');
+  });
+
+  it('never offers a page about one competitor, or a Wikipedia article, as a listing to join', () => {
+    const titled = (title: string) => ({ ...reading, page_facts: { title } });
+    expect(pageStanding(editorial, titled('Best budget retailers | News'), rivalWithoutYou)).toBe(
+      'gap',
+    );
+    expect(pageStanding(editorial, titled('Globex - Wikipedia'), rivalWithoutYou)).toBe('read');
+    expect(pageStanding(editorial, titled('globex | About'), rivalWithoutYou)).toBe('read');
+    expect(
+      pageStanding(
+        { ...editorial, registrable_domain: 'en.wikipedia.org' },
+        reading,
+        rivalWithoutYou,
+      ),
+    ).toBe('read');
   });
 
   it('reports you listed once your name is on the page, and read when no rival is', () => {

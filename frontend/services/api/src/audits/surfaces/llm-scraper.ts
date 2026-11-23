@@ -3,12 +3,11 @@ import { providerPolicy } from '../../providers/config.ts';
 import { ProviderError } from '../../providers/errors.ts';
 import type { AuditTask } from '../../queue/audit-queue.ts';
 import { isScraperEngine } from '../../search-surfaces/dataforseo.ts';
-import { parseScraper } from '../../search-surfaces/parsing.ts';
+import { parseScraper } from '../../search-surfaces/scraper-parsing.ts';
 import { readFrozenSearchRequest } from '../frozen-configuration.ts';
 import { persistExecutionSuccess, persistSurfaceFailure } from '../result-persistence.ts';
 import { frozenRequestSettings, observedAdapter, type ObservedSurface } from './dataforseo.ts';
 
-/** Scraper recovery always closes before the provider's 28-day task retention expires. */
 function recoveryDeadline(task: AuditTask): Date | null {
   if (!task.provider_task_submitted_at) return null;
   const hours = readFrozenSearchRequest(task.request_snapshot).recovery_deadline_hours;

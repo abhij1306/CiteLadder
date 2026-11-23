@@ -8,9 +8,23 @@ import { EnginesCard } from './source-url-cards';
 const engines = [{ logical_engine: 'chatgpt', transport_model: null, retrievals: 7 }];
 
 describe('EnginesCard', () => {
-  it('lists the engines that used the page', () => {
-    render(<EnginesCard engines={engines} loading={false} />);
-    expect(screen.getByRole('cell', { name: '7' })).toBeInTheDocument();
+  it('lists each engine that used the page once, without its models', () => {
+    render(
+      <EnginesCard
+        engines={[
+          { logical_engine: 'claude', transport_model: 'claude-sonnet-5-5', retrievals: 2 },
+          { logical_engine: 'chatgpt', transport_model: 'gpt-6.1', retrievals: 3 },
+          { logical_engine: 'chatgpt', transport_model: 'gpt-6.1-terra', retrievals: 4 },
+        ]}
+        loading={false}
+      />,
+    );
+    expect(
+      screen
+        .getAllByRole('row')
+        .slice(1)
+        .map((row) => row.textContent),
+    ).toEqual(['ChatGPT API7', 'Claude API2']);
   });
 
   it('shows neither rows nor "no engine" after a failed read', () => {

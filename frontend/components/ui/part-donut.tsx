@@ -53,6 +53,7 @@ export function PartDonut({
   remainderLabel = 'Unclassified',
   format = formatCount,
   label,
+  layout = 'side',
 }: Readonly<{
   parts: readonly Part[];
   total?: number;
@@ -60,6 +61,7 @@ export function PartDonut({
   remainderLabel?: string;
   format?: (value: number) => string;
   label: string;
+  layout?: 'side' | 'stacked';
 }>) {
   const shown = parts.slice(0, 4);
   const sum = shown.reduce((carry, part) => carry + part.value, 0);
@@ -77,8 +79,14 @@ export function PartDonut({
   });
   if (remainder > 0)
     rows.push({ label: remainderLabel, value: remainder, ink: null, share: remainder / whole });
+  const stacked = layout === 'stacked';
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-3">
+    <div
+      className={cn(
+        'flex min-w-0 flex-wrap items-center',
+        stacked ? 'flex-col justify-center gap-4' : 'gap-x-4 gap-y-3',
+      )}
+    >
       <ChartTable
         label={totalLabel ? `${label}: ${format(whole)} ${totalLabel}` : label}
         columns={['Share', 'Value']}
@@ -88,9 +96,9 @@ export function PartDonut({
         }))}
         notes={[]}
       />
-      <div aria-hidden className="relative w-36 shrink-0">
+      <div aria-hidden className={cn('relative shrink-0', stacked ? 'w-52' : 'w-36')}>
         <DonutRing
-          size={144}
+          size={stacked ? 208 : 144}
           segments={rows.map((row) => ({
             key: row.label,
             share: row.share,
@@ -104,24 +112,48 @@ export function PartDonut({
           </span>
         ) : null}
       </div>
-      <ul aria-hidden className="flex min-w-44 flex-1 flex-col gap-2">
-        {rows.map((row) => (
-          <li key={row.label} className={textRole('body', 'flex min-w-0 items-center gap-2')}>
-            <span
-              data-part={row.ink?.part ?? 'remainder'}
-              className={cn('rounded-full size-2 shrink-0', row.ink?.fill ?? 'bg-well')}
-            />
-            <span className="text-ink min-w-0 flex-1 truncate" title={row.label}>
-              {row.label}
-            </span>
-            <span className="text-ink shrink-0 tabular-nums">{chartPercent(row.value, whole)}</span>
-            <span className="text-ink-2 w-10 shrink-0 text-right tabular-nums">
-              {format(row.value)}
-            </span>
-          </li>
-        ))}
-      </ul>
+      {stacked ? (
+        <StackedKey rows={rows} format={format} />
+      ) : (
+        <ul aria-hidden className="flex min-w-fit flex-1 flex-col gap-2">
+          {rows.map((row) => (
+            <li key={row.label} className={textRole('body', 'flex min-w-0 items-center gap-2')}>
+              <span
+                data-part={row.ink?.part ?? 'remainder'}
+                className={cn('rounded-full size-2 shrink-0', row.ink?.fill ?? 'bg-well')}
+              />
+              <span className="text-ink flex-1 whitespace-nowrap">{row.label}</span>
+              <span className="text-ink shrink-0 tabular-nums">
+                {chartPercent(row.value, whole)}
+              </span>
+              <span className="text-ink-2 w-10 shrink-0 text-right tabular-nums">
+                {format(row.value)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
+  );
+}
+
+function StackedKey({
+  rows,
+  format,
+}: Readonly<{ rows: readonly Row[]; format: (value: number) => string }>) {
+  return (
+    <ul aria-hidden className="flex flex-wrap justify-center gap-x-4 gap-y-1">
+      {rows.map((row) => (
+        <li key={row.label} className={textRole('body', 'text-ink-2 flex items-center gap-2')}>
+          <span
+            data-part={row.ink?.part ?? 'remainder'}
+            className={cn('rounded-full size-2 shrink-0', row.ink?.fill ?? 'bg-well')}
+          />
+          {row.label}
+          <span className="text-ink font-medium tabular-nums">{format(row.value)}</span>
+        </li>
+      ))}
+    </ul>
   );
 }
 

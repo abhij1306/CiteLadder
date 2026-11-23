@@ -71,7 +71,6 @@ async function admitBatch(
     );
   } catch (error) {
     if (!(error instanceof GcpError)) throw error;
-    // The batch is admitted under its idempotency key; Pub/Sub redelivers it to a later pull.
     logger.warning('crawl_log_pull_ack_failed', {
       source_id: source.id,
       phase: 'acknowledge',
@@ -125,7 +124,7 @@ export async function enqueueDuePulls(
       keyParts: [source.id, Math.floor(now.getTime() / interval)],
       maxAttempts: crawlLogs.task_max_attempts,
     };
-    await enqueueTask(db, task); // NOSONAR -- One source at a time keeps each enqueue inside the tick's admission budget.
+    await enqueueTask(db, task); // NOSONAR
   }
   return true;
 }
@@ -142,7 +141,6 @@ export function crawlLogPull(readerFor: () => PubSubReader | null = defaultPubSu
     if (crawlLogAvailability() !== 'available') return;
     if (verificationDue(source, new Date())) {
       await checkCancelled('crawl-log-verify');
-      // An ownership check that could not run is not a pass: pull again once one does.
       const { failure } = await verifyPullSource(db, source, reader);
       if (failure === 'unavailable') return;
       source = await findLivePullSource(db, scope, sourceId);

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { sql } from 'kysely';
+import { modelLocked } from './model-choice.ts';
 import {
   agentChatDetailSchema,
   agentChatSummarySchema,
@@ -25,9 +26,9 @@ import { pageFetchView } from '../page-documents/reads.ts';
 import { statusView } from '../opportunities/action-status.ts';
 import { openTargetChoice } from './target-adapter.ts';
 import { stepTarget } from './sources.ts';
+import { proposalViews } from './change-proposals.ts';
 
 const iso = (date: Date | null) => date?.toISOString() ?? null;
-// First present reference wins; `action_id` can be attached after the chat started, so it ranks last.
 const ORIGIN_REFS: readonly [AgentChatOrigin, readonly string[]][] = [
   ['site_health', ['issue_group_reference', 'site_facts_reference', 'site_health_reference']],
   [
@@ -141,11 +142,6 @@ export async function progress(db: Database, run: Run) {
       ),
   ]);
 }
-/**
- * A chat in the workspace, with its project read from the chat itself. The
- * caller has authorized the workspace (the request's session read), so the
- * chat is read once and nothing re-checks the membership.
- */
 async function chatIn(db: Database, workspace: Pick<Scope, 'workspaceId'>, chatId: string) {
   const chat = await workspaceChat(db, workspace.workspaceId, chatId);
   return { chat, scope: { workspaceId: chat.workspace_id, projectId: chat.project_id } };
@@ -169,7 +165,8 @@ async function referencedActions(
       if (id) ids.add(id);
     }
     for (const mention of message.mentions) if (mention.kind === 'action') ids.add(mention.id);
-    for (const proposal of message.proposals) ids.add(proposal.action_id);
+    for (const proposal of message.proposals)
+      if (proposal.kind === 'declaration') ids.add(proposal.action_id);
   }
   if (!ids.size) return [];
   const rows = await db
@@ -189,7 +186,7 @@ export async function readChat(
   chatId: string,
 ) {
   const { chat, scope } = await chatIn(db, workspace, chatId);
-  const [messages, run, documents] = await Promise.all([
+  const [messages, run, documents, locked, outcomes] = await Promise.all([
     db
       .selectFrom('agent_messages')
       .selectAll()
@@ -207,6 +204,15 @@ export async function readChat(
       .limit(1)
       .executeTakeFirst(),
     chatDocuments(db, chat),
+    modelLocked(db, scope, chat.id),
+    db
+      .selectFrom('agent_proposal_outcomes')
+      .select(['message_id', 'proposal_index', 'state', 'reason'])
+      .where('workspace_id', '=', scope.workspaceId)
+      .where('chat_id', '=', chat.id)
+      .orderBy('created_at')
+      .orderBy('id')
+      .execute(),
   ]);
   const generated = documents.length
     ? await db
@@ -259,6 +265,10 @@ export async function readChat(
       evidence_refs: revisionRefs(message.evidence_refs),
       web_sources: revisionWebSources(message.web_sources),
       steps: messageSteps(message.steps),
+      proposals: proposalViews(
+        message.proposals,
+        outcomes.filter((outcome) => outcome.message_id === message.id),
+      ),
     }),
   );
   return agentChatDetailSchema.parse({
@@ -269,6 +279,7 @@ export async function readChat(
       run ? active.includes(run.status) : false,
     ),
     pinned_skill_id: chat.pinned_skill_id,
+    model: { id: chat.model, reasoning_effort: chat.reasoning_effort, locked },
     context: {
       refs: jsonObject(chat.context_refs, 'agent_chats.context_refs'),
       instructions: manifest?.instructions ? { revision: manifest.instructions.revision } : null,

@@ -5,7 +5,8 @@ import { TextLink } from '@/components/ui/text-link';
 import { textRole } from '@/components/ui/typography';
 import { cn } from '@/lib/utils';
 
-export const ROWS_SHELL = 'border-rule rounded-card bg-surface overflow-clip border';
+export const ROWS_SHELL =
+  'surface-lift border-transparent rounded-card bg-surface overflow-clip border';
 
 const GRID =
   'grid grid-cols-[20px_1fr_120px] phone:grid-cols-[20px_1fr_88px] desktop:grid-cols-[20px_1fr_92px_120px_110px] items-center gap-3 phone:gap-2 px-4 phone:px-3';

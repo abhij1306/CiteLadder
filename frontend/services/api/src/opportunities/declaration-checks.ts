@@ -25,7 +25,7 @@ export async function declarationChecks(
     recommendationIds,
   };
   for (const kind of CHECK_KINDS) {
-    const found = await CHECKS[kind].freeze(byKind.get(kind) ?? [], freezing); // NOSONAR -- One transaction connection.
+    const found = await CHECKS[kind].freeze(byKind.get(kind) ?? [], freezing); // NOSONAR
     for (const item of found) {
       const key = JSON.stringify(item.check);
       if (!checks.has(key)) checks.set(key, item);

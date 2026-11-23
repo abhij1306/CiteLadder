@@ -38,7 +38,7 @@ function AuditSection({
         kind="error"
         {...readErrorProps(auditRead)}
         title="Couldn't load this run"
-        fallback="Check your connection and try again."
+        fallback="The request failed or timed out."
       />
     );
   }
@@ -67,7 +67,7 @@ function executionsState({
       kind: 'error',
       ...readErrorProps(executionsRead),
       title: "Couldn't load the executions",
-      fallback: 'Check your connection and try again.',
+      fallback: 'The request failed or timed out.',
     };
   }
   if (executionsLoading || !executions) return { kind: 'loading', label: 'Loading executions…' };

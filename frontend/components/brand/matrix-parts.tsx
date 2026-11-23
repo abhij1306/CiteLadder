@@ -33,7 +33,7 @@ export function matrixBodyState(
         kind="read"
         {...readErrorProps(query)}
         title={`Couldn't load the ${what}`}
-        fallback="Check your connection and try again."
+        fallback="The request failed or timed out."
       />
     );
   if (query.isPending) return pending;

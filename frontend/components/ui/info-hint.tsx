@@ -14,7 +14,6 @@ export function InfoHint({ label, children }: Readonly<{ label: string; children
       <PopoverPrimitive.Trigger
         aria-label={label}
         aria-describedby={descriptionId}
-        // The panel only shows the description; it is not a popup to expand into.
         aria-haspopup={undefined}
         aria-expanded={undefined}
         aria-controls={undefined}
@@ -35,7 +34,6 @@ export function InfoHint({ label, children }: Readonly<{ label: string; children
           sideOffset={8}
           avoidCollisions
           collisionPadding={8}
-          // Focus stays on the button; returning it there on close would reopen the tip.
           onOpenAutoFocus={(event) => event.preventDefault()}
           onCloseAutoFocus={(event) => event.preventDefault()}
           className={cn(TOOLTIP_SHEET, 'popover-panel')}

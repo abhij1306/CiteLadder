@@ -22,8 +22,6 @@ export function useTopicMutations({
       await removal.onSuccess?.(data, topic, ...rest);
     },
   });
-  // Whichever topic mutation failed is the one worth reporting; they cannot
-  // both be in flight from this panel.
   const failed = [create, remove, rename].find((mutation) => mutation.isError);
   const error = failed ? mutationNoticeForError(failed.error, { action: 'save the topic' }) : null;
   return { create, rename, remove, error };

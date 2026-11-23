@@ -8,7 +8,7 @@ import { randomBytes } from 'node:crypto';
 import { sql } from 'kysely';
 import { crawlScheduleCadenceSchema } from '@citeladder/contracts/site-health';
 import { policy } from '../config.ts';
-import { resolveSettingSpec, type SettingSource } from '../config/settings.ts';
+import { settingValues, type SettingSource } from '../config/settings.ts';
 import type { Database } from '../db/database.ts';
 import { ApiError } from '../errors.ts';
 import { getLogger } from '../logging.ts';
@@ -17,12 +17,7 @@ import { crawlRequest } from '../site-health/crawl-request.ts';
 import { claimDueCrawlSchedules, nextOccurrence } from '../site-health/schedules.ts';
 
 export function crawlSchedulerSettings(env: SettingSource = process.env) {
-  return Object.fromEntries(
-    Object.entries(policy.crawl_schedules.settings).map(([name, spec]) => [
-      name,
-      Number(resolveSettingSpec(spec, env)),
-    ]),
-  ) as Record<keyof typeof policy.crawl_schedules.settings, number>;
+  return settingValues(policy.crawl_schedules.settings, env);
 }
 
 const SKIPPED = new Set(['crawl_already_active']);
@@ -138,9 +133,9 @@ export class CrawlScheduler {
   async runOnce(at = this.now(), canAdmit: () => boolean = () => true) {
     let created = 0;
     for (let count = 0; count < this.settings.claim_batch_size && canAdmit(); count++) {
-      const [claim] = await this.claimDue(at, 1); // NOSONAR -- Lease one occurrence before checking the next admission.
+      const [claim] = await this.claimDue(at, 1); // NOSONAR
       if (!claim) break;
-      if (await this.planClaim(claim, this.now())) created++; // NOSONAR -- Finish the leased occurrence before claiming another.
+      if (await this.planClaim(claim, this.now())) created++; // NOSONAR
     }
     return created;
   }

@@ -48,7 +48,6 @@ export function siteFetchSettings(env: SettingSource = process.env) {
 }
 
 export function isBotBlock(page: FetchedPage) {
-  // A 429 asks the crawler to slow down; CDN rate-limit pages carry challenge scripts too.
   if (page.status === 429) return false;
   const prefix = page.body
     .subarray(0, a.bot_block_marker_scan_bytes)
@@ -143,8 +142,6 @@ export class SitePageFetcher {
       detail =
         'robots.txt is access-blocked (401/403); the crawler does not bypass access controls';
     }
-    // An unreachable robots.txt (429, 5xx, network) may answer later; the task retries.
-    // A refused one (too large, redirect limit, SSRF, suppression) will not.
     const retryable = robots.transient;
     return { ok: false, code, detail, retryable, calls: [], latencyMs: null };
   }

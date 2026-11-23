@@ -21,14 +21,16 @@ import {
 
 import { ApiError, httpErrorStatus, isAbortError } from './errors';
 
-export function warmQuery<TOptions extends { queryKey: readonly unknown[] }>(
+export const FIRST_CURSOR: string | undefined = undefined;
+
+export function warmQuery<TQueryFnData, TError, TData, TQueryKey extends QueryKey>(
   client: QueryClient,
-  options: TOptions,
+  options: FetchQueryOptions<TQueryFnData, TError, TData, TQueryKey>,
 ): void {
   if (client.getQueryCache().find({ queryKey: options.queryKey })?.state.status === 'error') {
     return;
   }
-  void client.prefetchQuery(options as never);
+  void client.prefetchQuery(options);
 }
 
 export function readFromIntent<TData, TKey extends QueryKey>(

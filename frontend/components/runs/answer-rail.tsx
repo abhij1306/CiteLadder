@@ -5,8 +5,9 @@ import {
   RailItem,
   RailLine,
   RailList,
-  RailNote,
+  RailCount,
   RailRank,
+  RailUrl,
   RailSection,
   YouMark,
 } from '@/components/ui/answer-chat';
@@ -15,23 +16,19 @@ import { Notice, readErrorProps, type RetryableRead } from '@/components/ui/noti
 import { Skeleton } from '@/components/ui/skeleton';
 import { StateBlock } from '@/components/ui/state-block';
 import { StatusMark } from '@/components/ui/status-mark';
-import { TextLink } from '@/components/ui/text-link';
 import { textRole } from '@/components/ui/typography';
 import type { ExecutionEvidence, VisibilityExecutionEvidence } from '@citeladder/contracts';
 import { Quote } from '@/lib/icons';
 import { visibilityQueries } from '@/lib/api/visibility-queries';
 import { EVIDENCE_LIMIT } from '@/lib/config/operational';
-import { pluralCount } from '@/lib/format';
 import { useProjectScope } from '@/lib/project/active-project-scope';
 import type { AnswerBrand, AnswerLink, AnswerSource } from '@/lib/runs/answer-transcript';
-import { classificationBadgeValue, classificationLabel } from '@/lib/runs/status';
+import { classificationLabel } from '@citeladder/contracts/page-labels';
+import { classificationBadgeValue } from '@/lib/runs/status';
 
 export function BrandsRail({ brands }: Readonly<{ brands: readonly AnswerBrand[] }>) {
   return (
-    <RailSection
-      title="Brands"
-      trailing={brands.length ? pluralCount(brands.length, 'brand') : null}
-    >
+    <RailSection title="Brands" count={brands.length}>
       {brands.length ? (
         <RailList label="Brands, by first mention">
           {brands.map((brand) => (
@@ -68,10 +65,7 @@ export function BrandsRail({ brands }: Readonly<{ brands: readonly AnswerBrand[]
 
 export function SourcesRail({ sources }: Readonly<{ sources: readonly AnswerSource[] }>) {
   return (
-    <RailSection
-      title="Sources"
-      trailing={sources.length ? pluralCount(sources.length, 'source') : null}
-    >
+    <RailSection title="Sources" count={sources.length}>
       {sources.length ? (
         <RailList label="Sources">
           {sources.map((source) => (
@@ -81,32 +75,35 @@ export function SourcesRail({ sources }: Readonly<{ sources: readonly AnswerSour
                   name={source.domain || source.url}
                   websiteUrl={source.href}
                   placement="inline"
+                  entity="site"
                 />
                 <span className={textRole('emphasis', 'min-w-0 truncate')}>
                   {source.domain || 'Unknown domain'}
                 </span>
                 {source.you ? <YouMark /> : null}
-                <RailNote>
-                  {source.count === 1 ? 'Cited once' : `Cited ${source.count} times`}
-                </RailNote>
-              </RailLine>
-              {source.title ? <span className="type-caption text-ink">{source.title}</span> : null}
-              <TextLink
-                variant="external"
-                text="caption"
-                href={source.href}
-                className="[overflow-wrap:anywhere]"
-              >
-                <span>{source.url}</span>
-              </TextLink>
-              <span>
-                <StatusMark
-                  variant="classification"
-                  value={classificationBadgeValue(source.citation.classification)}
+                <RailCount
+                  label={source.count === 1 ? 'Cited once' : `Cited ${source.count} times`}
                 >
-                  {classificationLabel(source.citation.classification)}
-                </StatusMark>
-              </span>
+                  {source.count}
+                </RailCount>
+              </RailLine>
+              {source.title ? (
+                <span className="type-caption text-ink truncate" title={source.title}>
+                  {source.title}
+                </span>
+              ) : null}
+              <RailUrl
+                href={source.href}
+                text={source.url}
+                trailing={
+                  <StatusMark
+                    variant="classification"
+                    value={classificationBadgeValue(source.citation.classification)}
+                  >
+                    {classificationLabel(source.citation.classification)}
+                  </StatusMark>
+                }
+              />
             </RailItem>
           ))}
         </RailList>
@@ -128,30 +125,25 @@ export function LinksRail({
 }: Readonly<{ links: readonly AnswerLink[]; formats: ExecutionEvidence['answer_formats'] }>) {
   if (formats.kind === 'observed' && links.length === 0) return null;
   return (
-    <RailSection
-      title="Links"
-      trailing={formats.kind === 'observed' ? pluralCount(links.length, 'link') : null}
-    >
+    <RailSection title="Links" count={formats.kind === 'observed' ? links.length : undefined}>
       {formats.kind === 'observed' ? (
         <RailList label="Links in the answer">
           {links.map((link) => (
             <RailItem key={link.href}>
               <RailLine>
-                <BrandMark name={link.domain} websiteUrl={link.href} placement="inline" />
+                <BrandMark
+                  name={link.domain}
+                  websiteUrl={link.href}
+                  placement="inline"
+                  entity="site"
+                />
                 <span className={textRole('emphasis', 'min-w-0 truncate')}>{link.domain}</span>
                 {link.you ? <YouMark /> : null}
-                <RailNote>
-                  {link.count === 1 ? 'Linked once' : `Linked ${link.count} times`}
-                </RailNote>
+                <RailCount label={link.count === 1 ? 'Linked once' : `Linked ${link.count} times`}>
+                  {link.count}
+                </RailCount>
               </RailLine>
-              <TextLink
-                variant="external"
-                text="caption"
-                href={link.href}
-                className="[overflow-wrap:anywhere]"
-              >
-                <span>{link.href}</span>
-              </TextLink>
+              <RailUrl href={link.href} text={link.href} />
             </RailItem>
           ))}
         </RailList>

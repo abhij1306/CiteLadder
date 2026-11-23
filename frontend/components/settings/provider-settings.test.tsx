@@ -49,9 +49,10 @@ describe('ProviderSettings', () => {
 
     const dataforseo = await row('DataForSEO');
     expect(
-      dataforseo.getByText('ChatGPT Search · Gemini · Google AI Overview'),
+      dataforseo.getByText('ChatGPT Search · Gemini · Google AI Overview · Google AI Mode'),
     ).toBeInTheDocument();
-    expect((await row('OpenAI')).getByText(`ChatGPT API · ${CHATGPT_MODEL}`)).toBeInTheDocument();
+    expect((await row('OpenAI')).getByText('ChatGPT API')).toBeInTheDocument();
+    expect(screen.queryByText(new RegExp(CHATGPT_MODEL))).toBeNull();
     expect(screen.getByRole('heading', { name: 'Google' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Anthropic' })).toBeInTheDocument();
     expect(screen.getAllByText('Not connected')).toHaveLength(4);
@@ -112,7 +113,7 @@ describe('ProviderSettings', () => {
         transport_provider: 'dataforseo',
         api_login: 'team@example.com',
         api_password: 'secret',
-        routes: ['chatgpt_search', 'gemini_consumer', 'google_ai_overview'].map(
+        routes: ['chatgpt_search', 'gemini_consumer', 'google_ai_overview', 'google_ai_mode'].map(
           (logical_engine) => ({ logical_engine, is_default: false }),
         ),
       }),
@@ -173,7 +174,9 @@ describe('ProviderSettings', () => {
     await user.type(openai.getByPlaceholderText(/paste your api key/i), 'sk-test-key');
     await user.click(openai.getByRole('button', { name: /save key/i }));
 
-    expect(await openai.findByText('Provider timed out')).toBeInTheDocument();
+    expect(
+      await openai.findByText('The provider did not answer in time. Try again later.'),
+    ).toBeInTheDocument();
     expect(await openai.findByText('Not verified')).toBeInTheDocument();
 
     await user.click(openai.getByRole('button', { name: /test connection/i }));
@@ -194,7 +197,34 @@ describe('ProviderSettings', () => {
     await user.click(await openai.findByRole('button', { name: 'Manage OpenAI' }));
     await user.click(openai.getByRole('button', { name: /test connection/i }));
 
-    expect(await openai.findByText(/invalid api key/i)).toBeInTheDocument();
+    expect(
+      await openai.findByText('The provider rejected the key. Check it in Settings.'),
+    ).toBeInTheDocument();
+  });
+
+  it('removes a saved key after confirmation', async () => {
+    const user = userEvent.setup();
+    let saved = true;
+    mswServer.use(
+      catalogHandler(),
+      http.get('/api/v1/provider-connections', () =>
+        HttpResponse.json(saved ? [connection()] : []),
+      ),
+      http.delete(`/api/v1/provider-connections/${CONNECTION_ID}`, () => {
+        saved = false;
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+
+    renderWithProviders(<ProviderSettings />);
+    const openai = await row('OpenAI');
+    await user.click(await openai.findByRole('button', { name: 'Manage OpenAI' }));
+    await user.click(openai.getByRole('button', { name: 'Remove key' }));
+    const dialog = await screen.findByRole('alertdialog', { name: 'Remove the saved key?' });
+    await user.click(within(dialog).getByRole('button', { name: 'Remove key' }));
+
+    expect(await openai.findByText('Not connected')).toBeInTheDocument();
+    expect(openai.getByRole('button', { name: 'Connect OpenAI' })).toBeInTheDocument();
   });
 
   it('never renders the stored secret — key input is empty and write-only', async () => {

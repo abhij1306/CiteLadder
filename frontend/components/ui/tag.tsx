@@ -6,7 +6,7 @@ import { ArrowRight, X } from '@/lib/icons';
 import { cn } from '@/lib/utils';
 
 const TAG_FACE =
-  'type-caption border border-rule text-ink-2 inline-flex min-h-5 max-w-full min-w-0 shrink-0 items-center gap-0.5 rounded-mark px-1.5 normal-nums whitespace-nowrap [[data-public-surface]_&]:min-h-[var(--tag-height)] [[data-public-surface]_&]:px-2 [[data-public-surface]_&]:bg-surface [[data-public-surface]_&]:text-ink';
+  'type-caption border border-transparent bg-state-selected text-ink-2 inline-flex min-h-5 max-w-full min-w-0 shrink-0 items-center gap-0.5 rounded-mark px-1.5 normal-nums whitespace-nowrap [[data-public-surface]_&]:min-h-[var(--tag-height)] [[data-public-surface]_&]:px-2 [[data-public-surface]_&]:text-ink';
 
 type TagKind =
   | { kind?: 'category' | 'draft' }
@@ -88,8 +88,8 @@ export function RecordTag({
         </span>
       ) : (
         <span className="min-w-0 truncate">{label}</span>
-      )}
-      {/* Read as two words; flex layout drops the space visually. */} {status}
+      )}{' '}
+      {status}
       <ArrowRight className="size-3 shrink-0" aria-hidden />
     </ProjectLink>
   );

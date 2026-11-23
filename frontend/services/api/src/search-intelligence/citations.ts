@@ -2,18 +2,18 @@ import { asApiErrorCode } from '@citeladder/contracts/error-codes';
 import { createHash, randomUUID } from 'node:crypto';
 
 import { normalizeDomain } from '../analysis/domains.ts';
-import type { Database } from '../db/database.ts';
+import { inTransaction, type Database } from '../db/database.ts';
 import { ApiError, notFound } from '../errors.ts';
 import { chunksOf } from '../lists.ts';
 import { compareText } from '../text-order.ts';
 import type { Scope } from './reads.ts';
 import { datasetView } from './views.ts';
+import { fitsIndexKey } from '../db/index-key.ts';
 
 const PARENT_KIND = 'referring_domains';
 const DERIVED_KIND = 'citation_matches';
 const ROW_KIND = 'citation_match';
 const PARSER_VERSION = 'citation-match-1';
-// A match row binds 13 parameters; 1,000 rows stay far below the 65,535 limit.
 const MATCH_INSERT_CHUNK = 1000;
 
 const sha256 = (text: string) => createHash('sha256').update(text).digest('hex');
@@ -40,9 +40,13 @@ function selectionHash(parentId: string, auditIds: string[], citationIds: string
   );
 }
 
-function matchCoverage(parent: { coverage: string; truncated: boolean }, matches: number) {
+function matchCoverage(
+  parent: { coverage: string; truncated: boolean },
+  matches: number,
+  dropped: number,
+) {
   if (parent.coverage === 'unknown') return 'unknown';
-  if (parent.truncated || parent.coverage === 'partial') return 'partial';
+  if (parent.truncated || parent.coverage === 'partial' || dropped > 0) return 'partial';
   return matches > 0 ? 'complete' : 'empty';
 }
 
@@ -52,8 +56,7 @@ export function deriveCitationMatches(
   parentDatasetId: string,
   auditIds: readonly string[],
 ) {
-  return db.transaction().execute(async (trx) => {
-    // Locking the parent serializes concurrent derivations of it.
+  return inTransaction(db, async (trx) => {
     const parent = await scope.workspace
       .selectFrom(trx, 'search_intelligence_datasets')
       .selectAll()
@@ -105,10 +108,11 @@ export function deriveCitationMatches(
         .execute(),
     ]);
     const linkingDomains = new Set(linking.map((row) => normalizeDomain(row.domain)));
-    const matches = citations.flatMap((citation) => {
+    const linked = citations.flatMap((citation) => {
       const domain = normalizeDomain(citation.domain || citedUrl(citation));
       return linkingDomains.has(domain) ? [{ citation, domain }] : [];
     });
+    const matches = linked.filter(({ citation }) => fitsIndexKey(citedUrl(citation)));
 
     const citationIds = citations.map((citation) => citation.id).sort(compareText);
     const scopeHash = selectionHash(parent.id, selected, citationIds);
@@ -140,7 +144,7 @@ export function deriveCitationMatches(
         location_code: null,
         language_code: '',
         status: 'published',
-        coverage: matchCoverage(parent, matches.length),
+        coverage: matchCoverage(parent, matches.length, linked.length - matches.length),
         requested_rows: citations.length,
         raw_rows_received: citations.length,
         unique_rows_saved: matches.length,
@@ -165,7 +169,7 @@ export function deriveCitationMatches(
       .returningAll()
       .executeTakeFirstOrThrow();
     for (const chunk of chunksOf(matches, MATCH_INSERT_CHUNK)) {
-      await trx // NOSONAR -- Sequential inserts share one transaction.
+      await trx // NOSONAR
         .insertInto('search_intelligence_rows')
         .values(
           chunk.map(({ citation, domain }) => ({

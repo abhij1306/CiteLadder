@@ -11,12 +11,13 @@ import { ApiError } from '../errors.ts';
 import { competitorInput, cleanList } from './inputs.ts';
 import { discoveryProfile, discoverySettings, type DiscoveryInput } from './discovery-inputs.ts';
 import {
+  boundedPages,
   collectFirstParty,
   collectIdentityResearch,
   createResearchClient,
   ResearchBudget,
-  boundedEvidence,
-  type ResearchEvidence,
+  type ResearchClient,
+  type ResearchPage,
   type ResearchTransport,
 } from './research-evidence.ts';
 import { researchThemes, themeCandidates } from './research-themes.ts';
@@ -67,32 +68,18 @@ function phaseDeadline(milliseconds: number, signal?: AbortSignal) {
   };
 }
 
-export const identityEnvelope = z.object({
+const identityEnvelope = z.object({
   status: z.enum(['ready', 'insufficient_evidence', 'conflicting_evidence']),
   profile: discoveryProfile,
-  signature: z
-    .object({
-      category: z.string().default(''),
-      buyer: z.string().default(''),
-      core_job: z.string().default(''),
-      delivery_model: z.string().default(''),
-      market_context: z.string().default(''),
-    })
-    .default({ category: '', buyer: '', core_job: '', delivery_model: '', market_context: '' }),
-  field_evidence_refs: z.record(z.string(), z.array(z.string())).default({}),
-  themes: themeCandidates,
 });
 type Identity = z.output<typeof identityEnvelope>;
-export function validateIdentity(identity: Identity, items: readonly ResearchEvidence[]): Identity {
-  const refs = new Set(items.map((item) => item.evidence_ref));
-  for (const [field, values] of Object.entries(identity.field_evidence_refs)) {
-    const supported = values.filter((value) => refs.has(value));
-    if (values.length && !supported.length)
-      throw new Error(`identity cited only unknown evidence for ${field}`);
-    identity.field_evidence_refs[field] = supported;
-  }
-  return identity;
-}
+const themesEnvelope = z.object({ themes: themeCandidates });
+type ModelCall = {
+  phase: string;
+  prompt_version: string;
+  outcome: 'succeeded' | 'failed';
+} & Record<string, unknown>;
+
 export function cleanSuggestions(
   items: z.output<typeof competitorInput>[],
   brand: string,
@@ -132,14 +119,38 @@ export type ResearchDependencies = {
   signal?: AbortSignal;
   budgetEndsAt?: number;
 };
-async function generateIdentity(
-  gateway: ModelGateway | null,
-  input: DiscoveryInput,
-  items: readonly ResearchEvidence[],
-  modelCalls: Record<string, unknown>[],
-  { timeoutMs, signal }: { timeoutMs: number; signal?: AbortSignal },
-) {
-  if (!gateway) return null;
+type Settings = ReturnType<typeof discoverySettings>;
+type Call = {
+  gateway: ModelGateway;
+  modelCalls: ModelCall[];
+  timeoutMs: number;
+  signal: AbortSignal;
+};
+type Request = { input: DiscoveryInput; pages: readonly ResearchPage[]; call: Call };
+const succeeded = (
+  phase: string,
+  version: string,
+  result: Awaited<ReturnType<ModelGateway['structured']>>['result'],
+): ModelCall => ({
+  phase,
+  prompt_version: version,
+  outcome: 'succeeded',
+  ...result,
+  content: undefined,
+});
+const failed = (phase: string, version: string, gateway: ModelGateway): ModelCall => ({
+  phase,
+  prompt_version: version,
+  outcome: 'failed',
+  provider: gateway.baseUrlHost,
+  model: gateway.model,
+});
+
+async function generateIdentity({
+  input,
+  pages,
+  call: { gateway, modelCalls, timeoutMs, signal },
+}: Request) {
   const started = performance.now();
   const deadline = phaseDeadline(timeoutMs, signal);
   try {
@@ -153,22 +164,15 @@ async function generateIdentity(
         allowed_buyer_registers: cfg.buyer_registers,
         allowed_sectors: cfg.sectors,
         allowed_knowledge_strengths: cfg.knowledge_strengths,
-        evidence: items,
+        pages,
       }),
       identityEnvelope,
       deadline.signal,
     );
-    const identity = validateIdentity(generated.value, items);
-    modelCalls.push({
-      phase: 'identity',
-      prompt_version: cfg.brand_identity_prompt_version,
-      outcome: 'succeeded',
-      ...generated.result,
-      content: undefined,
-    });
-    return identity;
+    modelCalls.push(succeeded('identity', cfg.brand_identity_prompt_version, generated.result));
+    return generated.value;
   } catch (error) {
-    signal?.throwIfAborted();
+    signal.throwIfAborted();
     logModelFailure('identity', error, started);
     // A gateway refusal answers the same on every attempt; a model failure may not.
     throw new ResearchFailure(cfg.error_brand_identity_unavailable, !(error instanceof ApiError));
@@ -176,40 +180,96 @@ async function generateIdentity(
     deadline.clear();
   }
 }
-function captureMethod(kind: ResearchEvidence['source_kind']) {
-  if (kind === 'first_party') return cfg.capture_method_crawler;
-  return kind === 'external_fetch'
-    ? cfg.capture_method_external_fetch
-    : cfg.capture_method_external_search;
+
+async function generateThemes({
+  input,
+  pages,
+  call: { gateway, modelCalls, timeoutMs, signal },
+}: Request) {
+  const started = performance.now();
+  const deadline = phaseDeadline(timeoutMs, signal);
+  try {
+    const generated = await gateway.structured(
+      cfg.theme_research_system_prompt,
+      JSON.stringify({
+        brand_name: input.brand_name,
+        primary_market: input.primary_market,
+        prompt_version: cfg.brand_theme_prompt_version,
+        pages,
+      }),
+      themesEnvelope,
+      deadline.signal,
+    );
+    modelCalls.push(succeeded('themes', cfg.brand_theme_prompt_version, generated.result));
+    return generated.value.themes;
+  } catch (error) {
+    signal.throwIfAborted();
+    logModelFailure('themes', error, started);
+    modelCalls.push(failed('themes', cfg.brand_theme_prompt_version, gateway));
+    return [];
+  } finally {
+    deadline.clear();
+  }
 }
-async function suggestCompetitors({
-  gateway,
-  identity,
+
+export function competitorQueries(input: DiscoveryInput, site: ResolvedSite) {
+  const brand = new RegExp(
+    input.brand_name.replaceAll(/[.*+?^${}()|[\]\\]/gu, (character) => `\\${character}`),
+    'giu',
+  );
+  const trade = (site.page?.title ?? '')
+    .split(/\s+[|–—-]\s+|\s*\|\s*|:\s+/u)
+    .map((part) => {
+      const kept = part.replace(brand, ' ').replaceAll(/\s+/gu, ' ').trim();
+      return kept === part.trim() || kept.split(' ').length > 1 ? kept : '';
+    })
+    .filter(Boolean)
+    .join(' ')
+    .slice(0, cfg.competitor_trade_query_max_chars);
+  const named = `${input.brand_name} alternatives competitors ${input.primary_market}`;
+  return trade ? [named, trade] : [named];
+}
+
+async function findCompetitors({
+  client,
   input,
   site,
-  category,
-  evidence,
+  pages,
   settings,
-  modelCalls,
-  timeoutMs,
-  signal,
+  call,
 }: {
-  gateway: ModelGateway | null;
-  identity: Identity | null;
+  client: ResearchClient | null;
   input: DiscoveryInput;
   site: ResolvedSite;
-  category: string;
-  evidence: readonly ResearchEvidence[];
-  settings: ReturnType<typeof discoverySettings>;
-  modelCalls: Record<string, unknown>[];
-  timeoutMs: number;
-  signal?: AbortSignal;
+  pages: readonly ResearchPage[];
+  settings: Settings;
+  call: Call;
 }) {
-  if (!gateway || !identity) return { competitors: [], available: false };
+  let searchResults: ResearchPage[] = [];
+  let searchState = 'unavailable';
+  if (client) {
+    const outcomes = await Promise.allSettled(
+      competitorQueries(input, site).map((query) =>
+        client.search(query, null, settings.competitor_search_max_results),
+      ),
+    );
+    call.signal.throwIfAborted();
+    searchResults = outcomes.flatMap((outcome) =>
+      outcome.status === 'fulfilled' ? outcome.value : [],
+    );
+    const failed = outcomes.flatMap((outcome) =>
+      outcome.status === 'rejected' ? [outcome.reason] : [],
+    );
+    if (failed.length)
+      logger.warning('brand_discovery.competitor_search_failed', failureFields(failed[0]));
+    if (failed.length === outcomes.length) searchState = 'failed';
+    else if (failed.length) searchState = 'partial';
+    else searchState = searchResults.length ? 'ready' : 'no_results';
+  }
   const schema = z.object({
     competitors: z.array(competitorInput).max(settings.competitor_suggestion_maximum),
   });
-  const deadline = phaseDeadline(timeoutMs, signal);
+  const deadline = phaseDeadline(call.timeoutMs, call.signal);
   try {
     for (
       let attempt = 0;
@@ -218,18 +278,27 @@ async function suggestCompetitors({
     ) {
       const started = performance.now();
       try {
-        const generated = await gateway.structured(
+        const generated = await call.gateway.structured(
           competitorSuggestionPrompt(settings.competitor_suggestion_maximum),
           JSON.stringify({
             brand_name: input.brand_name,
             owned_domain: site.domain,
             primary_market: input.primary_market,
-            profile: identity.profile,
-            signature: { ...identity.signature, category },
-            evidence: boundedEvidence(evidence, settings.competitor_suggestion_evidence_max_chars),
+            pages: boundedPages(pages, settings.competitor_suggestion_evidence_max_chars),
+            search_results: boundedPages(
+              searchResults,
+              settings.competitor_suggestion_evidence_max_chars,
+            ),
           }),
           schema,
           deadline.signal,
+        );
+        call.modelCalls.push(
+          succeeded(
+            'competitor_suggestions',
+            cfg.brand_competitor_suggestion_version,
+            generated.result,
+          ),
         );
         const competitors = cleanSuggestions(
           generated.value.competitors,
@@ -237,30 +306,19 @@ async function suggestCompetitors({
           site.domain,
           settings.competitor_suggestion_maximum,
         );
-        modelCalls.push({
-          phase: 'competitor_suggestions',
-          prompt_version: cfg.brand_competitor_suggestion_version,
-          outcome: 'succeeded',
-          ...generated.result,
-          content: undefined,
-        });
-        return { competitors, available: true };
+        return { competitors, available: true, searchState };
       } catch (error) {
-        signal?.throwIfAborted();
+        call.signal.throwIfAborted();
         logModelFailure('competitor_suggestions', error, started);
-        modelCalls.push({
-          phase: 'competitor_suggestions',
-          prompt_version: cfg.brand_competitor_suggestion_version,
-          outcome: 'failed',
-          provider: gateway.baseUrlHost,
-          model: gateway.model,
-        });
+        call.modelCalls.push(
+          failed('competitor_suggestions', cfg.brand_competitor_suggestion_version, call.gateway),
+        );
       }
     }
   } finally {
     deadline.clear();
   }
-  return { competitors: [], available: false };
+  return { competitors: [], available: false, searchState };
 }
 function researchWarnings(
   warning: string,
@@ -289,14 +347,11 @@ function researchWarnings(
     warnings.add('conflicting_evidence');
   return [...warnings];
 }
-function researchGateways(
-  dependencies: ResearchDependencies,
-  settings: ReturnType<typeof discoverySettings>,
-) {
+function researchGateways(dependencies: ResearchDependencies, settings: Settings) {
   const metered = (gateway: ModelGateway | null) =>
     gateway && dependencies.meter.gateway(gateway, 'project_research');
   if (dependencies.gateway !== undefined)
-    return { identity: metered(dependencies.gateway), competitors: metered(dependencies.gateway) };
+    return { identity: metered(dependencies.gateway), other: metered(dependencies.gateway) };
   try {
     const base = {
       ...gatewaySettings(dependencies.env),
@@ -313,12 +368,25 @@ function researchGateways(
           defaultTransport,
         ),
       ),
-      competitors: metered(createModelGateway(base, defaultTransport)),
+      other: metered(createModelGateway(base, defaultTransport)),
     };
   } catch (error) {
     logger.warning('brand_discovery.model_unavailable', failureFields(error));
-    return { identity: null, competitors: null };
+    return { identity: null, other: null };
   }
+}
+function fallbackProfile(input: DiscoveryInput) {
+  return discoveryProfile.parse({
+    industry: input.industry,
+    category: input.subindustry,
+    description: '',
+    positioning: '',
+    products_services: [],
+    target_audience: '',
+    business_type: null,
+    price_tier: 'unknown',
+    field_confidence: {},
+  });
 }
 export async function researchBrand(
   input: DiscoveryInput,
@@ -331,125 +399,111 @@ export async function researchBrand(
     dependencies.budgetEndsAt ?? performance.now() + settings.interactive_timeout_seconds * 1000;
   const remaining = () => Math.max(0, budgetEndsAt - performance.now());
   const budget = new ResearchBudget(settings.keenable_total_call_cap);
-  const client = createResearchClient(settings, budget, dependencies.transport ?? fetch, {
-    meter: dependencies.meter,
-    feature: 'research_evidence',
-  });
+  const client = settings.keenable_api_key
+    ? createResearchClient(settings, budget, dependencies.transport ?? fetch, {
+        meter: dependencies.meter,
+        feature: 'research_evidence',
+      })
+    : null;
+  const gateways = researchGateways(dependencies, settings);
+  const sibling = new AbortController();
+  const signal = dependencies.signal
+    ? AbortSignal.any([sibling.signal, dependencies.signal])
+    : sibling.signal;
+  const modelCalls: ModelCall[] = [];
+  const firstPartyRead = collectFirstParty(site, dependencies.fetcher ?? fetchWebsite);
+  const competitorsFound = firstPartyRead.then((firstParty) =>
+    gateways.other
+      ? findCompetitors({
+          client,
+          input,
+          site,
+          pages: firstParty.items,
+          settings,
+          call: { gateway: gateways.other, modelCalls, timeoutMs: remaining(), signal },
+        })
+      : { competitors: [], available: false, searchState: 'unavailable' },
+  );
+  competitorsFound.catch(() => undefined);
   const [firstParty, external] = await Promise.all([
-    collectFirstParty(site, dependencies.fetcher ?? fetchWebsite),
-    settings.keenable_api_key
+    firstPartyRead,
+    client
       ? collectIdentityResearch(client, settings, input.brand_name, site.domain)
-      : Promise.resolve({ state: 'unavailable', items: [] as ResearchEvidence[] }),
+      : { state: 'unavailable', items: [] },
   ]);
-  const items = [
-    ...boundedEvidence(firstParty.items, settings.identity_first_party_evidence_max_chars),
+  dependencies.checkCancelled?.();
+  const pages = [
+    ...boundedPages(firstParty.items, settings.identity_first_party_evidence_max_chars),
     ...external.items,
   ];
-  const gateways = researchGateways(dependencies, settings);
-  const modelCalls: Record<string, unknown>[] = [];
-  dependencies.checkCancelled?.();
-  const identity = await generateIdentity(gateways.identity, input, items, modelCalls, {
-    timeoutMs: Math.min(settings.identity_model_timeout_seconds * 1000, remaining()),
-    signal: dependencies.signal,
-  });
-  const profile =
-    identity?.profile ??
-    discoveryProfile.parse({
-      industry: input.industry,
-      category: input.subindustry,
-      description: '',
-      positioning: '',
-      products_services: [],
-      target_audience: '',
-      business_type: null,
-      price_tier: 'unknown',
-      field_confidence: {},
-    });
-  await dependencies.onCompetitors?.();
-  const category = identity
-    ? identity.signature.category ||
-      profile.category ||
-      profile.category_terms[0] ||
-      profile.products_services[0] ||
-      ''
-    : '';
-  let competitorEvidence: ResearchEvidence[] = [];
-  let competitorState = 'unavailable';
-  if (gateways.competitors && category && settings.keenable_api_key) {
-    try {
-      competitorEvidence = await client.search(
-        `${input.brand_name} ${category} alternatives competitors ${input.primary_market}`,
-        null,
-        settings.competitor_search_max_results,
-        'competitor-search',
-      );
-      competitorState = competitorEvidence.length ? 'ready' : 'no_results';
-    } catch (error) {
-      dependencies.signal?.throwIfAborted();
-      logger.warning('brand_discovery.competitor_search_failed', failureFields(error));
-      competitorState = 'failed';
-    }
-  }
-  dependencies.checkCancelled?.();
-  const { competitors, available } = await suggestCompetitors({
-    gateway: gateways.competitors,
-    identity,
-    input,
-    site,
-    category,
-    evidence: competitorEvidence,
-    settings,
-    modelCalls,
-    timeoutMs: remaining(),
-    signal: dependencies.signal,
-  });
+  const identityFound = gateways.identity
+    ? generateIdentity({
+        input,
+        pages,
+        call: {
+          gateway: gateways.identity,
+          modelCalls,
+          timeoutMs: Math.min(settings.identity_model_timeout_seconds * 1000, remaining()),
+          signal,
+        },
+      })
+        .then(async (identity) => {
+          await dependencies.onCompetitors?.();
+          return identity;
+        })
+        .catch((error: unknown) => {
+          sibling.abort(error);
+          throw error;
+        })
+    : Promise.resolve(null);
+  const themesFound = gateways.other
+    ? generateThemes({
+        input,
+        pages,
+        call: { gateway: gateways.other, modelCalls, timeoutMs: remaining(), signal },
+      })
+    : Promise.resolve([]);
+  const [identityOutcome, themesOutcome, competitorsOutcome] = await Promise.allSettled([
+    identityFound,
+    themesFound,
+    competitorsFound,
+  ]);
+  dependencies.signal?.throwIfAborted();
+  if (identityOutcome.status === 'rejected') throw identityOutcome.reason;
+  if (themesOutcome.status === 'rejected') throw themesOutcome.reason;
+  if (competitorsOutcome.status === 'rejected') throw competitorsOutcome.reason;
+  const identity = identityOutcome.value;
+  const { competitors, available, searchState } = competitorsOutcome.value;
+  const profile = identity?.profile ?? fallbackProfile(input);
   const warnings = researchWarnings(
     site.warning,
     external.state,
-    competitorState,
+    searchState,
     identity,
     available,
     competitors.length,
   );
-  const manifest = [...items, ...competitorEvidence];
-  const capturedAt = new Date().toISOString();
-  const evidence = manifest.map((item) => ({
-    source_url: item.source_url,
-    capture_method: captureMethod(item.source_kind),
-    confidence:
-      item.source_kind === 'first_party'
-        ? cfg.first_party_evidence_confidence
-        : cfg.external_evidence_confidence,
-    captured_at: capturedAt,
-    supports: item.supports,
-    provider: item.provider,
-    model: '',
-    method: item.evidence_ref,
-  }));
-  const successful = modelCalls.find((call) => call.outcome === 'succeeded');
+  const successful = modelCalls.find((call) => call.phase === 'identity');
   return {
     profile,
     competitors,
     warnings,
-    evidence,
     pagesRead: firstParty.pages.length,
     snapshot: {
       review_state: 'unreviewed',
       identity_status: identity?.status ?? null,
       profile,
-      competitive_signature: identity?.signature ?? {},
       competitors,
       offerings: firstParty.offerings,
-      evidence_manifest: manifest,
       model_calls: modelCalls,
-      field_evidence_refs: identity?.field_evidence_refs ?? {},
-      themes: researchThemes(identity, policy.perception.project_themes),
+      themes: researchThemes(
+        identity ? { themes: themesOutcome.value } : null,
+        policy.perception.project_themes,
+      ),
       metrics: {
         keenable_calls_used: budget.used,
-        first_party_capture_version: policy.brand_evidence.version,
-        external_research_version: cfg.keenable_research_version,
         external_state: external.state,
-        competitor_search_state: competitorState,
+        competitor_search_state: searchState,
       },
     },
     provider: z.string().catch('').parse(successful?.endpoint_host),

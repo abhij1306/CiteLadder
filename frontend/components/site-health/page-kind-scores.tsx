@@ -5,7 +5,12 @@ import { ICONS } from '@/lib/icons';
 import { PageKindBadge } from '@/components/site-health/page-kind-badge';
 import type { SiteCrawl, SiteHealthDashboard } from '@citeladder/contracts';
 import { byPageKindRows } from '@/lib/site-health/page-kinds';
-import { formatScore, measurementCaveat } from '@/lib/site-health/status';
+import {
+  checksRunLabel,
+  formatScore,
+  measurementCaveat,
+  type ChecksRun,
+} from '@/lib/site-health/status';
 import { formatCount, formatPercent } from '@/lib/format';
 import { Section, SectionHeader, SectionTitle } from '@/components/ui/section';
 
@@ -48,14 +53,14 @@ export function PageKindScores({
             <TableCell numeric className={mutedWhenMissing(row.web_fundamentals_score)}>
               <MeasurementValue
                 score={row.web_fundamentals_score}
-                coverage={row.web_fundamentals_coverage}
+                checks={row.web_fundamentals_checks}
                 state={row.web_fundamentals_state}
               />
             </TableCell>
             <TableCell numeric className={mutedWhenMissing(row.aeo_readiness_score)}>
               <MeasurementValue
                 score={row.aeo_readiness_score}
-                coverage={row.aeo_measurement_coverage}
+                checks={row.aeo_readiness_checks}
                 state={row.aeo_measurement_state}
               />
             </TableCell>
@@ -83,11 +88,11 @@ const COLUMNS: readonly DataTableColumn[] = [
 
 function MeasurementValue({
   score,
-  coverage,
+  checks,
   state,
-}: Readonly<{ score: number | null; coverage: number | null; state: string }>) {
+}: Readonly<{ score: number | null; checks: ChecksRun | null; state: string }>) {
   if (score !== null) {
-    const caveat = measurementCaveat(state, coverage);
+    const caveat = measurementCaveat(state, checks);
     return (
       <span>
         <span>{printed(formatScore(score))}</span>
@@ -95,8 +100,8 @@ function MeasurementValue({
       </span>
     );
   }
-  if (state === 'limited_evidence')
-    return <Absence state="not_measured" label="Limited evidence" />;
+  const run = checksRunLabel(checks);
+  if (run) return <Absence state="not_measured" label={run} />;
   if (state === 'excluded') return <Absence state="not_applicable" label="Excluded" />;
   return <Absence state="not_measured" />;
 }

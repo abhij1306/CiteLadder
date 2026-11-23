@@ -44,13 +44,12 @@ function useRevealSelected(selected: string | null) {
 
 const TAB_KIND = {
   tab: {
-    base: 'min-h-[var(--control-md)] self-stretch',
-    current:
-      'after:bg-accent after:absolute after:inset-x-0 after:bottom-0 after:h-[var(--mark-width)]',
+    base: 'rounded-t-control min-h-[var(--control-md)] self-stretch border border-transparent px-4',
+    current: 'border-rule bg-page border-b-transparent',
   },
   segment: {
     base: 'rounded-mark min-h-[calc(var(--control-md)_-_4px)] px-3',
-    current: 'bg-state-selected',
+    current: 'bg-raised shadow-card',
   },
 } as const;
 
@@ -67,9 +66,11 @@ function tabFace({
   );
 }
 
+export const TAB_BASELINE = 'shadow-[inset_0_-1px_0_var(--color-rule)]';
+
 const STRIP_ROW = {
   page: 'min-h-[var(--page-tabs-height,var(--control-md))]',
-  section: 'border-rule border-b',
+  section: TAB_BASELINE,
 } as const;
 
 export const TAB_TRACK =
@@ -77,10 +78,10 @@ export const TAB_TRACK =
 
 export function tabClasses(selected: boolean, className?: string) {
   return cn(
-    'focus-ring inline-flex shrink-0 items-center self-stretch justify-center gap-1.5 rounded-sm border px-3 text-label whitespace-nowrap transition-[background-color,color] duration-[var(--motion-fast)] focus-visible:outline-offset-1 disabled:cursor-not-allowed disabled:opacity-45',
+    'focus-ring inline-flex shrink-0 items-center self-stretch justify-center gap-1.5 rounded-sm border border-transparent px-3 text-label whitespace-nowrap transition-[background-color,color] duration-[var(--motion-fast)] focus-visible:outline-offset-1 disabled:cursor-not-allowed disabled:opacity-45',
     selected
-      ? 'bg-surface border-rule text-ink font-medium'
-      : 'text-ink-2 not-disabled:hover:text-ink border-transparent font-normal',
+      ? 'bg-surface text-ink font-medium'
+      : 'text-ink-2 not-disabled:hover:text-ink font-normal',
     className,
   );
 }
@@ -212,7 +213,7 @@ export function HeldTabRow({
     <div
       aria-hidden
       data-held-tabs=""
-      className={cn(TAB_STRIP, STRIP_ROW.page, 'pointer-events-none gap-5')}
+      className={cn(TAB_STRIP, STRIP_ROW.page, 'pointer-events-none')}
     >
       {labels.map((label) => (
         <span
@@ -239,10 +240,6 @@ function scrollParent(from: HTMLElement): Element {
   return document.scrollingElement ?? document.documentElement;
 }
 
-/**
- * PageUp and PageDown scroll the page by a viewport, as they do from the body;
- * Radix's roving focus would otherwise jump to the first or last tab.
- */
 function pageKeyScrollsPage(event: KeyboardEvent<HTMLElement>) {
   const direction = PAGE_KEY[event.key];
   if (direction === undefined) return;
@@ -269,7 +266,7 @@ function TabStrip<T extends string>({
             strip.current = node;
           }}
           aria-label={ariaLabel}
-          className={cn(TAB_STRIP, STRIP_ROW[kind], 'gap-5')}
+          className={cn(TAB_STRIP, STRIP_ROW[kind])}
         >
           {items.map((item) => (
             <TabsPrimitive.Trigger
@@ -330,7 +327,8 @@ export function TabPanel({
       value={value}
       forceMount={forceMount}
       hidden={activeValue !== value}
-      className={cn('focus-ring', className)}
+      tabIndex={-1}
+      className={cn('outline-none', className)}
     >
       {children}
     </TabsPrimitive.Content>
@@ -400,10 +398,8 @@ export function SegmentedControl<T extends string>({
             strip.current = node;
           }}
           data-segmented-track=""
-          className={cn(TAB_STRIP, 'border-rule rounded-control border p-px', className)}
+          className={cn(TAB_STRIP, 'bg-state-hover rounded-control p-0.5', className)}
         >
-          {/* A nested flex row, NOT `display: contents`: some browsers drop a
-          contents box from the accessibility tree, costing the group its name. */}
           <div
             id={id}
             role="radiogroup"
@@ -420,7 +416,7 @@ export function SegmentedControl<T extends string>({
                     buttonsRef.current[index] = node;
                   }}
                   type="button"
-                  // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- Button-based radio keeps roving focus and the segment face.
+                  // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role
                   role="radio"
                   aria-checked={selected}
                   disabled={disabled}

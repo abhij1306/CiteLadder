@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState, type ReactNode } from 'react';
-import { useLocation, useSearchParams } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 
 import { BackfillProgress } from '@/components/settings/backfill-progress';
 import {
@@ -26,6 +26,7 @@ import {
 import { Plug, type IconGlyph } from '@/lib/icons';
 import { hardNavigate } from '@/lib/navigation/hard-navigate';
 import { projectDestination } from '@/lib/navigation/project-destination';
+import { useSetUrlParams, useUrlParam, useUrlSearch } from '@/lib/navigation/url-params';
 import { useProjectContext, useWorkspaceCapability } from '@/lib/project/project-context';
 
 import { usePropertyChoice } from './property-choice';
@@ -35,25 +36,16 @@ import { Section, SectionHeader, SectionTitle } from '@/components/ui/section';
 import { StateBlock } from '@/components/ui/state-block';
 
 function useOAuthReturn() {
-  const [params, setParams] = useSearchParams();
-  const [result] = useState(() => ({
-    connected: params.get('connected'),
-    error: params.get('error'),
-  }));
+  const connectedParam = useUrlParam('connected');
+  const errorParam = useUrlParam('error');
+  const setUrlParams = useSetUrlParams();
+  const [result] = useState(() => ({ connected: connectedParam, error: errorParam }));
   const client = useQueryClient();
   useEffect(() => {
     if (!result.connected && !result.error) return;
     if (result.connected) void refreshImportedReads(client);
-    setParams(
-      (current) => {
-        const next = new URLSearchParams(current);
-        next.delete('connected');
-        next.delete('error');
-        return next;
-      },
-      { replace: true },
-    );
-  }, [client, result, setParams]);
+    setUrlParams({ connected: null, error: null }, 'replace');
+  }, [client, result, setUrlParams]);
   const connected = isIntegrationProvider(result.connected) ? GRANT_FAMILY[result.connected] : null;
   return { connected, error: result.error };
 }
@@ -331,7 +323,7 @@ export function DataSourceSetup({
   const { activeProject, activeWorkspaceId } = useProjectContext();
   const canManage = useWorkspaceCapability('manage_credentials');
   const location = useLocation();
-  const [params] = useSearchParams();
+  const params = useUrlSearch();
   const providers = [...required, ...optional];
   const sources = useDataSources(activeWorkspaceId, activeProject?.id ?? null, providers);
   const oauth = useOAuthReturn();
@@ -413,7 +405,7 @@ function SetupCard({
             kind="read"
             title="Couldn't load your data sources"
             error={sources.error}
-            fallback="Couldn't load your data sources. Check your connection and try again."
+            fallback="Couldn't load your data sources. The request failed or timed out."
             onRetry={sources.retry}
           />
         ) : (

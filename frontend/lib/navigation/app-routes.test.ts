@@ -6,6 +6,7 @@ import {
   isAgentPath,
   navigationMode,
   projectSwitchPathname,
+  recoveryRoute,
   resolveTitle,
 } from './app-routes';
 import { routeTrail } from './route-trail';
@@ -18,6 +19,13 @@ describe('app route manifest', () => {
     expect(resolveTitle('/products/overview')).toBe('Shopping');
     expect(resolveTitle('/settings/unknown')).toBe('Settings');
     expect(resolveTitle('/nowhere')).toBe('CiteLadder');
+  });
+
+  it('sends a missing address back to the listed page it sits below, never to Overview', () => {
+    expect(recoveryRoute('/runs/r1')).toEqual({ title: 'Runs', path: '/runs' });
+    expect(recoveryRoute('/settings/unknown')).toEqual({ title: 'Settings', path: '/settings' });
+    expect(recoveryRoute('/runs')).toBeUndefined();
+    expect(recoveryRoute('/nowhere')).toBeUndefined();
   });
 
   it('gives only titled shell pages a loading frame', () => {

@@ -56,8 +56,7 @@ function SeverityCard({ summary }: Readonly<{ summary: SiteIssuesPage['summary']
     <FigureStrip
       label="Issue summary"
       segments={[
-        figure('types', 'Issue types', summary.defect_issue_type_count),
-        figure('advisories', 'Advisories', summary.advisory_issue_type_count),
+        figure('types', 'Issue types', summary.issue_count),
         figure('pages', 'Pages affected', summary.affected_url_count),
         ...SEVERITIES.map((severity) =>
           figure(
@@ -99,9 +98,14 @@ function FixFirst({
             <li key={issue.group_id}>
               <Pressable
                 onClick={() => onOpen(issue.group_id)}
-                className="hover:overlay-hover flex min-h-10 w-full min-w-0 items-center gap-2 px-4 text-start"
+                className="hover:overlay-hover phone:flex-wrap phone:gap-y-1 phone:py-2 flex min-h-10 w-full min-w-0 items-center gap-2 px-4 text-start"
               >
-                <span className={textRole('body', 'min-w-0 shrink truncate')}>
+                <span
+                  className={textRole(
+                    'body',
+                    'phone:basis-full phone:whitespace-normal min-w-0 shrink truncate',
+                  )}
+                >
                   {issueTitle(issue)}
                 </span>
                 <span
@@ -111,7 +115,10 @@ function FixFirst({
                 </span>
                 {fix && fix.fixed_url_count > 0 ? (
                   <span className={textRole('body', 'text-ink-2 shrink-0 tabular-nums')}>
-                    {fixedLabel(fix)}
+                    {fix.fixed_url_count >= fix.affected_url_count &&
+                    fix.verified_url_count < fix.affected_url_count
+                      ? 'Marked fixed, awaiting re-audit'
+                      : fixedLabel(fix)}
                   </span>
                 ) : null}
                 <span className="ms-auto flex shrink-0">

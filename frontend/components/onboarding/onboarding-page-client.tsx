@@ -35,9 +35,6 @@ function ProjectSetupGate() {
     ? workspaceDestination('/projects', null, activeWorkspaceId)
     : '/projects';
 
-  // Every settled FAILURE is answered before the loading branch. A failed
-  // workspace read leaves `activeWorkspaceId` null forever, so testing for it
-  // first hid the retry behind a spinner that never resolved.
   if (status === 'error') {
     return (
       <ProjectSetupBlocked

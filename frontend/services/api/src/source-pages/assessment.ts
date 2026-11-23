@@ -76,7 +76,6 @@ const bounded = (body: string, alias: string) =>
  */
 function spellings(alias: string): RegExp[] {
   const words = normalizeAlias(alias).split(' ').filter(Boolean);
-  // Separators are disjoint from the alias alphabet so matching never backtracks across them.
   const spaced = words.map(escape).join(String.raw`[^\p{L}\p{M}\p{N}_]{0,3}`);
   return [bounded(escape(alias), alias), ...(words.length ? [bounded(spaced, alias)] : [])];
 }

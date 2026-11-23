@@ -34,11 +34,6 @@ export function oauthCookieOptions(maxAge: number) {
 
 const RETURN_PATH_MAX = 512;
 
-/**
- * A same-origin app path the callback may land on, or null. Only the listed
- * screens qualify, so an OAuth round trip can never redirect off-site; any
- * earlier callback result in the query is dropped.
- */
 export function oauthReturnPath(value: string | null | undefined): string | null {
   if (!value || value.length > RETURN_PATH_MAX || !value.startsWith('/') || value.startsWith('//'))
     return null;
@@ -200,9 +195,6 @@ export async function completeOAuth(
       .where('transport', '=', transport)
       .forUpdate()
       .executeTakeFirst();
-    // A claimed revocation is about to revoke the old tokens at the provider,
-    // which can end the whole grant; reconnecting over it would keep a grant
-    // that dies with them. Once revoked (or the claim lapses) a reconnect is fine.
     if (
       existing?.status === 'pending_revocation' &&
       existing.refresh_claim_id !== null &&
@@ -317,7 +309,7 @@ async function queueCatchUp(db: Database, workspaceId: string, grantId: string) 
       syncKind: 'scheduled' as const,
     };
     try {
-      await enqueueSyncRun(db, target); // NOSONAR -- Each enqueue takes the workspace lock.
+      await enqueueSyncRun(db, target); // NOSONAR
     } catch (error) {
       if (!(error instanceof ApiError)) throw error;
       logger.info('integration_catch_up_skipped', {

@@ -7,6 +7,7 @@ import { JUMP_LINK } from '@/components/agent/jump-link';
 import { LiveActivity } from '@/components/agent/live-activity';
 import { ProposalCards } from '@/components/agent/proposal-cards';
 import { skillLabel } from '@/components/agent/skill-picker';
+import { ThreadViews } from '@/components/agent/thread-views';
 import { threadItems } from '@/components/agent/thread-items';
 import { TurnFailure } from '@/components/agent/turn-failure';
 import { turnParts } from '@/components/agent/turn-parts';
@@ -77,8 +78,6 @@ export function Conversation({
       <ReplyAnnouncement key={detail.chat.id} detail={detail} />
       <ContextUsed context={detail.context} />
       {renderOutput ? <DocumentList outputs={detail.outputs} /> : null}
-      {/* One `minmax(0, 1fr)` column at each level: an auto track would grow to
-          a turn's widest unbreakable line (a long URL chip) and scroll the thread sideways. */}
       <Stack as="ol" gap="workspace" aria-label="Messages" className="grid-cols-1">
         {items.map((item) =>
           item.kind === 'message' ? (
@@ -99,8 +98,14 @@ export function Conversation({
                   <>
                     <ProposalCards
                       workspaceId={workspaceId}
+                      chatId={detail.chat.id}
+                      messageId={item.message.id}
                       proposals={item.message.proposals}
                       actions={detail.actions}
+                    />
+                    <ThreadViews
+                      scope={{ workspaceId, projectId: detail.chat.project_id }}
+                      views={item.message.views}
                     />
                     {documents(byMessage.get(item.message.id))}
                   </>
@@ -167,7 +172,6 @@ function ReplyAnnouncement({ detail }: Readonly<{ detail: AgentChatDetail }>) {
   const busy = isRunActive(detail.latest_run) || isPageReading(detail.page_fetch);
   const fresh = reply && !busy && reply.id !== openedWith && reply.id !== announced ? reply : null;
   const freshId = fresh?.id;
-  // A screen reader queues the text when it lands; emptying the region later is silent.
   useEffect(() => {
     if (!freshId) return;
     const timer = setTimeout(() => setAnnounced(freshId), REPLY_ANNOUNCEMENT_MS);
@@ -286,8 +290,9 @@ function MessageBubble({
               <Inline as="ul" aria-label="Attachments" className="flex-wrap">
                 {message.attachments.map((attachment, index) => (
                   <PastedTextChip
-                    key={index} // NOSONAR -- a saved message's attachments never reorder and may repeat; position is the identity
+                    key={index} // NOSONAR
                     text={attachment.text}
+                    name={attachment.kind === 'file' ? attachment.name : undefined}
                   />
                 ))}
               </Inline>

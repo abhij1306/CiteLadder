@@ -94,10 +94,24 @@ describe('Overview PDF', () => {
     expect(text).not.toContain('2026-09-08T');
 
     const stranger = await fixtures.tenant();
-    const foreign = await app.request(`/api/v1/projects/${tenant.projectId}/overview/report.pdf`, {
-      headers: await headers(stranger),
-    });
-    expect(foreign.status).toBe(404);
+    const link = `/api/v1/projects/${tenant.projectId}/overview/report.pdf`;
+    const cookieOnly = async () => ({ cookie: (await headers(stranger)).cookie });
+    expect((await app.request(link, { headers: await headers(stranger) })).status).toBe(404);
+    expect((await app.request(link, { headers: await cookieOnly() })).status).toBe(404);
+    await db
+      .insertInto('workspace_members')
+      .values({
+        id: randomUUID(),
+        workspace_id: tenant.workspaceId,
+        user_id: stranger.userId,
+        role: 'viewer',
+        created_at: new Date(),
+        updated_at: new Date(),
+      })
+      .execute();
+    const opened = await app.request(link, { headers: await cookieOnly() });
+    expect(opened.status).toBe(200);
+    expect(opened.headers.get('content-type')).toBe('application/pdf');
   });
 
   it('reads a first run in plain words, naming engines, targets and competitors', async () => {

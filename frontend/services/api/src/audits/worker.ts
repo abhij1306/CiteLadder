@@ -61,7 +61,6 @@ export class AuditWorker {
     this.#now = options.now ?? (() => new Date());
     this.owner = options.owner ?? `audit-worker-ts-${randomBytes(6).toString('hex')}`;
     this.#queue = new AuditQueue(db, runtime.audits.lease_ttl_seconds, this.#now);
-    // Revocation still lands within the TTL; the per-task ownership lock is never cached.
     this.#deps = {
       db,
       runtime,
@@ -118,8 +117,8 @@ export class AuditWorker {
     const admit = () => queued && !failures.length && canAdmit() && performance.now() < windowEnd;
     if (admit()) await refill();
     while (inFlight.size) {
-      await Promise.race(inFlight); // NOSONAR -- Wait for the next free slot.
-      if (admit()) await refill(); // NOSONAR -- One refill per settlement.
+      await Promise.race(inFlight); // NOSONAR
+      if (admit()) await refill(); // NOSONAR
     }
     if (failures.length) throw failures[0];
     return claimed;
@@ -139,7 +138,6 @@ export class AuditWorker {
     const dispatch: DispatchState = { started: false };
     try {
       if (await repairOwnedCompletion(this.#db, claimed, deps.owner, this.#now())) return;
-      // Start the parent now; publish task running only after acquiring provider capacity.
       const running = await this.#queue.markRunning(claimed, deps.owner, false);
       if (!running) return;
       claimed = running.task;
@@ -201,7 +199,6 @@ export class AuditWorker {
     signal: AbortSignal,
   ) {
     try {
-      // Recheck ownership after acquiring capacity, immediately before any network boundary.
       const live = await this.#db
         .transaction()
         .execute((trx) => ownedAuditTask(trx, claimed, deps.owner));
@@ -261,8 +258,6 @@ export class AuditWorker {
       return { expired: true, recovery };
     }
     const startedAt = context?.audit.started_at;
-    // Once a paid submission may exist, retrieval is free and bounded by the poll ceiling
-    // (Google AI Overview) or the recovery deadline (scrapers), never by the run cap.
     const runExpired =
       !recovery &&
       !task.provider_submission_ref &&

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { policy } from '../config.ts';
 import { auditPolicy } from '../audits/config.ts';
 import type { Database } from '../db/database.ts';
+import { providerMetadataWithoutRawBody } from '../db/json.ts';
 import { enqueueDerivedOpportunityRefresh } from '../opportunities/enqueue.ts';
 import { payloadString, taskProject, type Executor } from '../queue/executor.ts';
 import { loadRevision, recordCatalogRevision, revisionShelf } from './catalog-revisions.ts';
@@ -30,7 +31,7 @@ function pendingAnswers(db: Database, scope: CommerceScope, revisionId: string, 
       't.prompt_snapshot_id',
       'r.id as artifact_id',
       'r.answer_text',
-      'r.provider_metadata',
+      providerMetadataWithoutRawBody('r.provider_metadata'),
       'r.citations',
       'r.created_at',
     ])
@@ -73,9 +74,8 @@ async function matchBatch(db: Database, scope: CommerceScope, revision: Revision
   const passes: { ctx: PassContext; answer: StoredAnswer }[] = [];
   for (const row of answers) {
     const audit = audits.find((candidate) => candidate.id === row.audit_id);
-    // A task's audit is in its project; anything else must not loop on the same batch.
     if (!audit) throw new Error('Commerce answer audit is outside its project');
-    const target = await promptTarget(db, audit, row.prompt_snapshot_id); // NOSONAR -- Reads only; one batch is bounded.
+    const target = await promptTarget(db, audit, row.prompt_snapshot_id); // NOSONAR
     passes.push({
       ctx: {
         workspaceId: scope.workspaceId,
@@ -105,9 +105,8 @@ async function matchBatch(db: Database, scope: CommerceScope, revision: Revision
   }
   await db.transaction().execute(async (trx) => {
     for (const { ctx, answer } of passes) {
-      // Deterministic: no resolver, so no model call inside the transaction.
-      const prepared = await prepareRecommendations(answer.answerText, ctx.catalog); // NOSONAR -- Local parsing; one answer at a time.
-      await recordPass(trx, ctx, answer, prepared); // NOSONAR -- One transaction: statements run in order.
+      const prepared = await prepareRecommendations(answer.answerText, ctx.catalog); // NOSONAR
+      await recordPass(trx, ctx, answer, prepared); // NOSONAR
     }
   });
   return answers.length;
@@ -142,12 +141,10 @@ export const matchAnswers: Executor = async (task, { db, checkCancelled }) => {
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
   for (;;) {
     await checkCancelled('commerce answer matching batch');
-    if (await superseded()) return; // NOSONAR -- Checked before each batch, in order.
-    const matched = await matchBatch(db, scope, revision, since); // NOSONAR -- Batches run in order until the window is matched.
+    if (await superseded()) return; // NOSONAR
+    const matched = await matchBatch(db, scope, revision, since); // NOSONAR
     if (matched < policy.commerce.answer_matching.batch_size) break;
   }
-  // The backfill's passes are new Commerce evidence (the newest match pass);
-  // a retry finds no pending answer and asks again, so the request survives a crash.
   await enqueueDerivedOpportunityRefresh(db, {
     ...scope,
     triggerKind: 'commerce_catalog_revision',

@@ -32,8 +32,11 @@ import { agentPolicy, AgentError, budgetSchema, type Scope } from '../agent/cont
 import { interactiveSlots } from '../http/interactive-slots.ts';
 import { workspaceChat } from '../agent/messages.ts';
 import { changeIdleChat } from '../agent/outputs.ts';
+import { DEFAULT_CHOICE } from '../agent/model-choice.ts';
 import { chooseOutputTarget } from '../agent/target-adapter.ts';
 import { readChat, listChats, listRevisions, runView, revisionView } from '../agent/reads.ts';
+import { currentInstructions } from '../agent/instructions.ts';
+import { agentProposalRoutes } from './agent-proposals.ts';
 import { defineGetRoute, definePostRoute, definePutRoute, defineDeleteRoute } from './define.ts';
 
 const family = 'agent',
@@ -112,6 +115,14 @@ function agentHttpError(code: string) {
     return new ApiError(409, 'The Agent model changed', {
       code: asApiErrorCode('model_changed'),
     });
+  if (code === 'model_locked')
+    return new ApiError(
+      409,
+      'The model is set once the chat has replied. Start a new chat to use another model.',
+      {
+        code: asApiErrorCode('agent_model_locked'),
+      },
+    );
   if (code === 'access_revoked' || code === 'capability_unavailable')
     return new ApiError(403, 'Agent run permission is unavailable');
   if (code === 'agent_context_unavailable') return notFound('Agent context');
@@ -212,10 +223,6 @@ export const agentRoutes = [
       const run = await read();
       if (!run) throw notFound('Agent run');
       const { queue, runtime } = await agentBindings(db);
-      // The turn lives as long as this request: in-app navigation keeps the
-      // browser's stream open, and closing the browser or stopping this
-      // instance ends the turn as interrupted. Its frozen time limit ends it
-      // as turn_timeout; a budget the runtime cannot read fails on load.
       const limit = budgetSchema.safeParse(run.budget);
       const slot = interactiveSlots.acquire();
       const gone = new AbortController();
@@ -271,10 +278,17 @@ export const agentRoutes = [
             prompt: step.prompt,
           })),
         })),
+        models: {
+          options: agentPolicy.models,
+          default_model: DEFAULT_CHOICE.model,
+          default_reasoning_effort: DEFAULT_CHOICE.effort,
+        },
         limits: {
+          message_max_chars: agentPolicy.message_max_chars,
           mentions_max: agentPolicy.mentions_max,
           attachments_max: agentPolicy.attachments_max,
           attachment_max_chars: agentPolicy.attachment_max_chars,
+          attachments_total_max_chars: agentPolicy.attachments_total_max_chars,
         },
       };
     },
@@ -339,6 +353,7 @@ export const agentRoutes = [
             ),
           mentionIds: input.mentions,
           attachments: input.attachments,
+          choice: { model: input.model, effort: input.reasoning_effort },
           key: key(c),
         }),
       );
@@ -374,6 +389,7 @@ export const agentRoutes = [
           skillId: input.skill_id,
           mentionIds: input.mentions,
           attachments: input.attachments,
+          choice: { model: input.model, effort: input.reasoning_effort },
           key: key(c),
         }),
       );
@@ -536,21 +552,7 @@ export const agentRoutes = [
     path: '/api/v1/projects/{project_id}/agent/instructions',
     params: { path: projectPath, query: {} },
     response: agentInstructionsSchema,
-    async handle({ db, c }, { path }) {
-      const value = scope(c, path.project_id);
-      const row = await db
-        .selectFrom('agent_instruction_revisions')
-        .selectAll()
-        .where('workspace_id', '=', value.workspaceId)
-        .where('project_id', '=', value.projectId)
-        .orderBy('revision', 'desc')
-        .executeTakeFirst();
-      return {
-        revision: row?.revision ?? null,
-        text: row?.text ?? '',
-        created_at: row?.created_at.toISOString() ?? null,
-      };
-    },
+    handle: ({ db, c }, { path }) => currentInstructions(db, scope(c, path.project_id)),
   }),
   definePutRoute({
     ...projectFamily,
@@ -568,4 +570,5 @@ export const agentRoutes = [
       return { revision: row.revision, text: row.text, created_at: row.created_at.toISOString() };
     },
   }),
+  ...agentProposalRoutes,
 ];

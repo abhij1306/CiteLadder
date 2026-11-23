@@ -70,7 +70,7 @@ export const productMetricCheck: CheckModule<'product_metric'> = {
         window_days: m.WINDOW_DAYS,
       };
       const window = checkWindow(check, { until: new Date(declaredAt) });
-      const before = await reading(db, scope, check, window, owned); // NOSONAR -- One transaction connection.
+      const before = await reading(db, scope, check, window, owned); // NOSONAR
       if (before?.reading.state === 'measured') check.baseline_value = before.reading.value;
       checks.push({ member, check });
     }

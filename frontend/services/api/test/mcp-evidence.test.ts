@@ -44,7 +44,6 @@ beforeEach(async () => {
     grantId: randomUUID(),
     workspaceIds: [tenant.workspaceId],
     tokenHash: randomUUID(),
-    canWrite: false,
   };
   await db
     .insertInto('mcp_oauth_grants')
@@ -307,7 +306,6 @@ it('pages prompts stably while context includes only active prompts and foreign 
   const set = await promptSet(db, tenant.projectId);
   const nets = await topic(db, tenant.projectId, 'Golf nets', 'Home practice');
   const kicking = await topic(db, tenant.projectId, 'Kicking nets');
-  // Distinct instants: same-millisecond fixtures would page in random-UUID order.
   const at = (offset: number) => new Date(Date.UTC(2026, 0, 1) + offset);
   const first = await prompt(db, set, 'Acme first', { createdAt: at(0), topicId: nets });
   const second = await prompt(db, set, 'Acme second', { createdAt: at(1) });
@@ -327,6 +325,9 @@ it('pages prompts stably while context includes only active prompts and foreign 
     })
     .where('id', '=', second)
     .execute();
+  await db.updateTable('prompts').set({ intent: 'evaluation' }).where('id', '=', second).execute();
+  const evaluations = await read('read_prompt_portfolio', { intent: 'evaluation' });
+  expect((evaluations.items as { id: string }[]).map((row) => row.id)).toEqual([second]);
   const page = await read('read_prompt_portfolio', { limit: 1 });
   expect(page.items).toEqual([
     expect.objectContaining({ id: first, grounded: false, topic_id: nets, topic: 'Golf nets' }),
@@ -934,7 +935,6 @@ async function siteIssue(
       dimension: rule.dimension,
       category: rule.category,
       severity: rule.severity,
-      finding_class: rule.finding_class,
       description: rule.description,
       remediation: rule.remediation,
       analyzer_version: policy.site_health.versions.analyzer,
@@ -979,7 +979,7 @@ it("lists exactly the pages a Site Health rule affects, with each page's failing
       aeo_readiness_score: null,
       aeo_measurement_state: 'limited_evidence',
       issue_count: 1,
-      issue_rules: { advisory: ['technical.meta_description_present'] },
+      issue_rules: ['technical.meta_description_present'],
       rule_evidence: { present: false },
       inbound_count: null,
       depth_from_home: null,
@@ -988,10 +988,7 @@ it("lists exactly the pages a Site Health rule affects, with each page's failing
     expect.objectContaining({
       site_url_id: titled.id,
       issue_count: 2,
-      issue_rules: {
-        advisory: ['technical.meta_description_present'],
-        defect: ['technical.title_present'],
-      },
+      issue_rules: ['technical.meta_description_present', 'technical.title_present'],
     }),
   ]);
   const one = await pages({ rule_id: 'technical.title_present', limit: 1 });

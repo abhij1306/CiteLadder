@@ -81,7 +81,6 @@ async function searchConsoleQueries(db: Database, scope: ObservedScope): Promise
     .orderBy('id', 'desc')
     .executeTakeFirst();
   if (!snapshot) return [];
-  // A double, not int: a busy query's summed impressions can pass 2^31.
   const impressions = sql<number>`sum(impressions)::float8`;
   const rows = await workspace
     .selectFrom(db, 'query_evidence_rows')
@@ -172,7 +171,6 @@ export async function persistedSeedSources(
   ];
 }
 
-// ICU word boundaries also split scripts written without spaces (Japanese, Chinese, Thai).
 const WORDS = new Intl.Segmenter(undefined, { granularity: 'word' });
 
 function queryShaped(text: string, language: string): boolean {

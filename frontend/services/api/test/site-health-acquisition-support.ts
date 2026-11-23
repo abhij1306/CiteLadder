@@ -110,7 +110,7 @@ export function acquisitionHarness(db: Database, fixtures: SiteFixtures) {
       .executeTakeFirstOrThrow();
   }
   async function run(site: SiteHealthWorker, ...taskIds: string[]) {
-    for (const id of taskIds) await site.execute(await lease(id, site.owner)); // NOSONAR -- Tasks run in the order given, as the worker would.
+    for (const id of taskIds) await site.execute(await lease(id, site.owner)); // NOSONAR
   }
   async function walkSetup(
     site: SiteHealthWorker,

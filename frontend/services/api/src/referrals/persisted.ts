@@ -92,7 +92,7 @@ export async function readReferralClassifications(
       .orderBy('row.id')
       .limit(BATCH_SIZE);
     if (after !== null) query = query.where('row.id', '>', after);
-    const batch = await query.execute(); // NOSONAR -- Keyset pages read in order.
+    const batch = await query.execute(); // NOSONAR
     rows.push(...batch);
     if (batch.length < BATCH_SIZE || !isNonEmpty(batch)) break;
     after = lastOf(batch).id;

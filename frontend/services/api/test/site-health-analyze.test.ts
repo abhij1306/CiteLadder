@@ -143,11 +143,11 @@ describe('analyze acquisition', () => {
     });
     const issues = await db
       .selectFrom('site_issues')
-      .select(['rule_id', 'finding_class'])
+      .select(['rule_id', 'severity'])
       .where('analysis_id', '=', analysis!.id)
       .where('rule_id', '=', 'technical.sitemap_noindex')
       .execute();
-    expect(issues).toEqual([{ rule_id: 'technical.sitemap_noindex', finding_class: 'advisory' }]);
+    expect(issues).toEqual([{ rule_id: 'technical.sitemap_noindex', severity: 'low' }]);
   });
 
   it('acquires, analyzes and settles the page with its evidence in one commit', async () => {
@@ -808,7 +808,6 @@ describe('page fetch policy', () => {
       false,
     );
     expect(isBotBlock(page(200, '<html><main><h1>Widgets</h1></main></html>'))).toBe(false);
-    // Cloudflare's rate-limit page loads the challenge platform; it is still a retryable 429.
     const limited = '<html><script src="/cdn-cgi/challenge-platform/scripts/jsd/main.js"></script>';
     expect(isBotBlock(page(429, limited))).toBe(false);
     expect(isBotBlock(page(403, limited))).toBe(true);

@@ -7,6 +7,7 @@ import { onlyOf } from '../lists.ts';
 import { domainMatches } from '../analysis/domains.ts';
 import { stripTrailing } from '../text-order.ts';
 import { failureFacts, getLogger } from '../logging.ts';
+import { fitsIndexKey } from '../db/index-key.ts';
 
 export const shelfPolicy = auditPolicy.commerce_shelf;
 export const boundedText = (text: string, limit: number) => [...text].slice(0, limit).join('');
@@ -271,11 +272,6 @@ export function observedMerchant(span: string, resolved?: string) {
     return { url, domain: '' };
   }
 }
-/**
- * A resolved PDP becomes an AI-observed competitor only when the answer itself
- * carries that URL, the URL is not merely a citation, and it is not on the
- * business's own site. A URL the resolver supplied on its own is not evidence.
- */
 export function resolvedCompetitorUrl(
   url: string,
   evidence: { answer: string; citations: string[]; ownedHosts: string[] },
@@ -290,7 +286,7 @@ export function resolvedCompetitorUrl(
 }
 export function competitorPageUrl(url: string, ownedHosts: string[]): string | null {
   const canonical = canonicalPage(url);
-  if (!canonical) return null;
+  if (!canonical || !fitsIndexKey(canonical)) return null;
   const parsed = new URL(canonical);
   const within = (domains: readonly string[]) =>
     domains.some((domain) => domainMatches(parsed.hostname, domain));

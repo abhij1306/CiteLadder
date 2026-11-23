@@ -2,7 +2,9 @@ import { createHash, randomUUID } from 'node:crypto';
 
 import { getDomain } from 'tldts';
 
+import { budget, spendBudget } from '../abuse/usage.ts';
 import { abortable } from '../agent/async.ts';
+import type { SettingSource } from '../config/settings.ts';
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { acquireProjectLock } from '../prompts/locks.ts';
@@ -141,7 +143,6 @@ export async function refreshLogos(db: Database, scope: ProjectScope, fetcher = 
   function add(value: string, brandId: string | null, competitorId: string | null) {
     const domain = logoKey(value);
     if (!domain) return;
-    // Only the keyed host's own homepage decides the shared asset, never a requester's path.
     const target = targets.get(domain) ?? {
       domain,
       url: `https://${domain}/`,
@@ -222,4 +223,15 @@ export async function refreshLogos(db: Database, scope: ProjectScope, fetcher = 
     });
   }
   return readProject(db, scope);
+}
+
+export async function refreshProjectLogos(
+  db: Database,
+  settings: SettingSource,
+  scope: ProjectScope,
+  fetcher = fetchWebsite,
+) {
+  await readProject(db, scope);
+  await spendBudget(db, budget('brand_logo_refresh', settings), scope.workspaceId);
+  return refreshLogos(db, scope, fetcher);
 }

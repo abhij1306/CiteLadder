@@ -10,14 +10,11 @@ export const DENSE_SCRIPT =
 const WORDS = new Intl.Segmenter(undefined, { granularity: 'word' });
 
 export function normalizeAlias(value: string): string {
-  return (
-    casefold(value.normalize('NFKC'))
-      .replaceAll('&', ' and ')
-      // Combining marks are part of a word (Thai and Devanagari vowel signs).
-      .replaceAll(/[^\p{L}\p{M}\p{N}_ ]/gu, ' ')
-      .trim()
-      .replaceAll(/\s+/gu, ' ')
-  );
+  return casefold(value.normalize('NFKC'))
+    .replaceAll('&', ' and ')
+    .replaceAll(/[^\p{L}\p{M}\p{N}_ ]/gu, ' ')
+    .trim()
+    .replaceAll(/\s+/gu, ' ');
 }
 
 export function aliasSpellings(alias: string): string[][] {
@@ -115,6 +112,9 @@ export const countsAnywhere = (entity: EntityPolicy | undefined) =>
 const phraseAt = (tokens: readonly string[], words: readonly string[], index: number) =>
   index >= 0 && words.every((word, offset) => tokens[index + offset] === word);
 
+const namesSeveralWords = (words: readonly string[]) =>
+  words.length > 1 && !words.some((word) => DENSE_SCRIPT.test(word));
+
 export function occurrenceCounts(
   tokens: readonly string[],
   span: { start: number; end: number },
@@ -126,7 +126,8 @@ export function occurrenceCounts(
     for (let index = span.end - words.length; index <= span.start; index++)
       if (phraseAt(tokens, words, index)) return false;
   }
-  if (entity.mode === 'always') return true;
+  if (entity.mode === 'always' || namesSeveralWords(tokens.slice(span.start, span.end)))
+    return true;
   const window = policy.audits.analysis.context_window_tokens;
   const low = Math.max(0, span.start - window),
     high = Math.min(tokens.length, span.end + window);

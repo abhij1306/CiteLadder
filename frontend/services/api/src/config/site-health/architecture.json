@@ -29,7 +29,6 @@
     "unhubbed_page_kind_min_urls": 3,
     "max_pages": 500,
     "max_evidence_items": 25,
-    "page_kind_collapse_min": 8,
     "max_breadcrumb_items": 16
   },
   "archetypes": {

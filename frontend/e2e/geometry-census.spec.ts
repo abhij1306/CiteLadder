@@ -31,6 +31,8 @@ const PROMPT_SETS = {
   ],
   limits: {
     generation_count_max: 50,
+    brand_prompts_max: 10,
+    brand_generation_calls: 4,
     import_rows_max: 500,
     bulk_prompts_max: 500,
     persona_max_chars: 200,
@@ -199,8 +201,7 @@ function measure({ route }: { route: string }) {
     }
   };
   bandGap('[data-masthead]', 'band.gap');
-  bandGap('[data-page-band="tabs"]', 'band.gap');
-  bandGap('[data-page-band="filters"]', 'band.gap');
+  bandGap('[data-page-band="tabs"]', 'strip.gap');
   for (const body of all('[data-page-body]'))
     add('body.top-gap', body, px(getComputedStyle(body).paddingTop));
   for (const band of all('[data-page-band="tabs"]')) {
@@ -357,8 +358,6 @@ async function census(
   await page.setViewportSize({ width: WIDTHS[0], height: 900 });
   await page.goto(fixtureProjectPath(route));
   await expect(page.getByRole('heading', { level: 1 })).toBeAttached();
-  // Unstubbed reads answer 404, so a route that never idles is re-reading a
-  // failed read forever: a product bug to fix, never a timeout to raise.
   await page.waitForLoadState('networkidle');
   await prepare?.(page);
   const nextFrame = () =>

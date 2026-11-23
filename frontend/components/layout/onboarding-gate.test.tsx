@@ -1,14 +1,19 @@
-import { renderWithProviders as render } from '@/test/render';
 import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { useState } from 'react';
+import { useState, type ReactElement } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 
 import { LOADING_INDICATOR_DELAY_MS } from '@/lib/config/operational';
 import { useProjectScope } from '@/lib/project/active-project-scope';
-import type { Project } from '@citeladder/contracts';
+import { ProjectSelectionProvider, type ProjectContextValue } from '@/lib/project/project-scope';
 import { makeProject } from '@/test/fixtures/project';
 import type { FailureScope, SelectionStatus } from '@/lib/project/selection';
+import {
+  renderWithProviders,
+  testProjectSelection,
+  testWorkspace,
+  type TestRole,
+} from '@/test/render';
 
 const replace = vi.fn();
 let pathname = '/projects';
@@ -23,46 +28,29 @@ vi.mock('react-router-dom', async (importOriginal) => ({
 const WORKSPACE = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const PROJECT = '11111111-1111-4111-8111-111111111111';
 
-type Role = 'owner' | 'admin' | 'member' | 'viewer';
-
-let contextValue: {
-  status: SelectionStatus;
-  errorScope: FailureScope;
-  activeWorkspaceId: string | null;
-  activeWorkspace: { id: string; role: Role; capabilities: readonly string[] } | null;
-  activeProjectId: string | null;
-  activeProject: Project | null;
-  retry: () => void;
-};
-vi.mock('@/lib/project/project-context', () => ({
-  useActiveWorkspaceId: () => 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-  useProjectContext: () => contextValue,
-}));
+let selection: Partial<ProjectContextValue>;
 
 import { OnboardingGate } from './onboarding-gate';
 
-/** The effective capabilities each role publishes on the workspace row. */
-const CAPABILITIES: Record<Role, readonly string[]> = {
-  owner: ['manage_credentials', 'read', 'run', 'write'],
-  admin: ['manage_credentials', 'read', 'run', 'write'],
-  member: ['read', 'run', 'write'],
-  viewer: ['read'],
-};
+function render(ui: ReactElement) {
+  return renderWithProviders(ui, { projectSelection: selection });
+}
 
 function setContext(
   status: SelectionStatus,
-  role: Role = 'owner',
+  role: TestRole = 'owner',
   errorScope: FailureScope = null,
 ) {
-  contextValue = {
+  const workspace = testWorkspace(role);
+  selection = {
     status,
     errorScope,
-    activeWorkspaceId: WORKSPACE,
-    activeWorkspace: { id: WORKSPACE, role, capabilities: CAPABILITIES[role] },
+    workspaces: [workspace],
+    activeWorkspaceId: workspace.id,
+    activeWorkspace: workspace,
     activeProjectId: status === 'ready' ? PROJECT : null,
     activeProject:
       status === 'ready' ? makeProject({ id: PROJECT, workspace_id: WORKSPACE }) : null,
-    retry: vi.fn(),
   };
 }
 
@@ -165,7 +153,9 @@ describe('OnboardingGate', () => {
     );
 
     expect(replace).not.toHaveBeenCalled();
-    expect(screen.getByText('That project is unavailable')).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'That project is unavailable' }),
+    ).toBeInTheDocument();
   });
 
   it('hands a project route its resolved project scope', () => {
@@ -195,21 +185,24 @@ describe('OnboardingGate', () => {
         </label>
       );
     }
-    const gate = () => (
-      <OnboardingGate>
-        <DraftScreen />
-      </OnboardingGate>
+    const gate = (value: Partial<ProjectContextValue>) => (
+      <ProjectSelectionProvider value={testProjectSelection(value)}>
+        <OnboardingGate>
+          <DraftScreen />
+        </OnboardingGate>
+      </ProjectSelectionProvider>
     );
-    const { rerender } = render(gate());
+    const { rerender } = render(gate(selection));
     await userEvent.type(screen.getByLabelText(`Draft for ${PROJECT}`), 'weekly');
     expect(screen.getByLabelText(`Draft for ${PROJECT}`)).toHaveValue('weekly');
 
-    contextValue = {
-      ...contextValue,
-      activeProjectId: OTHER,
-      activeProject: makeProject({ id: OTHER, workspace_id: WORKSPACE }),
-    };
-    rerender(gate());
+    rerender(
+      gate({
+        ...selection,
+        activeProjectId: OTHER,
+        activeProject: makeProject({ id: OTHER, workspace_id: WORKSPACE }),
+      }),
+    );
 
     expect(screen.getByLabelText(`Draft for ${OTHER}`)).toHaveValue('');
   });

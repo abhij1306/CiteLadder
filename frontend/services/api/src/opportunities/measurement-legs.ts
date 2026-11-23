@@ -75,11 +75,6 @@ async function visibilityLeg(
     : empty(a.LEG_VISIBILITY_RUN);
 }
 
-/**
- * A synced window that starts after the declaration day is what a traffic
- * check reads. Search Console finalizes a day after a short lag, so
- * the first such window is due then; past it, a sync is what is missing.
- */
 export function searchConsoleState(
   declaredAt: Date,
   window: { start: string; end: string } | null,

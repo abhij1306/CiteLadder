@@ -1,24 +1,18 @@
-import type { ReactNode } from 'react';
-
 import { ClampText } from '@/components/ui/clamp-text';
 import { Icon } from '@/components/ui/icon';
 import { Pressable } from '@/components/ui/pressable';
 import { Tag } from '@/components/ui/tag';
 import { TextLink } from '@/components/ui/text-link';
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
-import { InfoHint } from '@/components/ui/info-hint';
-import { Inline } from '@/components/ui/layout';
 import { pageNumberControls, useResizableTablePage } from '@/components/ui/pager';
 import { TableActionsCell, TableCell, TableCellLines, TableRow } from '@/components/ui/table';
 import { Absence } from '@/components/ui/absence';
-import type { DemandDetectorPolicy } from '@citeladder/contracts';
 import { ChevronRight } from '@/lib/icons';
 import type { DemandSignal } from '@/lib/api/demand';
 import {
   numericMetric,
   signalPage,
   signalSubject,
-  signalDefinition,
   signalTarget,
   signalTypeMeta,
   type RankedSignal,
@@ -42,46 +36,15 @@ function SignalChip({ signalType }: Readonly<{ signalType: string }>) {
   return <Tag>{signalTypeMeta(signalType).label}</Tag>;
 }
 
-/**
- * Each signal type in the snapshot, explained once, behind one
- * hint on the summary line so it is read before the table. It lists the
- * whole snapshot's types rather than the filtered ones, so choosing a filter
- * never changes it.
- */
-export function SignalLegend({
-  signals,
-  policy,
-}: Readonly<{ signals: readonly DemandSignal[]; policy: DemandDetectorPolicy }>) {
-  const types = [...new Set(signals.map((signal) => signal.signal_type))];
-  if (types.length === 0) return null;
-  return (
-    <Inline as="span" gap="tight">
-      Signal types
-      <InfoHint label="Signal types">
-        {types.map((type) => {
-          const meta = signalTypeMeta(type);
-          return (
-            <span key={type} className="block">
-              {`${meta.label}: ${signalDefinition(type, policy)} `}
-            </span>
-          );
-        })}
-      </InfoHint>
-    </Inline>
-  );
-}
-
 export function DemandSignalTable({
   rows,
   filterKey,
   onInspect,
-  description,
   onClearFilters,
 }: Readonly<{
   rows: readonly RankedSignal[];
   filterKey: string;
   onInspect: (signal: DemandSignal) => void;
-  description: ReactNode;
   onClearFilters: () => void;
 }>) {
   const { page, setPage, pageCount, from, to, pageSize, pageSizeControl } = useResizableTablePage(
@@ -93,7 +56,6 @@ export function DemandSignalTable({
   return (
     <DataTable
       title="Demand signals"
-      description={description}
       columns={COLUMNS}
       state={
         rows.length === 0

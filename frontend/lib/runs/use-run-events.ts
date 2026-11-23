@@ -30,8 +30,6 @@ export function useRunEvents(
     if (event) {
       for (const family of invalidationsFor(event)) pending.current.add(family);
     } else if (frame.data) {
-      // Drifted data is never treated as a DTO, but it still warrants a safe
-      // refetch of the baseline run views.
       pending.current.add('audit');
       pending.current.add('executions');
     }
@@ -56,6 +54,5 @@ export function useRunEvents(
     reconnectMaxMs: RUN_STREAM_RECONNECT_MAX_MS,
     onFrame,
     onInvalidate,
-    streamName: 'runs',
   });
 }

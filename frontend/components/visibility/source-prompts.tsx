@@ -1,10 +1,12 @@
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
-import { useState, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 
 import { BrandMark } from '@/components/ui/brand-mark';
 import { Button } from '@/components/ui/button';
+import { EngineMark, engineMarkKey } from '@/components/ui/engine-mark';
 import { Icon } from '@/components/ui/icon';
-import { AnswerDialog, type EvidenceSubject } from '@/components/runs/answer-dialog';
+import type { EvidenceSubject } from '@/components/runs/answer-dialog';
+import { useAnswerDialog } from '@/components/runs/answer-link';
 import { DataTable, type DataTableColumn, type DataTableState } from '@/components/ui/data-table';
 import { readErrorProps } from '@/components/ui/notice';
 import { TitledSection } from '@/components/ui/section';
@@ -34,13 +36,11 @@ const MAX_CHIPS = 3;
 export function SourcePrompts({
   filters,
   queries,
-  domain,
   url,
 }: Readonly<{
   filters: SourceFilters;
   queries: SourceQueries;
-  domain?: string | null;
-  url?: string | null;
+  url: string;
 }>) {
   const params = {
     audit_id: queries.selectedRunIds ? undefined : (queries.activeRunId ?? undefined),
@@ -48,18 +48,17 @@ export function SourcePrompts({
     engine: filters.engine === 'all' ? undefined : filters.engine,
     topic: queries.topic,
     cohort: filters.cohort,
-    domain: domain ?? undefined,
-    url: url ?? undefined,
+    url,
   };
   const query = useQuery({
     ...visibilityQueries.evidence(
       { workspaceId: queries.workspaceId, projectId: queries.projectId },
       params,
     ),
-    enabled: Boolean(queries.activeRunId && (domain || url)),
+    enabled: Boolean(queries.activeRunId),
   });
 
-  const [opened, setOpened] = useState<EvidenceSubject | null>(null);
+  const answerDialog = useAnswerDialog();
 
   return (
     <>
@@ -72,17 +71,11 @@ export function SourcePrompts({
           footer={query.data?.truncated ? `Newest ${EVIDENCE_LIMIT} shown` : null}
         >
           {(query.data?.items ?? []).map((item) => (
-            <PromptRow key={item.analysis_id} item={item} onOpenAnswer={setOpened} />
+            <PromptRow key={item.analysis_id} item={item} onOpenAnswer={answerDialog.open} />
           ))}
         </DataTable>
       </TitledSection>
-      <AnswerDialog
-        execution={opened}
-        open={opened !== null}
-        onOpenChange={(next) => {
-          if (!next) setOpened(null);
-        }}
-      />
+      {answerDialog.dialog}
     </>
   );
 }
@@ -117,6 +110,11 @@ function promptsState(
   };
 }
 
+function EngineLogo({ engine }: Readonly<{ engine: string }>) {
+  const key = engineMarkKey(engine);
+  return key ? <EngineMark engine={key} className="shrink-0" /> : null;
+}
+
 function PromptRow({
   item,
   onOpenAnswer,
@@ -129,13 +127,10 @@ function PromptRow({
     <TableRow>
       <TableCell>
         <Inline as="span">
-          <BrandMark name={engines.label(item.logical_engine)} />
+          <EngineLogo engine={item.logical_engine} />
           <TableCellLines
             primary={item.prompt_text || 'Untitled prompt'}
-            secondary={
-              engines.modelLabel(item.logical_engine, item.transport_model) ||
-              engines.label(item.logical_engine)
-            }
+            secondary={engines.label(item.logical_engine)}
           />
         </Inline>
       </TableCell>
@@ -191,16 +186,19 @@ function MentionChips({ item }: Readonly<{ item: VisibilityExecutionEvidence }>)
 }
 
 function SourceChips({ item }: Readonly<{ item: VisibilityExecutionEvidence }>) {
-  const hosts = [
-    ...new Set(item.citations.map((citation) => hostOf(citation.url)).filter(Boolean)),
-  ] as string[];
+  const hosts = [...new Set(item.citations.flatMap((citation) => hostOf(citation.url) || []))];
   if (!hosts.length) return <ObservedNone />;
   return (
     <ChipRow overflow={hosts.length - MAX_CHIPS}>
       {hosts.slice(0, MAX_CHIPS).map((host) => (
         <Tooltip key={host} content={host}>
           <span className="inline-flex">
-            <BrandMark name={host} websiteUrl={`https://${host}`} placement="inline" />
+            <BrandMark
+              name={host}
+              websiteUrl={`https://${host}`}
+              placement="inline"
+              entity="site"
+            />
           </span>
         </Tooltip>
       ))}

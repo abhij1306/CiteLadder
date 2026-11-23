@@ -20,7 +20,6 @@ const auditFields = auditLaunchRequestSchema.extend({
 });
 const selectedPrompts = (input: { prompt_set_id?: string | null; prompt_ids: string[] }) =>
   Boolean(input.prompt_set_id || input.prompt_ids.length);
-/** A browser launch. */
 export const auditRequestInput = auditFields.refine(
   selectedPrompts,
   'Select a prompt set or prompt IDs',
@@ -31,5 +30,8 @@ export const auditInput = auditFields
 export const auditLaunchInput = auditFields
   .omit({ project_id: true })
   .extend({ max_attempts: z.int().min(1) })
+  .refine(selectedPrompts, 'Select a prompt set or prompt IDs');
+export const auditLaunchDraft = auditFields
+  .omit({ project_id: true })
   .refine(selectedPrompts, 'Select a prompt set or prompt IDs');
 export type AuditInput = z.output<typeof auditInput>;

@@ -5,7 +5,7 @@ import { z } from 'zod';
 
 import { policy } from '../config.ts';
 import { resolveSettingSpec } from '../config/settings.ts';
-import type { Database } from '../db/database.ts';
+import { inTransaction, type Database } from '../db/database.ts';
 import type { RecordScope } from '../db/workspace-scope.ts';
 import { jsonObject, record } from '../db/json.ts';
 import { ApiError } from '../errors.ts';
@@ -31,8 +31,8 @@ function plannedPersona(refs: unknown[]): string {
   const audience = cell?.audience;
   return typeof audience === 'string' ? audience.trim().slice(0, P.persona_max_chars) : '';
 }
-const setting = (name: keyof typeof P.generation_settings) =>
-  resolveSettingSpec(P.generation_settings[name], process.env) as number;
+const setting = <K extends keyof typeof P.generation_settings>(name: K) =>
+  resolveSettingSpec(P.generation_settings[name], process.env);
 
 export const candidateReview = promptCandidateReviewRequestSchema;
 
@@ -172,7 +172,7 @@ export function reviewCandidates(
 ): Promise<CandidateReview> {
   validateIds(input.accept_ids, input.reject_ids);
   const { workspaceId } = scope;
-  return db.transaction().execute(async (trx) => {
+  return inTransaction(db, async (trx) => {
     const set = await scopedPromptSet(trx, workspaceId, promptSetId, scope.projectId);
     await acquireProjectLock(trx, set.project_id);
     await acquirePromptSetLock(trx, set.id);

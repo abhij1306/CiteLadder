@@ -10,7 +10,6 @@ const FIX = 'Add a responsive viewport meta declaration.';
 const cohort = (pageCount: number, crawled: number | null = 412) => ({
   rule_id: RULE,
   rule_label: 'Mobile viewport missing',
-  finding_class: 'defect',
   crawl_id: '44444444-4444-4444-8444-444444444444',
   group_id: 'aaaaaaaa-1111-4111-8111-111111111111',
   page_count: pageCount,
@@ -37,7 +36,6 @@ function detail(occurrences: SiteIssueDetail['occurrences']): SiteIssueDetail {
     dimension: 'technical',
     category: 'mobile',
     severity: 'high',
-    finding_class: 'defect',
     title: 'Mobile viewport missing',
     description: 'The document declares a mobile viewport.',
     remediation: FIX,

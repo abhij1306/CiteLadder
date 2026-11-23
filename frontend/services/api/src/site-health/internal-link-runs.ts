@@ -9,7 +9,7 @@ import {
 
 import { budget, spendBudget } from '../abuse/usage.ts';
 import { policy } from '../config.ts';
-import type { Database } from '../db/database.ts';
+import { inTransaction, type Database } from '../db/database.ts';
 import { record } from '../db/json.ts';
 import { ApiError } from '../errors.ts';
 import { getLogger } from '../logging.ts';
@@ -21,6 +21,7 @@ import { linkCandidates, linkRequests } from './internal-link-candidates.ts';
 import { loadLinkPages, type LinkScope } from './internal-link-pages.ts';
 import { pageRerunSql } from './page-rerun.ts';
 import { currentSiteCrawlQuery } from './reads/crawl.ts';
+import { widen } from '../widen.ts';
 
 const { succeeded, failed, cancelled } = policy.task_queue.statuses;
 const terminalTaskStatuses = [succeeded, failed, cancelled];
@@ -81,7 +82,7 @@ export async function linkRun(db: Database, scope: LinkScope, id?: string) {
       state: internalLinkAnalysisStateSchema.parse(run.state),
       created_at: run.created_at.toISOString(),
     })),
-    analysis: null as InternalLinkAnalysis | null,
+    analysis: widen<InternalLinkAnalysis | null>(null),
     crawl_id: crawl?.id ?? null,
     availability: crawl ? ('ready' as const) : ('crawl_required' as const),
   };
@@ -111,8 +112,7 @@ export async function admitLinkRun(
   actorId: string,
   input: { crawl_id: string; idempotency_key: string },
 ) {
-  const id = await db.transaction().execute(async (trx) => {
-    // Serialize admission for this project, including concurrent idempotent requests.
+  const id = await inTransaction(db, async (trx) => {
     await trx
       .selectFrom('projects')
       .select('id')
@@ -140,8 +140,6 @@ export async function admitLinkRun(
       .where('state', 'in', ['queued', 'running'])
       .executeTakeFirst();
     if (active) throw new ApiError(409, 'An internal link analysis is already running');
-    // A cancelled run's worker can still settle in-flight judgments; the
-    // project's slot stays occupied until its judgment task is terminal.
     const settling = await trx
       .selectFrom('analytics_tasks')
       .select('id')

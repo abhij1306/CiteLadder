@@ -43,7 +43,6 @@ export function ActionUrls({
     ),
   ];
   const rest = first.total - rows.length;
-  // The total can drift from the pages; the last page ends "Show more".
   const exhausted = extra.isSuccess && !extra.hasNextPage;
   const full = ticked.size >= HANDOFF_URLS_MAX;
   const showMore = () => {

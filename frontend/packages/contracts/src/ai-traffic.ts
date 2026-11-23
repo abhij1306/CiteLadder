@@ -218,7 +218,6 @@ export const crawlVerificationFailureSchema = z.enum([
 ]);
 const crawlPullSourceSchema = z.object({
   subscription: z.string(),
-  /** The `citeladder-source` label value the subscription must carry. */
   verification_nonce: z.string(),
   verified_at: z.string().nullable(),
   verification_checked_at: z.string().nullable(),
@@ -306,7 +305,6 @@ export const crawlReceiptSchema = z.object({
 export const crawlUploadSchema = z.object({
   id: z.uuid(),
   filename: z.string(),
-  // bigint column; the driver returns int8 as text.
   size_bytes: z.coerce.number(),
   status: z.string(),
   last_ack_seq: z.number(),

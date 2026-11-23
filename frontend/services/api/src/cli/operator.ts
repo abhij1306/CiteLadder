@@ -19,7 +19,6 @@ export function operatorDiagnostic(error: unknown): string {
   if (error instanceof Error && safeFailures.has(error.message)) return error.message;
   if (error instanceof Error && error.message === 'An active admin user is required')
     return 'active_admin_required';
-  // A PostgreSQL SQLSTATE (28P01: password rejected) names the cause without any input.
   if (
     error instanceof Error &&
     'code' in error &&

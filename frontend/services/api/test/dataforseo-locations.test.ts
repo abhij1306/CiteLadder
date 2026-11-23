@@ -36,6 +36,7 @@ describe('the DataForSEO locations file', () => {
           ],
           ['es', 'ja', 'en', 'zh-TW', 'he'],
         ),
+        google_ai_mode: lists([country(2724, 'ES')], ['es', 'pt-BR']),
         chatgpt_search: lists([country(2724, 'ES')], ['es', 'en']),
         gemini_consumer: lists([country(2724, 'ES')], ['xx']),
       },
@@ -43,11 +44,15 @@ describe('the DataForSEO locations file', () => {
     );
     expect(file.languages).toEqual({
       google_ai_overview: ['en', 'es', 'ja'],
+      google_ai_mode: ['es'],
       chatgpt_search: ['en', 'es'],
       gemini_consumer: [],
     });
     expect(file.countries).toEqual({
-      ES: { location_code: 2724, surfaces: ['google_ai_overview', 'chatgpt_search'] },
+      ES: {
+        location_code: 2724,
+        surfaces: ['google_ai_overview', 'google_ai_mode', 'chatgpt_search'],
+      },
       JP: { location_code: 2392, surfaces: ['google_ai_overview'] },
     });
     expect(file.generated_at).toBe('2026-10-10');
@@ -58,6 +63,7 @@ describe('the DataForSEO locations file', () => {
       buildLocationsFile(
         {
           google_ai_overview: lists([country(2724, 'ES')], ['es']),
+          google_ai_mode: lists([], []),
           chatgpt_search: lists([country(9999, 'ES')], ['es']),
           gemini_consumer: lists([], []),
         },
@@ -90,6 +96,7 @@ describe('the DataForSEO locations file', () => {
           'nl',
           'pl',
         ],
+        google_ai_mode: [],
         chatgpt_search: ['en'],
         gemini_consumer: [],
       },
@@ -107,6 +114,7 @@ describe('the DataForSEO locations file', () => {
         ),
         '      "pl"',
         '    ],',
+        '    "google_ai_mode": [],',
         '    "chatgpt_search": ["en"],',
         '    "gemini_consumer": []',
         '  },',

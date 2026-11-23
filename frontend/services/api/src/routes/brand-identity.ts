@@ -33,6 +33,7 @@ import {
   updateBrandFact,
 } from '../projects/brand-facts.ts';
 import { businessMapUpdate, readBusinessMap, updateBusinessMap } from '../projects/business-map.ts';
+import { projectThemeMergeRequestSchema } from '@citeladder/contracts/project-requests';
 import {
   createTheme,
   deleteTheme,
@@ -40,6 +41,7 @@ import {
   renameTheme,
   themeRequest,
 } from '../projects/themes.ts';
+import { mergeCategories } from '../perception/category-merge.ts';
 import { acceptSuggestion, COMPETITORS_WRITE, rejectSuggestion } from '../commands/competitors.ts';
 import { routeActor } from '../commands/permission.ts';
 import { listSuggestions } from '../projects/competitor-suggestions.ts';
@@ -60,7 +62,6 @@ const root = '/api/v1/projects/{project_id}';
 const uuid = { scalar: { kind: 'uuid' }, required: true } as const;
 const projectPath = { project_id: uuid } as const;
 
-/** Logo reads authorize through the path: an `<img>` sends no workspace header. */
 function serveLogo(
   c: Context<AppEnv>,
   db: Database,
@@ -191,6 +192,22 @@ export const brandIdentityRoutes = [
         { ...projectScopeOf(c, path.project_id), themeId: path.theme_id },
         input,
       );
+    },
+  }),
+  definePostRoute({
+    ...activeProject,
+    path: `${root}/themes/{theme_id}/merge`,
+    capability: 'write',
+    params: { path: { ...projectPath, theme_id: uuid }, query: {} },
+    body: projectThemeMergeRequestSchema,
+    response: projectThemeSchema,
+    async handle({ c, db }, { path }) {
+      const { into_id: intoId } = await readBody(c, projectThemeMergeRequestSchema);
+      return mergeCategories(db, {
+        ...projectScopeOf(c, path.project_id),
+        themeId: path.theme_id,
+        intoId,
+      });
     },
   }),
   defineDeleteRoute({

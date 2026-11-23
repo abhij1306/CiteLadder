@@ -23,20 +23,24 @@ describe('Agent admission on PostgreSQL', () => {
   });
   it('admits a turn on the configured gateway and freezes its model', async () => {
     const scope = await fixtures.scope();
-    await expect(agentAdmission(agentSettings({}), gateway)(db, scope)).resolves.toEqual({
+    await expect(
+      agentAdmission(agentSettings({}), gateway)(db, scope, 'test-model'),
+    ).resolves.toEqual({
       requested_model: 'test-model',
     });
   });
   it('refuses a turn when no Agent model is configured', async () => {
     const scope = await fixtures.scope();
-    await expect(agentAdmission(agentSettings({}), unconfigured)(db, scope)).rejects.toMatchObject({
+    await expect(
+      agentAdmission(agentSettings({}), unconfigured)(db, scope, 'test-model'),
+    ).rejects.toMatchObject({
       code: 'model_unavailable',
     });
   });
   it('refuses a turn over the workspace active-turn limit', async () => {
     const scope = await fixtures.scope();
     await expect(
-      agentAdmission({ ...agentSettings({}), activeLimit: 0 }, gateway)(db, scope),
+      agentAdmission({ ...agentSettings({}), activeLimit: 0 }, gateway)(db, scope, 'test-model'),
     ).rejects.toMatchObject({ status: 429 });
   });
 });

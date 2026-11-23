@@ -131,7 +131,11 @@ export function DashboardActions({
 
 function FactSummary({ value }: Readonly<{ value: string }>) {
   if (!value.trim()) return <Absence state="not_set" />;
-  return <ClampText className={textRole('body')}>{value}</ClampText>;
+  return (
+    <ClampText lines={2} className={textRole('body', 'whitespace-normal')}>
+      {value}
+    </ClampText>
+  );
 }
 
 function PdfButton({
@@ -253,7 +257,12 @@ function ownedCitationSegment({ track }: Pick<CommandCenter, 'track'>): FigureSe
  */
 export function Movement({ data }: Readonly<{ data: CommandCenter }>) {
   return (
-    <WidgetFrame id="movement" title="Movement" fill={data.movements.length ? 'chart' : 'list'}>
+    <WidgetFrame
+      id="movement"
+      title="Movement"
+      fill={data.movements.length ? 'chart' : 'list'}
+      card={data.movements.length > 0}
+    >
       {data.movements.length ? (
         <MovementChart movements={data.movements} />
       ) : (

@@ -15,7 +15,6 @@ function rendered(markdown: string): HTMLElement {
       </ReactMarkdown>,
     ),
   );
-  // The rendered nodes stay in the container once the root lets go of them.
   const snapshot = container.cloneNode(true);
   root.unmount();
   return snapshot instanceof HTMLElement ? snapshot : container;

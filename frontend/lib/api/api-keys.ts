@@ -30,6 +30,8 @@ export const apiKeysApi = {
       await apiClient.post<unknown>(`/api-keys/${keyId}/revoke`, {}, { workspaceId }),
       'api-keys.revoke',
     ),
+  remove: (workspaceId: string, keyId: string) =>
+    apiClient.delete<void>(`/api-keys/${keyId}`, { workspaceId }),
 };
 
 export const apiKeyQueries = {
@@ -54,5 +56,10 @@ export const apiKeyMutations = {
     mutationOptions({
       mutationFn: (keyId: string) => apiKeysApi.revoke(workspaceId, keyId),
       onSuccess: (_key, _keyId, _result, { client }) => refreshApiKeys(client),
+    }),
+  remove: (workspaceId: string) =>
+    mutationOptions({
+      mutationFn: (keyId: string) => apiKeysApi.remove(workspaceId, keyId),
+      onSuccess: (_data, _keyId, _result, { client }) => refreshApiKeys(client),
     }),
 };

@@ -1,6 +1,6 @@
 import type { visibilityExecutionEvidenceSchema } from '@citeladder/contracts/visibility-evidence';
 import type { z } from 'zod';
-import { record } from '../db/json.ts';
+import { isRecord, record } from '../db/json.ts';
 import { policy } from '../config.ts';
 type Item = z.input<typeof visibilityExecutionEvidenceSchema>;
 export type SearchEvent = Item['search_events'][number];
@@ -23,8 +23,8 @@ function eventText(value: unknown): string {
 function normalizeEvents(raw: unknown): SearchEvent[] {
   if (!Array.isArray(raw)) return [];
   return raw.flatMap((entry) => {
-    if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) return [];
-    const event = entry as Record<string, unknown>;
+    if (!isRecord(entry)) return [];
+    const event = entry;
     if (!EVENT_FIELDS.some((field) => Object.hasOwn(event, field))) return [];
     return [
       {

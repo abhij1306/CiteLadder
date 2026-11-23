@@ -9,7 +9,7 @@ import {
   AGENT_STREAM_NOTIFY_FALLBACK_MS,
 } from '@/lib/config/agent';
 import { API_BASE_URL } from '@/lib/config/operational';
-import { readSseResponse, streamHeaders } from '@/lib/sse/use-event-stream';
+import { openSseStream, readSseResponse } from '@/lib/sse/use-event-stream';
 
 export type TurnEvent = z.infer<typeof agentTurnEventSchema>;
 type ToolEvent = Extract<TurnEvent, { type: 'tool' }>;
@@ -61,7 +61,6 @@ function notify() {
   for (const listener of listeners) listener();
 }
 
-/** Listeners hear once a frame however many events arrive; a hidden tab pauses frames, so a timeout backs them up. */
 function notifyNextFrame() {
   if (fallback !== undefined) return;
   frame = requestAnimationFrame(notify);
@@ -154,11 +153,11 @@ function retryDelayMs(response: Response): number {
 async function runStream(url: string, workspaceId: string | null, runId: string) {
   for (let attempt = 1; ; attempt += 1) {
     const controller = new AbortController();
-    const response = await fetch(url, {
+    const response = await openSseStream({
+      url,
       method: 'POST',
-      credentials: 'include',
-      cache: 'no-store',
-      headers: streamHeaders(workspaceId, null),
+      workspaceId,
+      lastEventId: null,
       signal: controller.signal,
     });
     if (response.status === 429 && attempt < AGENT_RUN_RETRY.maxAttempts) {

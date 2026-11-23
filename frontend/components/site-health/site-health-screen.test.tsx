@@ -150,6 +150,30 @@ describe('SiteHealthScreen — Pages tab reads', () => {
     expect(reads).toEqual(['true|status|10']);
   });
 
+  it('reads the pages an issue link, a view and the depth, score and indexable filters name', async () => {
+    setSearch(
+      'tab=pages&pages_view=with_issues&pages_rule=technical.indexable&pages_indexable=no&pages_depth=2-3&pages_score=aeo_readiness:79',
+    );
+    mockRoutes();
+    const reads: string[] = [];
+    mswServer.use(
+      http.get(`/api/v1/site-crawls/${CRAWL}/pages`, ({ request }) => {
+        const params = new URL(request.url).searchParams;
+        params.delete('limit');
+        params.delete('sort');
+        reads.push(params.toString());
+        return HttpResponse.json({ items: [], next_cursor: null, root_errors: [] });
+      }),
+    );
+
+    renderScreen();
+
+    expect(await screen.findByText('No pages in this view')).toBeVisible();
+    expect(reads).toContain(
+      'rule=technical.indexable&indexable=false&min_depth=2&max_depth=3&score_role=aeo_readiness&max_score=79&with_issues=true',
+    );
+  });
+
   it('draws the page views and page-kind filter from the address, only on Pages', async () => {
     const user = userEvent.setup();
     setSearch('tab=pages&pages_view=errors&page_kind=faq');
@@ -162,7 +186,7 @@ describe('SiteHealthScreen — Pages tab reads', () => {
       'aria-checked',
       'true',
     );
-    expect(screen.getByRole('button', { name: /^Page kind: (?!All page kinds)/ })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Remove Page kind filter' })).toBeVisible();
 
     await user.click(screen.getByRole('tab', { name: 'Overview' }));
     const params = new URLSearchParams(window.location.search);
@@ -396,6 +420,8 @@ describe('SiteHealthScreen — canonical single-screen flow (regression)', () =>
       aeo_readiness_score: 62,
       aeo_measurement_coverage: 0.8,
       aeo_measurement_state: 'measured',
+      web_fundamentals_checks: null,
+      aeo_readiness_checks: null,
       search_eligibility: 'eligible',
       selected_count: 1,
       analyzed_count: 1,
@@ -415,6 +441,8 @@ describe('SiteHealthScreen — canonical single-screen flow (regression)', () =>
           aeo_readiness_score: null,
           aeo_measurement_coverage: null,
           aeo_measurement_state: 'not_measured',
+          web_fundamentals_checks: null,
+          aeo_readiness_checks: null,
           aeo_measurement_reason: 'page_purpose_unresolved',
         },
       },

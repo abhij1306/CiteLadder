@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { sql } from 'kysely';
 
-import type { Database } from '../db/database.ts';
+import { inTransaction, type Database } from '../db/database.ts';
 import { ApiError, notFound } from '../errors.ts';
 import { codes, integrationPolicy, integrationSettings } from './config.ts';
 import { policy } from '../config.ts';
@@ -9,6 +9,7 @@ import { budget, spendBudget } from '../abuse/usage.ts';
 import { isoDateText } from '../db/timestamps.ts';
 import { addDays, reportingDay } from '../calendar-days.ts';
 import { selectedPartition } from './partitions.ts';
+import { widen } from '../widen.ts';
 
 const settings = integrationSettings();
 
@@ -28,12 +29,6 @@ function day(value: string): number {
 
 type PropertyZone = { provider: string; reporting_timezone: string | null };
 
-/**
- * The last day the property has finished, in its own reporting time zone:
- * GA4's recorded property zone, Search Console's Pacific day, Bing's UTC day.
- * A GA4 property whose zone is not yet known uses the latest zone on Earth,
- * so a sync never imports a day the property is still recording.
- */
 function propertyYesterday(property: PropertyZone, now = new Date()): string {
   const zones: Record<string, string> = integrationPolicy.reporting_time_zones;
   const timeZone = property.reporting_timezone ?? zones[property.provider] ?? 'UTC';
@@ -67,7 +62,7 @@ function windowFor(
 }
 
 export function enqueueSyncRun(db: Database, input: SyncInput) {
-  return db.transaction().execute(async (trx) => {
+  return inTransaction(db, async (trx) => {
     const workspace = await trx
       .selectFrom('workspaces')
       .select('id')
@@ -363,7 +358,7 @@ async function backfillWindows(
   const candidates: Array<[string, string]> = [];
   if (prior.length) {
     for (const row of prior) {
-      const window = [isoDay(row.window_start), isoDay(row.window_end)] as [string, string];
+      const window = widen<[string, string]>([isoDay(row.window_start), isoDay(row.window_end)]);
       if (['failed', 'cancelled'].includes(row.status) && !alive.has(`${window[0]}:${window[1]}`))
         candidates.push(window);
     }

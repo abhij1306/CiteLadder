@@ -28,10 +28,7 @@ export function PromptTrend({ history }: Readonly<{ history: PromptHistory }>) {
   const timeZone = useDisplayTimeZone();
   const { points } = history;
   return (
-    <TitledSection
-      title="Trend"
-      description="A run with no successful answer is a gap. A change in measurement conditions starts a new line."
-    >
+    <TitledSection title="Trend">
       <SectionContent>
         <Stack gap="workspace">
           <AreaChart

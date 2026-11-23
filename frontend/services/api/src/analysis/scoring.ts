@@ -4,6 +4,8 @@ import { entityOffset, namesAlias, normalizeText, type EntityPolicy } from './al
 import { entityKey, storedEntityMatching } from './entity-matching.ts';
 import { brandPosition } from './position.ts';
 import { policy } from '../config.ts';
+import type { RouteIdentity } from '../audits/costs.ts';
+import { readFrozenConfiguration } from '../audits/frozen-configuration.ts';
 
 type JsonObject = Record<string, unknown>;
 
@@ -19,8 +21,7 @@ export type ScoringConfig = {
   brandName: string;
   brandAliases: string[];
   productsServices: string[];
-  provider: string;
-  model: string;
+  engineRoutes: Partial<Record<string, RouteIdentity>>;
   ownedDomains: unknown[];
   unintendedDomains: unknown[];
   competitors: CompetitorConfig[];
@@ -64,8 +65,7 @@ export function scoringConfig(configuration: unknown): ScoringConfig {
     brandName: scalarText(config.brand_name),
     brandAliases: truthyStrings([config.brand_name, ...listOf(config.brand_aliases)]),
     productsServices: truthyStrings(listOf(config.products_services)),
-    provider: scalarText(config.provider),
-    model: scalarText(config.model),
+    engineRoutes: readFrozenConfiguration(config).engine_routes ?? {},
     ownedDomains: listOf(config.owned_domains),
     unintendedDomains: listOf(config.unintended_domains),
     competitors: competitorConfigs(config, matching),

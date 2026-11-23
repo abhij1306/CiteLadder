@@ -68,7 +68,7 @@ export async function deriveRunMetrics(
     auditId = audit.id;
   for (const task of tasks.filter((t) => t.status === 'succeeded')) {
     if (!task.result_artifact_id) throw new Error('Successful task has no immutable artifact');
-    await derive(trx, task, audit, task.result_artifact_id); // NOSONAR -- One transaction: derivations run in order.
+    await derive(trx, task, audit, task.result_artifact_id); // NOSONAR
   }
   const analyses = await trx
     .selectFrom('response_analyses')
@@ -82,7 +82,7 @@ export async function deriveRunMetrics(
   const artifacts = await trx
     .selectFrom('raw_response_artifacts as r')
     .innerJoin('audits as a', 'a.id', 'r.audit_id')
-    .selectAll('r')
+    .select(['r.id', 'r.task_id', 'r.usage'])
     .where('a.workspace_id', '=', workspaceId)
     .where('r.audit_id', '=', auditId)
     .execute();

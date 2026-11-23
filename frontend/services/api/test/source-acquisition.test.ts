@@ -438,9 +438,9 @@ it('never judges a name too short to find on a page absent, so it leaves no list
     ['competitor', 'present'],
   ]);
   expect(
-    isListingGap({ source_class: null }, [
-      { entity_kind: 'brand', presence: 'not_assessable' },
-      { entity_kind: 'competitor', presence: 'present' },
+    isListingGap({ source_class: null, registrable_domain: 'example.test', title: '' }, [
+      { entity_kind: 'brand', entity_name: 'HP', presence: 'not_assessable' },
+      { entity_kind: 'competitor', entity_name: 'Dell', presence: 'present' },
     ]),
   ).toBe(false);
   expect(presences(['Hewlett-Packard'])[0]).toEqual(['brand', 'not_detected']);

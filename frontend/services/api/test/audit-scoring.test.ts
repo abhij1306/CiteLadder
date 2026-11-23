@@ -2,7 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { scoreExecution, scoringConfig } from '../src/analysis/scoring.ts';
 import { assessEntities, brandNamed } from '../src/analysis/entity-assessment.ts';
 import { citationIdentity } from '../src/source-pages/identity.ts';
-import { aliasSuggestions, normalizeAlias, firstAliasOffset } from '../src/analysis/aliases.ts';
+import {
+  aliasSuggestions,
+  normalizeAlias,
+  firstAliasOffset,
+  namesEntity,
+} from '../src/analysis/aliases.ts';
+import { entityKey, projectEntityMatching } from '../src/analysis/entity-matching.ts';
 const config = scoringConfig({
   brand_name: 'Acme & Co',
   brand_aliases: ['Summitwear'],
@@ -122,6 +128,41 @@ describe('frozen deterministic execution scoring', () => {
     expect(brand).toMatchObject({ state: 'mentioned' });
     expect(brand!.evidence_spans[0]!.text).toContain('Target store');
     expect(assessEntities('Define the target audience first.', target)[0]!.state).toBe('absent');
+  });
+  it('counts a common-word competitor named beside another tracked brand', () => {
+    const matching = projectEntityMatching(
+      {},
+      ['Homewares'],
+      [
+        { name: 'Best & Less', aliases: [] },
+        { name: 'Kmart', aliases: [] },
+        { name: 'Target', aliases: [] },
+        { name: 'Next', aliases: [] },
+      ],
+    );
+    const target = matching[entityKey('Target')];
+    expect(
+      namesEntity(
+        'One comparison picks Kmart for everyday bath towels as the cheapest cotton option, and Target for plush towels.',
+        ['Target'],
+        target,
+      ),
+    ).toBe(true);
+    expect(namesEntity('Next on the list, Target for plush towels.', ['Target'], target)).toBe(
+      false,
+    );
+    expect(namesEntity('Set a target for plush towels.', ['Target'], target)).toBe(false);
+    const australia = projectEntityMatching(
+      {},
+      [],
+      [{ name: 'Target Australia', aliases: ['Target'] }],
+    )[entityKey('Target Australia')];
+    const aliases = ['Target Australia', 'Target'];
+    expect(australia?.mode).toBe('context_required');
+    expect(
+      namesEntity('Target Australia is good for budget-friendly basics.', aliases, australia),
+    ).toBe(true);
+    expect(namesEntity('Know your target audience first.', aliases, australia)).toBe(false);
   });
   it('finds names inside sentences of scripts written without spaces', () => {
     const score = (brand_name: string, answerText: string) =>

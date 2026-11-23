@@ -22,9 +22,6 @@ const aliasMatches = (alias: string, answer: string) =>
 function spellingMatches(words: readonly string[], answer: string): RegExpExecArray[] {
   const normalized = words.join(' ');
   const tokens = words.map((token) => (token === 'and' ? '(?:and|&)' : escapeRegex(token)));
-  // The separator is disjoint from the token alphabet (letters, marks, digits,
-  // '_', and '&' when an "and" token can match it), so a near-miss cannot
-  // backtrack polynomially over a long answer.
   const separator = words.includes('and')
     ? String.raw`[^\p{L}\p{M}\p{N}_&]*`
     : String.raw`[^\p{L}\p{M}\p{N}_]*`;

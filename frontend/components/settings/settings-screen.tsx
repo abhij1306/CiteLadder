@@ -32,9 +32,9 @@ function visibleTabs(hasWorkspace: boolean, managesCredentials: boolean) {
   );
 }
 
-const SETTINGS_TAB_CODEC = stringUrlCodec(
+const SETTINGS_TAB_CODEC = stringUrlCodec<SettingsTab>(
   SETTINGS_TABS.map((tab) => tab.value),
-  'general' as SettingsTab,
+  'general',
 );
 
 function ProjectDeletionControls() {
@@ -49,10 +49,6 @@ function ProjectDeletionControls() {
       onSuccess: (remaining, deletedId) => {
         const next = remaining.find((project) => project.id !== deletedId) ?? null;
         if (next) {
-          // Navigate, do not merely re-select: the deleted id may be the one in
-          // `?project=`, and leaving it there would resolve to a project that no
-          // longer exists and present as "that project is unavailable". Replace
-          // rather than push for the same reason — Back must not return to it.
           selectProject(next.id, { replace: true });
           setConfirmOpen(false);
         } else {
@@ -161,22 +157,22 @@ export function SettingsScreen() {
   return (
     <TabsRoot value={activeTab} onValueChange={setActiveTab} orientation="vertical">
       <SettingsPage rail={<TabRail items={tabs} ariaLabel="Settings sections" />}>
-        <TabPanel value="general" forceMount className="focus-ring data-[state=inactive]:hidden">
+        <TabPanel value="general" forceMount className="data-[state=inactive]:hidden">
           <TimeZoneSetting />
           <ProjectDeletionControls />
         </TabPanel>
 
-        <TabPanel value="providers" forceMount className="focus-ring data-[state=inactive]:hidden">
+        <TabPanel value="providers" forceMount className="data-[state=inactive]:hidden">
           <ProviderSettings />
         </TabPanel>
 
-        <TabPanel value="integrations" className="focus-ring">
+        <TabPanel value="integrations">
           <IntegrationSettings />
         </TabPanel>
-        <TabPanel value="connections" className="focus-ring">
+        <TabPanel value="connections">
           <McpConnections />
         </TabPanel>
-        <TabPanel value="api-keys" className="focus-ring">
+        <TabPanel value="api-keys">
           <ApiKeys />
         </TabPanel>
       </SettingsPage>

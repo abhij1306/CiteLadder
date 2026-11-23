@@ -21,11 +21,12 @@ import type {
 } from '@citeladder/contracts';
 import type { PagesSort } from '@/lib/api/site-health';
 import type { RunStatusValue, StatusValue } from '@/components/ui/status-mark';
-import type { InternalLinkAnalysis } from '@citeladder/contracts/site-health';
+import { checksRunSchema, type InternalLinkAnalysis } from '@citeladder/contracts/site-health';
+import type { z } from 'zod';
 import { CRAWL_POLL_MS, CRAWL_VIEW_REFRESH_MS } from '@/lib/config/operational';
 import { RERUN_POLL_INTERVAL_MS } from '@/lib/config/site-health';
 import { pollWhileActive, type JobStates } from '@/lib/jobs/poll';
-import { absent, availabilityLabel, formatCount, type Formatted } from '@/lib/format';
+import { absent, availabilityLabel, formatCount, pluralCount, type Formatted } from '@/lib/format';
 import { sentenceCaseStatus } from '@/lib/utils';
 
 const INTERNAL_LINK_REASON_LABELS: Record<string, string> = {
@@ -203,13 +204,14 @@ export function inventoryModeForPhase(
     case 'dashboard':
       return 'scored';
     case 'terminal':
-      // a FAILED crawl's terminal view keeps the tabbed page browser so
-      // the Errors & Blocked tab stays reachable — it renders the root-failure
-      // block (root_errors) even though no page rows exist. Any other
-      // terminal shape (cancelled-with-nothing) lists nothing.
       return crawl?.status === 'failed' ? 'scored' : 'none';
-    default:
+    case 'resolving':
+    case 'empty':
       return 'none';
+    default: {
+      const unhandled: never = phase;
+      return unhandled;
+    }
   }
 }
 
@@ -232,10 +234,15 @@ export function pageStatusBadgeValue(status: PageAnalysisStatus): StatusValue {
     case 'blocked':
     case 'cancelled':
       return 'danger';
+    case 'not_selected':
     case 'not_measured':
+    case 'pending':
+    case 'running':
       return 'info';
-    default:
-      return 'info';
+    default: {
+      const unhandled: never = status;
+      return unhandled;
+    }
   }
 }
 
@@ -249,17 +256,20 @@ export function statusLabel(status: string): string {
 
 export { formatScore } from '@/lib/format';
 
+export type ChecksRun = z.infer<typeof checksRunSchema>;
+
+export function checksRunLabel(checks: ChecksRun | null | undefined): string | null {
+  if (!checks || checks.run >= checks.total) return null;
+  return `${formatCount(checks.run)} of ${pluralCount(checks.total, 'check')} run`;
+}
+
 export function measurementCaveat(
   state: string | undefined,
-  coverage?: number | null,
+  checks?: ChecksRun | null,
   reason?: string,
 ): string | null {
   if (state === 'measured') return null;
-  if (state === 'limited_evidence') {
-    return coverage === null || coverage === undefined
-      ? 'Partial audit'
-      : `Partial audit · ${Math.round(coverage * 100)}% coverage`;
-  }
+  if (state === 'limited_evidence') return checksRunLabel(checks) ?? 'Not every check ran';
   if (state === 'excluded') return 'Excluded from this audit';
   if (reason === 'unsupported_purpose_checklist') return 'Unsupported purpose checklist';
   return availabilityLabel('not_measured');

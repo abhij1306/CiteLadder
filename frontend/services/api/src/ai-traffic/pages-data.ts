@@ -178,10 +178,6 @@ async function pageSelection(db: Database, scope: CrawlScope, input: PageOptions
     from keys k left join bot b using(url_hash) left join landing l using(url_hash) left join citation c using(url_hash)
       left join inventory i using(url_hash) left join finding f using(url_hash) left join errors e using(url_hash))
     select * from joined where ${sql.join(rowConditions, and)}`;
-  // Deriving a row's path, folder and resource class costs a regex per row,
-  // and the inventory alone can hold tens of thousands of paths: a read
-  // formats only its page unless a folder or resource filter needs them all.
-  // `offset 0` keeps the path one evaluation instead of one per rule.
   const format = (rows: RawBuilder<unknown>) => sql`select r.*,
       coalesce(r.stored_display_path,u.path) as display_path,
       coalesce(r.stored_folder,

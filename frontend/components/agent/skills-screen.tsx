@@ -100,18 +100,18 @@ function SkillGroups({ skills }: Readonly<{ skills: AgentSkill[] }>) {
 function SkillRow({ skill, output }: Readonly<{ skill: AgentSkill; output: string | undefined }>) {
   const detailId = useId();
   return (
-    <li className="hover:overlay-hover relative flex min-h-[var(--table-row-height)] min-w-0 items-center gap-2 px-4">
+    <li className="hover:overlay-hover relative flex min-h-[var(--table-row-height)] min-w-0 items-center gap-3 px-4 py-2.5">
       <Icon icon={OUTPUT_ICONS[skill.output_kind] ?? Sparkles} className="text-ink-2" />
-      <span className={textRole('body', 'flex min-w-0 flex-1 items-baseline gap-2')}>
+      <span className={textRole('body', 'flex min-w-0 flex-1 flex-col gap-0.5')}>
         <ProjectLink
           href={agentHandoffHref({ skillId: skill.id })}
           aria-label={`Start a chat with ${skill.label}`}
           aria-describedby={output ? `${detailId} ${detailId}-output` : detailId}
-          className="focus-ring-inset type-label text-ink shrink-0 no-underline before:absolute before:inset-0"
+          className="focus-ring-inset type-label text-ink self-start no-underline before:absolute before:inset-0"
         >
           {skill.label}
         </ProjectLink>
-        <span id={detailId} className="text-ink-2 phone:sr-only min-w-0 truncate">
+        <span id={detailId} className="text-ink-2 phone:sr-only line-clamp-2 min-w-0">
           {skill.description}
         </span>
       </span>

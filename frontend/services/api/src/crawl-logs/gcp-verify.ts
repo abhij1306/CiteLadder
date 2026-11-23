@@ -43,7 +43,6 @@ async function checkSubscription(
   } catch (error) {
     if (!(error instanceof GcpError)) throw error;
     if (error.failure === 'permission_denied') return 'permission_denied';
-    // A name Google refuses as malformed names no subscription the reader can use.
     if (error.failure === 'not_found' || error.failure === 'invalid') return 'not_found';
     return 'unavailable';
   }

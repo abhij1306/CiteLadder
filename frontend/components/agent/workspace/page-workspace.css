@@ -19,7 +19,6 @@
   padding: 0 var(--card-padding);
 }
 .page-editor .cm-editor .page-editor-h1 {
-  /* Nothing else reads this role, so the theme may not emit it: its values stand behind it. */
   font-size: var(--text-display-sm, 1.5rem);
   line-height: var(--text-display-sm--line-height, 2rem);
 }
@@ -48,7 +47,7 @@
   font-weight: var(--weight-medium);
 }
 .page-editor .cm-editor .page-editor-em {
-  font-style: italic;
+  font-weight: var(--weight-medium);
 }
 .page-editor .cm-editor .page-editor-link {
   color: var(--color-accent-text);

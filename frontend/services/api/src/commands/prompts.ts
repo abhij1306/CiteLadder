@@ -94,11 +94,6 @@ export function deletePrompts(
   return bulk.deletePrompts(db, { workspaceId: actor.workspaceId, projectId }, input);
 }
 
-/**
- * Import spends the workspace's `bulk_import` window first, then checks the raw
- * byte size, and only then parses the body: a refused, oversized or invalid
- * import still uses its attempt.
- */
 export async function importPrompts(
   db: Database,
   actor: Writer,

@@ -13,7 +13,6 @@ import { selectedPartition } from '../integrations/partitions.ts';
 
 const { referrals } = policy;
 const REFERRAL_DATASETS = Object.values(referrals.datasets).sort(compareText);
-// Rows per INSERT, well inside PostgreSQL's bind-parameter limit.
 const INSERT_CHUNK = 1000;
 
 export async function ownedArtifact(

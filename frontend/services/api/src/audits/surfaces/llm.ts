@@ -3,7 +3,8 @@ import { failureFacts, getLogger } from '../../logging.ts';
 import { answerRequestSchema } from '../../answer-engines/contracts.ts';
 import { ProviderError } from '../../providers/errors.ts';
 import { auditPolicy } from '../config.ts';
-import type { ExecutionContext } from '../execution-context.ts';
+import { pauseUnavailableAccount, type ExecutionContext } from '../execution-context.ts';
+import { searchPolicy } from '../../search-surfaces/dataforseo.ts';
 import { persistAnswerFailure, persistExecutionSuccess } from '../result-persistence.ts';
 import type { PhaseDeps, SurfaceAdapter, TaskFailure } from './adapter.ts';
 
@@ -79,6 +80,8 @@ export const llmSurface: SurfaceAdapter = {
         persisted_code: safe.code,
       });
       state.rateError = safe;
+      if (safe.code === searchPolicy.constants.error_account_unavailable)
+        await pauseUnavailableAccount(deps.db, context, deps.runtime, deps.now());
       await persistAnswerFailure(deps.db, claimed, deps.owner, safe, deps.runtime, {
         called: true,
         context,

@@ -37,6 +37,7 @@ export const intentLabels: Record<PromptIntent, string> = {
   purchase: 'Purchase',
   service: 'Service',
   local: 'Local',
+  evaluation: 'Brand evaluation',
 };
 
 export const buyerStageValues: BuyerStage[] = buyerStageSchema.options;

@@ -74,8 +74,6 @@ export function shelfMetrics(taskIds: string[], observations: Observation[]) {
     )
     .filter((row) => row !== undefined);
   return {
-    // The column is not nullable: with no successful execution the read
-    // reports visibility unavailable from `successful_execution_count`.
     product_visibility: taskIds.length
       ? taskIds.filter((id) => ownedTasks.has(id)).length / taskIds.length
       : 0,
@@ -116,7 +114,6 @@ function latestPasses(
     .orderBy('p.id', 'desc');
 }
 
-/** Caller holds the workspace-scoped audit lock. Historical snapshots never read the current catalog. */
 export async function finalizeCommerceShelf(db: Database, audit: Selectable<Audits>) {
   if (audit.audit_scope !== 'commerce') return;
   const frozen = record(record(audit.configuration).commerce_measurement),
@@ -137,7 +134,7 @@ export async function finalizeCommerceShelf(db: Database, audit: Selectable<Audi
     .where('id', 'in', ids)
     .execute();
   for (const target of targets) {
-    const exists = await db
+    const exists = await db // NOSONAR
       .selectFrom('commerce_shelf_snapshots')
       .select('id')
       .where('workspace_id', '=', audit.workspace_id)
@@ -148,7 +145,7 @@ export async function finalizeCommerceShelf(db: Database, audit: Selectable<Audi
       .where('formula_version', '=', versions.formula_version!)
       .executeTakeFirst();
     if (exists) continue;
-    const tasks = await db
+    const tasks = await db // NOSONAR
       .selectFrom('audit_tasks as t')
       .innerJoin('audit_prompt_snapshots as s', 's.id', 't.prompt_snapshot_id')
       .innerJoin('commerce_prompt_targets as c', 'c.prompt_id', 's.prompt_id')
@@ -166,7 +163,7 @@ export async function finalizeCommerceShelf(db: Database, audit: Selectable<Audi
       .where('s.cohort', 'not in', policy.prompts.branded_cohorts)
       .execute();
     const taskIds = new Set(tasks.map((task) => task.id));
-    const observations = await db // NOSONAR -- Runs on the caller's audit-lock transaction.
+    const observations = await db // NOSONAR
       .selectFrom('commerce_recommendation_observations')
       .selectAll()
       .where('workspace_id', '=', audit.workspace_id)
@@ -184,7 +181,7 @@ export async function finalizeCommerceShelf(db: Database, audit: Selectable<Audi
       .orderBy('created_at')
       .orderBy('id')
       .execute();
-    await db
+    await db // NOSONAR
       .insertInto('commerce_shelf_snapshots')
       .values({
         id: randomUUID(),

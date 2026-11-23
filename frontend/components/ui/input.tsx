@@ -4,15 +4,14 @@ import { Icon } from '@/components/ui/icon';
 import type { IconGlyph } from '@/lib/icons';
 import { cn } from '@/lib/utils';
 
-export const FIELD_EDGE =
-  'bg-panel border border-rule hover:border-control-line [[data-public-surface]_&]:shadow-edge';
+export const FIELD_EDGE = 'bg-panel border border-transparent [[data-public-surface]_&]:bg-well';
 
 const FIELD_SHAPE =
   'type-body min-h-[var(--control-md)] w-full rounded-control px-3 text-ink transition-[background-color,border-color,outline-color] duration-[var(--motion-fast)]';
 
 export const FIELD_BOX = `${FIELD_EDGE} ${FIELD_SHAPE}`;
 
-export const TRIGGER_BOX = `face bg-raised border border-rule hover:bg-raised-2 data-[state=open]:bg-raised-2 ${FIELD_SHAPE}`;
+export const TRIGGER_BOX = `face bg-raised border border-transparent [[data-public-surface]_&]:bg-well hover:bg-raised-2 data-[state=open]:bg-raised-2 ${FIELD_SHAPE}`;
 
 const inputWidths = {
   fill: '',
@@ -45,7 +44,7 @@ export function Input({
         className={cn(
           'focus-input',
           FIELD_BOX,
-          'placeholder:text-ink-2 disabled:cursor-not-allowed disabled:opacity-60',
+          'placeholder:text-ink-3 disabled:cursor-not-allowed disabled:bg-raised-2 disabled:text-ink-2',
           inputWidths[width],
           containerClassName,
           className,
@@ -74,7 +73,7 @@ export function Input({
       <input
         ref={ref}
         className={cn(
-          'placeholder:text-ink-2 type-body min-w-0 flex-1 self-stretch bg-transparent disabled:cursor-not-allowed',
+          'placeholder:text-ink-3 type-body min-w-0 flex-1 self-stretch bg-transparent disabled:cursor-not-allowed',
           className,
         )}
         {...props}

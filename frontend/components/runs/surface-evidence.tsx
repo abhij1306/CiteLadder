@@ -16,6 +16,7 @@ import { pluralCount } from '@/lib/format';
 import { StateBlock } from '@/components/ui/state-block';
 import { wellClasses } from '@/components/ui/slip';
 import { FigureStrip } from '@/components/ui/figure-strip';
+import { useEngineCatalog } from '@/lib/providers/engines';
 
 function presenceLabel(evidence: SearchSurfaceEvidence): string {
   if (evidence.aio_present === true) return 'Shown';
@@ -159,11 +160,15 @@ function SurfaceFooter({ evidence }: Readonly<{ evidence: SearchSurfaceEvidence 
   );
 }
 
-export function SurfaceEvidence({ evidence }: Readonly<{ evidence: SearchSurfaceEvidence }>) {
+export function SurfaceEvidence({
+  evidence,
+  engine,
+}: Readonly<{ evidence: SearchSurfaceEvidence; engine: string }>) {
+  const label = useEngineCatalog().label(engine);
   const shown = evidence.aio_present === true;
   return (
     <Stack as="section" gap="workspace" className="min-w-0">
-      <SubsectionHeader title="AI Overview details" />
+      <SubsectionHeader title={`${label} details`} />
       <FigureStrip
         segments={[
           { key: 'overview', label: 'Overview', value: presenceLabel(evidence) },
@@ -190,7 +195,7 @@ export function SurfaceEvidence({ evidence }: Readonly<{ evidence: SearchSurface
       ) : (
         <div className={wellClasses('type-body text-ink-2 min-w-0')}>
           {evidence.aio_present === false
-            ? 'No overview appeared.'
+            ? `No ${label} appeared.`
             : 'Search not retrieved: a measurement gap, not brand absence.'}
         </div>
       )}

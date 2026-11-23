@@ -120,11 +120,6 @@ export class TrafficProjectionBuilder {
       this.buckets.get(bucketStart(day, this.window.granularity))!.gsc.hasRows = true;
     }
   }
-  /**
-   * Zero vs missing is decided per day: a range observes a zero when any of
-   * its days has a partition that can. Other days only make the range partial,
-   * which its persisted per-day quality records; they never null its zeros.
-   */
   private measures(
     value: Measures,
     datasets: string[],

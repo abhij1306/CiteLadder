@@ -6,12 +6,8 @@ import type {
   visibilitySourceSeriesSchema,
   visibilitySourcesSchema,
 } from '@citeladder/contracts/visibility-evidence';
-import {
-  domainTypeLabel,
-  DOMAIN_TYPES,
-  urlTypeLabel,
-  URL_TYPES,
-} from '@/lib/visibility/vocabulary';
+import { URL_TYPES, urlTypeLabel } from '@citeladder/contracts/page-labels';
+import { domainTypeLabel, DOMAIN_TYPES } from '@/lib/visibility/vocabulary';
 
 export type SourcesData = z.infer<typeof visibilitySourcesSchema>;
 export type SourceItem = SourcesData['items'][number];

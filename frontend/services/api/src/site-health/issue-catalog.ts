@@ -3,13 +3,7 @@ import { sql } from 'kysely';
 import { z } from 'zod';
 
 import type { Database } from '../db/database.ts';
-import {
-  catalogClassKey,
-  catalogItems,
-  ISSUE_FINDING_CLASSES,
-  issueSummary,
-  unfilteredIssues,
-} from './reads/issues.ts';
+import { catalogItems, issueSummary, unfilteredIssues } from './reads/issues.ts';
 import { viewIssuesSql } from './reads/crawl.ts';
 import { issueGroupId } from './reads/rules.ts';
 import { CRAWL_COLUMNS, type Crawl } from './site-task.ts';
@@ -35,7 +29,7 @@ type IssueReferenceSnippet = z.infer<typeof referenceSnippetSchema>;
 async function firstSnippetRow(
   db: Database,
   crawl: Crawl,
-  family: { findingClass: string; ruleId: string; path: readonly string[] },
+  family: { ruleId: string; path: readonly string[] },
 ) {
   const { rows } = await sql<{
     issue_id: string;
@@ -50,7 +44,7 @@ async function firstSnippetRow(
       from site_issues i
       join site_urls u on u.workspace_id = i.workspace_id and u.id = i.site_url_id
       where ${viewIssuesSql(crawl)}
-        and i.finding_class = ${family.findingClass} and i.rule_id = ${family.ruleId}
+        and i.rule_id = ${family.ruleId}
     )
     -- The family's pages in URL order, each fetch read only until one carries a
     -- snippet: ordering by URL first drove the plan from every project URL.
@@ -67,18 +61,14 @@ async function firstSnippetRow(
   return rows[0];
 }
 
-async function referenceSnippets(
-  db: Database,
-  crawl: Crawl,
-  findingClass: string,
-): Promise<IssueReferenceSnippet[]> {
+async function referenceSnippets(db: Database, crawl: Crawl): Promise<IssueReferenceSnippet[]> {
   const snippets: IssueReferenceSnippet[] = [];
   for (const [ruleId, path] of Object.entries(SNIPPET_FACTS)) {
-    const row = await firstSnippetRow(db, crawl, { findingClass, ruleId, path }); // NOSONAR -- In order on the writer's connection.
+    const row = await firstSnippetRow(db, crawl, { ruleId, path }); // NOSONAR
     const snippet = snippetSchema.safeParse(row?.snippet);
     if (!row || !snippet.success) continue;
     snippets.push({
-      group_id: issueGroupId(crawl.id, ruleId, findingClass),
+      group_id: issueGroupId(crawl.id, ruleId),
       rule_id: ruleId,
       page_url: row.page_url,
       site_url_id: row.site_url_id,
@@ -91,51 +81,44 @@ async function referenceSnippets(
 }
 
 async function computeIssueCatalog(db: Database, crawl: Crawl) {
-  const classes = [];
-  for (const findingClass of [...ISSUE_FINDING_CLASSES, null]) {
-    const filters = unfilteredIssues(findingClass);
-    const items = await catalogItems(db, crawl, filters); // NOSONAR -- In order on one connection.
-    const summary = await issueSummary(db, crawl, filters); // NOSONAR -- In order on one connection.
-    const snippets = findingClass ? await referenceSnippets(db, crawl, findingClass) : []; // NOSONAR -- In order on one connection.
-    classes.push({ findingClass, items, summary, snippets });
-  }
-  return classes;
+  const filters = unfilteredIssues();
+  const items = await catalogItems(db, crawl, filters);
+  const summary = await issueSummary(db, crawl, filters);
+  const snippets = await referenceSnippets(db, crawl);
+  return { items, summary, snippets };
 }
 
 async function writeIssueCatalog(
   db: Database,
   crawl: Crawl,
-  classes: Awaited<ReturnType<typeof computeIssueCatalog>>,
+  { items, summary, snippets }: Awaited<ReturnType<typeof computeIssueCatalog>>,
 ) {
   const now = new Date();
-  for (const { findingClass, items, summary, snippets } of classes) {
-    await db // NOSONAR -- In order on the writer's connection.
-      .insertInto('site_issue_catalogs')
-      .values({
-        workspace_id: crawl.workspace_id,
-        project_id: crawl.project_id,
-        crawl_id: crawl.id,
-        finding_class: catalogClassKey(findingClass),
-        items: JSON.stringify(items),
-        summary: JSON.stringify(summary),
-        reference_snippets: JSON.stringify(snippets),
-        analyzer_version: crawl.analyzer_version,
-        rule_catalog_version: crawl.rule_catalog_version,
-        created_at: now,
-        updated_at: now,
-      })
-      .onConflict((conflict) =>
-        conflict.columns(['crawl_id', 'finding_class']).doUpdateSet((eb) => ({
-          items: eb.ref('excluded.items'),
-          summary: eb.ref('excluded.summary'),
-          reference_snippets: eb.ref('excluded.reference_snippets'),
-          analyzer_version: eb.ref('excluded.analyzer_version'),
-          rule_catalog_version: eb.ref('excluded.rule_catalog_version'),
-          updated_at: eb.ref('excluded.updated_at'),
-        })),
-      )
-      .execute();
-  }
+  await db
+    .insertInto('site_issue_catalogs')
+    .values({
+      workspace_id: crawl.workspace_id,
+      project_id: crawl.project_id,
+      crawl_id: crawl.id,
+      items: JSON.stringify(items),
+      summary: JSON.stringify(summary),
+      reference_snippets: JSON.stringify(snippets),
+      analyzer_version: crawl.analyzer_version,
+      rule_catalog_version: crawl.rule_catalog_version,
+      created_at: now,
+      updated_at: now,
+    })
+    .onConflict((conflict) =>
+      conflict.column('crawl_id').doUpdateSet((eb) => ({
+        items: eb.ref('excluded.items'),
+        summary: eb.ref('excluded.summary'),
+        reference_snippets: eb.ref('excluded.reference_snippets'),
+        analyzer_version: eb.ref('excluded.analyzer_version'),
+        rule_catalog_version: eb.ref('excluded.rule_catalog_version'),
+        updated_at: eb.ref('excluded.updated_at'),
+      })),
+    )
+    .execute();
 }
 
 export async function persistIssueCatalog(db: Database, crawl: Crawl): Promise<void> {
@@ -153,8 +136,7 @@ export async function publishRunningIssues(
     .where('id', '=', task.crawl_id)
     .executeTakeFirst();
   if (!crawl || !isActiveCrawl(crawl.status)) return;
-  // One connection: the summary's parallel statements never crowd the runner's task slots.
-  const classes = await db.connection().execute((conn) => computeIssueCatalog(conn, crawl));
+  const catalog = await db.connection().execute((conn) => computeIssueCatalog(conn, crawl));
   await db.transaction().execute(async (trx) => {
     const locked = await trx
       .selectFrom('site_crawls')
@@ -163,6 +145,6 @@ export async function publishRunningIssues(
       .where('id', '=', crawl.id)
       .forNoKeyUpdate()
       .executeTakeFirst();
-    if (locked && isActiveCrawl(locked.status)) await writeIssueCatalog(trx, crawl, classes);
+    if (locked && isActiveCrawl(locked.status)) await writeIssueCatalog(trx, crawl, catalog);
   });
 }

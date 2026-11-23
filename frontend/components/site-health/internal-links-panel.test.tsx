@@ -107,7 +107,7 @@ function LinksTab({ canAnalyze }: Readonly<{ canAnalyze?: boolean }>) {
   );
 }
 
-function renderPanel(withNavigation = false) {
+function renderPanel(withNavigation = false, query = '') {
   return renderWithProviders(
     <>
       <LinksTab />
@@ -116,7 +116,7 @@ function renderPanel(withNavigation = false) {
     {
       initialEntries: [
         ...(withNavigation ? ['/projects'] : []),
-        `/site?tab=internal-links&project=${project.id}`,
+        `/site?tab=internal-links&project=${project.id}${query}`,
       ],
       projectSelection: { activeProject: project, activeProjectId: project.id, status: 'ready' },
     },
@@ -226,6 +226,23 @@ describe('Internal links', () => {
       'Cancelled',
       'Failed',
     ]);
+  });
+
+  it('opens another saved analysis on its first page', async () => {
+    const history = [
+      { id: run, created_at: '2026-09-28T10:00:00Z', state: 'completed' },
+      { id: uuid(301), created_at: '2026-09-27T10:00:00Z', state: 'failed' },
+    ];
+    mswServer.use(http.get(endpoint, () => HttpResponse.json({ ...read(analysis()), history })));
+    renderPanel(true, '&links_page=3');
+    const user = userEvent.setup();
+    await openFilterOptions(user, 'Saved analysis');
+    const options = await screen.findAllByRole('menuitemradio');
+    await user.click(options[1]!);
+    await waitFor(() =>
+      expect(screen.getByLabelText('Location')).toHaveTextContent(`analysis=${uuid(301)}`),
+    );
+    expect(screen.getByLabelText('Location')).not.toHaveTextContent('links_page');
   });
 
   it('replaces search history while preserving deliberate analysis navigation', async () => {
@@ -370,7 +387,7 @@ describe('Internal links', () => {
       screen.getByRole('button', { name: 'Review link from Source to Destination' }),
     );
     const drawer = await screen.findByRole('dialog');
-    expect(within(drawer).getByText('Suggested anchor text')).toBeInTheDocument();
+    expect(within(drawer).getByRole('heading', { name: 'Anchor text' })).toBeVisible();
   });
 
   it('distinguishes failed analysis and unknown diagnostic reasons', async () => {

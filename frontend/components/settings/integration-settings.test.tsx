@@ -15,15 +15,12 @@ import {
 import { hardNavigate } from '@/lib/navigation/hard-navigate';
 import { queryKeys } from '@/lib/api/query-keys';
 import { mswServer } from '@/test/msw-server';
-import { renderWithProviders } from '@/test/render';
+import { projectScope, renderWithProviders, type TestRole } from '@/test/render';
 import { makeProject } from '@/test/fixtures/project';
 import { DISPLAY_TIME_ZONE_COOKIE } from '@/lib/display-timezone';
-import { roles } from '@/services/api/src/config/workspaces.json';
 
 let search = '';
 const replaceState = vi.spyOn(window.history, 'replaceState');
-// Connect/Reconnect hard-navigates to the OAuth start 302 endpoint through the
-// lib/navigate seam (jsdom can't stub Location#assign).
 vi.mock('@/lib/navigation/hard-navigate', () => ({ hardNavigate: vi.fn() }));
 const assignMock = vi.mocked(hardNavigate);
 
@@ -42,23 +39,11 @@ const activeProject = makeProject({
   name: 'Example.com',
   brand_name: 'Example',
 });
-const granted = vi.hoisted(() => ({ role: 'owner' as 'owner' | 'member' }));
-vi.mock('@/lib/project/project-context', () => ({
-  useWorkspaceCapability: (capability: string) =>
-    (roles[granted.role] as readonly string[]).includes(capability),
-  useActiveWorkspaceId: () => WS,
-  useProjectContext: () => ({
-    projects: [activeProject],
-    activeProject,
-    activeProjectId: activeProject.id,
-    setActiveProjectId: vi.fn(),
-    isLoading: false,
-  }),
-}));
 
-function renderSettings() {
+function renderSettings(role: TestRole = 'owner') {
   return renderWithProviders(<IntegrationSettings />, {
     initialEntries: [`/settings${search ? `?${search}` : ''}`],
+    projectSelection: projectScope(activeProject, role),
   });
 }
 
@@ -315,25 +300,20 @@ describe('IntegrationSettings — grant cards', () => {
   });
 
   it('lets a Member sync without offering the credential controls the Member lacks', async () => {
-    granted.role = 'member';
-    try {
-      mockList([gscConnection, ga4Connection]);
-      renderSettings();
+    mockList([gscConnection, ga4Connection]);
+    renderSettings('member');
 
-      const row = await screen.findByTestId('connection-row-gsc');
-      expect(await within(row).findByText('sc-domain:example.com')).toBeInTheDocument();
-      expect(
-        within(row).getByRole('button', { name: 'Sync Google Search Console now' }),
-      ).toBeEnabled();
-      expect(within(row).queryByRole('button', { name: / actions$/ })).toBeNull();
-      const googleCard = screen.getByTestId('grant-card-google');
-      expect(within(googleCard).queryByRole('button', { name: 'Reconnect' })).toBeNull();
-      expect(within(googleCard).queryByRole('button', { name: /^Disconnect/ })).toBeNull();
-      const msCard = screen.getByTestId('grant-card-microsoft');
-      expect(within(msCard).queryByRole('button', { name: 'Connect Bing' })).toBeNull();
-    } finally {
-      granted.role = 'owner';
-    }
+    const row = await screen.findByTestId('connection-row-gsc');
+    expect(await within(row).findByText('sc-domain:example.com')).toBeInTheDocument();
+    expect(
+      within(row).getByRole('button', { name: 'Sync Google Search Console now' }),
+    ).toBeEnabled();
+    expect(within(row).queryByRole('button', { name: / actions$/ })).toBeNull();
+    const googleCard = screen.getByTestId('grant-card-google');
+    expect(within(googleCard).queryByRole('button', { name: 'Reconnect' })).toBeNull();
+    expect(within(googleCard).queryByRole('button', { name: /^Disconnect/ })).toBeNull();
+    const msCard = screen.getByTestId('grant-card-microsoft');
+    expect(within(msCard).queryByRole('button', { name: 'Connect Bing' })).toBeNull();
   });
 });
 
@@ -435,7 +415,9 @@ describe('IntegrationSettings — sync polling', () => {
         ),
       ),
     );
-    const { queryClient } = renderWithProviders(<IntegrationSettings />);
+    const { queryClient } = renderWithProviders(<IntegrationSettings />, {
+      projectSelection: projectScope(activeProject),
+    });
 
     const row = await screen.findByTestId('connection-row-gsc');
     const syncName = 'Sync Google Search Console now';

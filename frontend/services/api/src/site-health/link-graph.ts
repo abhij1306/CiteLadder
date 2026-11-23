@@ -5,6 +5,7 @@ import { onlyOf } from '../lists.ts';
 import { canonicalUrl as canonical } from './url-identity.ts';
 import { linkTargetUrl } from './discovery-links.ts';
 import { anchorDestinations, anchorDiagnostics } from './link-anchors.ts';
+import { widen } from '../widen.ts';
 
 export type LinkPage = {
   id: string;
@@ -199,7 +200,7 @@ export function buildLinkMetrics(
   const aliases = aliasesFor(pages);
   const nodes = new Map(pages.map((page) => [page.id, canonical(page.url) ?? page.url]));
   const outgoing = new Map(pages.map((page) => [page.id, pageEdges(page, aliases, nodes)]));
-  const inbound = new Map(pages.map((page) => [page.id, [] as LinkEdge[]]));
+  const inbound = new Map(pages.map((page) => [page.id, widen<LinkEdge[]>([])]));
   for (const edges of outgoing.values())
     for (const edge of edges) if (edge.target) inbound.get(edge.target)!.push(edge);
   const depth = depths(aliases.get(canonical(homeUrl) ?? ''), outgoing);

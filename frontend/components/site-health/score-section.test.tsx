@@ -25,21 +25,25 @@ describe('ScoreSection', () => {
     expect(screen.getAllByText('Not measured')).toHaveLength(5);
   });
 
-  it('preserves unavailable measurement states when scores are absent', () => {
+  it('says how many checks ran under a partly checked score and keeps an excluded state', () => {
     const dashboard = {
       score_summary: {
-        web_fundamentals_score: null,
+        web_fundamentals_score: 73,
         web_fundamentals_coverage: 0.5,
         web_fundamentals_state: 'limited_evidence',
+        web_fundamentals_checks: { run: 1_200, total: 1_250 },
         aeo_readiness_score: null,
         aeo_measurement_coverage: null,
         aeo_measurement_state: 'excluded',
+        aeo_readiness_checks: null,
       },
     } as SiteHealthDashboard;
 
     render(<ScoreSection crawl={null} dashboard={dashboard} />);
 
-    expect(screen.getAllByText('Limited evidence').length).toBeGreaterThan(0);
+    expect(figureText('Web fundamentals')).toBe('73');
+    expect(screen.getByText('1,200 of 1,250 checks run')).toBeInTheDocument();
+    expect(screen.queryByText(/Limited evidence/)).toBeNull();
     expect(screen.getAllByText(/Excluded/).length).toBeGreaterThan(0);
   });
 

@@ -88,12 +88,12 @@ describe('IssuesCatalog', () => {
       within(strip)
         .getAllByRole('term')
         .map((term) => term.textContent),
-    ).toEqual(['Issue types', 'Advisories', 'Pages affected', 'High', 'Medium', 'Low']);
+    ).toEqual(['Issue types', 'Pages affected', 'High', 'Medium', 'Low']);
     expect(
       within(strip)
         .getAllByRole('definition')
         .map((value) => value.textContent),
-    ).toEqual(['47', '2', '50', '12', '23', '12']);
+    ).toEqual(['47', '50', '12', '23', '12']);
     const fixFirst = screen.getByRole('region', { name: 'Fix these first' });
     const [first, second] = within(fixFirst).getAllByRole('listitem');
     expect(within(first!).getByText('Add a JSON-LD WebSite schema.')).toBeInTheDocument();
@@ -557,6 +557,49 @@ describe('IssuesCatalog', () => {
     expect(within(dialog).getByText('Showing 2 of 3 pages.')).toBeInTheDocument();
   });
 
+  it('shows New and Fixed since the previous crawl, a dash when unknown, and each page’s value', async () => {
+    const rule = 'technical.meta_description_length';
+    const short = { length: 4, min_chars: 70, max_chars: 160, reason: 'too_short' };
+    serveIssues([
+      issue({ rule_id: rule, affected_url_count: 2, new_url_count: 2, resolved_url_count: null }),
+    ]);
+    const page = (index: number, text: string) =>
+      occurrence({
+        rule_id: rule,
+        occurrence_id: `dddddddd-${index}111-4111-8111-111111111111`,
+        site_url_id: `cccccccc-${index}111-4111-8111-111111111111`,
+        evidence: short,
+        value: { kind: 'meta_description', text, length: 4 },
+      });
+    mswServer.use(
+      http.get(`${ISSUES}/${ISSUE_A}`, () =>
+        HttpResponse.json(
+          issueDetail({
+            rule_id: rule,
+            affected_url_count: 2,
+            occurrences: [page(1, 'Shop'), page(2, 'Shoe')],
+          }),
+        ),
+      ),
+    );
+    const user = userEvent.setup();
+    renderIssues(<IssuesCatalog crawlId={CRAWL} />);
+
+    const row = (await screen.findByRole('button', { name: 'WebSite schema is missing' })).closest(
+      'tr',
+    )!;
+    const cells = within(row).getAllByRole('cell');
+    expect(cells[3]).toHaveTextContent('2');
+    expect(cells[4]).toHaveTextContent('—');
+    const dialog = await openIssue(user, 'WebSite schema is missing');
+    expect(await within(dialog).findByText('Shop')).toBeInTheDocument();
+    expect(within(dialog).getByText('Shoe')).toBeInTheDocument();
+    expect(
+      within(dialog).getAllByText(/Meta description \(4 chars, recommended 70–160\)/),
+    ).toHaveLength(2);
+    expect(within(dialog).queryByText(/4 characters/)).toBeNull();
+  });
+
   it('applies a severity filter as a server param (not a client filter)', async () => {
     const seen = serveIssues();
     const user = userEvent.setup();
@@ -567,7 +610,7 @@ describe('IssuesCatalog', () => {
     await waitFor(() => expect(seen.at(-1)?.get('severity')).toBe('medium'));
   });
 
-  it('lists advisories beside defects, and the Severity filter narrows to either', async () => {
+  it('lists every check failure with its severity, and the Severity filter sends only a severity', async () => {
     const seen: Array<string | null> = [];
     mswServer.use(
       http.get(ISSUES, ({ request }) => {
@@ -580,7 +623,6 @@ describe('IssuesCatalog', () => {
               group_id: OTHER,
               rule_id: 'technical.title_length_band',
               title: 'Title length outside recommended band',
-              finding_class: 'advisory',
               severity: 'low',
             }),
           ],
@@ -596,13 +638,14 @@ describe('IssuesCatalog', () => {
     expect(
       await within(table).findByRole('button', { name: 'Title length outside recommended band' }),
     ).toBeInTheDocument();
-    expect(within(table).getByText('Advisory')).toBeInTheDocument();
-    expect(seen.at(-1)).not.toContain('finding_class');
+    const row = within(table)
+      .getByRole('button', { name: 'Title length outside recommended band' })
+      .closest('tr')!;
+    expect(within(row).getByText('Low')).toBeInTheDocument();
 
-    await chooseFilter(user, 'Severity', 'Advisory');
-    await waitFor(() => expect(seen.at(-1)).toContain('finding_class=advisory'));
     await chooseFilter(user, 'Severity', 'High');
-    await waitFor(() => expect(seen.at(-1)).toContain('severity=high&finding_class=defect'));
+    await waitFor(() => expect(seen.at(-1)).toContain('severity=high'));
+    expect(seen.join('&')).not.toContain('finding_class');
   });
 
   it('wires the page-kind filter as a server param, set and cleared', async () => {

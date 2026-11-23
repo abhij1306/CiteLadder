@@ -3,7 +3,6 @@ import { sql } from 'kysely';
 import { policy } from '../config.ts';
 import { detectEarnedPageOpportunities } from '../analysis/opportunities/earned-pages.ts';
 import type {
-  AnalysisEvidence,
   DetectorHit,
   SourcePageEvidence,
   VisibilityEvidence,
@@ -44,7 +43,7 @@ function answerIndex(visibility: VisibilityEvidence) {
   const byId = new Map(visibility.analyses.map((row) => [row.analysis_id, row]));
   const snapshots = new Map(visibility.prompt_snapshots.map((row) => [row.prompt_index, row]));
   return (analysisIds: Set<string>) => {
-    const selected = [...analysisIds].flatMap((id) => byId.get(id) ?? []) as AnalysisEvidence[];
+    const selected = [...analysisIds].flatMap((id) => byId.get(id) ?? []);
     const indices = [...new Set(selected.map((row) => row.prompt_index))].sort((a, b) => a - b);
     const prompts = indices.flatMap((index) => snapshots.get(index) ?? []);
     return {

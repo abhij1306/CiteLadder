@@ -7,6 +7,14 @@ import { answerRequestSchema, type Answer, type AnswerRequest } from './contract
 import { ProviderError } from '../providers/errors.ts';
 import { parseAnswer } from './parse.ts';
 import { boundedJson } from '../providers/response.ts';
+import { isOutOfCredit, mayBeOutOfCredit, OUT_OF_CREDIT_CODE } from '../providers/out-of-credit.ts';
+
+async function failureBody(response: Response, settings: ProviderSettings, signal: AbortSignal) {
+  if (mayBeOutOfCredit(response.status))
+    return boundedJson(response, settings.maxResponseBytes, signal).catch(() => null);
+  await response.body?.cancel();
+  return null;
+}
 
 export function answerPayload(request: AnswerRequest): Record<string, unknown> {
   answerRequestSchema.parse(request);
@@ -49,7 +57,7 @@ function googlePayload(request: AnswerRequest): Record<string, unknown> {
     model: request.transport_model,
     input: request.prompt,
     store: false,
-    system_instruction: request.system_instruction,
+    ...(request.system_instruction ? { system_instruction: request.system_instruction } : {}),
     max_output_tokens: request.max_output_tokens,
     ...(['minimal', 'low'].includes(request.reasoning_effort)
       ? { generation_config: { thinking_level: request.reasoning_effort } }
@@ -57,11 +65,6 @@ function googlePayload(request: AnswerRequest): Record<string, unknown> {
     ...(request.retrieval_enabled ? { tools: [{ type: 'google_search' }] } : {}),
   };
 }
-/**
- * The route's frozen thinking mode and effort. Thinking tokens count against
- * `max_tokens`, so an answer-capture route turns thinking off in config rather
- * than raising the output budget.
- */
 function anthropicReasoning(request: AnswerRequest) {
   const effort = request.reasoning_effort;
   return {
@@ -146,7 +149,8 @@ export async function executeAnswer(
     throw new ProviderError(signal.aborted ? 'timeout' : 'connection', true);
   }
   if (!response.ok) {
-    await response.body?.cancel();
+    if (isOutOfCredit(response.status, await failureBody(response, settings, signal)))
+      throw new ProviderError(OUT_OF_CREDIT_CODE);
     throw new ProviderError(
       providerErrorCode(response.status),
       transientStatus(response.status),
@@ -166,9 +170,21 @@ export async function executeAnswer(
   } catch {
     throw new ProviderError('parse_error');
   }
-  return answered(answer);
+  return answered({
+    ...answer,
+    provider_metadata: {
+      ...answer.provider_metadata,
+      raw_body: rawBody(payload, settings.answerRawBodyMaxBytes),
+    },
+  });
 }
 
+function rawBody(payload: unknown, limitBytes: number) {
+  const bytes = Buffer.byteLength(JSON.stringify(payload));
+  return bytes > limitBytes
+    ? { kind: 'over_bound' as const, bytes, limit_bytes: limitBytes }
+    : { kind: 'stored' as const, bytes, body: payload };
+}
 const UNFINISHED = new Set<Answer['finish_reason']>(['error', 'cancelled', 'paused']);
 function answered(answer: Answer): Answer {
   if (UNFINISHED.has(answer.finish_reason)) throw new ProviderError('answer_unfinished', true);

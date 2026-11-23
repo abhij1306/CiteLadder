@@ -191,7 +191,7 @@ export const ownedUrlCitedCheck: CheckModule<'owned_url_cited'> = {
   async freeze(members, context) {
     const checks: MemberCheck[] = [];
     for (const member of members) {
-      const check = await freezeGap(member, context); // NOSONAR -- One transaction connection.
+      const check = await freezeGap(member, context); // NOSONAR
       if (check) checks.push({ member, check });
     }
     const analyzed = await analyzedPage(context);

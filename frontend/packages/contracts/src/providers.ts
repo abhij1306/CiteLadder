@@ -4,15 +4,12 @@ const responseObject = <Shape extends z.ZodRawShape>(shape: Shape) => z.strictOb
 const uuid = () => z.uuid();
 
 export const transportProviderSchema = z.enum(['openai', 'anthropic', 'google', 'dataforseo']);
-// Every engine the analysis side understands. `google_ai_overview` is an
-// OBSERVED search surface rather than a conversational engine, and it is a
-// member here before it is selectable in a run — a connection may be
-// configured for a surface whose execution path has not shipped.
 export const logicalEngineSchema = z.enum([
   'chatgpt',
   'gemini',
   'claude',
   'google_ai_overview',
+  'google_ai_mode',
   'chatgpt_search',
   'gemini_consumer',
 ]);
@@ -27,8 +24,6 @@ const providerRouteSchema = responseObject({
   active: z.boolean().optional(),
 });
 
-// Strict: an unexpected key (e.g. a leaked `api_key`/`secret`) is a contract
-// violation and must fail loud — the secret is never present on the wire.
 export const providerConnectionSchema = responseObject({
   id: uuid(),
   workspace_id: uuid(),

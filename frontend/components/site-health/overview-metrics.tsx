@@ -9,22 +9,31 @@ export type AuditMetric = {
   title: string;
   value: number | null;
   valueUnit?: 'score' | 'percent' | 'count';
+  figure?: ReactNode;
+  sub?: ReactNode;
   href?: string;
   unavailable?: ReactNode;
+  caption?: string | null;
 };
 
 function auditSegment({
   title,
   value,
   valueUnit = 'score',
+  figure,
+  sub,
   href,
   unavailable,
+  caption,
 }: AuditMetric): FigureSegment {
   const base = {
     key: title,
     label: title,
+    sub,
+    caption: caption ?? undefined,
     action: href ? { label: 'View details', href } : undefined,
   };
+  if (figure) return { ...base, value: figure };
   if (value === null) {
     return { ...base, value: unavailable ?? <Absence state="not_measured" /> };
   }
@@ -117,23 +126,35 @@ function measurementMetric(context: MetricContext): AuditMetric {
 const count = (value: unknown) =>
   typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
 
-function coverageCounts(coverage: SiteHealthOverview['crawl_coverage'] | undefined) {
-  const evidence = coverage?.evidence ?? {};
+function coverageCounts(context: MetricContext) {
+  const evidence = context.overview?.crawl_coverage.evidence ?? {};
   const found = count(evidence.observation_count);
   const analyzed = count(evidence.analyzed_url_count);
-  if (found === null || analyzed === null) return null;
-  return { found, analyzed };
+  if (found === null || analyzed === null)
+    return context.selected > 0
+      ? {
+          found: context.selected,
+          analyzed: Math.min(context.analyzed, context.selected),
+          limit: null,
+        }
+      : null;
+  return found > 0
+    ? { found, analyzed: Math.min(analyzed, found), limit: count(evidence.automatic_limit) }
+    : null;
 }
 
 function crawlMetric(context: MetricContext): AuditMetric {
-  const counts = coverageCounts(context.overview?.crawl_coverage);
-  let progress = context.selected > 0 ? (100 * context.analyzed) / context.selected : null;
-  if (counts)
-    progress = counts.found ? (100 * Math.min(counts.analyzed, counts.found)) / counts.found : null;
+  const counts = coverageCounts(context);
   return {
     title: 'Crawl coverage',
-    valueUnit: 'percent',
-    value: progress,
+    value: null,
+    figure: counts ? (
+      <>
+        {`${formatCount(counts.analyzed)} of ${formatCount(counts.found)} `}
+        <span className="type-caption text-ink-2">pages audited</span>
+      </>
+    ) : undefined,
+    sub: counts?.limit ? `Plan limit ${formatCount(counts.limit)} pages` : undefined,
     href: '/site?tab=pages',
   };
 }

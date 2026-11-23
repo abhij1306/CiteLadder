@@ -58,11 +58,6 @@ const LABELABLE = new Set(['button', 'input', 'meter', 'output', 'progress', 'se
 const labelable = (node: HtmlElement) =>
   LABELABLE.has(node.tagName) && !(node.tagName === 'input' && inputType(node) === 'hidden');
 
-/**
- * HTML's labeled control: a label with `for` names only the first element with
- * that id (`explicit`), never the one it wraps, and an empty `for` names
- * nothing; a label without `for` names its first labelable descendant.
- */
 function hasAssociatedLabel(control: HtmlElement, explicit: Set<HtmlElement>) {
   if (explicit.has(control)) return true;
   const label = [...ancestors(control)].find((item) => item.tagName === 'label');

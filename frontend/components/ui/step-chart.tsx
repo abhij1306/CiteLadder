@@ -198,13 +198,13 @@ export function StepChart({
             value: latestText(line),
           }))}
         />
-        {/* oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- the plot is a keyboard-readable group */}
-        <div // NOSONAR -- a keyboard-readable plot has no native element
+        {/* oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
+        <div // NOSONAR
           ref={plotRef}
-          // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- no native element reads a plot point by point
+          // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role
           role="group"
-          // oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- the arrow keys need focus on the plot
-          tabIndex={count ? 0 : undefined} // NOSONAR -- the arrow keys need focus on the plot
+          // oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex
+          tabIndex={count ? 0 : undefined} // NOSONAR
           aria-label={`${label}. Use the left and right arrow keys to read each point.`}
           onKeyDown={onKeyDown}
           onMouseMove={(event) =>

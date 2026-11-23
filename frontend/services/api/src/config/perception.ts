@@ -53,8 +53,14 @@ const schema = z.strictObject({
   min_confidence: share,
   max_entities: positive,
   max_passage_chars_per_entity: positive,
+  max_passage_chars_per_brand: positive,
   max_aspects_per_entity: positive,
+  max_aspects_per_brand: positive,
   max_quotes_per_theme: positive,
+  max_attributes_per_category: positive,
+  max_quotes_per_attribute: positive,
+  attribute_max_words: positive,
+  attribute_max_chars: positive,
   max_negative_quotes: positive,
   max_drivers: positive,
   max_classifications_per_audit: positive,
@@ -69,6 +75,8 @@ const schema = z.strictObject({
     research_max: positive,
     research_max_words: positive,
     research_min_confidence: share,
+    model_max: positive,
+    model_name_max_words: positive,
     company_fact_terms: z.array(z.string().trim().toLowerCase().min(1)),
   }),
   eval_policy_version: version,
@@ -116,7 +124,14 @@ function loadPerception(input: unknown) {
   const config = result.data;
   if (config.quotes_default_limit > config.quotes_max_limit)
     throw new ConfigError('Perception quote default limit exceeds its maximum');
-  for (const slot of ['{prompt}', '{language}', '{themes}', '{max_aspects}', '{entities}'])
+  for (const slot of [
+    '{prompt}',
+    '{language}',
+    '{categories}',
+    '{max_brand_aspects}',
+    '{max_aspects}',
+    '{entities}',
+  ])
     if (!config.user_template.includes(slot))
       throw new ConfigError(`Perception user template is missing ${slot}`);
   assertFactCheck(config.fact_check);

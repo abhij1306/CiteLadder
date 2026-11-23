@@ -4,6 +4,7 @@ import { Button, IconButton } from '@/components/ui/button';
 import { ValuesInput, type ChipItem } from '@/components/ui/chip-input';
 import { Icon } from '@/components/ui/icon';
 import { Notice } from '@/components/ui/notice';
+import { Tag } from '@/components/ui/tag';
 import { Select } from '@/components/ui/select';
 import { SettingsGroup } from '@/components/ui/setting-row';
 import { SLIP_FACE } from '@/components/ui/slip';
@@ -163,7 +164,7 @@ function AddOffering({
           event.preventDefault();
           add();
         }}
-        className="type-body text-ink placeholder:text-ink-2 min-h-8 flex-1 bg-transparent"
+        className="type-body text-ink placeholder:text-ink-3 min-h-8 flex-1 bg-transparent"
       />
     </div>
   );
@@ -307,22 +308,15 @@ export function BusinessFacts({
         ))}
         <FactRow label="Business model">
           <div className="flex items-center gap-2">
-            <div
-              className={cn(
-                'rounded-control w-56 max-w-full',
-                draft.suggested.includes('businessModel') &&
-                  'border-control-line border border-dashed',
-              )}
-            >
-              <Select
-                ariaLabel="Business model"
-                placeholder={unknownModel ? 'Unknown' : 'Not set'}
-                value={draft.businessModel ?? undefined}
-                options={BUSINESS_MODEL_CHOICES}
-                disabled={disabled}
-                onValueChange={(model) => onChange(withField(draft, 'businessModel', model))}
-              />
-            </div>
+            <Select
+              ariaLabel="Business model"
+              placeholder={unknownModel ? 'Unknown' : 'Not set'}
+              value={draft.businessModel ?? undefined}
+              options={BUSINESS_MODEL_CHOICES}
+              disabled={disabled}
+              onValueChange={(model) => onChange(withField(draft, 'businessModel', model))}
+            />
+            {draft.suggested.includes('businessModel') ? <Tag kind="draft">Suggested</Tag> : null}
             {draft.suggested.includes('businessModel') ? (
               <IconButton
                 icon={Check}

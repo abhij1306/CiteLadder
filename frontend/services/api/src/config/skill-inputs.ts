@@ -4,17 +4,11 @@ export function resolveSkillsDirectory(configured: string): string {
   return configured || fileURLToPath(new URL('../../assets/agent-skills/', import.meta.url));
 }
 
-/**
- * Follows Markdown fenced blocks line by line: `marker` is a fence line, and
- * `fenced` is true inside a block. A fence line with an info string never
- * closes one.
- */
 function fenceTracker() {
   let fence: string | null = null;
   return (line: string) => {
     const [opening = '', fenceRun] = /^ {0,3}(`{3,}|~{3,})/u.exec(line) ?? [];
     const info = line.slice(opening.length);
-    // A line terminator in the rest (e.g. a CRLF `\r`) means the line is not a fence.
     const run = /[\n\r\p{Zl}\p{Zp}]/u.test(info) ? undefined : fenceRun;
     if (
       run !== undefined &&

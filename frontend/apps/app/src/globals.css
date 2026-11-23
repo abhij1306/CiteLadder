@@ -67,6 +67,7 @@
   --color-*: initial;
   --color-paper: oklch(96.7% 0 0);
   --color-surface: oklch(100% 0 0);
+  --color-page: var(--color-surface);
   --color-surface-sunken: oklch(94.3% 0 0);
   --color-state-hover: oklch(from var(--color-ink) l c h / 6%);
   --color-state-pressed: oklch(from var(--color-ink) l c h / 8%);
@@ -78,6 +79,7 @@
   --color-ink-hover: oklch(28.5% 0 0);
   --color-ink-secondary: oklch(43.9% 0 0);
   --color-ink-muted: var(--color-ink-secondary);
+  --color-ink-3: var(--color-ink-2);
   --color-on-ink: oklch(100% 0 0);
   --color-accent: oklch(63.4% 0.1973 37.5);
   --color-accent-ink: oklch(52.3% 0.1667 37.5);
@@ -123,9 +125,6 @@
   --color-warning-wash: var(--color-warning-soft);
   --color-info-wash: var(--color-info-soft);
   --color-chrome: var(--color-paper);
-  /* Data: you are the accent, rivals one to four in rank order (ink, then
-     cool hues only), a fifth and later are `data-other`. Charts read these
-     from script, so each must stay an emitted variable, never `inline`. */
   --color-data-you: var(--color-accent);
   --color-data-rival-1: var(--color-ink);
   --color-data-rival-2: oklch(52.3% 0.1 244);
@@ -253,6 +252,8 @@
      `max-w-narrow` (section headers, setup cards, onboarding, empty
      states). */
   --container-app: 1440px;
+  --container-page: 1160px;
+  --container-measure: 800px;
   --container-answer: 1080px;
   --container-thread: 1040px;
   --container-prose: 720px;
@@ -291,7 +292,8 @@
   --weight-regular: 400;
   --weight-medium: 500;
 
-  --shadow-edge: 0 1px 2px oklch(17.8% 0 0 / 5%);
+  --scrollbar-thumb: color-mix(in oklch, var(--color-ink-2) 35%, transparent);
+
   --shadow-button: inset 0 1px 0 oklch(100% 0 0 / 6%), 0 1px 1px oklch(0% 0 0 / 10%), 0 2px 6px -1px oklch(0% 0 0 / 6%);
   --shadow-xs: 0 0 0 1px oklch(17.8% 0 0 / 8%), 0 1px 2px oklch(17.8% 0 0 / 6%);
   --shadow-pop:
@@ -366,7 +368,6 @@
   --color-data-other: oklch(41% 0 0);
   --color-scrim: oklch(0% 0 0 / 64%);
   --color-chart-grid: oklch(26.9% 0 0);
-  --shadow-edge: 0 1px 2px oklch(0% 0 0 / 40%);
   --shadow-button: inset 0 1px 0 oklch(100% 0 0 / 5%), 0 1px 1px oklch(0% 0 0 / 50%), 0 2px 6px -1px oklch(0% 0 0 / 30%);
   --shadow-xs: 0 0 0 1px oklch(100% 0 0 / 8%), 0 1px 2px oklch(0% 0 0 / 50%);
   --shadow-pop: 0 0 0 1px oklch(100% 0 0 / 10%), 0 16px 40px oklch(0% 0 0 / 60%);
@@ -374,16 +375,17 @@
 }
 
 :root[data-theme='dark']:not([data-public-surface]) {
-  --color-ground: #09090a;
-  --color-panel: #121213;
-  --color-raised: #1a1a1b;
-  --color-raised-2: #252526;
-  --color-well: var(--color-raised);
+  --color-ground: #0a0a0a;
+  --color-panel: #1b1b1b;
+  --color-raised: #232323;
+  --color-raised-2: #2e2e2e;
+  --table-head-ground: #262626;
   --color-thumb: var(--color-ink-2);
-  --color-rule: rgb(255 255 255 / 8%);
-  --color-control-line: rgb(255 255 255 / 12%);
+  --color-rule: rgb(255 255 255 / 11%);
+  --color-control-line: rgb(255 255 255 / 22%);
+  --color-page: #111111;
   --color-ink: #ececec;
-  --color-ink-2: #929293;
+  --color-ink-2: #a8a8aa;
   --color-ink-hover: oklch(85% 0 0);
   --color-accent: #ff6a33;
   --color-accent-text: oklch(75.3% 0.155 41.6);
@@ -402,7 +404,7 @@
   --color-data-other: oklch(65% 0 0);
   --color-state-hover: rgb(255 255 255 / 4%);
   --color-state-selected: rgb(255 255 255 / 7%);
-  --nav-current-fill: var(--color-state-selected);
+  --nav-current-fill: rgb(255 255 255 / 11%);
   --color-scrim: oklch(0% 0 0 / 60%);
   --shadow-card: none;
   --shadow-pop: inset 0 1px 0 oklch(100% 0 0 / 5%), 0 4px 12px oklch(0% 0 0 / 30%);
@@ -439,11 +441,6 @@
   --text-data-sm--font-weight: 350;
 }
 
-/* Tailwind folds a theme shadow into its own variable at build time, which
-   would freeze the light value; these read the live token instead. */
-@utility shadow-edge {
-  box-shadow: var(--shadow-edge);
-}
 @utility shadow-xs {
   box-shadow: var(--shadow-xs);
 }
@@ -549,25 +546,26 @@
    header → controls 16, the controls band's rows 8 apart, peers 12 apart. */
 :root:not([data-public-surface]) {
   text-wrap: pretty;
-  --table-head-ground: var(--color-panel);
+  --table-head-ground: #dde3ea;
   --table-ground: var(--color-surface);
-  --color-ground: #f2f2f4;
+  --color-ground: #e4eaf2;
   --color-chrome: var(--color-ground);
   --color-panel: #ffffff;
   --color-surface: var(--color-panel);
   --color-raised: var(--color-panel);
-  --color-raised-2: #eef0f2;
-  --color-well: #f7f8f9;
-  --color-rule: rgb(0 0 0 / 8%);
-  --color-control-line: rgb(0 0 0 / 12%);
+  --color-raised-2: #e9eef6;
+  --color-well: var(--color-page);
+  --color-page: #f0f4f9;
+  --color-rule: rgb(0 0 0 / 11%);
+  --color-control-line: rgb(0 0 0 / 22%);
   --color-focus: var(--color-accent);
   --focus-width: 1px;
   --focus-offset: 0px;
   --focus-glow: color-mix(in srgb, var(--color-focus) 24%, transparent);
   --field-focus-edge: var(--color-focus);
-  --color-control-edge: var(--color-rule);
   --color-ink: #1d1d1d;
-  --color-ink-2: #5f636a;
+  --color-ink-2: #54585f;
+  --color-ink-3: #71717a;
   --color-ink-hover: oklch(32% 0.015 264);
   --color-on-ink: var(--color-panel);
   --color-accent: #e8501a;
@@ -584,7 +582,7 @@
   --color-data-rival-2: oklch(53.2% 0.1214 251.5);
   --color-data-rival-3: oklch(43.6% 0.176 291.5);
   --color-data-rival-4: oklch(54.3% 0.0889 188.8);
-  --color-data-other: oklch(63% 0.0193 264.4);
+  --color-data-other: oklch(61% 0.0193 264.4);
   --color-state-hover: rgb(0 0 0 / 3%);
   --color-state-selected: rgb(0 0 0 / 6%);
   --color-state-pressed: var(--color-state-selected);
@@ -620,27 +618,28 @@
 
   --radius-mark: 4px;
   --radius-control: 6px;
-  --radius-card: 8px;
+  --radius-card: var(--radius-control);
   --radius-overlay: 12px;
   --shadow-card: 0 1px 2px oklch(21% 0.034 263 / 5%);
   --shadow-pop: 0 4px 12px oklch(21% 0.034 263 / 10%), 0 1px 2px oklch(21% 0.034 263 / 6%);
   --shadow-sheet: 0 16px 40px oklch(21% 0.034 263 / 18%);
   --mark-width: 2px;
 
-  --control-md: 28px;
-  --control-lg: 44px;
+  --control-md: 32px;
+  --control-lg: 40px;
   --control-coarse: 44px;
-  --nav-row-height: 28px;
-  --table-row-height: 40px;
+  --button-hit: 40px;
+  --nav-row-height: 32px;
+  --table-row-height: 44px;
 
-  --masthead-height: 44px;
-  --page-tabs-height: 36px;
-  --filter-bar-height: 44px;
+  --masthead-height: 48px;
+  --page-tabs-height: 40px;
+  --filter-bar-height: 48px;
   --sidebar-width: 224px;
   --sidebar-width-compact: 200px;
   --sidebar-rail-width: 56px;
   --rail-button: 40px;
-  --nav-current-fill: #e7e7ea;
+  --nav-current-fill: #d3e3fd;
   --panel-inset: 0px;
   --route-chrome-height: calc(
     2 * var(--panel-inset) + var(--masthead-block-size, var(--masthead-height)) +
@@ -721,11 +720,12 @@
 }
 
 * {
+  scrollbar-width: thin;
   scrollbar-color: transparent transparent;
 }
 
 *:hover {
-  scrollbar-color: color-mix(in oklch, var(--color-ink-2)35%, transparent) transparent;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
 }
 
 *::-webkit-scrollbar {
@@ -745,11 +745,11 @@
 }
 
 *:hover::-webkit-scrollbar-thumb {
-  background-color: color-mix(in oklch, var(--color-ink-2)35%, transparent);
+  background-color: var(--scrollbar-thumb);
 }
 
 *::-webkit-scrollbar-thumb:hover {
-  background-color: color-mix(in oklch, var(--color-ink-2)50%, transparent);
+  background-color: color-mix(in oklch, var(--color-ink-2) 50%, transparent);
 }
 
 /* The app and onboarding sit on `paper`. Wide content scrolls in its
@@ -758,12 +758,12 @@ html {
   min-height: 100%;
   background: var(--color-ground);
   scrollbar-gutter: stable;
-  scrollbar-color: color-mix(in oklch, var(--color-ink-2)35%, transparent) transparent;
-  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
 }
 
 html:has([data-app-surface]) {
   scrollbar-gutter: auto;
+  overflow: hidden;
 }
 [data-main-column] {
   scroll-padding-top: calc(var(--sticky-header-offset) + var(--page-top-gap));
@@ -775,9 +775,6 @@ html:has([data-app-surface]) {
   }
 }
 
-/* Radix scroll locks add a scrollbar-width margin. The root's stable gutter
-   already reserves that space, so suppress the second compensation for menus,
-   selects, date pickers, and dialogs while retaining their scroll/focus lock. */
 @supports (scrollbar-gutter: stable) {
   html body[data-scroll-locked] {
     margin-right: 0 !important;
@@ -800,6 +797,14 @@ body {
   -moz-osx-font-smoothing: grayscale;
   font-synthesis: none;
   text-size-adjust: 100%;
+}
+
+:is(em, i, cite, dfn, address) {
+  font-style: normal;
+}
+
+em {
+  font-weight: var(--weight-medium);
 }
 
 /* The product type roles, each one of the system's styles (docs/design.md):
@@ -1362,7 +1367,7 @@ a.focus-ring:active .type-caption {
   color: var(--color-on-primary);
 }
 [data-demoted] [data-button-variant] {
-  border-color: var(--color-rule);
+  border-color: transparent;
   background-color: var(--color-raised);
   color: var(--color-ink);
 }
@@ -1377,9 +1382,17 @@ a.focus-ring:active .type-caption {
 
 :root:not([data-public-surface])
   [data-button-variant]:is(:disabled, [aria-disabled='true']):not([aria-busy='true']) {
-  background-color: var(--color-raised);
-  border-color: var(--color-rule);
-  color: color-mix(in oklch, var(--color-ink-2) 60%, transparent);
+  background-color: var(--color-raised-2);
+  border-color: transparent;
+  color: color-mix(in oklch, var(--color-ink-2) 80%, transparent);
+  box-shadow: none;
+}
+
+:root:not([data-public-surface]) [data-button-variant]::after {
+  content: '';
+  position: absolute;
+  inset-block: min(0px, calc((100% - var(--button-hit)) / 2));
+  inset-inline: min(0px, calc((100% - var(--button-hit)) / 2));
 }
 
 :disabled:focus-visible,
@@ -1412,15 +1425,12 @@ a.focus-ring:active .type-caption {
     border-color: Highlight;
   }
 
-  /* The selected overlay is a background image, which forced colours drop;
-     a selected row or option keeps an inner edge instead. */
   [class~='overlay-selected'],
   [class~='aria-selected:overlay-selected'][aria-selected='true'] {
     outline: 2px solid SelectedItem;
     outline-offset: -2px;
   }
 
-  /* The radio dot is a filled span, which otherwise collapses to Canvas. */
   [role='radio'][data-state='checked'] [data-state='checked'] > span {
     background-color: CanvasText;
     forced-color-adjust: none;
@@ -1432,9 +1442,6 @@ a.focus-ring:active .type-caption {
   color: var(--color-ink);
 }
 
-/* Browsers tint autofilled inputs with their own fill; keep the field surface.
-   The surface is an inset shadow over the UA's !important background, so a
-   focused field repeats its focus ring in the same declaration. */
 input:is(:autofill, :-webkit-autofill) {
   -webkit-text-fill-color: var(--color-ink);
   box-shadow: inset 0 0 0 100vmax var(--color-surface);
@@ -1461,7 +1468,6 @@ input:is(:autofill, :-webkit-autofill) {
   }
 }
 
-/* Box shadows disappear in forced colours; retain a system-colour boundary. */
 @media (forced-colors: active) {
   [data-button-variant='primary'],
   [data-button-variant='secondary'],
@@ -1528,7 +1534,6 @@ samp {
   padding-top: env(safe-area-inset-top, 0px);
 }
 
-/* Removes the 300ms tap delay without disabling pinch zoom. */
 a,
 button,
 [role="button"],
@@ -1545,23 +1550,37 @@ label {
 }
 
 :root:not([data-public-surface]) :is([data-data-table-frame], .table-frame:not([data-data-table] *)) {
-  border: 1px solid var(--color-rule);
-  border-radius: var(--radius-card);
-  background: var(--table-ground);
+  border: 0;
+  border-radius: var(--radius-control);
+  background: var(--table-head-ground);
+  padding: 0 4px 4px;
   overflow: clip;
 }
 :root:not([data-public-surface]) .table-frame {
+  --table-cell-padding-x: 16px;
   --table-cell-padding-y: 4px;
-  border-radius: 0;
 }
-:root:not([data-public-surface]) [data-data-table-frame] .table-frame,
-:root:not([data-public-surface])
-  :where(.surface-card, .surface-slip, .surface-well, [data-section='framed'], [role='dialog'])
-  [data-data-table-frame] {
+:root:not([data-public-surface]) [data-data-table-frame] .table-frame {
   border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+:root:not([data-public-surface]) .table-frame tbody {
+  clip-path: inset(0 round var(--radius-mark));
+}
+:root:not([data-public-surface]) .table-frame thead th + th::before {
+  content: '';
+  position: absolute;
+  inset-inline-start: 0;
+  top: 50%;
+  width: 1px;
+  height: 16px;
+  translate: 0 -50%;
+  background: var(--color-rule);
+  pointer-events: none;
 }
 :root:not([data-public-surface]) .table-frame thead th {
-  height: 32px;
+  height: 36px;
   font-size: var(--text-caption);
   line-height: var(--text-caption--line-height);
   font-weight: var(--weight-medium);
@@ -1569,7 +1588,6 @@ label {
   text-transform: none;
   color: var(--color-ink-2);
   background: var(--table-head-ground);
-  box-shadow: inset 0 -1px 0 var(--color-rule);
 }
 :root:not([data-public-surface]) .table-frame tbody > tr > * {
   background-color: var(--table-ground);
@@ -1586,12 +1604,6 @@ label {
 }
 :root:not([data-public-surface]) .table-frame td.tabular-nums {
   font-variant-numeric: tabular-nums;
-}
-:root:not([data-public-surface]) .table-frame tr > :first-child {
-  padding-inline-start: 16px;
-}
-:root:not([data-public-surface]) .table-frame tr > :last-child {
-  padding-inline-end: 16px;
 }
 
 :is([data-pinned='1'] tr > :first-child, [data-pinned='2'] tr > :nth-child(2)) {
@@ -1630,8 +1642,9 @@ label {
 }
 
 :root:not([data-public-surface]) [data-chart-frame]:not([data-chart-frame='auto']) {
-  border: 1px solid var(--color-rule);
+  border: 1px solid transparent;
   border-radius: var(--radius-card);
+  background-color: var(--color-surface);
   padding: 12px 16px;
 }
 :root:not([data-public-surface])
@@ -1831,4 +1844,47 @@ label {
    its ink fill, under the press shadow; pressed, it drops to the edge shadow. */
 .button-key {
   background-image: linear-gradient(rgb(255 255 255 / 14%), rgb(0 0 0 / 8%));
+}
+
+[data-regular-table-text] tbody :not([data-button-variant], [data-button-variant] *) {
+  font-weight: var(--weight-regular);
+}
+
+:root:not([data-public-surface])
+  :is(.surface-card, .surface-slip, .surface-lift, [data-figure-strip]):not(
+    :where(.surface-card, .surface-slip, .surface-lift, .surface-well, [data-section='framed'], [role='dialog'], [data-data-table-frame], [data-figure-strip]) *
+  ) {
+  border: 1px solid transparent;
+  border-radius: var(--radius-card);
+  background-color: var(--color-surface);
+}
+:root:not([data-public-surface])
+  :where(.surface-card, .surface-slip, .surface-lift, [role='dialog'], [data-figure-strip], .table-frame)
+  :is(.focus-input, .focus-frame) {
+  background-color: var(--color-well);
+}
+:root:not([data-public-surface])
+  :is([data-state-frame], [data-state-block-inline]):not(
+    :where(.surface-card, .surface-slip, .surface-lift, .surface-well, [data-section='framed'], [role='dialog'], [data-data-table-frame], .table-frame, [data-figure-strip]) *
+  ) {
+  border-radius: var(--radius-card);
+  background-color: var(--color-surface);
+}
+:root:not([data-public-surface])
+  [data-state-block-inline]:not(
+    :where(.surface-card, .surface-slip, .surface-lift, .surface-well, [data-section='framed'], [role='dialog'], [data-data-table-frame], .table-frame, [data-figure-strip]) *
+  ) {
+  padding: 12px 16px;
+}
+:root:not([data-public-surface]) :is(a, button, [role='link']):not(:hover, :focus-visible),
+:root:not([data-public-surface]) :is(a, button, [role='link']):not(:hover, :focus-visible) * {
+  text-decoration-color: transparent;
+}
+:root:not([data-public-surface])
+  [data-chart-frame='auto']:not(
+    :where(.surface-card, .surface-slip, .surface-lift, .surface-well, [data-section='framed'], [role='dialog']) *
+  ) {
+  border-radius: var(--radius-card);
+  padding: 12px 16px;
+  background-color: var(--color-surface);
 }

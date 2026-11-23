@@ -122,10 +122,7 @@ export function exampleOf(schema: JsonSchema, context: ExampleContext): unknown 
       return first ? walk(first, depth + 1, key) : null;
     }
     if (Array.isArray(node.allOf))
-      return Object.assign(
-        {},
-        ...(node.allOf as JsonSchema[]).map((part) => walk(part, depth + 1, key)),
-      );
+      return Object.assign({}, ...node.allOf.map((part) => walk(part, depth + 1, key)));
     return typedExample(node, context, walk, depth, key, nextId);
   };
   return walk(schema, 0, '');

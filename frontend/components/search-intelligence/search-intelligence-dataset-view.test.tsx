@@ -97,7 +97,7 @@ it('filters on the server and exports every saved matching page', async () => {
   await screen.findByText('Unfiltered page');
   await userEvent.type(screen.getByRole('searchbox', { name: 'Filter saved results' }), 'needle');
   await screen.findByText('needle first');
-  await userEvent.click(screen.getByRole('button', { name: 'Export saved CSV' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Export CSV' }));
   await waitFor(() => expect(download).toHaveBeenCalledOnce());
   const exported = download.mock.calls[0]![2];
   expect(exported).toHaveLength(2);
@@ -173,7 +173,7 @@ it.each([
         activeProjectId: project.id,
       }),
     });
-    await userEvent.click(await screen.findByRole('button', { name: 'Export saved CSV' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Export CSV' }));
     await waitFor(() => expect(download).toHaveBeenCalledOnce());
     const [, headers, rows] = download.mock.calls[0]!;
     const exported = Object.fromEntries(headers.map((header, index) => [header, rows[0]![index]]));

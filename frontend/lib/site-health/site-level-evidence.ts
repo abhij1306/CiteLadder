@@ -20,6 +20,8 @@ export const pageListRules: readonly SiteLevelRule[] = siteLevelRuleSchema.extra
 ]).options;
 export const siteLevelRules: readonly SiteLevelRule[] = siteLevelRuleSchema.options;
 
+export const isSiteLevelRule = (ruleId: string) => siteLevelRuleSchema.safeParse(ruleId).success;
+
 type EvidencePage = Readonly<{
   siteUrlId: string;
   url: string;

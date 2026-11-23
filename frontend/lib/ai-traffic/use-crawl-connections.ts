@@ -42,11 +42,6 @@ export function useCrawlSources(
         : false,
   });
 }
-/**
- * A completed upload is processed after a short delay, then its source reports
- * it. `completedAt` is the server's completion time, so both sides of the
- * comparison come from the server clock; `timedOut` ends the bounded wait.
- */
 type Awaiting = Readonly<{ sourceId: string; completedAt: string; timedOut: boolean }>;
 export type UploadProcessing = 'processing' | 'processed' | 'delayed';
 export function uploadProcessing(

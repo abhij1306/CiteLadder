@@ -72,7 +72,6 @@ function bandReason(dimension: ReadinessDimension): string | null {
     (check) => check.partial_count > 0 || check.missing_count > 0,
   ).length;
   if (partial > 0) return `${pluralCount(partial, 'check')} not fully met`;
-  if (dimension.dimension_measurement_state === 'limited_evidence') return 'Limited evidence';
   return 'Not every check resolved';
 }
 

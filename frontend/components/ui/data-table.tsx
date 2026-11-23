@@ -3,7 +3,6 @@ import { useContext, useId, type ComponentProps, type ReactNode, type RefObject 
 import { BusyRung } from '@/components/ui/rung-meter';
 import {
   DataTableColumns,
-  useFlexibleColumnCheck,
   type DataTableColumn,
   type DataTableSelection,
 } from '@/components/ui/data-table-columns';
@@ -71,7 +70,6 @@ export function DataTable({
   });
   const paging = pagingLayout(pager, pageSize, reserveRows);
   const scroll = useScrollFrame({ label: parts.regionLabel, start: false });
-  useFlexibleColumnCheck({ columns, title, label });
   const replacing = replacingState(state);
   return (
     <section
@@ -261,7 +259,7 @@ function DataTableFoot({
   return (
     <div
       data-data-table-foot=""
-      className="border-rule flex min-h-10 min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-1 border-t px-4 py-1"
+      className="flex min-h-10 min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-1 px-4 py-1"
     >
       {footer ? (
         <div className="type-caption grid min-w-0 content-center gap-1">{footer}</div>

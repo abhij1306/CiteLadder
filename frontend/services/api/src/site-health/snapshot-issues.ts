@@ -7,7 +7,7 @@ import type { Crawl } from './site-task.ts';
 import { compareText } from '../text-order.ts';
 
 function snapshotIssueRows(crawl: Crawl, analysisIds: string[]) {
-  return sql`select i.id, i.crawl_id, i.rule_id, i.finding_class, i.site_url_id, i.severity, i.category,
+  return sql`select i.id, i.crawl_id, i.rule_id, i.site_url_id, i.severity, i.category,
       e.scope, e.score_roles
     from site_issues i
     join site_rule_evaluations e on e.id = i.evaluation_id and e.workspace_id = i.workspace_id
@@ -24,7 +24,7 @@ function snapshotIssueRows(crawl: Crawl, analysisIds: string[]) {
           and o.crawl_id = ${crawl.id})`;
 }
 
-const technicalRow = sql`m.finding_class = 'defect' and 'web_fundamentals' = any(m.score_roles)`;
+const technicalRow = sql`'web_fundamentals' = any(m.score_roles)`;
 const readinessRow = sql`'aeo_readiness' = any(m.score_roles)`;
 const countsBy = (column: string) =>
   sql`(select coalesce(jsonb_object_agg(c.key, c.count), '{}'::jsonb) from (
@@ -32,7 +32,6 @@ const countsBy = (column: string) =>
 
 type GroupRow = {
   rule_id: string;
-  finding_class: string;
   severity: string;
   category: string;
   description: string;
@@ -56,12 +55,12 @@ export async function snapshotIssues(db: Database, crawl: Crawl, analysisIds: st
     with m as materialized (${snapshotIssueRows(crawl, analysisIds)}),
     -- One representative row per rule group (its first issue by id), its roles and pages.
     grouped as (
-      select g.rule_id, g.finding_class, min(g.id::text)::uuid as first_id,
+      select g.rule_id, min(g.id::text)::uuid as first_id,
         (array_agg(g.crawl_id order by g.id::text))[1] as first_crawl_id,
         count(distinct g.site_url_id)::int as urls,
         array_agg(distinct r.role) filter (where r.role is not null) as roles
       from m g left join lateral unnest(g.score_roles) r(role) on true
-      group by g.rule_id, g.finding_class
+      group by g.rule_id
     )
     select
       (select count(*)::int from m) as issues,
@@ -73,7 +72,7 @@ export async function snapshotIssues(db: Database, crawl: Crawl, analysisIds: st
       ${countsBy('severity')} as severities,
       ${countsBy('category')} as categories,
       (select coalesce(jsonb_agg(jsonb_build_object(
-          'rule_id', g.rule_id, 'finding_class', g.finding_class, 'severity', i.severity,
+          'rule_id', g.rule_id, 'severity', i.severity,
           'category', i.category, 'description', i.description, 'remediation', i.remediation,
           'evidence', i.evidence, 'roles', g.roles, 'urls', g.urls)), '[]'::jsonb)
         from grouped g join site_issues i
@@ -82,10 +81,9 @@ export async function snapshotIssues(db: Database, crawl: Crawl, analysisIds: st
   const total = firstOf(rows, 'the snapshot issue rollups');
   const top = total.groups
     .map((row) => {
-      const impact = issueImpact(row.rule_id, row.finding_class, row.severity);
+      const impact = issueImpact(row.severity);
       return {
         rule_id: row.rule_id,
-        finding_class: row.finding_class,
         severity: row.severity,
         category: row.category,
         description: row.description,
@@ -101,7 +99,6 @@ export async function snapshotIssues(db: Database, crawl: Crawl, analysisIds: st
       (a, b) =>
         Number(b.eligibility_blocker) - Number(a.eligibility_blocker) ||
         b.impact_band - a.impact_band ||
-        Number(b.finding_class === 'defect') - Number(a.finding_class === 'defect') ||
         b.affected_pages - a.affected_pages ||
         compareText(a.rule_id, b.rule_id),
     );

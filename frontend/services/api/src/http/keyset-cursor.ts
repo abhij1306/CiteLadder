@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { z } from 'zod';
 
 import { compareText } from '../text-order.ts';
 
@@ -23,29 +24,24 @@ export function encodeKeysetCursor(
   return Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
 }
 
+const cursorPayload = z.object({ fp: z.unknown().optional(), k: z.array(z.string()) });
+
 export function decodeKeysetCursor(
   cursor: string,
   scope: string,
   filters: Record<string, unknown>,
 ): string[] {
-  // Node's base64url decoder skips foreign characters; refuse them first.
   if (!/^[A-Za-z0-9_-]+$/u.test(cursor)) throw new InvalidCursorError('invalid cursor');
-  let payload: { fp?: unknown; k?: unknown } | null;
+  let decoded: unknown;
   try {
-    payload = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as typeof payload;
+    decoded = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'));
   } catch {
     throw new InvalidCursorError('invalid cursor');
   }
-  if (
-    payload === null ||
-    typeof payload !== 'object' ||
-    !Array.isArray(payload.k) ||
-    !payload.k.every((value) => typeof value === 'string')
-  ) {
-    throw new InvalidCursorError('invalid cursor');
-  }
-  if (payload.fp !== filterFingerprint(scope, filters)) {
+  const payload = cursorPayload.safeParse(decoded);
+  if (!payload.success) throw new InvalidCursorError('invalid cursor');
+  if (payload.data.fp !== filterFingerprint(scope, filters)) {
     throw new InvalidCursorError('cursor does not match the current endpoint filters');
   }
-  return payload.k as string[];
+  return payload.data.k;
 }

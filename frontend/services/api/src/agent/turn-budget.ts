@@ -1,7 +1,9 @@
 import type { z } from 'zod';
-import type { AgentProposal, agentStepSchema } from '@citeladder/contracts/agent';
+import type { agentStepSchema } from '@citeladder/contracts/agent';
+import type { AgentView } from '@citeladder/contracts/agent-views';
 import type { ConversationBlock, ConversationMessage } from '../models/conversation.ts';
 import type { DocumentState } from './builtin-tools.ts';
+import type { StoredProposal } from './change-proposals.ts';
 import { AgentError, type Budget } from './contracts.ts';
 import type { AgentModel } from './model-calls.ts';
 import { refused, type ToolOutcome } from './tools.ts';
@@ -14,7 +16,8 @@ export type TurnState = DocumentState & {
   waiting: boolean;
   searches: number;
   steps: StepRecord[];
-  proposals: AgentProposal[];
+  proposals: StoredProposal[];
+  views: AgentView[];
   toolsUsed: number;
   messages: ConversationMessage[];
   contextHash: string;
@@ -37,11 +40,6 @@ function searchAllowance(budget: Budget, used: number, waiting: boolean, last: b
   const allowed = Math.min(left, budget.max_web_searches_per_call);
   return waiting ? Math.max(1, allowed) : allowed;
 }
-/**
- * Thinking shares the output cap, so a cut-off call is discarded and asked
- * once more with low effort as the next call of the turn; a cut-off retry, or
- * a cut-off last call, ends the turn.
- */
 export function retryEffort(effort: Budget['reasoning_effort'], ordinal: number, budget: Budget) {
   if (effort === 'low' || ordinal === budget.max_model_calls)
     throw new AgentError('output_too_long');
@@ -53,7 +51,6 @@ export function noReply(reads: number) {
     ? `I completed ${read} but reached this turn’s limit before writing an answer. Nothing was saved. Narrow the request to one page, prompt or date range and ask again.`
     : 'I reached this turn’s limit before writing an answer. Nothing was saved. Narrow the request and ask again.';
 }
-/** Appended after a step's tool results, never deleted, so the cached history stays exact. */
 function reminder(
   budget: Budget,
   ordinal: number,
@@ -73,10 +70,6 @@ function reminder(
   ].filter(Boolean);
   return notes.join(' ');
 }
-/**
- * The searches call `ordinal` may run; the turn's last call starts none.
- * Provider-hosted search exists only on the Messages API.
- */
 export function nextSearches(model: AgentModel, budget: Budget, state: TurnState, ordinal: number) {
   if (model.adapter !== 'anthropic') return 0;
   return searchAllowance(budget, state.searches, state.waiting, ordinal === budget.max_model_calls);
@@ -86,7 +79,6 @@ export function resultsMessage(
   state: TurnState,
   { ordinal, last, results }: { ordinal: number; last: boolean; results: ConversationBlock[] },
 ): ConversationMessage {
-  // A search waiting on these results needs a message of results only.
   const note = last || state.waiting ? '' : reminder(budget, ordinal, state);
   return { role: 'user', content: [...results, ...(note ? [{ type: 'text', text: note }] : [])] };
 }

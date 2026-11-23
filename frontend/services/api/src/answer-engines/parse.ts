@@ -87,9 +87,7 @@ function events(calls: ObjectValue[], transport: string): SearchEvent[] {
       const args = object(callArguments(call, transport));
       const query = transport === 'google' ? '' : text(args.query);
       const listed = Array.isArray(args.queries) ? args.queries.map(text).filter(Boolean) : [];
-      // OpenAI repeats the first listed query as `query`; record each query once.
       const queries = [...(query && !listed.includes(query) ? [query] : []), ...listed];
-      // OpenAI and Anthropic preserve a count-only search when query text is absent.
       const countOnly = transport === 'google' ? [] : [''];
       const values = queries.length ? queries : countOnly;
       return values.map((value, index) => ({
@@ -102,10 +100,6 @@ function events(calls: ObjectValue[], transport: string): SearchEvent[] {
     })
     .map((event, sequence) => ({ ...event, sequence }));
 }
-/**
- * What the engine read: OpenAI's consulted sources on each search call and
- * Anthropic's search results. Google does not expose them, so it stays unknown.
- */
 function retrievedSources(
   items: ObjectValue[],
   calls: ObjectValue[],
@@ -129,7 +123,6 @@ function retrievedSources(
   }
   return sources;
 }
-/** Gemini `finish_reason` values and Interactions `status` values (upper-cased). */
 const GOOGLE_FINISH: Record<string, FinishReason> = {
   STOP: 'stop',
   COMPLETED: 'stop',
@@ -171,21 +164,12 @@ const ANTHROPIC_FINISH: Record<string, FinishReason> = {
   refusal: 'content_filter',
 };
 
-/**
- * Claude's answer is the text after its last search. Text before it is the
- * search preamble ("I'll search for…"), not the answer.
- */
 function anthropicAnswerBlocks(items: ObjectValue[]) {
   const lastSearch = items.findLastIndex(
     (item) => item.type === 'server_tool_use' || item.type === 'web_search_tool_result',
   );
   return items.slice(lastSearch + 1).filter((item) => item.type === 'text');
 }
-/**
- * Claude splits one answer into a text block per cited span, so its blocks
- * join exactly as written: trimming or separating them would break a cited
- * sentence in two. Other engines' blocks are whole paragraphs.
- */
 function answerText(blocks: ObjectValue[], transport: string) {
   if (transport === 'anthropic')
     return blocks
@@ -257,7 +241,6 @@ export function parseAnswer(payload: unknown, request: AnswerRequest, latencyMs 
     usage.total_tokens = counter(rawUsage, 'total_tokens') ?? sum(input, output);
     usage.web_search_requests = calls.length;
     rawFinish = text(object(source.incomplete_details).reason) || text(source.status);
-    // A refusal arrives as a message block on a `completed` response.
     const refused = items
       .filter((item) => item.type === 'message')
       .some((item) => objects(item.content).some((block) => block.type === 'refusal'));

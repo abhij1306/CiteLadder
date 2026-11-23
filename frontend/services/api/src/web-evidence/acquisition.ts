@@ -7,10 +7,10 @@ import { resolveSettingSpec, type SettingSource } from '../config/settings.ts';
 import type { Database } from '../db/database.ts';
 import { FetchError, fetchWebsite, type FetchOptions, type WebsiteFetcher } from '../safe-fetch.ts';
 import { failureFacts, getLogger } from '../logging.ts';
+import { widen } from '../widen.ts';
 
 const logger = getLogger('web_evidence.acquisition');
 
-// The package is CommonJS; its declaration describes the exported function as ESM.
 const robotsParser = robotsModule as unknown as (
   url: string,
   body: string,
@@ -82,7 +82,6 @@ export async function authorizeAcquisition(db: Database, url: URL) {
       .limit(1)
       .executeTakeFirst();
   } catch (error) {
-    // Fail closed: an unreadable operator stop list never admits a request.
     logger.warning('web_acquisition_control_unreadable', failureFacts(error));
     throw new FetchError('acquisition_unavailable');
   }
@@ -108,11 +107,6 @@ export class HostPacer {
     const state = this.#host(authority);
     state.last = Math.max(state.last, performance.now() + seconds * 1000);
   }
-  /**
-   * Wait for a free slot. An abort while queued leaves the queue at once; a
-   * waiter that is woken but has been aborted passes the wake-up on, so a
-   * cancelled caller never strands the callers behind it.
-   */
   async #acquire(state: HostState, signal?: AbortSignal) {
     signal?.throwIfAborted();
     while (state.active >= this.concurrency) {
@@ -137,7 +131,6 @@ export class HostPacer {
     state.active++;
   }
   async slot<T>(authority: string, seconds: number, send: () => Promise<T>, signal?: AbortSignal) {
-    // Before the host state exists, so a cancelled call never leaves an idle entry behind.
     signal?.throwIfAborted();
     const state = this.#host(authority);
     await this.#acquire(state, signal);
@@ -178,7 +171,6 @@ export function robotsPolicy(
   const unavailable = status === 429 || status >= 500 || status === 0;
   const restricted = status === 401 || status === 403;
   const fetched = status >= 200 && status < 300;
-  // A missing file (other 4xx) is readable as "no rules"; 1xx, 3xx and failures are not.
   const readable = fetched || (status >= 400 && status < 500 && !unavailable && !restricted);
   const robots = robotsParser(`${origin}/robots.txt`, fetched ? body : '');
   const groups = fetched ? ruleGroups(body) : new Set<string>();
@@ -192,7 +184,7 @@ export function robotsPolicy(
     body: fetched ? body : null,
     unavailable,
     transient: unavailable,
-    failure: null as string | null,
+    failure: widen<string | null>(null),
     restricted,
     readable,
     delay: seconds,

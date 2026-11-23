@@ -9,6 +9,7 @@ import type { z } from 'zod';
 import { AGENT_CHAT_PAGE_SIZE } from '@/lib/config/agent';
 
 import { apiClient, type ApiRequestOptions } from './client';
+import { FIRST_CURSOR } from './query-client';
 import { queryKeys } from './query-keys';
 import type { ProjectScope } from './query-keys/scope';
 import {
@@ -58,6 +59,8 @@ export type AgentPageFetchDone = Extract<
 >;
 export type SuggestionChange = 'apply' | 'dismiss' | 'revert';
 type SuggestionRef = { chatId: string; outputId: string; suggestionId: string };
+type ProposalRef = { chatId: string; messageId: string; index: number };
+type ProposalDecision = 'confirm' | 'dismiss';
 const outputPath = (document: { chatId: string; outputId: string }) =>
   `/agent/chats/${document.chatId}/outputs/${document.outputId}`;
 
@@ -235,6 +238,20 @@ const agentApi = {
       await apiClient.post(`${outputPath(document)}/target`, input, options),
       'agent.chooseOutputTarget',
     ),
+  decideProposal: async (
+    ref: ProposalRef,
+    decision: ProposalDecision,
+    options?: ApiRequestOptions,
+  ) =>
+    strictValidate(
+      agentChatDetailSchema,
+      await apiClient.post(
+        `/agent/chats/${ref.chatId}/messages/${ref.messageId}/proposals/${ref.index}/${decision}`,
+        {},
+        options,
+      ),
+      'agent.decideProposal',
+    ),
   instructions: async (projectId: string, options?: ApiRequestOptions) =>
     strictValidate(
       agentInstructionsSchema,
@@ -262,7 +279,7 @@ export const agentQueries = {
         q: filters.q || null,
         actionId: filters.actionId ?? null,
       }),
-      initialPageParam: undefined as string | undefined,
+      initialPageParam: FIRST_CURSOR,
       queryFn: ({ signal, pageParam }) =>
         agentApi.listChats(
           scope.projectId,
@@ -331,13 +348,16 @@ const refreshPageDocument = (client: QueryClient, chatId: string) =>
 const refreshAgentChatLists = (client: QueryClient, projectId: string) =>
   client.invalidateQueries({ queryKey: queryKeys.agent.chatLists(projectId) });
 
+const RECORD_KEYED: ReadonlySet<string> = new Set([
+  'actions',
+  'runs',
+  'site-health',
+  'integrations',
+  'brand-discovery',
+  'billing',
+]);
+
 export const agentMutations = {
-  /**
-   * A new chat. The chat lists refresh in the background; the saved
-   * conversation is read before success resolves so the screen keeps its
-   * composer until the chat can render (prefetchQuery contains read failures,
-   * so an accepted send stays accepted).
-   */
   createChat: (workspaceId: string | null) =>
     mutationOptions({
       mutationFn: (vars: {
@@ -360,6 +380,8 @@ export const agentMutations = {
         skillId?: string | null;
         mentions?: string[];
         attachments?: AgentAttachment[];
+        model?: string;
+        reasoning_effort?: AgentMessageRequest['reasoning_effort'];
         idempotencyKey: string;
       }) =>
         agentApi.sendMessage(
@@ -369,6 +391,8 @@ export const agentMutations = {
             skill_id: vars.skillId,
             mentions: vars.mentions,
             attachments: vars.attachments,
+            model: vars.model,
+            reasoning_effort: vars.reasoning_effort,
           },
           vars.idempotencyKey,
           { workspaceId: scope.workspaceId },
@@ -422,6 +446,21 @@ export const agentMutations = {
       onError: (_error, vars, _context, { client }) => void refreshAgentChat(client, vars.chatId),
       onSettled: (_result, _error, _vars, _context, { client }) =>
         client.invalidateQueries({ queryKey: queryKeys.actions.all }),
+    }),
+  decideProposal: (workspaceId: string | null) =>
+    mutationOptions({
+      mutationFn: (vars: ProposalRef & { decision: ProposalDecision }) =>
+        agentApi.decideProposal(vars, vars.decision, { workspaceId }),
+      onSuccess: (detail, vars, _result, { client }) => {
+        client.setQueryData(queryKeys.agent.chat(workspaceId, vars.chatId), detail);
+        const projectId = detail.chat.project_id;
+        if (vars.decision === 'confirm')
+          void client.invalidateQueries({
+            predicate: ({ queryKey }) =>
+              queryKey.includes(projectId) || RECORD_KEYED.has(String(queryKey[0])),
+          });
+      },
+      onError: (_error, vars, _context, { client }) => void refreshAgentChat(client, vars.chatId),
     }),
   changeSuggestion: (workspaceId: string | null) =>
     mutationOptions({

@@ -166,7 +166,6 @@ describe('atomic Search Intelligence reviews', () => {
     const input = reviewBody.parse({
       datasets: [{ kind: 'missing_keywords', competitor_id: competitorId }],
     });
-    // Changing the same project from another transaction inside resolution would deadlock if the review held its lock.
     await expect(
       createReview(db, t.scope, t.userId, 'changed-target', input, key, {
         resolve: async (target) => {

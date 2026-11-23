@@ -10,7 +10,7 @@ import type { Selectable } from 'kysely';
 import { z } from 'zod';
 
 import { policy } from '../config.ts';
-import type { Database } from '../db/database.ts';
+import { inTransaction, type Database } from '../db/database.ts';
 import { jsonObject } from '../db/json.ts';
 import type { BrandProfiles } from '../generated/db-schema.ts';
 import { acquireProjectLock } from '../prompts/locks.ts';
@@ -231,7 +231,7 @@ export function updateBrandProfile(
   userId: string,
   update: BrandProfileUpdate,
 ): Promise<BrandProfile> {
-  return db.transaction().execute(async (trx) => {
+  return inTransaction(db, async (trx) => {
     await acquireProjectLock(trx, scope.projectId);
     const brand = await trx
       .selectFrom('brands')

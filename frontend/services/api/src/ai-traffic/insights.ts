@@ -122,8 +122,8 @@ export const refreshTrafficInsights: Executor = async (task, { db, checkCancelle
     await subjectXactLock(trx, `${scope.workspaceId}:${projectId}:ai-traffic-insights-publication`);
     if (!(await ga4Mapped(trx, scope))) return;
     for (const window of await insightWindows(trx, scope)) {
-      await checkCancelled('AI Traffic insight window'); // NOSONAR -- Each window checks cancellation first.
-      await refreshInsightWindow(trx, scope, window); // NOSONAR -- Windows share one locked transaction.
+      await checkCancelled('AI Traffic insight window'); // NOSONAR
+      await refreshInsightWindow(trx, scope, window); // NOSONAR
     }
   });
 };

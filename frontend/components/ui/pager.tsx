@@ -1,6 +1,6 @@
 import { useId, useLayoutEffect, useRef, useState } from 'react';
 
-import { Button, IconButton } from '@/components/ui/button';
+import { IconButton } from '@/components/ui/button';
 import { Select } from '@/components/ui/select';
 import {
   TABLE_DEFAULT_PAGE_SIZE,
@@ -8,7 +8,7 @@ import {
   isTablePageSize,
   type TablePageSize,
 } from '@/lib/config/tables';
-import { ChevronLeft, ChevronRight } from '@/lib/icons';
+import { ChevronLeft, ChevronRight, ChevronsLeft } from '@/lib/icons';
 import { formatCount } from '@/lib/format';
 import { useUrlState, type UrlCodec } from '@/lib/navigation/url-state';
 import { cn } from '@/lib/utils';
@@ -113,10 +113,15 @@ function PagerSteps({
 >) {
   return (
     <div className="flex items-center gap-2">
-      {onFirst ? (
-        <Button variant="secondary" disabled={!canPrev || busy} onClick={onFirst}>
-          First page
-        </Button>
+      {onFirst && canPrev ? (
+        <IconButton
+          variant="secondary"
+          icon={ChevronsLeft}
+          label="First page"
+          tooltip={false}
+          disabled={busy}
+          onClick={onFirst}
+        />
       ) : null}
       <IconButton
         variant="secondary"

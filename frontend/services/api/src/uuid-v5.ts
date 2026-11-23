@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 
 export function uuidV5(namespace: string, name: string): string {
-  const bytes = createHash('sha1') // NOSONAR -- Version 5 is defined over SHA-1; the result is an identifier, not a secret.
+  const bytes = createHash('sha1') // NOSONAR
     .update(Buffer.from(namespace.replaceAll('-', ''), 'hex'))
     .update(name, 'utf8')
     .digest()

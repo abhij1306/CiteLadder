@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vite-plus/test';
 
-import { absenceBasis, presenceLabel, standingLabel } from './source-pages';
+import { standingLabel } from '@citeladder/contracts/page-labels';
+
+import { presenceLabel, quoteParts, readableQuote } from './source-pages';
 
 describe('cited-page vocabulary', () => {
   it('never renders an unread page as an absence', () => {
@@ -11,37 +13,36 @@ describe('cited-page vocabulary', () => {
   it('says a name too short to judge was not judged, never that it is absent', () => {
     expect(presenceLabel('not_assessable')).toBe('Name too short to judge on a page');
     expect(standingLabel('not_assessable')).toBe('Not assessable');
-    expect(absenceBasis('not_assessable', 'none', 4200)).toBeNull();
   });
 
   it('drops a token it has no words for rather than leaking it', () => {
     expect(presenceLabel('invented_state')).toBeNull();
   });
+});
 
-  it('qualifies an absence with the method and the coverage behind it', () => {
-    expect(absenceBasis('not_detected', 'exact_alias', 4200)).toBe(
-      'Searched 4,200 characters of readable text for the exact name.',
-    );
+describe('page quotes', () => {
+  it.each([
+    ['Kmart has the cheapest full kit, Targ', 'Kmart has the cheapest full kit…'],
+    [
+      'lworths Group) targets the same value tier as Kmart, which k',
+      '…Group) targets the same value tier as Kmart, which…',
+    ],
+    ['Target better uniform fabric.', 'Target better uniform fabric.'],
+    ['  Big W   leads\nthe list.  ', 'Big W leads the list.'],
+  ])('cuts %j only at word boundaries', (passage, expected) => {
+    expect(readableQuote(passage)).toBe(expected);
   });
 
-  it('says outright that nothing matched, rather than naming a null method', () => {
-    expect(absenceBasis('not_detected', 'none', 4200)).toBe(
-      'Searched 4,200 characters of readable text; no form of the name matched.',
-    );
-  });
-
-  it('never tells an ambiguous or partial verdict that nothing matched', () => {
-    expect(absenceBasis('ambiguous', null, 4200)).toContain('could not be quoted');
-    expect(absenceBasis('partial', null, 4200)).toContain('not enough of it');
-    expect(absenceBasis('not_detected', null, 4200)).toContain('no form of the name matched');
-  });
-
-  it('offers no basis for a positive finding, which has its own passage', () => {
-    expect(absenceBasis('present', 'exact_alias', 4200)).toBeNull();
-  });
-
-  it('offers no basis for a page nobody read or whose read text is unknown', () => {
-    expect(absenceBasis('not_detected', null, 0)).toBeNull();
-    expect(absenceBasis('not_detected', null, null)).toBeNull();
+  it('finds the name in any letter case and keeps the text as written', () => {
+    expect(quoteParts('Kmart vs BIG W prices', 'Big W')).toEqual({
+      before: 'Kmart vs ',
+      match: 'BIG W',
+      after: ' prices',
+    });
+    expect(quoteParts('No rival here', 'Big W')).toEqual({
+      before: 'No rival here',
+      match: '',
+      after: '',
+    });
   });
 });

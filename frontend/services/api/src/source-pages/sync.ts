@@ -100,8 +100,7 @@ async function upsertPages(
               page_format_method: sql<string>`case when ${weak} then excluded.page_format_method else source_pages.page_format_method end`,
               page_format_version: sql<string>`case when ${weak} then excluded.page_format_version else source_pages.page_format_version end`,
             }
-          : // A no-op update so RETURNING includes pages that already exist.
-            { url_hash: sql<string>`source_pages.url_hash` },
+          : { url_hash: sql<string>`source_pages.url_hash` },
       ),
     )
     .returning(['id', 'url_hash'])
@@ -310,8 +309,6 @@ export async function resolveCitation(
 ) {
   const identity = pageIdentity(finalUrl);
   if (!identity) return null;
-  // The audit was checked when this run synced its pages; the update is
-  // scoped to it, so only the fence and the lock are needed here.
   await db.transaction().execute(async (trx) => {
     await fenceInspectionTask(trx, task);
     await acquireProjectLock(trx, scope.projectId);

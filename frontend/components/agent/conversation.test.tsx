@@ -237,7 +237,6 @@ describe('Links in a reply', () => {
       { projectSelection: { activeProject: makeProject({ website_url: 'https://acme.com' }) } },
     );
 
-    // `fireEvent` returns false when a handler cancelled the browser's navigation.
     expect(fireEvent.click(await screen.findByRole('link', { name: 'Our pricing' }))).toBe(true);
     expect(fireEvent.click(screen.getByRole('link', { name: 'the review' }))).toBe(true);
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();

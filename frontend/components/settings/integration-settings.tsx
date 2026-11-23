@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useSearchParams } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 
+import { useUrlParam } from '@/lib/navigation/url-params';
 import { CrawlLogConnections } from '@/components/ai-traffic/crawl-log-connections';
 import {
   FAMILY_META,
@@ -39,7 +39,6 @@ function groupIntoGrants(connections: IntegrationConnection[]): GrantModel[] {
   }
   const grants: GrantModel[] = [];
   for (const [grantId, grouped] of byGrant) {
-    // Sorted in place: the group is this function's own, and sorting keeps it non-empty.
     const sorted = grouped.sort((a, b) => PROVIDER_ORDER[a.provider] - PROVIDER_ORDER[b.provider]);
     const [first] = sorted;
     grants.push({
@@ -89,20 +88,15 @@ function CallbackNotice({
  */
 export function IntegrationSettings() {
   const queryClient = useQueryClient();
-  const searchParams = useSearchParams()[0];
+  const connected = useUrlParam('connected');
+  const error = useUrlParam('error');
   const workspaceId = useActiveWorkspaceId();
 
-  const [notice] = useState(() => ({
-    connected: searchParams.get('connected'),
-    error: searchParams.get('error'),
-  }));
-  const hasCallbackParams = searchParams.has('connected') || searchParams.has('error');
+  const [notice] = useState(() => ({ connected, error }));
+  const hasCallbackParams = connected !== null || error !== null;
   useEffect(() => {
     if (!hasCallbackParams) return;
     if (notice.connected) void refreshIntegrations(queryClient);
-    // Shallow URL cleanup, NOT a redirect: the params have already been captured
-    // into `notice`, so this only rewrites the address bar. A route navigation
-    // would re-render every mounted settings panel for nothing.
     window.history.replaceState(null, '', '/settings?tab=integrations');
   }, [hasCallbackParams, notice.connected, queryClient]);
 
@@ -128,7 +122,7 @@ export function IntegrationSettings() {
               kind="error"
               title="Couldn't load integrations"
               {...readErrorProps(connectionsQuery)}
-              fallback="Couldn't load integrations. Check your connection and try again."
+              fallback="Couldn't load integrations. The request failed or timed out."
             />
           ) : null}
           {connectionsQuery.isLoading ? (

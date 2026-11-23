@@ -40,5 +40,9 @@ export function adsStateHeading(state: Exclude<VisibilityAdsResponse['state'], '
       return AD_APPLICABILITY.unavailable;
     case 'no_answers':
       return 'No ChatGPT Search answers';
+    default: {
+      const unhandled: never = state;
+      return unhandled;
+    }
   }
 }

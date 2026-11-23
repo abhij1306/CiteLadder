@@ -5,6 +5,7 @@ import { canonicalPage } from '../page-identity.ts';
 import { record } from '../db/json.ts';
 import { compareText, scalarText, stripTrailing } from '../text-order.ts';
 import { onlyOf } from '../lists.ts';
+import { widen } from '../widen.ts';
 
 const p = policy.demand;
 type PageCandidate = {
@@ -66,7 +67,7 @@ function resolveFromArtifacts(
   candidates: PageCandidate[],
   artifacts: PageArtifact[],
 ): PageResolution {
-  const enriched = candidates.map((c) => ({ ...c, evidence: [] as string[] }));
+  const enriched = candidates.map((c) => ({ ...c, evidence: widen<string[]>([]) }));
   for (const candidate of enriched) {
     const proofs = new Set<string>();
     for (const artifact of artifacts) {

@@ -260,7 +260,6 @@ export async function loadChain(
   );
 }
 
-/** Appends one event; the caller holds the chat's lock, so the sequence is the next one. */
 export async function appendEvent(
   db: Database,
   owner: Owner,
@@ -307,12 +306,11 @@ export async function recheckOpen(db: Database, owner: Owner, outputId: string, 
   for (const suggestion of suggestions) {
     const located = locate(suggestion, chain);
     if (located.ok) continue;
-    await /* NOSONAR -- One transaction connection: events append in order. */ appendEvent(
-      db,
-      owner,
-      suggestion,
-      { status: 'stale', by, reason: located.reason },
-    );
+    await /* NOSONAR */ appendEvent(db, owner, suggestion, {
+      status: 'stale',
+      by,
+      reason: located.reason,
+    });
     staled++;
   }
   return staled;

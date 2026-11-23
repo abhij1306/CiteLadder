@@ -48,10 +48,6 @@ export function comparableUrl(value: string) {
   return `${url.protocol}//${url.host.toLowerCase()}${path}${search}`;
 }
 
-/**
- * The canonical beside a noindex, recorded as context only: CMS templates emit a
- * self-canonical on every page, including the tag archives they noindex on purpose.
- */
 function recordCanonical(facts: Facts, evidence: Record<string, unknown>) {
   const declared = text(facts.canonical_url).trim();
   if (!declared) return;

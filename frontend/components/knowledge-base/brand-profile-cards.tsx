@@ -9,6 +9,7 @@ import { Inline } from '@/components/ui/layout';
 import { Select } from '@/components/ui/select';
 import { SettingField, SettingRow, SettingRows, SettingsGroup } from '@/components/ui/setting-row';
 import { StateBlock } from '@/components/ui/state-block';
+import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Pencil } from '@/lib/icons';
 import { mutationNoticeForError } from '@/lib/api/mutation-notice';
@@ -50,17 +51,11 @@ export function CompanyFactsCard({ form }: Readonly<{ form: BrandProfileForm }>)
       <SettingRows foot={<ProfileSaveFoot form={form} />}>
         <SettingField label="Category">
           {(field) => (
-            <Textarea
+            <Input
               {...field}
-              rows={2}
               disabled={saving}
               value={identity.category}
-              onChange={(event) =>
-                form.setIdentity({
-                  ...identity,
-                  category: event.target.value.replaceAll('\n', ' '),
-                })
-              }
+              onChange={(event) => form.setIdentity({ ...identity, category: event.target.value })}
             />
           )}
         </SettingField>

@@ -74,7 +74,6 @@ export function claimDueSchedules(
   });
 }
 
-/** Lock order for every worker write: scoped parent audit, then the owned task. */
 export async function ownedAuditTask(db: Database, claimed: AuditTask, owner: string) {
   const audit = await db
     .selectFrom('audits')

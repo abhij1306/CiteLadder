@@ -386,8 +386,6 @@ describe('request timeout (A3)', () => {
     const fetchMock = vi.fn().mockImplementation(
       (_url: string, init: RequestInit) =>
         new Promise((_resolve, reject) => {
-          // Bind the signal once: inside the listener TS cannot re-narrow
-          // `init.signal`, so reading `.reason` off it there fails the build.
           const signal = init.signal;
           signal?.addEventListener('abort', () => reject(signal.reason));
         }),
@@ -409,8 +407,6 @@ describe('request timeout (A3)', () => {
     const fetchMock = vi.fn().mockImplementation(
       (_url: string, init: RequestInit) =>
         new Promise((_resolve, reject) => {
-          // Bind the signal once: inside the listener TS cannot re-narrow
-          // `init.signal`, so reading `.reason` off it there fails the build.
           const signal = init.signal;
           signal?.addEventListener('abort', () => reject(signal.reason));
         }),

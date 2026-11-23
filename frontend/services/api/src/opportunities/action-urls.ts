@@ -148,7 +148,6 @@ export async function writeActionUrls(trx: Database, scope: Scope, synced: Actio
       and not exists (select 1 from ${wanted}
         where w.action_id = a.action_id and w.site_url_id = a.site_url_id)`.execute(trx);
   if (!actionIds.length) return;
-  // Cohort pages come from evidence; only this project's existing URLs are kept.
   await sql`insert into action_urls (workspace_id, project_id, action_id, site_url_id)
     select u.workspace_id, u.project_id, w.action_id, u.id
     from ${wanted}

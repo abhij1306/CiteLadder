@@ -90,10 +90,6 @@ async function declarations(
   }));
 }
 
-/**
- * Append one observation for a declaration, idempotently per source revision.
- * The declaration row is locked so two sources fold their states in order.
- */
 async function recordVerification(
   db: Database,
   task: QueueTask,
@@ -144,7 +140,6 @@ async function recordVerification(
         implementation_event_id: declaration.id,
         observation_kind: observationKind(merged, total),
         observed_at: source.observed_at,
-        // Wall-clock, not transaction start: the row lock above orders appends.
         created_at: sql`clock_timestamp()`,
         crawl_id: source.kind === 'site_crawl' ? source.id : null,
         audit_id: audit,
@@ -169,9 +164,9 @@ export const verifyImplementationEvents: Executor = async (task, context) => {
   for (;;) {
     const rows = await declarations(context.db, task, project, source, after);
     for (const declaration of rows)
-      await recordVerification(context.db, task, project, source, declaration); // NOSONAR -- One declaration at a time bounds the pool.
+      await recordVerification(context.db, task, project, source, declaration); // NOSONAR
     if (rows.length < p.IMPLEMENTATION_VERIFICATION_BATCH_MAX) break;
     after = rows.at(-1);
-    await context.checkCancelled('implementation verification'); // NOSONAR -- Between pages, in order.
+    await context.checkCancelled('implementation verification'); // NOSONAR
   }
 };

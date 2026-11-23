@@ -3,7 +3,7 @@ id: growth_plan
 label: Growth plan
 group: strategy
 order: 1
-version: 2
+version: 3
 output_kind: plan
 description: Prioritize SEO and AI visibility opportunities using persisted CiteLadder evidence. Produce bounded growth plans and explicit next-step advice for specialist work.
 ---
@@ -24,7 +24,7 @@ A short, evidence-backed sequence of work toward the business objective, each it
 
 - A disconnected source, failed run or changed prompt set is a data problem, not a decline.
 - A proven defect on a conversion path beats speculative content; a low-volume, high-fit task can beat a high-volume unrelated keyword.
-- Route each bottleneck to its skill: Prompt discovery, Search opportunities, Search Console optimization, Technical health, Internal links, AI visibility diagnosis, Earned authority, or a content skill.
+- Route each bottleneck to its skill: Prompt discovery, Search opportunities, Search Console optimization, Technical health, Internal links, AI traffic review, AI visibility diagnosis, Brand perception, AI Shelf review, Earned authority, Connected data check, or a content skill.
 - No revenue estimate without real conversion data. Where your order differs from CiteLadder's Action ranking, say why.
 
 ## Deliver

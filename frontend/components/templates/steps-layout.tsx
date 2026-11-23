@@ -29,8 +29,6 @@ export function StepsLayout<T extends string>({
 }>) {
   const index = steps.findIndex((step) => step.value === current);
   const scroller = useRef<HTMLDivElement>(null);
-  // A lazy screen mounts after the route move focused the main panel, which
-  // does not scroll here: take that focus so keys and the scrollbar work.
   useEffect(() => {
     const active = document.activeElement;
     if (active === document.body || active?.id === 'main')
@@ -38,8 +36,6 @@ export function StepsLayout<T extends string>({
   }, []);
   return (
     <div className="flex h-[calc(100dvh-var(--route-chrome-height))] min-h-0 min-w-0 flex-col">
-      {/* `relative` contains absolute descendants (`sr-only` text); without it they
-          escape the clip, lengthen the panel and it scrolls the page header away. */}
       <div
         ref={scroller}
         tabIndex={-1}

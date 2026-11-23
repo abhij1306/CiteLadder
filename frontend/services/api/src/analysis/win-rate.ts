@@ -44,7 +44,6 @@ const winTallySchema = z.object({
 });
 export type WinTally = z.infer<typeof winTallySchema>;
 
-// Own keys only: a tracked name such as "constructor" must not read Object.prototype.
 const ownCount = (first: WinTally['first'], name: string) =>
   Object.hasOwn(first, name) ? first[name]! : 0;
 

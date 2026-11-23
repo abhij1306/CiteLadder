@@ -52,7 +52,7 @@ export function SelectionPageStateBlock({
       kind="error"
       {...readErrorProps(queries.auditsQuery)}
       title="Couldn't load this project's runs"
-      fallback="Check your connection and try again."
+      fallback="The request failed or timed out."
     />
   );
 }
@@ -85,7 +85,7 @@ export function useSelectionPageFilters({
     onChangeGranularity: filters.setGranularity,
     cohort: filters.cohort,
     onChangeCohort: filters.setCohort,
-    selectionMode: filters.selectionMode,
+    selectionMode: queries.selectionMode,
     outcome: filters.outcome,
     onChangeOutcome: filters.setOutcome,
     markets: queries.markets,

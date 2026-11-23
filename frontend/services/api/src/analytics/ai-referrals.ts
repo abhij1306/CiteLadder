@@ -7,7 +7,7 @@ import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { isoDateText } from '../db/timestamps.ts';
 import { metricSeriesPoints } from './metric-series.ts';
-import { record } from '../db/json.ts';
+import { record, strings } from '../db/json.ts';
 import { firstOf } from '../lists.ts';
 
 const analytics = policy.analytics;
@@ -109,8 +109,6 @@ export async function readAiReferrals(
       .where('window_start', '=', sql<Date>`${query.fromDate}::date`)
       .where('window_end', '=', sql<Date>`${query.toDate}::date`);
   } else {
-    // A sync writes its own window and the preset family on one end date; on a
-    // tie the longest window wins, never a one-day sync window.
     snapshots = snapshots.orderBy('window_end', 'desc').orderBy('window_start', 'asc');
   }
   const snapshot = await snapshots.limit(1).executeTakeFirst();
@@ -192,10 +190,7 @@ function landingSummary(raw: unknown) {
     row.sessions += Number(r.sessions);
     row.key_events += Number(r.key_events);
     row.analytics_quality = [
-      ...new Set([
-        ...row.analytics_quality,
-        ...(Array.isArray(r.analytics_quality) ? (r.analytics_quality as string[]) : []),
-      ]),
+      ...new Set([...row.analytics_quality, ...strings(r.analytics_quality)]),
     ];
     groups.set(key, row);
   }

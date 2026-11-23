@@ -11,7 +11,7 @@ import {
 import type { z } from 'zod';
 
 import type { Database } from '../db/database.ts';
-import { record } from '../db/json.ts';
+import { isRecord, record } from '../db/json.ts';
 import { wireUtc, utcText } from '../db/timestamps.ts';
 import { scalarText } from '../text-order.ts';
 import { brandIdentities, markFirstNamed, type BrandIdentity } from './brand-identities.ts';
@@ -26,7 +26,7 @@ export type ExecutionEvidenceResponse = z.input<typeof executionEvidenceSchema>;
 
 function scoreObject(score: unknown): Record<string, unknown> | null {
   if (score === null) return null;
-  if (typeof score === 'object' && !Array.isArray(score)) return score as Record<string, unknown>;
+  if (isRecord(score)) return score;
   throw new TypeError('stored score is not an object');
 }
 
@@ -200,8 +200,6 @@ export async function getExecutionEvidence(
       classification: citationClassificationSchema.parse(citation.classification),
     })),
     competitors_mentioned: competitorsMentioned(score),
-    // Null for an LLM execution, and for a search that produced no
-    // observation row: a gap in ours, not a measured absence.
     search_surface,
     perception,
     claims,

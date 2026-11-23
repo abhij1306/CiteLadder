@@ -37,6 +37,7 @@ it('names each kind of step as a verb and the reader’s noun, never a tool name
       { kind: 'document', action: 'replaced', number: 2, title: 'Brief' },
       { kind: 'suggestion' },
       { kind: 'proposal', label: 'https://acme.example/returns' },
+      { kind: 'change', label: 'Add 2 prompts to “Main”' },
       { kind: 'model', ordinal: 2 },
     ]),
   ).toEqual([
@@ -53,6 +54,7 @@ it('names each kind of step as a verb and the reader’s noun, never a tool name
     ['Replaced Document 2', 'Brief', 'done'],
     ['Suggested changes', null, 'done'],
     ['Suggested marking an Action implemented', 'https://acme.example/returns', 'done'],
+    ['Suggested a change', 'Add 2 prompts to “Main”', 'done'],
   ]);
 });
 

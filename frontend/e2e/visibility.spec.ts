@@ -288,6 +288,7 @@ function pendingPerception() {
       score,
       coverage,
       theme_mentions: [],
+      categories: [],
     },
     coverage,
     entities: [],

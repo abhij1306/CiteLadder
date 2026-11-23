@@ -7,7 +7,6 @@ import { lineIndex, parseSource } from './source-ast.mjs';
 
 const FRONTEND = path.resolve(import.meta.dirname, '..');
 const REPOSITORY = path.resolve(FRONTEND, '..');
-// An absolute path, not PATH lookup: a PATH entry cannot substitute git (Sonar S4036).
 const GIT_EXECUTABLE = '/usr/bin/git';
 export const POLICIES = {
   frontend: {
@@ -23,16 +22,11 @@ export const POLICIES = {
 };
 const GENERATED_DIRECTORIES = ['services/api/src/generated/'];
 const REVISION = /^(?:HEAD|[0-9a-fA-F]{40})$/;
-// ESTree names for the kinds the TypeScript walk counted. Accessors and
-// constructors are `MethodDefinition` wrappers around a FunctionExpression
-// here, so counting the inner function keeps the per-function tally the same.
 const FUNCTION_KINDS = new Set([
   'FunctionDeclaration',
   'FunctionExpression',
   'ArrowFunctionExpression',
 ]);
-// `SwitchCase` covers both CaseClause and DefaultClause, so a `default:` arm
-// adds a point where the TypeScript walk also counted one.
 const BRANCH_KINDS = new Set([
   'IfStatement',
   'ForStatement',
@@ -254,7 +248,6 @@ export function staleExceptionFailures(measurements, policy) {
       failures.push(`stale module exception: ${file} is now within the default`);
   }
   for (const key of Object.keys(policy.exceptions.functions)) {
-    // A function name may itself hold `::` (an anonymous function's enclosing name); a path never does.
     const separator = key.indexOf('::');
     const measurement = measurements[key.slice(0, separator)];
     const name = key.slice(separator + 2);

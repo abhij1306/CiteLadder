@@ -6,6 +6,7 @@ import {
 } from '@tanstack/react-query';
 
 import { ApiError } from './errors';
+import { FIRST_CURSOR } from './query-client';
 import { queryKeys } from './query-keys';
 import type { ProjectScope } from './query-keys/scope';
 import type { Visibility } from '@citeladder/contracts';
@@ -128,7 +129,7 @@ export const visibilityQueries = {
           { ...params, cursor: pageParam },
           scoped(scope, signal),
         ),
-      initialPageParam: undefined as string | undefined,
+      initialPageParam: FIRST_CURSOR,
       getNextPageParam: (last) => last.next_cursor ?? undefined,
     }),
   ads: (scope: ProjectScope, params: Omit<ParamsOf<'getAds'>, 'cursor'>) =>
@@ -140,7 +141,7 @@ export const visibilityQueries = {
           { ...params, cursor: pageParam },
           scoped(scope, signal),
         ),
-      initialPageParam: undefined as string | undefined,
+      initialPageParam: FIRST_CURSOR,
       getNextPageParam: (last) => last.creatives.next_cursor ?? undefined,
     }),
   evidence: (scope: ProjectScope, params: ParamsOf<'getVisibilityEvidence'>) =>

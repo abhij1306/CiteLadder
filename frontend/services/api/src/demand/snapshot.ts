@@ -51,7 +51,6 @@ export const recomputeDemand: Executor = async (task, { db, maxAttempts, checkCa
   };
   await checkCancelled('demand projection');
   await db.transaction().execute(async (trx) => {
-    // Concurrent retries must publish one immutable snapshot, not fail a uniqueness race.
     await subjectXactLock(trx, `demand_snapshot:${scope.projectId}`);
     const query = await buildQueryEvidence(trx, scope);
     const traffic = await trafficSource(trx, scope);

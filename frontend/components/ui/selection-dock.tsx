@@ -26,11 +26,9 @@ export function SelectionDock({
 }
 
 export const DOCK_SLOT = {
-  // Every decision label (Decline, Accept, Restore) is under 112px, so the minimum holds it fixed.
   decision: 'min-w-28',
   wide: 'rail:w-44',
   primary: 'min-w-0 shrink rail:w-64',
-  // `truncate` on the flex button cuts nothing; its label cuts in a block of its own.
   primaryLabel: 'min-w-0 truncate',
 } as const;
 

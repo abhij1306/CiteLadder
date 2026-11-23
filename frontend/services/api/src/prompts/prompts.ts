@@ -230,31 +230,6 @@ async function screen<T extends { text: string; topic_id?: string | null }>(
   });
 }
 
-export async function screenPrompts(
-  db: Database,
-  scope: RecordScope,
-  promptSetId: string,
-  inputs: readonly z.infer<typeof promptInput>[],
-) {
-  const set = await scopedPromptSet(db, scope.workspaceId, promptSetId, scope.projectId);
-  const screened = await screen(db, set, inputs);
-  return {
-    admitted: screened.flatMap((item) => (item.problem === null ? [item.input] : [])),
-    dropped: screened.flatMap(({ input, problem }) =>
-      problem === null
-        ? []
-        : [
-            {
-              text: input.text,
-              ...(problem.kind === 'binding'
-                ? BINDING_FAILURES[problem.failure]
-                : { code: 'duplicate', message: DUPLICATE }),
-            },
-          ],
-    ),
-  };
-}
-
 export async function createPrompts(
   db: Database,
   scope: RecordScope,
@@ -265,7 +240,6 @@ export async function createPrompts(
     const set = await scopedPromptSet(trx, scope.workspaceId, promptSetId, scope.projectId);
     await acquireProjectLock(trx, set.project_id);
     await acquirePromptSetLock(trx, set.id);
-    // Screened under the project lock, so the topic vocabulary cannot change before the insert.
     const screened = await screen(trx, set, inputs);
     for (const { problem } of screened)
       if (problem?.kind === 'binding') throw bindingError(problem.failure);
@@ -476,7 +450,7 @@ export async function importPrompts(
   input: z.infer<typeof promptImport>,
 ): Promise<PromptSetView> {
   const { workspaceId } = scope;
-  await db.transaction().execute(async (trx) => {
+  await inTransaction(db, async (trx) => {
     const set = await scopedPromptSet(trx, workspaceId, promptSetId, scope.projectId);
     await acquireProjectLock(trx, set.project_id);
     await acquirePromptSetLock(trx, set.id);

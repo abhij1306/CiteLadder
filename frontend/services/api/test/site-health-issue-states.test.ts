@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, describe, expect, it } from 'vitest';
 import { policy } from '../src/config.ts';
+import { issues, unfilteredIssues } from '../src/site-health/reads/issues.ts';
 import { testDatabase } from './support.ts';
 import { landFinalRevisions } from './site-health-finalize-fixtures.ts';
 import { SiteFixtures, type SiteSeed } from './site-health-fixtures.ts';
@@ -14,6 +15,7 @@ afterAll(async () => {
 
 const SITEMAP = 'technical.sitemap_redirect';
 const CLIENT = 'technical.client_side_redirect';
+const H1 = 'technical.h1_present';
 const minutes = (count: number) => new Date(Date.UTC(2026, 10, 1, 9, count));
 
 async function land(seed: SiteSeed) {
@@ -64,7 +66,6 @@ async function audit(
         dimension: rule.dimension,
         category: rule.category,
         severity: rule.severity,
-        finding_class: rule.finding_class,
         evidence: JSON.stringify({}),
         description: rule.description,
         remediation: rule.remediation,
@@ -178,6 +179,58 @@ describe('issue state and trend', () => {
       [SITEMAP]: 'regressed',
     });
     expect((await trend(seed))[0]!.open_count).toBe(1);
+  });
+
+  it('counts pages new since the previous site crawl and fixed since it, unknown without one', async () => {
+    const seed = await fixtures.crawl('completed');
+    const changes = async (crawl: SiteSeed) => {
+      const page = await issues(db, crawl.workspaceId, crawl.crawlId, unfilteredIssues(), {
+        limit: 50,
+        cursor: null,
+      });
+      return Object.fromEntries(
+        page.items.map((item) => [item.rule_id, [item.new_url_count, item.resolved_url_count]]),
+      );
+    };
+    const first = await crawlAt(seed, minutes(0));
+    const a = await audit(first, '/a', { [CLIENT]: 'missing', [SITEMAP]: 'missing' });
+    const b = await audit(first, '/b', { [SITEMAP]: 'missing' });
+    await land(first);
+    expect(await changes(first)).toEqual({ [CLIENT]: [null, null], [SITEMAP]: [null, null] });
+
+    const second = await crawlAt(seed, minutes(10));
+    await audit(
+      second,
+      '/a',
+      { [CLIENT]: 'missing', [SITEMAP]: 'satisfied', [H1]: 'missing' },
+      a.id,
+    );
+    await audit(second, '/b', { [SITEMAP]: 'missing', [H1]: 'missing' }, b.id);
+    await land(second);
+    const secondChanges = { [CLIENT]: [0, 0], [SITEMAP]: [0, 1], [H1]: [2, 0] };
+    expect(await changes(second)).toEqual(secondChanges);
+
+    const outsider = await fixtures.crawl('completed');
+    const before = await crawlAt(outsider, minutes(0));
+    const other = await audit(before, '/b', { [SITEMAP]: 'missing' });
+    await land(before);
+    const after = await crawlAt(outsider, minutes(10));
+    await audit(after, '/b', { [SITEMAP]: 'satisfied', [H1]: 'missing' }, other.id);
+    await land(after);
+    expect(await changes(second)).toEqual(secondChanges);
+
+    const third = await crawlAt(seed, minutes(20));
+    await audit(third, '/a', { [CLIENT]: 'satisfied', [H1]: 'satisfied' }, a.id);
+    await audit(third, '/b', { [SITEMAP]: 'satisfied', [H1]: 'missing' }, b.id);
+    await land(third);
+    expect(await changes(second)).toEqual(secondChanges);
+    expect(await changes(third)).toEqual({ [H1]: [0, 1] });
+
+    const fourth = await crawlAt(seed, minutes(30));
+    await audit(fourth, '/a', { [SITEMAP]: 'missing' }, a.id);
+    await audit(fourth, '/b', { [H1]: 'missing' }, b.id);
+    await land(fourth);
+    expect(await changes(fourth)).toEqual({ [SITEMAP]: [1, 0], [H1]: [0, 0] });
   });
 
   it('marks a 404 page unavailable, never resolved, and recovers when it answers', async () => {

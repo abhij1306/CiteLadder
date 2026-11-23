@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { testDatabase } from './support.ts';
 import { VisibilityFixtures } from './visibility-fixtures.ts';
@@ -10,13 +10,16 @@ import { costMicrousd, modelPrice } from '../src/models/pricing.ts';
 
 const db = testDatabase();
 const fixtures = new VisibilityFixtures(db);
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 afterAll(async () => {
   await fixtures.cleanup();
   await db.destroy();
 });
 
 /** A gateway on the priced model whose provider answers with `reply`. */
-function gateway(reply: () => Response | Promise<Response>) {
+function gateway(reply: () => Response | Promise<Response>, model = 'claude-haiku-5-5') {
   const fetch = vi.fn<typeof globalThis.fetch>(async () => reply());
   return {
     fetch,
@@ -25,7 +28,7 @@ function gateway(reply: () => Response | Promise<Response>) {
         ...gatewaySettings({}),
         apiKey: 'fixture-key',
         baseUrl: 'https://model.test/v1',
-        model: 'claude-haiku-5-5',
+        model,
         attempts: 1,
       },
       { fetch, sleep: async () => {} },

@@ -17,11 +17,13 @@ export function BrandMark({
   logoUrl,
   websiteUrl,
   placement = 'row',
+  entity = 'brand',
 }: Readonly<{
   name: string;
   logoUrl?: string | null;
   websiteUrl?: string | null;
   placement?: BrandMarkPlacement;
+  entity?: 'brand' | 'site';
 }>) {
   const [failed, setFailed] = useState<Record<string, true>>({});
   const spec = PLACEMENT[placement];
@@ -29,7 +31,7 @@ export function BrandMark({
   const src = brandMarkSources({ logoUrl, websiteUrl, pixels: spec.pixels }).find(
     (candidate) => !failed[candidate],
   );
-  const [letter = '?'] = brandInitials(name);
+  const [letter = '?'] = brandInitials(name.replace(/^www\./u, ''));
 
   return (
     <span
@@ -54,7 +56,10 @@ export function BrandMark({
       ) : (
         <span
           className={cn(
-            'bg-ink text-on-ink grid place-items-center font-medium uppercase',
+            'grid place-items-center font-medium uppercase',
+            entity === 'site'
+              ? 'border-control-line text-ink-2 rounded-mark border'
+              : 'bg-ink text-on-ink',
             placement === 'header' ? 'size-full' : spec.image,
           )}
         >

@@ -167,7 +167,6 @@ export function rejectSuggestion(
   candidateId: string,
 ): Promise<Suggestion> {
   return inTransaction(db, async (trx) => {
-    // The project lock first, as accept takes it: both update every row of a key.
     await lockProject(trx, decision);
     const candidate = await lockedCandidate(trx, decision, candidateId);
     if (candidate.status === ACCEPTED)

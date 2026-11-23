@@ -200,7 +200,6 @@ async function storeFrontier(
     .where('crawl_id', '=', crawl.id)
     .executeTakeFirstOrThrow();
   const capacity = Math.max(0, frontierLimit(crawl, settings) - Number(existing.count));
-  // One array parameter, so a sitemap-sized batch stays clear of the driver's bind limit.
   const known = new Set(
     (
       await trx
@@ -226,7 +225,7 @@ async function storeFrontier(
     .slice(0, capacity);
   const now = new Date();
   for (let offset = 0; offset < fresh.length; offset += settings.batch)
-    await trx // NOSONAR: batches bound each insert's bind parameters, in order in one transaction.
+    await trx // NOSONAR
       .insertInto('site_discovery_frontier')
       .values(
         fresh.slice(offset, offset + settings.batch).map((item) => ({
@@ -261,7 +260,7 @@ async function addReferrers(trx: Database, crawl: Crawl, seen: Candidate[]) {
     byReferrer.set(item.referrerId, hashes);
   }
   for (const [referrer, hashes] of byReferrer)
-    await trx // NOSONAR: one statement per referring page, in order in one transaction.
+    await trx // NOSONAR
       .updateTable('site_discovery_frontier')
       .set({
         referrer_site_url_ids: sql`array_append(referrer_site_url_ids, ${referrer}::uuid)`,
@@ -478,8 +477,6 @@ export async function admitCandidates(
   options: AdmissionOptions = {},
 ): Promise<AdmissionResult> {
   const settings = options.settings ?? frontierSettings();
-  // Budgets read the count only after the caller's runtime lock, which serializes every admission
-  // of the workspace: a sibling commit that raised it is visible by now.
   const live = await trx
     .selectFrom('site_crawls')
     .select('admitted_url_count')

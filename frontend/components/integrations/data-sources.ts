@@ -65,11 +65,11 @@ export function useDataSources(
   const loading =
     connections.isLoading || mappingQueries.some((query) => query.isLoading && !query.data);
   const steps = new Map(
-    providers.map((provider) => [
+    providers.map((provider): [IntegrationProvider, SourceStep] => [
       provider,
       projectId
         ? sourceStep(provider, connections.data ?? [], mappings, projectId)
-        : ({ kind: 'connect' } as SourceStep),
+        : { kind: 'connect' },
     ]),
   );
   const failedMappings = mappingQueries.filter((query) => query.isError);

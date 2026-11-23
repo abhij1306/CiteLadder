@@ -51,9 +51,6 @@ export async function enqueuePostSyncProjections(
   }
   if (failed || artifacts.some((artifact) => trafficDatasets.has(artifact.dataset)))
     await enqueueTrafficRefresh(trx, run);
-  // A run with referral datasets refreshes AI Referrals at the end of its
-  // ingest → classify chain, after classification; refreshing here as well
-  // would run first and publish every bucket as pending.
   const chained = artifacts.some((artifact) => referralDatasets.has(artifact.dataset));
   if (!chained && (failed || artifacts.some((a) => referralExtraDatasets.has(a.dataset))))
     await enqueueTask(trx, {

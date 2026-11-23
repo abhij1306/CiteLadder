@@ -41,6 +41,7 @@ function rates(overrides: Partial<SurfaceRates> = {}): SurfaceRates {
 function panel(data: SurfaceRates) {
   return render(
     <SurfaceRatesPanel
+      engineLabel="Google AI Overview"
       query={
         { data, isError: false, isFetching: false } as Parameters<
           typeof SurfaceRatesPanel
@@ -64,7 +65,7 @@ describe('AI Overview rates', () => {
 
     for (const basis of [
       /40 of 100 searches we successfully observed/,
-      /10 of 40 searches that showed an overview/,
+      /10 of 40 searches where it was shown/,
     ])
       expect(screen.getByRole('button', { description: basis })).toHaveAccessibleName(/^Basis of /);
   });

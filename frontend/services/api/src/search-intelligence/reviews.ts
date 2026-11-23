@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { searchLanguageOf, surfaceSupports } from '../search-surfaces/locations.ts';
 import { asApiErrorCode } from '@citeladder/contracts/error-codes';
-import type { Database } from '../db/database.ts';
+import { inTransaction, type Database } from '../db/database.ts';
 import { strings } from '../db/json.ts';
 import { ApiError, notFound } from '../errors.ts';
 import { resolveSite } from '../projects/site-resolution.ts';
@@ -257,7 +257,6 @@ async function planDatasets(
   return { plan, reused, total, plannedRows };
 }
 
-/** Unpaid resolution precedes the project lock; the quoted plan is then frozen atomically. */
 export async function createReview(
   db: Database,
   scope: Scope,
@@ -286,7 +285,7 @@ export async function createReview(
   const resolved = new Map<string, CanonicalTarget>();
   for (const [id, target] of saved)
     resolved.set(id, await (options.resolve ?? resolveCompetitor)(target));
-  return db.transaction().execute(async (trx) => {
+  return inTransaction(db, async (trx) => {
     await scope.workspace
       .selectFrom(trx, 'projects')
       .select('id')

@@ -4,7 +4,7 @@ import type { Database } from '../db/database.ts';
 import type { Audits, BrandMentions } from '../generated/db-schema.ts';
 import type { AuditTask } from '../queue/audit-queue.ts';
 import { policy } from '../config.ts';
-import { record, jsonObjects } from '../db/json.ts';
+import { providerMetadataWithoutRawBody, record, jsonObjects } from '../db/json.ts';
 import { scalarText } from '../text-order.ts';
 import {
   cohortNamesBrand,
@@ -39,7 +39,14 @@ async function scoredArtifact(
 ) {
   const artifact = await db
     .selectFrom('raw_response_artifacts')
-    .selectAll()
+    .select([
+      'answer_text',
+      'citations',
+      'retrieved_sources',
+      'search_events',
+      'search_used',
+      providerMetadataWithoutRawBody('provider_metadata'),
+    ])
     .where('id', '=', artifactId)
     .where('audit_id', '=', audit.id)
     .where('task_id', '=', task.id)

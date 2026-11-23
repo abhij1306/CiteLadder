@@ -25,11 +25,19 @@ import {
   orderedListSteps,
 } from './content-facts.ts';
 import { emptyEntityFacts, entityFacts } from './entity-facts.ts';
-import { analysisPolicy, limits, squash } from './policy.ts';
+import { serverRenderSignals } from './delivery-checks.ts';
+import { analysisPolicy, limits, squash, words } from './policy.ts';
 import { mergeRobotsHeader, robotsMeta } from './robots-directives.ts';
-import { elementRegion, nodeIsRendered, pageScope, regionNodeIsVisible } from './regions.ts';
+import {
+  elementRegion,
+  nodeIsRendered,
+  pageScope,
+  regionNodeIsVisible,
+  regionText,
+} from './regions.ts';
 import { emptySourceSupport, sameSite, sourceSupportFacts } from './source-support.ts';
 import { structuredDataFacts as structuredData } from './structured-data.ts';
+import { widen } from '../../widen.ts';
 
 const f = analysisPolicy.facts;
 const HTML_TYPES = new Set(['text/html', 'application/xhtml+xml']);
@@ -325,10 +333,6 @@ function inlineScriptChars(root: HtmlNode) {
 
 const SCRIPT_NAVIGATION = /\blocation(?:\.href)?\s*=(?!=)|\blocation\.(?:replace|assign)\s*\(/u;
 
-/**
- * `delay; url=target` as browsers read it: a delay, then an optional target
- * (with or without `url=` and quotes). A bare delay only reloads the page.
- */
 function refreshTarget(content: string) {
   const separator = content.search(/[;,]/u);
   const seconds = Number.parseFloat(separator === -1 ? content : content.slice(0, separator));
@@ -419,18 +423,18 @@ function emptyFacts() {
     meta_description: '',
     robots: robotsMeta(document(Buffer.alloc(0))),
     canonical_url: '',
-    canonical_declarations: [] as string[],
-    open_graph: {} as Record<string, string>,
-    twitter: {} as Record<string, string>,
+    canonical_declarations: widen<string[]>([]),
+    open_graph: widen<Record<string, string>>({}),
+    twitter: widen<Record<string, string>>({}),
     headings: headingFacts(document(Buffer.alloc(0))),
-    freshness_context: { required: false, reasons: [] as string[] },
+    freshness_context: { required: false, reasons: widen<string[]>([]) },
     images: { count: 0, missing_alt: 0, decorative_alt: 0 },
     accessibility: accessibilityFacts(document(Buffer.alloc(0)), 0),
     mobile: { viewport: { declared: false, content: '' } },
     body: { text: '', word_count: 0, truncated: false },
-    cta_text: [] as string[],
-    form_fields: [] as string[],
-    link_context: [] as string[],
+    cta_text: widen<string[]>([]),
+    form_fields: widen<string[]>([]),
+    link_context: widen<string[]>([]),
     entity: emptyEntityFacts(),
     structured_data: structuredData(document(Buffer.alloc(0)), 0, ''),
     links: linksAndAssets(document(Buffer.alloc(0)), '', '', 0),
@@ -438,21 +442,22 @@ function emptyFacts() {
     author: '',
     dates: { published: '', modified: '' },
     authorship: emptyAuthorship(),
-    landmarks: { main: false, article: false, nav: false } as Record<string, boolean>,
+    landmarks: widen<Record<string, boolean>>({ main: false, article: false, nav: false }),
     ordered_list_steps: 0,
-    hreflang_alternates: [] as { hreflang: string; url: string }[],
+    hreflang_alternates: widen<{ hreflang: string; url: string }[]>([]),
     ...emptyContentFacts(),
     source_support: emptySourceSupport(),
     inline_script_chars: 0,
+    main_word_count: 0,
     client_redirect: {
       meta_refresh_url: '',
-      meta_refresh_seconds: null as number | null,
+      meta_refresh_seconds: widen<number | null>(null),
       script_navigates: false,
     },
-    contact_points: [] as { channel: string; value: string }[],
-    commerce: emptyCommerceFacts() as ReturnType<typeof emptyCommerceFacts> & {
-      visible_price_context?: string;
-    },
+    contact_points: widen<{ channel: string; value: string }[]>([]),
+    commerce: widen<ReturnType<typeof emptyCommerceFacts> & { visible_price_context?: string }>(
+      emptyCommerceFacts(),
+    ),
   };
 }
 type DocumentFacts = ReturnType<typeof emptyFacts>;
@@ -529,16 +534,14 @@ function extractDocument(
     ...contentFacts(page),
     source_support: sourceSupportFacts(page),
     inline_script_chars: inlineScriptChars(root),
+    main_word_count: words(regionText(page.region)).length,
     client_redirect: clientRedirect(root, finalUrl, page.baseUrl),
     blocking_resources: blockingResources(root, links.stylesheets.length),
     body: bodyText(root, settings.maxTextChars),
     ...authorshipFacts(page, sd.blocks, articleMeta, metaContent(root, 'author'), modifiedMeta),
     commerce: commerceFacts(page),
   };
-  const shell =
-    facts.body.word_count < f.server_rendered_min_words &&
-    facts.inline_script_chars > facts.body.text.length;
-  return shell ? clearPageOwned(facts, 'client_rendering_required') : facts;
+  return serverRenderSignals(facts)[0] ? clearPageOwned(facts, 'client_rendering_required') : facts;
 }
 
 function deliveryFacts(delivery: Delivery, headers: Record<string, string>) {
@@ -596,7 +599,10 @@ export function extractPageFacts(
     ...facts,
     extractor_version: policy.site_health.versions.extractor,
     content_type: contentType,
-    delivery: deliveryFacts(delivery, headers),
+    delivery: deliveryFacts(
+      { ...delivery, decodedBytes: delivery.decodedBytes ?? body.length },
+      headers,
+    ),
     robots: mergeRobotsHeader(facts.robots, headers['x-robots-tag'] ?? ''),
   };
 }

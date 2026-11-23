@@ -28,7 +28,7 @@ const reads = policy.site_health.reads;
 const labels: Record<string, string> = reads.aeo_dimension_labels;
 const descriptions: Record<string, string> = reads.aeo_dimension_descriptions;
 const CONTENT_ADDRESSABLE = new Set(reads.content_addressable_check_ids);
-const list = (value: unknown) => (Array.isArray(value) ? (value as unknown[]) : []);
+const list = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
 const OVERVIEW_UNAVAILABLE = 'Site Health Overview is not available';
 const NO_COMPARABLE = {
   added_page_kinds: [],
@@ -189,11 +189,7 @@ export async function overview(
       .filter((issue) => Object.keys(issue).length > 0)
       .map((issue) => {
         const ruleId = scalarText(issue.rule_id);
-        const impact = issueImpact(
-          ruleId,
-          scalarText(issue.finding_class),
-          scalarText(issue.severity),
-        );
+        const impact = issueImpact(scalarText(issue.severity));
         return {
           score_roles: ruleScoreRoles(ruleId),
           impact_band: impact.band,

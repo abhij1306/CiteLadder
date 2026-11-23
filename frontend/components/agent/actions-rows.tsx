@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useInfiniteQuery } from '@tanstack/react-query';
 
 import { Checkbox } from '@/components/ui/checkbox';
-import { ImpactBars } from '@/components/ui/impact-bars';
+import { StatusMark } from '@/components/ui/status-mark';
 import { WorkRow, WorkRows, WorkRowsMore } from '@/components/ui/work-rows';
 import { actionTarget } from '@/lib/agent/action-title';
 import { groupingParams, type GroupingRef, type TreeGrouping } from '@/lib/agent/action-tree';
@@ -38,11 +38,13 @@ export function sourceLabel(action: Pick<Action, 'families' | 'origin'>): string
   );
 }
 
-const IMPACT_LEVEL = { high: 3, medium: 2, low: 1 } as const;
-
 export function Impact({ band }: Readonly<{ band: Action['priority_band'] }>) {
   if (!band) return <span>Not scored</span>;
-  return <ImpactBars level={IMPACT_LEVEL[band]}>{IMPACT_LABEL[band]}</ImpactBars>;
+  return (
+    <StatusMark variant="priority" value={band}>
+      {IMPACT_LABEL[band]}
+    </StatusMark>
+  );
 }
 
 export function GroupingRows({
@@ -66,7 +68,6 @@ export function GroupingRows({
     ...(extra.data?.pages.flatMap((page) => page.items) ?? []).filter((item) => !seen.has(item.id)),
   ];
   const rest = grouping.count - rows.length;
-  // The tree's count can drift from the list read; its last page ends "Show more".
   const exhausted = extra.isSuccess && !extra.hasNextPage;
   const showMore = () => {
     if (!more) setMore(true);
@@ -98,7 +99,6 @@ function ActionRow({ action, refOf }: Readonly<{ action: Action; refOf: Grouping
   const title = actionTarget(action);
   const whole = selection.hasGrouping(refOf);
   const caption = [
-    action.finding_class === 'advisory' ? 'Advisory' : null,
     action.summary
       ? firstSentence(action.summary)
       : (approachLabel(action.approach) ?? targetKindLabel(action.target_kind)),

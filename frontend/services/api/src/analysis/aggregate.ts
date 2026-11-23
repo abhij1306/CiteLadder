@@ -4,7 +4,7 @@ import { scalarText, compareText } from '../text-order.ts';
 import { groupBy } from '../lists.ts';
 import { competitorPosition } from './position.ts';
 import { citationDomain, type ScoringConfig } from './scoring.ts';
-import { costStatus, rateCard } from '../audits/costs.ts';
+import { costStatus, rateCard, type RouteIdentity } from '../audits/costs.ts';
 import { usageCount } from '../answer-engines/parse.ts';
 import { round } from '../numbers.ts';
 import type { FirstNamed } from '@citeladder/contracts/audits';
@@ -89,7 +89,6 @@ function citationAggregates(rows: AggregateExecution[]) {
       domains.set(domain, value);
     }
   }
-  // Stable insertion order resolves annotation-count ties, as Counter.most_common does.
   const top = [...domains].sort(([, a], [, b]) => b.annotations - a.annotations).slice(0, 25);
   const total = sum([...domains.values()].map((v) => v.annotations)),
     shown = sum(top.map(([, v]) => v.annotations));
@@ -117,36 +116,46 @@ function searchFeeEstimate(grounded: number, fee: number | null | undefined) {
   if (grounded === 0) return 0;
   return fee == null ? null : (grounded * fee) / policy.costs.microusd_per_usd;
 }
+const priceLines = {
+  uncached_input_tokens: 'uncached_input_microusd_per_million',
+  cached_input_tokens: 'cached_input_microusd_per_million',
+  output_tokens: 'output_microusd_per_million',
+} as const;
+const usageTotal = (rows: readonly AggregateExecution[], key: string) =>
+  sum(rows.map((row) => usageCount(row.usage[key]) ?? 0));
+const groundedCount = (rows: readonly AggregateExecution[]) =>
+  rows.filter((row) => row.score.search_used).length;
+const knownSum = (values: readonly (number | null)[]) =>
+  values.reduce<number | null>((total, n) => (total === null || n === null ? null : total + n), 0);
+function engineCost(rows: readonly AggregateExecution[], route: RouteIdentity | undefined) {
+  const pricing = route ? rateCard(route) : null;
+  return {
+    tokens: knownSum(
+      Object.entries(priceLines).map(([key, line]) =>
+        tokenLineEstimate(usageTotal(rows, key), pricing?.[line]),
+      ),
+    ),
+    search: searchFeeEstimate(groundedCount(rows), pricing?.search_fee_microusd),
+  };
+}
 function tokenCost(rows: AggregateExecution[], config: ScoringConfig) {
   const totals = Object.fromEntries(
-    ['uncached_input_tokens', 'cached_input_tokens', 'output_tokens', 'total_tokens'].map((key) => [
-      key,
-      sum(rows.map((row) => usageCount(row.usage[key]) ?? 0)),
-    ]),
-  ) as Record<string, number>;
+    [...Object.keys(priceLines), 'total_tokens'].map((key) => [key, usageTotal(rows, key)]),
+  );
   const tokens = {
     input_tokens: totals.uncached_input_tokens! + totals.cached_input_tokens!,
     ...totals,
   };
-  const route = policy.costs.catalogs[
-    policy.costs.pricing_version as keyof typeof policy.costs.catalogs
-  ]?.find(
-    (item) =>
-      item.identity.logical_engine === config.provider &&
-      item.identity.transport_model === config.model,
-  )?.identity;
-  const pricing = route ? rateCard(route) : null;
-  const lines = [
-    ['uncached_input_tokens', pricing?.uncached_input_microusd_per_million],
-    ['cached_input_tokens', pricing?.cached_input_microusd_per_million],
-    ['output_tokens', pricing?.output_microusd_per_million],
-  ] as const;
-  const estimates = lines.map(([key, r]) => tokenLineEstimate(totals[key]!, r));
-  const tokenEstimate = estimates.every((n) => n !== null)
-    ? sum(estimates as number[]) / (policy.costs.tokens_per_million * policy.costs.microusd_per_usd)
-    : null;
-  const grounded = rows.filter((row) => row.score.search_used).length;
-  const searchEstimate = searchFeeEstimate(grounded, pricing?.search_fee_microusd);
+  const engines = [...groupBy(rows, (row) => row.logical_engine)].map(([engine, group]) =>
+    engineCost(group, config.engineRoutes[engine]),
+  );
+  const tokenMicrousd = knownSum(engines.map((engine) => engine.tokens));
+  const tokenEstimate =
+    tokenMicrousd === null
+      ? null
+      : tokenMicrousd / (policy.costs.tokens_per_million * policy.costs.microusd_per_usd);
+  const searchEstimate = knownSum(engines.map((engine) => engine.search));
+  const grounded = groundedCount(rows);
   const reported = rows
     .map((row) => usageCount(row.usage.provider_cost_microusd))
     .filter((n): n is number => n !== null);

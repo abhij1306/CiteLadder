@@ -4,11 +4,6 @@ import { domainMatches, normalizeDomain } from '../domains.ts';
 import type { CitationEvidence } from './evidence.ts';
 import { compareText } from '../../text-order.ts';
 const p = policy.opportunity.source_patterns;
-/**
- * True when `google` is the registrable label: only a public suffix follows
- * it. Not a prefix
- * test, so `google.evil.com` is an ordinary publisher.
- */
 function isGoogleSearchSurface(domain: string): boolean {
   const [first, secondLevel, ...rest] = domain.split('.');
   if (first !== 'google' || secondLevel === undefined) return false;

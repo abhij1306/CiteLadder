@@ -3,6 +3,7 @@ import { surfaceSupports, type SearchSurface } from './locations.ts';
 import { policy, ConfigError } from '../config.ts';
 import { resolveSettingSpec, type SettingSource } from '../config/settings.ts';
 import { surfaceKindOf, type ProviderSettings } from '../providers/config.ts';
+import { enginesOfKind } from '../config/providers.ts';
 import {
   acceptedStatus,
   costMicrousd,
@@ -16,13 +17,20 @@ export type SearchEngine = SearchSurface;
 export type ScraperEngine = keyof typeof searchPolicy.scraper.products;
 export const isScraperEngine = (engine: string): engine is ScraperEngine =>
   surfaceKindOf(engine) === 'llm_scraper' && Object.hasOwn(searchPolicy.scraper.products, engine);
+export type SerpEngine = keyof typeof searchPolicy.serp.products;
+const isSerpEngine = (engine: string): engine is SerpEngine =>
+  surfaceKindOf(engine) === 'search_ai' && Object.hasOwn(searchPolicy.serp.products, engine);
+if (!enginesOfKind('search_ai').every(isSerpEngine))
+  throw new ConfigError('Every search AI route needs a DataForSEO SERP product');
+export function serpEngine(engine: string): SerpEngine {
+  if (!isSerpEngine(engine)) throw new ProviderError('invalid_surface');
+  return engine;
+}
 export type SearchRequest = {
   query: string;
   location_code: number;
   language_code: string;
   device: 'desktop' | 'mobile';
-  depth: number;
-  load_async_ai_overview: boolean;
   timeout_seconds: number;
   provider_submission_ref: string;
   request_settings: Record<string, unknown>;
@@ -82,15 +90,12 @@ function providerPath(
       : searchPolicy.constants.path_id_list;
   if (isScraperEngine(engine))
     return `/v3/ai_optimization/${searchPolicy.scraper.products[engine]}/llm_scraper/${operation}`;
-  return operation === 'task_post'
-    ? searchPolicy.constants.path_task_post
-    : searchPolicy.constants.path_task_get_advanced;
+  return `/v3/serp/google/${searchPolicy.serp.products[serpEngine(engine)]}/${operation}`;
 }
 export function searchPayload(engine: SearchEngine, input: SearchRequest) {
   const c = searchPolicy.constants;
   if (!input.provider_submission_ref || input.provider_submission_ref.length > c.tag_max_chars)
     throw new ProviderError('invalid_submission_ref');
-  // DataForSEO treats percent and plus characters as encoding syntax.
   const keyword = input.query.replaceAll('%', '%25').replaceAll('+', '%2B');
   const scraper = isScraperEngine(engine);
   const limit = scraper ? searchPolicy.scraper.keyword_max_chars : c.keyword_max_chars;
@@ -112,8 +117,7 @@ export function searchPayload(engine: SearchEngine, input: SearchRequest) {
         ...market,
         device: input.device,
         os: c.os_for_device[input.device],
-        depth: input.depth,
-        load_async_ai_overview: input.load_async_ai_overview,
+        ...searchPolicy.serp.request_settings[serpEngine(engine)],
       };
 }
 function requireAccepted(envelope: Envelope) {

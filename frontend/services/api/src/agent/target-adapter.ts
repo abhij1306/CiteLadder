@@ -102,8 +102,6 @@ export async function chooseOutputTarget(
     await setOutputAction(db, chat, output.id, proposal.action);
     return;
   }
-  // A declaration takes the project lock before it checks the revision's Action,
-  // so holding it here keeps one from anchoring this document while it moves.
   await acquireProjectLock(db, chat.project_id);
   if (await anchorsDeclaration(db, chat, output.id, proposal.action.id))
     throw new AgentError('output_conflict');

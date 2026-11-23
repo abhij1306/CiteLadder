@@ -240,8 +240,6 @@ describe('prefetchRoute', () => {
   it('files a cold issue catalog under the crawl the project read names, then asks that crawl for its summary, before the dashboard lands', async () => {
     const summary = {
       issue_count: 0,
-      defect_issue_type_count: 0,
-      advisory_issue_type_count: 0,
       occurrence_count: 0,
       severity_counts: {},
       dimension_counts: {},

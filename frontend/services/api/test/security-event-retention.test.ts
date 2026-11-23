@@ -5,10 +5,6 @@ import { testConfig, testDatabase } from './support.ts';
 
 const db = testDatabase(testConfig());
 const actor = randomUUID();
-// The clock is fixed years in the past so the cutoff never reaches rows other
-// test files write at the real time on the shared database. Only this file
-// writes rows that old, so assertions read this run's rows alone and tolerate
-// a crashed earlier run's leftovers being pruned alongside them.
 const now = new Date('2020-01-31T00:00:00Z');
 const days = (n: number) => new Date(now.getTime() - n * 86_400_000);
 

@@ -35,7 +35,6 @@ export type CrawlReadOptions = {
   status?: number | null;
   folder?: string | null;
   resource_class?: string | null;
-  /** Resolved once per read from the project's crawl state; never caller input. */
   reporting_timezone?: string;
 };
 export function verificationFilter(value?: string | null) {
@@ -121,7 +120,6 @@ function rollups(db: Database, scope: CrawlScope, options: CrawlReadOptions) {
 }
 function cursorParts(scope: CrawlScope, view: string, options: CrawlReadOptions) {
   const endpoint = [scope.workspaceId, scope.projectId, view].join(':');
-  // A keyset cursor marks a position, so a continuation may ask for a different page size.
   const { cursor, limit: _limit, ...filters } = options;
   try {
     return { endpoint, filters, keys: cursor ? decodeKeysetCursor(cursor, endpoint, filters) : [] };
@@ -311,8 +309,6 @@ export async function activityExport(
   input: CrawlReadOptions = {},
 ) {
   const options = await withReportingTimezone(db, scope, input);
-  // The count and every batch share one retention cutoff, so a slow download
-  // does not lose its oldest rows to a cutoff that moved while it streamed.
   const retainedSince = retentionCutoff();
   const { count } = await activityRequests(db, scope, options, retainedSince)
     .select(sql<number>`count(*)::integer`.as('count'))

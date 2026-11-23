@@ -2,6 +2,6 @@
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "citeladder",
   "version": "0.4.0",
-  "description": "Review AI visibility, cited sources and Site Health evidence from a self-hosted CiteLadder instance.",
+  "description": "Review AI visibility, cited sources and Site Health evidence from a self-hosted CiteLadder instance. Read-only: changes happen in the CiteLadder app.",
   "author": { "name": "CiteLadder contributors", "url": "https://github.com/abhij1306/CiteLadder" }
 }

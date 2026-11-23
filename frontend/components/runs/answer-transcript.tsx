@@ -110,7 +110,12 @@ function sourceLinks(sources: readonly AnswerSource[]): LinkChip {
     const source = safe ? byHref.get(safe) : undefined;
     if (!source) return null;
     const mark = (
-      <BrandMark name={source.domain || source.url} websiteUrl={source.href} placement="inline" />
+      <BrandMark
+        name={source.domain || source.url}
+        websiteUrl={source.href}
+        placement="inline"
+        entity="site"
+      />
     );
     return (
       <CitationChip

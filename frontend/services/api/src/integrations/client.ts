@@ -65,7 +65,6 @@ const defaultIO: IntegrationIO = {
     }),
 };
 
-/** Fixed provider HTTPS hosts only; redirects never carry credentials elsewhere. */
 function approvedIntegrationUrl(value: string): URL {
   const url = new URL(value);
   if (
@@ -83,8 +82,6 @@ function approvedIntegrationUrl(value: string): URL {
 function statusError(status: number, retryAfter: string | null): IntegrationError {
   let code = codes.ERROR_PROVIDER_API;
   if (status === 429) code = codes.ERROR_RATE_LIMITED;
-  // A 401 is the credential; a 403 is this property's permission, which must
-  // not demote a grant that still serves the workspace's other properties.
   else if (status === 401) code = codes.ERROR_GRANT_AUTH_FAILED;
   else if (status === 403) code = codes.ERROR_PROPERTY_NOT_ACCESSIBLE;
   return new IntegrationError(
@@ -153,9 +150,6 @@ export class IntegrationClient {
         });
       return response;
     } catch (error) {
-      // Never surface provider bodies, URLs, headers or request exceptions
-      // containing credentials; the error's class alone tells a timeout from
-      // a refused redirect or a network failure.
       logger.warning('integration_provider_request_failed', {
         host: approved.hostname,
         path: approved.pathname,
@@ -201,9 +195,6 @@ export class IntegrationClient {
         client_secret: credential.secret,
       }),
     });
-    // RFC 6749 answers a revoked or expired refresh token with 400
-    // `invalid_grant`: the credential is gone, so the user must reconnect. Any
-    // other refusal keeps its status classification below.
     if (
       form.grant_type === 'refresh_token' &&
       response.status === 400 &&

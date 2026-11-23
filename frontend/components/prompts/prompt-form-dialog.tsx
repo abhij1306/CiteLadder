@@ -69,7 +69,6 @@ export function PromptFormDialog({
   error?: MutationNoticeData;
 }>) {
   const isEdit = Boolean(prompt);
-  // Stable across renders: `values` re-syncs the form whenever it changes.
   const initialValues = useMemo(
     () => (prompt ? promptToFormValues(prompt) : emptyPromptForm(defaultTopicId)),
     [prompt, defaultTopicId],
@@ -189,8 +188,6 @@ export function PromptFormDialog({
                   />
                 )}
               </Field>
-              {/* Tags are not part of a run's frozen prompt panel, so a
-                correction keeps the prompt's comparison series. */}
               <Field label="Persona" error={errors.persona?.message} className="desktop:col-span-2">
                 {(props) => (
                   <Input {...props} {...register('persona')} placeholder="Marathon runners" />

@@ -5,13 +5,63 @@ import { cn } from '@/lib/utils';
 
 export type StatusTone = 'neutral' | 'positive' | 'negative' | 'warning' | 'info' | 'you';
 
-const TONE_DOT: Record<StatusTone, string> = {
-  neutral: 'bg-ink-2',
-  positive: 'bg-positive',
-  negative: 'bg-negative',
-  warning: 'bg-warning',
-  info: 'bg-info',
-  you: 'bg-accent',
+const INNER_STROKE = {
+  fill: 'none',
+  strokeWidth: 1.5,
+  strokeLinecap: 'round',
+  strokeLinejoin: 'round',
+} as const;
+
+const TONE_INK: Record<StatusTone, string> = {
+  neutral: 'text-ink-2',
+  positive: 'text-positive',
+  negative: 'text-negative',
+  warning: 'text-warning',
+  info: 'text-info',
+  you: 'text-accent',
+};
+
+const TONE_FILL: Record<StatusTone, string> = {
+  neutral: 'bg-raised-2',
+  positive: 'bg-positive-wash',
+  negative: 'bg-negative-wash',
+  warning: 'bg-warning-wash',
+  info: 'bg-info-wash',
+  you: 'bg-accent-wash',
+};
+
+const TONE_SHAPE: Record<StatusTone, ReactNode> = {
+  neutral: <circle cx={6} cy={6} r={4.25} fill="none" stroke="currentColor" strokeWidth={1.5} />,
+  positive: (
+    <>
+      <circle cx={6} cy={6} r={6} fill="currentColor" />
+      <path d="M3.4 6.2 5.2 8l3.4-3.8" className="stroke-panel" {...INNER_STROKE} />
+    </>
+  ),
+  negative: (
+    <>
+      <circle cx={6} cy={6} r={6} fill="currentColor" />
+      <path d="m4 4 4 4m0-4-4 4" className="stroke-panel" {...INNER_STROKE} />
+    </>
+  ),
+  warning: (
+    <>
+      <path
+        d="M6 .6 11.7 10.9H.3z"
+        fill="currentColor"
+        stroke="currentColor"
+        strokeLinejoin="round"
+      />
+      <path d="M6 4.2v3m0 1.9v.1" className="stroke-panel" {...INNER_STROKE} />
+    </>
+  ),
+  info: (
+    <>
+      <circle cx={6} cy={6} r={6} fill="currentColor" />
+      <path d="M6 5.6v3.2m0-5.5v.1" className="stroke-panel" {...INNER_STROKE} />
+    </>
+  ),
+  you: <path d="M6 .5 11.5 6 6 11.5.5 6z" fill="currentColor" />,
 };
 
 type Glyph = 'dot' | 'live' | Readonly<{ bars: 1 | 2 | 3 }>;
@@ -51,18 +101,16 @@ const runStatusMarks = {
   cancelled: mark('warning'),
 } as const satisfies Record<string, Mark>;
 
-const severityMarks = {
-  critical: mark('negative'),
-  high: mark('negative'),
-  medium: mark('warning'),
-  low: mark('neutral'),
-  info: mark('neutral'),
-} as const satisfies Record<string, Mark>;
-
 const priorityMarks = {
   high: mark('negative', { bars: 3 }),
-  medium: mark('neutral', { bars: 2 }),
+  medium: mark('warning', { bars: 2 }),
   low: mark('neutral', { bars: 1 }),
+} as const satisfies Record<string, Mark>;
+
+const severityMarks = {
+  critical: priorityMarks.high,
+  ...priorityMarks,
+  info: mark('neutral'),
 } as const satisfies Record<string, Mark>;
 
 export type StatusValue = keyof typeof statusMarks;
@@ -112,7 +160,11 @@ function markOf(props: StatusMarkProps): Mark {
 function MarkGlyph({ tone, glyph }: Mark) {
   if (glyph === 'live') return <Spinner />;
   if (glyph === 'dot')
-    return <span aria-hidden className={cn('size-1.5 shrink-0 rounded-full', TONE_DOT[tone])} />;
+    return (
+      <svg aria-hidden viewBox="0 0 12 12" className={cn('size-3 shrink-0', TONE_INK[tone])}>
+        {TONE_SHAPE[tone]}
+      </svg>
+    );
   return <PriorityBars filled={glyph.bars} tone={tone} />;
 }
 
@@ -129,7 +181,7 @@ function PriorityBars({ filled, tone }: Readonly<{ filled: 1 | 2 | 3; tone: Stat
       width={16}
       height={16}
       viewBox="0 0 16 16"
-      className={cn('shrink-0', tone === 'negative' && 'text-negative')}
+      className={cn('shrink-0', TONE_INK[tone])}
     >
       {PRIORITY_BARS.map((bar, index) => (
         <rect
@@ -161,8 +213,8 @@ export function StatusMark(props: Readonly<StatusMarkProps>) {
       {...attributes}
       data-status-tone={statusMark.tone}
       className={cn(
-        'type-caption text-ink inline-flex h-5 shrink-0 items-center gap-1.5 align-middle font-medium whitespace-nowrap',
-        typeof statusMark.glyph === 'object' && 'border-rule rounded-full border px-2',
+        'type-caption text-ink inline-flex h-5 shrink-0 items-center gap-1 rounded-full ps-1.5 pe-2 align-middle font-medium whitespace-nowrap',
+        TONE_FILL[statusMark.tone],
         className,
       )}
     >

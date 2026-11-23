@@ -1,6 +1,7 @@
 import type { Database } from '../db/database.ts';
 import { IntegrationError } from './client.ts';
 import { integrationPolicy } from './config.ts';
+import { isRecord } from '../db/json.ts';
 
 export type SyncIdentity = {
   id: string;
@@ -11,7 +12,6 @@ export type SyncIdentity = {
   property_ref: string;
 };
 
-/** Called inside the run transaction: connection before mapping matches mutation lock order. */
 export async function activeSyncTarget(db: Database, run: SyncIdentity) {
   const connection = await db
     .selectFrom('integration_connections')
@@ -40,10 +40,7 @@ export async function activeSyncTarget(db: Database, run: SyncIdentity) {
 }
 
 export function selectedItemDataset(capabilities: unknown): string {
-  const state =
-    capabilities !== null && typeof capabilities === 'object'
-      ? (capabilities as Record<string, unknown>)[integrationPolicy.ga4_capability_key]
-      : null;
+  const state = isRecord(capabilities) ? capabilities[integrationPolicy.ga4_capability_key] : null;
   return state !== null &&
     typeof state === 'object' &&
     'version' in state &&
@@ -55,8 +52,7 @@ export function selectedItemDataset(capabilities: unknown): string {
 }
 
 export function artifactOffset(snapshot: unknown): number {
-  if (snapshot === null || typeof snapshot !== 'object') return -1;
-  const fields = snapshot as Record<string, unknown>;
-  const value = fields.startRow ?? fields.page_offset;
+  if (!isRecord(snapshot)) return -1;
+  const value = snapshot.startRow ?? snapshot.page_offset;
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : -1;
 }

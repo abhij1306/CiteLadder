@@ -1,6 +1,5 @@
 import { useState, type ReactNode } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { useSearchParams } from 'react-router-dom';
 import type { InternalLink, InternalLinkAnalysis } from '@citeladder/contracts/site-health';
 
 import { RESERVED_CONTROLS } from '@/components/layout/page-shell';
@@ -14,6 +13,7 @@ import { Download } from '@/lib/icons';
 import { ACTION_STATUS_LABEL } from '@/lib/agent/vocabulary';
 import { httpErrorStatus } from '@/lib/api/errors';
 import { internalLinksMutations, internalLinksQueries } from '@/lib/api/site-health-internal-links';
+import { useSetUrlParams, useUrlParam, type UrlParamValues } from '@/lib/navigation/url-params';
 import type { UrlHistory } from '@/lib/navigation/url-state';
 import { useDisplayTimeZone } from '@/lib/display-timezone';
 import { formatCount, formatDisplayTimestamp } from '@/lib/format';
@@ -22,30 +22,37 @@ import { INTERNAL_LINK_STATES, pollInternalLinks } from '@/lib/site-health/statu
 import { useWorkspaceCapability } from '@/lib/project/project-context';
 
 type Scope = Readonly<{ projectId: string; workspaceId: string }>;
-type ParamChange = (key: string, value: string, history?: UrlHistory) => void;
+type LinkParam = 'analysis' | 'link' | 'links_q' | 'links_status';
+type LinkParams = Readonly<Record<LinkParam, string | null>>;
+type ParamChange = (key: LinkParam, value: string, history?: UrlHistory) => void;
+const CLEARED_BY: Readonly<Record<LinkParam, UrlParamValues>> = {
+  analysis: { link: null, links_page: null },
+  link: {},
+  links_q: { links_page: null },
+  links_status: { links_page: null },
+};
 export const isRunning = (state: InternalLinkAnalysis['state']) =>
   INTERNAL_LINK_STATES[state].active;
 
 export function useLinkParams() {
-  const [params, setParams] = useSearchParams();
-  const update: ParamChange = (key, value, history = 'push') =>
-    setParams(
-      (previous) => {
-        const next = new URLSearchParams(previous);
-        if (value) next.set(key, value);
-        else next.delete(key);
-        if (key === 'analysis') next.delete('link');
-        if (key === 'links_q' || key === 'links_status') next.delete('links_page');
-        return next;
-      },
-      { replace: history === 'replace' },
-    );
+  const setUrlParams = useSetUrlParams();
+  const params: LinkParams = {
+    analysis: useUrlParam('analysis'),
+    link: useUrlParam('link'),
+    links_q: useUrlParam('links_q'),
+    links_status: useUrlParam('links_status'),
+  };
+  const update: ParamChange = (key, value, history = 'push') => {
+    const changed: Partial<Record<LinkParam, string | null>> = {};
+    changed[key] = value || null;
+    setUrlParams({ ...changed, ...CLEARED_BY[key] }, history);
+  };
   return { params, update };
 }
 
 function useInternalLinks(scope: Scope, enabled: boolean) {
   const { params, update } = useLinkParams();
-  const analysisId = params.get('analysis') || undefined;
+  const analysisId = params.analysis || undefined;
   const query = useQuery({
     ...internalLinksQueries.analysis(scope, analysisId),
     enabled,
@@ -107,8 +114,8 @@ export function useInternalLinksBands({
   const analysis = read.data?.analysis;
   const links = filterLinks(
     analysis?.recommendations ?? [],
-    params.get('links_q') ?? '',
-    params.get('links_status') ?? '',
+    params.links_q ?? '',
+    params.links_status ?? '',
   );
   return {
     read,
@@ -125,7 +132,7 @@ function linksControls({
   timeZone,
 }: Readonly<{
   read: LinksRead;
-  params: URLSearchParams;
+  params: LinkParams;
   update: ParamChange;
   links: InternalLink[];
   timeZone: string;
@@ -137,7 +144,7 @@ function linksControls({
   return {
     search: (
       <SearchField
-        value={params.get('links_q') ?? ''}
+        value={params.links_q ?? ''}
         onValueChange={(value) => update('links_q', value, 'replace')}
         placeholder="Search pages and anchors"
         aria-label="Search pages and anchors"
@@ -147,7 +154,7 @@ function linksControls({
       choiceFilter({
         id: 'status',
         label: 'Action status',
-        value: params.get('links_status') ?? '',
+        value: params.links_status ?? '',
         defaultValue: '',
         groups: [
           {

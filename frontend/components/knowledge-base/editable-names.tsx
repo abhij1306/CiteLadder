@@ -96,7 +96,7 @@ export function EditableNameRow({
           {verb}
         </Button>
         <Button
-          variant="quiet"
+          variant="danger"
           disabled={pending}
           aria-label={`Delete ${name}`}
           onClick={() => void onDelete().catch(() => undefined)}

@@ -96,7 +96,6 @@ function RouteRail({
   const current = rail.items.find((item) => item.value === value) ?? rail.items[0];
   return (
     <RailColumns
-      wide={current !== undefined && (rail.wide ?? []).includes(current.value)}
       rail={<HeldTabRail labels={rail.items.map((item) => item.label)} selected={current?.label} />}
     >
       {children}

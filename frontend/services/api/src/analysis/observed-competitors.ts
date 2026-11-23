@@ -19,11 +19,6 @@ export function suggestionRows(db: Database, scope: ProjectScope) {
     .where('project_id', '=', scope.projectId);
 }
 
-/**
- * Serializes the project's suggestion writes with its decisions, so a write
- * never misses a rejection committed while it ran. A decision takes it after
- * the project lock and before any candidate row.
- */
 export function lockSuggestions(db: Database, scope: ProjectScope) {
   return subjectXactLock(db, `competitor-suggestions:${scope.projectId}`);
 }

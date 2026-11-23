@@ -5,9 +5,11 @@ import { percentText } from '@/lib/format';
 
 export type ChartTone = 1 | 2 | 3 | 4 | 5;
 
+const LEADING_TONES: readonly ChartTone[] = [1, 2, 3];
+
 export function chartTone(item: Readonly<{ other?: boolean }>, index: number): ChartTone {
   if (item.other) return 4;
-  return index >= 3 ? 5 : ((index + 1) as ChartTone);
+  return LEADING_TONES[index] ?? 5;
 }
 
 const CHART_SERIES = {
@@ -92,10 +94,6 @@ export function useChartWidth<T extends HTMLElement>(fallback = 640) {
 
 export type ChartHeight = 'sm' | 'md' | 'lg';
 
-/**
- * The roles in pixels, for a chart that draws its plot to a measured box. The
- * same values as the `--chart-height-*` tokens in `apps/app/src/globals.css`.
- */
 export const CHART_HEIGHT_PX = { sm: 160, md: 240, lg: 320 } as const satisfies Record<
   ChartHeight,
   number

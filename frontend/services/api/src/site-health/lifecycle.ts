@@ -23,7 +23,6 @@ import { drainedFinalizeTask, enqueueFinalize, failFinalization } from './termin
 const logger = getLogger('app.workers.site_health.lifecycle');
 const TERMINAL_TASK = policy.task_queue.terminal;
 const DISCOVERY_KINDS = ['discover', 'site_setup'];
-// Literals, not a bound array: the planner then proves ix_site_crawl_tasks_open's predicate.
 const TERMINAL_STATUSES = sql.join(TERMINAL_TASK.map((status) => sql.lit(status)));
 const OVERDUE = policy.site_health.page_analysis.acquisition.error_codes.crawl_overdue;
 
@@ -54,11 +53,6 @@ async function reconcileLockedCrawl(db: Database, crawl: Crawl, options: Reconci
   if (rescore) await refreshLiveScoreSummary(db, crawl);
 }
 
-/**
- * A reconcile's crawl-wide reads, made from an unlocked copy of the row. A
- * cancelled crawl recounts under the lock: its counter writes move no state
- * column, so an earlier unlocked count could overwrite a later one.
- */
 type Assessed =
   | { kind: 'settled' }
   | { kind: 'recount' }
@@ -90,7 +84,6 @@ async function applyAssessed(db: Database, assessed: Extract<Assessed, { kind: '
   if (score) await writeScoreSummary(db, crawl, score);
 }
 
-/** NO KEY UPDATE: FOR UPDATE would block the FK checks of every child insert in the crawl. */
 function lockCrawl(db: Database, workspaceId: string, crawlId: string) {
   return db
     .selectFrom('site_crawls')
@@ -223,7 +216,7 @@ async function eachCrawl<T extends { id: string }>(
   let acted = 0;
   for (const crawl of crawls)
     try {
-      if ((await work(crawl)) !== false) acted++; // NOSONAR -- One crawl lock at a time: a batch never holds several crawl rows.
+      if ((await work(crawl)) !== false) acted++; // NOSONAR
     } catch (error) {
       logger.exception(failure, error, { crawl_id: crawl.id });
     }
@@ -263,7 +256,6 @@ export async function reconcileStalled(db: Database, settings: SiteWorkerSetting
 function overdueCrawls(db: Database, settings: SiteWorkerSettings['lifecycle'], crawlId?: string) {
   const at = (seconds: number) => new Date(Date.now() - seconds * 1000);
   const started = sql<Date>`coalesce(c.started_at, c.created_at)`;
-  // A running finalize settles once after many batch commits: its heartbeat is progress.
   const progressed = sql<Date>`greatest(${started}, (select max(greatest(t.completed_at,
       case when t.task_kind = 'finalize' then t.heartbeat_at end))
     from site_crawl_tasks t where t.workspace_id = c.workspace_id and t.crawl_id = c.id))`;

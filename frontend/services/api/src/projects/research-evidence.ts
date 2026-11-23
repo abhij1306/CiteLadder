@@ -2,7 +2,6 @@ import { createHash } from 'node:crypto';
 
 import { z } from 'zod';
 
-import { normalizeDomain } from '../analysis/domains.ts';
 import { policy } from '../config.ts';
 import { extractPage, offeringLinks, type PageEvidence } from './html-evidence.ts';
 import { publicUrl, type WebsiteFetcher } from '../safe-fetch.ts';
@@ -14,23 +13,15 @@ import { assertMetered } from '../models/meter-scope.ts';
 import { getLogger } from '../logging.ts';
 
 const logger = getLogger('app.projects.research');
-export type ResearchEvidence = {
+export type ResearchPage = { url: string; title: string; text: string };
+type SearchResult = ResearchPage & {
   source_id: string;
   processing_version: string;
-  parent_source_id: string | null;
-  evidence_ref: string;
-  source_url: string;
-  title: string;
-  text: string;
-  source_kind: 'first_party' | 'external_search' | 'external_fetch';
   provider: string;
-  query_ref: string;
   published_at: string;
   acquired_at: string;
-  live: boolean | null;
-  supports: string[];
 };
-export type ResearchSettings = ReturnType<typeof discoverySettings>;
+type ResearchSettings = ReturnType<typeof discoverySettings>;
 export type ResearchTransport = typeof fetch;
 export class ResearchBudget {
   used = 0;
@@ -44,10 +35,10 @@ export class ResearchBudget {
     return admitted;
   }
 }
-export function boundedEvidence(items: readonly ResearchEvidence[], maxChars: number) {
+export function boundedPages(items: readonly ResearchPage[], maxChars: number): ResearchPage[] {
   const seen = new Set<string>();
   const unique = items.filter((item) => {
-    const url = publicUrl(item.source_url).href;
+    const url = publicUrl(item.url).href;
     if (seen.has(url)) return false;
     seen.add(url);
     return true;
@@ -57,35 +48,8 @@ export function boundedEvidence(items: readonly ResearchEvidence[], maxChars: nu
     if (remaining <= 0) return [];
     const text = item.text.slice(0, Math.max(1, Math.floor(remaining / (unique.length - index))));
     remaining -= text.length;
-    return [{ ...item, text }];
+    return [{ url: item.url, title: item.title, text }];
   });
-}
-function evidence(
-  ref: string,
-  url: string,
-  title: string,
-  text: string,
-  kind: ResearchEvidence['source_kind'],
-): ResearchEvidence {
-  return {
-    source_id: ref,
-    processing_version:
-      kind === 'first_party'
-        ? policy.brand_evidence.version
-        : policy.discovery.constants.keenable_research_version,
-    parent_source_id: null,
-    evidence_ref: ref,
-    source_url: url,
-    title,
-    text,
-    source_kind: kind,
-    provider: kind === 'first_party' ? '' : 'keenable',
-    query_ref: '',
-    published_at: '',
-    acquired_at: new Date().toISOString(),
-    live: kind === 'external_fetch' ? false : null,
-    supports: ['profile'],
-  };
 }
 
 export async function collectFirstParty(site: ResolvedSite, fetcher: WebsiteFetcher) {
@@ -116,19 +80,13 @@ export async function collectFirstParty(site: ResolvedSite, fetcher: WebsiteFetc
   for (const outcome of outcomes)
     if (outcome.status === 'fulfilled' && outcome.value) pages.push(outcome.value);
   const items = pages.map((page) => ({
-    ...evidence(
-      `fp-${page.source_id}`,
-      page.url,
-      page.title,
-      [page.title, page.description, page.text].filter(Boolean).join('\n'),
-      'first_party',
-    ),
-    source_id: page.source_id,
-    processing_version: page.processing_version,
+    url: page.url,
+    title: page.title,
+    text: [page.title, page.description, page.text].filter(Boolean).join('\n'),
   }));
   return {
     pages,
-    items: boundedEvidence(items, cfg.max_total_chars),
+    items: boundedPages(items, cfg.max_total_chars),
     offerings: offeringLinks(pages),
   };
 }
@@ -160,7 +118,7 @@ export function createResearchClient(
     base.hash
   )
     throw new Error('Keenable base URL must use canonical HTTPS');
-  async function request(path: string, body?: Record<string, unknown>) {
+  async function request(path: string, body: Record<string, unknown>) {
     if (!settings.keenable_api_key || !budget.take(1))
       throw new Error('external_research_unavailable');
     const response = await meter.meter.call(
@@ -168,32 +126,25 @@ export function createResearchClient(
       { provider: 'keenable', model: 'keenable' },
       async () => {
         assertMetered('keenable');
-        return { value: await send(path, body), usage: null };
+        const value = await transport(new URL(path, base), {
+          method: 'POST',
+          headers: {
+            'X-API-Key': settings.keenable_api_key,
+            accept: 'application/json',
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify(body),
+          redirect: 'error',
+          signal: AbortSignal.timeout(settings.keenable_request_timeout_seconds * 1000),
+        });
+        if (!value.ok) throw new Error('external_research_failed');
+        return { value, usage: null };
       },
     );
-    if (!response.ok) throw new Error('external_research_failed');
     return z.record(z.string(), z.unknown()).parse(await response.json());
   }
-  function send(path: string, body?: Record<string, unknown>) {
-    return transport(new URL(path, base), {
-      method: body ? 'POST' : 'GET',
-      headers: {
-        'X-API-Key': settings.keenable_api_key,
-        accept: 'application/json',
-        ...(body ? { 'content-type': 'application/json' } : {}),
-      },
-      ...(body ? { body: JSON.stringify(body) } : {}),
-      redirect: 'error',
-      signal: AbortSignal.timeout(settings.keenable_request_timeout_seconds * 1000),
-    });
-  }
   return {
-    async search(
-      query: string,
-      site: string | null,
-      maximum: number,
-      prefix: string,
-    ): Promise<ResearchEvidence[]> {
+    async search(query: string, site: string | null, maximum: number): Promise<SearchResult[]> {
       const body = await request('/v1/search', {
         query,
         ...(site ? { site } : {}),
@@ -208,9 +159,6 @@ export function createResearchClient(
         const parsed = searchResult.safeParse(raw);
         if (!parsed.success) return [];
         const item = parsed.data;
-        const sourceId =
-          item.source_id ??
-          String(item.id ?? createHash('sha256').update(JSON.stringify(raw)).digest('hex'));
         try {
           publicUrl(item.url);
         } catch {
@@ -218,70 +166,24 @@ export function createResearchClient(
         }
         return [
           {
-            ...evidence(
-              `keenable-${sourceId}`,
-              item.url,
-              item.title,
-              (item.snippet || item.description).slice(0, settings.keenable_snippet_max_chars),
-              'external_search',
-            ),
+            url: item.url,
+            title: item.title,
+            text: (item.snippet || item.description).slice(0, settings.keenable_snippet_max_chars),
+            source_id:
+              item.source_id ??
+              String(item.id ?? createHash('sha256').update(JSON.stringify(raw)).digest('hex')),
+            processing_version: policy.discovery.constants.keenable_research_version,
+            provider: 'keenable',
             published_at: item.published_at,
             acquired_at: item.acquired_at,
-            source_id: sourceId,
-            query_ref: prefix,
           },
         ];
       });
     },
-    async page(item: ResearchEvidence, live: boolean) {
-      const params = new URLSearchParams({
-        url: item.source_url,
-        live: String(live),
-        max_chars: String(settings.keenable_fetch_max_chars),
-      });
-      const raw = await request(`/v1/fetch?${params}`);
-      const body = z.record(z.string(), z.unknown()).parse(raw.data ?? raw);
-      const text = z.string().parse(body.markdown ?? body.content ?? body.text ?? '');
-      const sourceUrl = z.string().parse(body.url ?? item.source_url);
-      publicUrl(sourceUrl);
-      const sourceId = z
-        .union([z.string(), z.number()])
-        .transform(String)
-        .parse(
-          body.source_id ??
-            body.id ??
-            createHash('sha256').update(JSON.stringify(body)).digest('hex'),
-        );
-      return {
-        ...item,
-        source_url: sourceUrl,
-        title: z.string().parse(body.title ?? item.title),
-        published_at: z.string().parse(body.published_at ?? item.published_at),
-        acquired_at: z.string().parse(body.acquired_at ?? item.acquired_at),
-        source_id: sourceId,
-        parent_source_id: item.source_id,
-        evidence_ref: `keenable-fetch-${sourceId}`,
-        text: text.slice(0, settings.keenable_fetch_max_chars),
-        source_kind: 'external_fetch' as const,
-        live,
-      };
-    },
   };
 }
 export type ResearchClient = ReturnType<typeof createResearchClient>;
-function logRejected(event: string, outcomes: readonly PromiseSettledResult<unknown>[]) {
-  const failures = outcomes.flatMap((outcome) =>
-    outcome.status === 'rejected' ? [outcome.reason] : [],
-  );
-  if (!failures.length) return;
-  logger.warning(event, {
-    failed: failures.length,
-    attempted: outcomes.length,
-    error_classes: [
-      ...new Set(failures.map((error) => (error instanceof Error ? error.name : typeof error))),
-    ],
-  });
-}
+
 export async function collectIdentityResearch(
   client: ResearchClient,
   settings: ResearchSettings,
@@ -299,33 +201,26 @@ export async function collectIdentityResearch(
   const outcomes = await Promise.allSettled(
     queries
       .slice(0, settings.identity_search_count)
-      .map(([query, site], index) =>
-        client.search(query, site, settings.identity_search_max_results, `ki-search-${index + 1}`),
-      ),
+      .map(([query, site]) => client.search(query, site, settings.identity_search_max_results)),
   );
-  logRejected('brand_discovery.identity_search_failed', outcomes);
-  const searches = outcomes.flatMap((outcome) =>
+  const failures = outcomes.flatMap((outcome) =>
+    outcome.status === 'rejected' ? [outcome.reason] : [],
+  );
+  if (failures.length)
+    logger.warning('brand_discovery.identity_search_failed', {
+      failed: failures.length,
+      attempted: outcomes.length,
+      error_classes: [
+        ...new Set(failures.map((error) => (error instanceof Error ? error.name : typeof error))),
+      ],
+    });
+  const results = outcomes.flatMap((outcome) =>
     outcome.status === 'fulfilled' ? outcome.value : [],
   );
-  if (!searches.length)
-    return {
-      state: outcomes.every((outcome) => outcome.status === 'rejected') ? 'failed' : 'no_results',
-      items: [],
-    };
-  const pages: ResearchEvidence[] = [];
-  const selected = searches.slice(0, settings.identity_fetch_max_pages);
-  for (let offset = 0; offset < selected.length; offset += settings.keenable_concurrency) {
-    const fetched =
-      await /* NOSONAR -- Batches cap provider requests at the configured concurrency. */ Promise.allSettled(
-        selected
-          .slice(offset, offset + settings.keenable_concurrency)
-          .map((item) => client.page(item, normalizeDomain(item.source_url) === domain)),
-      );
-    logRejected('brand_discovery.identity_fetch_failed', fetched);
-    for (const result of fetched) if (result.status === 'fulfilled') pages.push(result.value);
-  }
+  if (!results.length)
+    return { state: failures.length === outcomes.length ? 'failed' : 'no_results', items: [] };
   return {
     state: 'ready',
-    items: boundedEvidence([...pages, ...searches], settings.identity_external_evidence_max_chars),
+    items: boundedPages(results, settings.identity_external_evidence_max_chars),
   };
 }

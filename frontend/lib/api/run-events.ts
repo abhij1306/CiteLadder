@@ -29,7 +29,14 @@ export function invalidationsFor(event: AuditEvent): RunInvalidation[] {
     case 'task.retry':
     case 'task.capacity_wait':
       return ['audit', 'executions'];
-    default:
+    case 'audit.created':
+    case 'audit.queued':
+    case 'audit.running':
+    case 'audit.status':
       return ['audit'];
+    default: {
+      const unhandled: never = event;
+      return unhandled;
+    }
   }
 }

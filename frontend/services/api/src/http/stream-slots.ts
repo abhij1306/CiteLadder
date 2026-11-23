@@ -84,8 +84,6 @@ export function slottedEventStream(
   }
   if (signal.aborted) release();
   else signal.addEventListener('abort', release, { once: true });
-  // Ended access closes the stream even if the inner one never finishes:
-  // cancelling discards its queue and ends a pending read as done.
   accessEnded.signal.addEventListener(
     'abort',
     () => {

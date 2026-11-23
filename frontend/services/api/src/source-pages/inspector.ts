@@ -118,7 +118,7 @@ export function sourcePageInspector(fetcher?: WebsiteFetcher): Executor {
       let result: FetchedPage;
       const startedAt = performance.now();
       try {
-        result = await acquirer.fetch(token, options); // NOSONAR -- Each redirect fetch spends budget first and stops when it is exhausted.
+        result = await acquirer.fetch(token, options); // NOSONAR
       } catch (error) {
         logger.info('source_page_redirect_fetch_failed', {
           task_id: task.id,
@@ -145,8 +145,6 @@ export function sourcePageInspector(fetcher?: WebsiteFetcher): Executor {
       result: FetchedPage | FetchOutcome,
     ) => {
       await checkCancelled('source-page publication');
-      // One page's failure must not discard its siblings' readings; its claim
-      // lease lapses and a later inspection retries it.
       try {
         const fetched = 'body' in result ? fetchedOutcome(url, result) : result;
         const extracted =

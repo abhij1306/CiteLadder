@@ -1,5 +1,4 @@
 export const AGENT_STREAM_REPAINT_MS = { floor: 50, cap: 250 } as const;
-/** Live-turn listeners hear once a frame; a hidden tab pauses frames, so this timeout backs them up. */
 export const AGENT_STREAM_NOTIFY_FALLBACK_MS = 100;
 
 export const AGENT_CHAT_PAGE_SIZE = 30;
@@ -10,11 +9,6 @@ export const AGENT_RUN_POLL_STEPS: readonly { untilMs: number; everyMs: number }
 export const AGENT_RUN_POLL_MAX_MS = 10_000;
 export const AGENT_PAGE_FETCH_POLL_MS = 2_000;
 export const AGENT_CHAT_LIST_POLL_MS = 5_000;
-/**
- * A turn's stream that delivers no frame, keep-alives included, for this long
- * is closed and the persisted read takes over: twice the server's 15-second
- * `stream_heartbeat_seconds`.
- */
 export const AGENT_STREAM_IDLE_MS = 30_000;
 export const AGENT_RUN_RETRY = { defaultDelayMs: 15_000, maxAttempts: 8 } as const;
 export const AGENT_FOLLOW_LATEST_GAP_PX = 96;

@@ -35,7 +35,7 @@ import {
 import { NamedBrandMarks } from '@/components/visibility/named-brand-marks';
 import { ChevronRight } from '@/lib/icons';
 import { useEngineCatalog } from '@/lib/providers/engines';
-import { standingLabel } from '@/lib/visibility/source-pages';
+import { standingLabel } from '@citeladder/contracts/page-labels';
 import { pageFormatBasis } from '@/lib/visibility/vocabulary';
 import type { useVisibilityFilters } from '@/lib/visibility/use-visibility-dashboard';
 

@@ -14,6 +14,8 @@ function summary(overrides: Partial<SiteScoreSummary> = {}): SiteScoreSummary {
     aeo_readiness_score: 62,
     aeo_measurement_coverage: 0.8,
     aeo_measurement_state: 'measured',
+    web_fundamentals_checks: null,
+    aeo_readiness_checks: null,
     search_eligibility: 'eligible',
     selected_count: 10,
     analyzed_count: 4,
@@ -68,6 +70,8 @@ describe('PageKindScores', () => {
                 aeo_readiness_score: 62,
                 aeo_measurement_coverage: 0.8,
                 aeo_measurement_state: 'measured',
+                web_fundamentals_checks: null,
+                aeo_readiness_checks: null,
                 aeo_measurement_reason: '',
               },
               homepage: {
@@ -78,6 +82,8 @@ describe('PageKindScores', () => {
                 aeo_readiness_score: 70,
                 aeo_measurement_coverage: 0.8,
                 aeo_measurement_state: 'measured',
+                web_fundamentals_checks: null,
+                aeo_readiness_checks: null,
                 aeo_measurement_reason: '',
               },
             },
@@ -113,6 +119,8 @@ describe('PageKindScores', () => {
                 aeo_readiness_score: null,
                 aeo_measurement_coverage: null,
                 aeo_measurement_state: 'not_measured',
+                web_fundamentals_checks: null,
+                aeo_readiness_checks: null,
                 aeo_measurement_reason: '',
               },
             },
@@ -125,7 +133,7 @@ describe('PageKindScores', () => {
     expect(screen.getAllByText('Not measured').length).toBeGreaterThan(0);
   });
 
-  it('shows a non-null limited score with subordinate coverage and preserves excluded state', () => {
+  it('shows a partly checked score with how many checks ran and preserves excluded state', () => {
     render(
       <PageKindScores
         crawl={null}
@@ -140,6 +148,8 @@ describe('PageKindScores', () => {
                 aeo_readiness_score: null,
                 aeo_measurement_coverage: null,
                 aeo_measurement_state: 'excluded',
+                web_fundamentals_checks: { run: 3, total: 6 },
+                aeo_readiness_checks: null,
                 aeo_measurement_reason: '',
               },
             },
@@ -149,7 +159,7 @@ describe('PageKindScores', () => {
     );
 
     expect(screen.getByText('46')).toBeInTheDocument();
-    expect(screen.getByText('Partial audit · 50% coverage')).toBeInTheDocument();
+    expect(screen.getByText('3 of 6 checks run')).toBeInTheDocument();
     expect(screen.getByText('Excluded')).toBeInTheDocument();
   });
 
@@ -177,6 +187,8 @@ describe('PageKindScores', () => {
                 aeo_readiness_score: 70,
                 aeo_measurement_coverage: 0.8,
                 aeo_measurement_state: 'measured',
+                web_fundamentals_checks: null,
+                aeo_readiness_checks: null,
                 aeo_measurement_reason: '',
               },
               other: {
@@ -187,6 +199,8 @@ describe('PageKindScores', () => {
                 aeo_readiness_score: null,
                 aeo_measurement_coverage: null,
                 aeo_measurement_state: 'not_measured',
+                web_fundamentals_checks: null,
+                aeo_readiness_checks: null,
                 aeo_measurement_reason: 'page_purpose_unresolved',
               },
             },
@@ -215,6 +229,8 @@ describe('PageKindScores', () => {
                 aeo_readiness_score: 45,
                 aeo_measurement_coverage: 0.8,
                 aeo_measurement_state: 'measured',
+                web_fundamentals_checks: null,
+                aeo_readiness_checks: null,
                 aeo_measurement_reason: '',
               },
             },

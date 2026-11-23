@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { useState } from 'react';
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 
@@ -14,9 +15,12 @@ import type { ChangeObservation, ChangeSummary } from '@citeladder/contracts';
 import { useCursorTableQuery } from '@/lib/table/use-cursor-table-query';
 import { changeFieldLabel } from '@/lib/site-health/change-fields';
 import { ChangeEvidenceDrawer } from './changes-panel-evidence';
+import { CrawlHistory } from './crawl-history';
 import { readErrorProps } from '@/components/ui/notice';
 import { READ_FAILED, StateBlock } from '@/components/ui/state-block';
 import { FigureStrip } from '@/components/ui/figure-strip';
+
+const classCountsSchema = z.record(z.string(), z.number());
 
 const CLASS_LABELS = {
   improvement: 'Improvement',
@@ -52,8 +56,6 @@ export function ChangesPanel({
   const { crawlAId, crawlBId, pairAvailable } = comparedPair(summary.data);
   const { page, table } = useCursorTableQuery({
     workspaceId,
-    // Rows carry over only within the same compared pair: a row of another
-    // pair would link to the wrong crawl's page.
     scopeId: [projectId, crawlAId ?? 'unselected-a', crawlBId ?? 'unselected-b'],
     scope: null,
     query: (request) => siteHealthQueries.changes(scope, { crawlAId, crawlBId, ...request }),
@@ -70,12 +72,13 @@ export function ChangesPanel({
   });
   const counts =
     summary.data?.state === 'available'
-      ? (summary.data.summary.counts_by_class as Record<string, number> | undefined)
+      ? classCountsSchema.safeParse(summary.data.summary.counts_by_class).data
       : undefined;
   const summaryState = comparisonState(summary, pairAvailable);
   const origin = sharedOrigin(page?.items.map((row) => row.normalized_url) ?? []);
   return (
     <Stack gap="workspace" className="min-w-0" data-testid="website-changes">
+      <CrawlHistory workspaceId={workspaceId} projectId={projectId} />
       {summary.isPending ? (
         <StateBlock
           kind="loading"

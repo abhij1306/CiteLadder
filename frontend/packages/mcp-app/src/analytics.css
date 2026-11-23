@@ -4,11 +4,6 @@
 @source "./";
 @source "../../../components/ui";
 
-/* The host CSP grants no resource domains, so no web font loads. The app
-   shells define these families with hosted faces; here they resolve to an
-   installed copy or the system stack, never to an undefined var(). */
-/* An installed Geist Mono sets data and code, as the hosted face does in the
-   app shells; without one they fall back to the system monospace. */
 @font-face {
   font-family: 'CiteLadder Geist Mono';
   src: local('Geist Mono'), local('GeistMono-Regular');

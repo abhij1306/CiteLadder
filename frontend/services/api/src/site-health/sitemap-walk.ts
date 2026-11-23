@@ -144,10 +144,9 @@ export async function walkSitemaps(
       Math.min(settings.concurrency, settings.maxDocuments - attempted),
     );
     attempted += wave.length;
-    const answers =
-      await /* NOSONAR -- Waves are bounded and sequential: a wave's references feed the next one. */ Promise.all(
-        wave.map(async (entry) => ({ entry, read: await readSitemap(ctx, entry.url, settings) })),
-      );
+    const answers = await /* NOSONAR */ Promise.all(
+      wave.map(async (entry) => ({ entry, read: await readSitemap(ctx, entry.url, settings) })),
+    );
     ctx.signal.throwIfAborted();
     for (const { entry, read } of answers) collect(walk, entry, read);
   }
@@ -236,11 +235,6 @@ function queueChildren(walk: Walk, index: IndexRead, document: SitemapDocument) 
   }
 }
 
-/**
- * A CDN can keep serving an index naming children the site has since
- * replaced. When none of an index's children was read, fetch that index once
- * more past the cache.
- */
 function childAnswered(walk: Walk, index: IndexRead, url: string, answer: SitemapAnswer['kind']) {
   index.pending--;
   if (refetchPolicy.child_answers.includes(answer)) index.unread.push(url);

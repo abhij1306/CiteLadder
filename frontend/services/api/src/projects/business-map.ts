@@ -8,7 +8,7 @@ import {
 import { z } from 'zod';
 
 import { policy } from '../config.ts';
-import type { Database } from '../db/database.ts';
+import { inTransaction, type Database } from '../db/database.ts';
 import { jsonObject } from '../db/json.ts';
 import { ApiError } from '../errors.ts';
 import { acquireProjectLock } from '../prompts/locks.ts';
@@ -149,7 +149,7 @@ export function updateBusinessMap(
   userId: string,
   update: BusinessMapUpdate,
 ): Promise<BusinessMap> {
-  return db.transaction().execute(async (trx) => {
+  return inTransaction(db, async (trx) => {
     await acquireProjectLock(trx, scope.projectId);
     const profile = await loadProfile(trx, scope, true);
     const context = jsonObject(profile.business_context, 'brand_profiles.business_context');

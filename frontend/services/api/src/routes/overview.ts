@@ -40,6 +40,7 @@ export const overviewRoutes = [
   }),
   defineGetRoute({
     ...family,
+    authorize: 'project',
     path: `${root}/report.pdf`,
     params: { path: projectPath, query: {} },
     response: z.string().meta({ format: 'binary' }),

@@ -95,7 +95,6 @@ export async function readiness(
     .executeTakeFirst();
   if (project === undefined) throw notFound('Project');
   const [ownedDomains, competitors, account, latest, datasets] = await Promise.all([
-    // Project children carry no workspace column; the join scopes them.
     scope.workspace
       .selectFrom(db, 'projects')
       .innerJoin('owned_domains', 'owned_domains.project_id', 'projects.id')
@@ -143,16 +142,21 @@ export async function readiness(
   };
 }
 
-export async function listRuns(db: Database, scope: Scope, offset: number, limit: number) {
-  const runs = await scope.workspace
+export async function listRuns(
+  db: Database,
+  scope: Scope,
+  page: { offset: number; limit: number; awaitingConfirmation: boolean },
+) {
+  let query = scope.workspace
     .selectFrom(db, 'search_intelligence_runs')
     .selectAll()
-    .where('project_id', '=', scope.projectId)
-    .where('confirmed_at', 'is not', null)
+    .where('project_id', '=', scope.projectId);
+  if (!page.awaitingConfirmation) query = query.where('confirmed_at', 'is not', null);
+  const runs = await query
     .orderBy('created_at', 'desc')
     .orderBy('id', 'desc')
-    .offset(offset)
-    .limit(limit)
+    .offset(page.offset)
+    .limit(page.limit)
     .execute();
   return runs.map(runView);
 }
@@ -249,7 +253,6 @@ export async function datasetPage(
     if (anchor === undefined) throw invalidCursor();
     const tie = sql<SqlBool>`${sql.ref('id')} > ${after}`;
     const beyond = request.direction === 'asc' ? sql`>` : sql`<`;
-    // Nulls sort last: after a null key only later nulls remain.
     query = query.where(
       anchor.value === null
         ? sql<SqlBool>`${key} is null and ${tie}`

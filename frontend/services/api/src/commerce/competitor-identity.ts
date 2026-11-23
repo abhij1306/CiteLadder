@@ -54,8 +54,6 @@ export async function findOrCreateCandidate(
       .executeTakeFirst();
   const existing = await find(observedUrl);
   if (existing) return existing;
-  // Concurrent audit completions serialize new pending candidates on the
-  // owning project, identity lookup included, so two first sightings agree.
   await lockCatalog(db, { workspaceId, projectId });
   const known = await knownProduct(db, scope, observed.title, observedUrl);
   const url = known?.canonical_url ?? observedUrl;

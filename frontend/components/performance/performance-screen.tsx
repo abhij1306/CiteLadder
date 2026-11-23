@@ -111,10 +111,6 @@ function performanceCoverage(
   };
 }
 
-function hasQualityFlags(quality: PerformanceDashboard['coverage']['analytics_quality']) {
-  return Object.values(quality).some((days) => days.some((day) => day.flags.length > 0));
-}
-
 function coverageSummary(coverage: PerformanceDashboard['coverage']): string | null {
   if (!coverage.earliest_date || !coverage.latest_date) return null;
   return `${formatWindowDate(coverage.earliest_date)} – ${formatWindowDate(
@@ -338,14 +334,14 @@ export function PerformanceScreen() {
         <StateBlock
           kind="error"
           {...readErrorProps(dashboard)}
-          fallback="Couldn't load performance data. Check your connection and try again."
+          fallback="Couldn't load performance data. The request failed or timed out."
           title="Couldn't load performance data"
         />
       </ReportPage>
     );
   if (!dashboard.data) return <PerformanceLoading />;
 
-  const data = dashboard.data as PerformanceDashboard;
+  const data = dashboard.data;
   const refreshing = dashboard.isPlaceholderData || projection.projecting;
   const selectedWindow = data.selected;
   const comparisonWindow = data.comparison;
@@ -401,7 +397,6 @@ export function PerformanceScreen() {
             projectionFailed: projection.failure !== null,
             selectedMissing: coverage.selectedMissing,
             comparisonMissing: coverage.comparisonMissing,
-            qualityFlagged: hasQualityFlags(data.coverage.analytics_quality),
             readinessFailed: readiness.isError,
           })}
         />

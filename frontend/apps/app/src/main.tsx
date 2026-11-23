@@ -13,7 +13,6 @@ import { setUrlStateRouter } from '@/lib/navigation/url-state';
 import { appRoutes } from './router';
 
 function mountApp(): void {
-  // Before anything renders, so an error during the first paint is reported too.
   installClientErrorListeners();
   installInteractionTiming();
   const queryClient = getAppQueryClient();

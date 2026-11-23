@@ -1,10 +1,6 @@
 import { screen } from '@testing-library/react';
 import type userEvent from '@testing-library/user-event';
 
-/**
- * Opens one of the Agent composer's + submenus by keyboard: the keys every
- * reader has, and jsdom cannot follow a pointer into a Radix submenu.
- */
 export async function openComposerSubmenu(
   user: ReturnType<typeof userEvent.setup>,
   submenu: RegExp,

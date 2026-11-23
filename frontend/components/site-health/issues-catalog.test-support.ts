@@ -1,5 +1,5 @@
 import { createElement, type ReactElement } from 'react';
-import type { IssueOccurrence, SiteIssue } from '@citeladder/contracts';
+import type { AffectedPage, SiteIssue } from '@citeladder/contracts';
 
 import { renderWithProviders } from '@/test/render';
 import { IssuesCatalog as ScopedIssuesCatalog } from './issues-catalog';
@@ -36,12 +36,14 @@ export function issue(overrides: Partial<SiteIssue> = {}): SiteIssue {
     dimension: 'aeo',
     category: 'schema',
     severity: 'high',
-    finding_class: 'defect',
     title: 'WebSite schema is missing',
     description: 'Search engines cannot find WebSite structured data on this page.',
     remediation: 'Add a JSON-LD WebSite schema.',
     remediation_route: 'code',
+    score_roles: ['aeo_readiness'],
     affected_url_count: 32,
+    new_url_count: null,
+    resolved_url_count: null,
     analyzer_version: 'a1',
     rule_version: 'r1',
     created_at: '2026-07-15T00:00:00Z',
@@ -49,7 +51,7 @@ export function issue(overrides: Partial<SiteIssue> = {}): SiteIssue {
   };
 }
 
-export function occurrence(overrides: Partial<IssueOccurrence> = {}): IssueOccurrence {
+export function occurrence(overrides: Partial<AffectedPage> = {}): AffectedPage {
   return {
     occurrence_id: 'dddddddd-1111-4111-8111-111111111111',
     evaluation_id: 'eeeeeeee-1111-4111-8111-111111111111',
@@ -63,12 +65,12 @@ export function occurrence(overrides: Partial<IssueOccurrence> = {}): IssueOccur
     dimension: 'aeo',
     category: 'schema',
     severity: 'high',
-    finding_class: 'defect',
     issue_title: 'WebSite schema is missing',
     description: 'Expected WebSite structured data is absent.',
     remediation: 'Add a JSON-LD WebSite schema.',
     reason_code: 'expected_schema_absent',
     evidence: { expected_types: ['WebSite'], found_types: ['Organization'] },
+    value: { kind: 'none' },
     analyzer_version: 'a1',
     rule_version: 'r1',
     created_at: '2026-07-15T00:00:00Z',
@@ -84,7 +86,6 @@ export function issueDetail(overrides: Record<string, unknown> = {}) {
     dimension: 'aeo',
     category: 'schema',
     severity: 'high',
-    finding_class: 'defect',
     title: 'WebSite schema is missing',
     description: 'Search engines cannot find WebSite structured data on this page.',
     remediation: 'Add a JSON-LD WebSite schema.',
@@ -102,8 +103,6 @@ export function issueDetail(overrides: Record<string, unknown> = {}) {
 
 export const summary = {
   issue_count: 47,
-  defect_issue_type_count: 47,
-  advisory_issue_type_count: 2,
   occurrence_count: 94,
   severity_counts: { high: 12, medium: 23, low: 12 },
   dimension_counts: { technical: 30, aeo: 17 },

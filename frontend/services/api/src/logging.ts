@@ -2,7 +2,6 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 
 type Level = 'debug' | 'info' | 'warning' | 'error';
 
-/** Cloud Logging reads `severity` from a JSON line; log-based alerts filter on it. */
 const SEVERITY = {
   debug: 'DEBUG',
   info: 'INFO',
@@ -32,11 +31,6 @@ function errorFields(error: unknown): Fields {
   return { exception: `${error.name}: ${error.message}`, stack: error.stack };
 }
 
-/**
- * The class and code of a failure, for structured records that must not carry
- * its message (provider messages can echo request or response bodies). A
- * failure without a string `code` has none (null).
- */
 export function failureFacts(error: unknown): { error_class: string; error_code: string | null } {
   if (!(error instanceof Error)) return { error_class: typeof error, error_code: null };
   const code = 'code' in error && typeof error.code === 'string' ? error.code : null;

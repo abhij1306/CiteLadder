@@ -81,7 +81,6 @@ export const verifyOutputSchema = z.object({
 });
 export type VerifyOutput = z.infer<typeof verifyOutputSchema>;
 
-/** The system and user messages; one substitution pass, so answer text is never re-substituted. */
 export function verifyPrompt(
   pkg: VerifyPackage,
   policy: Pick<FactCheckPolicy, 'verify_system_template' | 'verify_user_template'>,

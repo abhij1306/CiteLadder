@@ -11,7 +11,6 @@ type SseEventStreamOptions = {
   reconnectMaxMs: number;
   onFrame: (frame: RawSseFrame) => boolean;
   onInvalidate: () => void;
-  streamName: string;
 };
 
 const REFUSALS: ReadonlySet<number> = new Set([401, 403, 404]);
@@ -21,7 +20,7 @@ type StreamOutcome =
   | Readonly<{ kind: 'dropped' }>
   | Readonly<{ kind: 'refused' }>;
 
-export function streamHeaders(
+function streamHeaders(
   workspaceId: string | null,
   lastEventId: string | null,
 ): Record<string, string> {
@@ -29,6 +28,28 @@ export function streamHeaders(
   if (workspaceId) headers['X-Workspace-Id'] = workspaceId;
   if (lastEventId) headers['Last-Event-ID'] = lastEventId;
   return headers;
+}
+
+export function openSseStream({
+  url,
+  method,
+  workspaceId,
+  lastEventId,
+  signal,
+}: Readonly<{
+  url: string;
+  method: 'GET' | 'POST';
+  workspaceId: string | null;
+  lastEventId: string | null;
+  signal: AbortSignal;
+}>): Promise<Response> {
+  return fetch(url, {
+    method,
+    headers: streamHeaders(workspaceId, lastEventId),
+    credentials: 'include',
+    cache: 'no-store',
+    signal,
+  });
 }
 
 export async function readSseResponse(
@@ -64,7 +85,6 @@ export function useSseEventStream({
   reconnectMaxMs,
   onFrame,
   onInvalidate,
-  streamName,
 }: SseEventStreamOptions): void {
   useEffect(() => {
     if (!enabled || !url) return;
@@ -86,11 +106,11 @@ export function useSseEventStream({
     };
 
     const connect = async (): Promise<StreamOutcome> => {
-      const response = await fetch(url, {
+      const response = await openSseStream({
+        url,
         method: 'GET',
-        headers: streamHeaders(workspaceId, stream.lastEventId),
-        credentials: 'include',
-        cache: 'no-store',
+        workspaceId,
+        lastEventId: stream.lastEventId,
         signal: controller.signal,
       });
       if (REFUSALS.has(response.status)) return { kind: 'refused' };
@@ -107,13 +127,7 @@ export function useSseEventStream({
     };
 
     const run = async (attempt = 0) => {
-      let outcome: StreamOutcome = { kind: 'dropped' };
-      try {
-        outcome = await connect();
-      } catch (error) {
-        if (cancelled || controller.signal.aborted) return;
-        console.error(`[${streamName}] event stream failed`, { attempt, error });
-      }
+      const outcome = await connect().catch((): StreamOutcome => ({ kind: 'dropped' }));
       if (cancelled || controller.signal.aborted) return;
       if (outcome.kind === 'refused') return;
 
@@ -138,7 +152,6 @@ export function useSseEventStream({
     onInvalidate,
     reconnectBaseMs,
     reconnectMaxMs,
-    streamName,
     url,
     workspaceId,
   ]);

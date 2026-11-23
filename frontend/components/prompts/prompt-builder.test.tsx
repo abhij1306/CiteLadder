@@ -133,9 +133,9 @@ const noReview: ComponentProps<typeof PromptBuilder>['review'] = {
 
 function renderBuilder(
   step: BuilderStep,
-  { generate = vi.fn(async () => result), review = noReview } = {},
+  { generate = vi.fn(async () => result), review = noReview, query = '' } = {},
 ) {
-  window.history.replaceState(null, '', `/prompts/build?step=${step}`);
+  window.history.replaceState(null, '', `/prompts/build?step=${step}${query}`);
   renderWithProviders(
     <PromptBuilder
       projectId={projectId}
@@ -293,6 +293,22 @@ describe('PromptBuilder', () => {
     expect(await screen.findByText(/No pending suggestions remain/)).toBeVisible();
     expect(screen.getByText('Coverage by topic')).toBeVisible();
     expect(screen.getByRole('button', { name: 'Generate more for Golf nets' })).toBeEnabled();
+  });
+
+  it('opens on brand prompts from a link and sends only the brand count, naming what it spends', async () => {
+    const user = userEvent.setup({ delay: null });
+    serve({});
+    const { generate } = renderBuilder('distribution', { query: '&generate=brand' });
+
+    expect(await screen.findByRole('radio', { name: 'Brand prompts' })).toBeChecked();
+    expect(screen.getByText('AI credits: up to 4 model calls')).toBeVisible();
+    expect(screen.queryByRole('slider', { name: 'Unbranded and Branded' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Generate' }));
+    expect(generate).toHaveBeenCalledWith({ mode: 'brand', count: 10, topic_ids: [] });
+
+    await user.click(screen.getByRole('button', { name: 'Back' }));
+    await user.click(await screen.findByRole('radio', { name: 'Buyer questions' }));
+    expect(await screen.findByRole('slider', { name: 'Unbranded and Branded' })).toBeVisible();
   });
 
   it('tracks only the selected suggestions from the footer', async () => {

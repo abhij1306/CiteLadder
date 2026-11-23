@@ -126,11 +126,14 @@ function crawlerSummary(view: SiteFactsView): string {
       label,
       count: bots.filter((bot) => bot.policy === policy).length,
     }))
-    .filter(({ count }) => count > 0)
-    .map(({ label, count }) => `${formatCount(count)} ${label.toLowerCase()}`)
-    .join(', ');
+    .filter(({ count }) => count > 0);
   const total = pluralCount(bots.length, 'crawler');
-  return policies ? `${total}: ${policies}` : total;
+  const [only, ...others] = policies;
+  if (!only) return total;
+  if (!others.length) return `${total}: ${only.label.toLowerCase()}`;
+  return `${total}: ${policies
+    .map(({ label, count }) => `${formatCount(count)} ${label.toLowerCase()}`)
+    .join(', ')}`;
 }
 
 type CrawlerBot = SiteFactsView['robots']['bots'][number];

@@ -30,9 +30,6 @@ export function ReorderList({
   pending: boolean;
   onMove: (from: number, to: number) => void;
 }>) {
-  // A drop carries the dragged row's position under the list's own drag type;
-  // anything else dropped on the list (selected text, a row's visible number,
-  // a link from another page) carries none and is not a move.
   const moveDropped = (dropped: string, to: number) => {
     const from = Number(dropped);
     if (dropped !== '' && Number.isInteger(from) && from >= 0 && from < items.length && from !== to)
@@ -80,8 +77,8 @@ function ReorderRow({
     onMove(index, index + step);
   };
   return (
-    // oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- Drag and Alt+arrow enhance the row; its "…" menu is the complete reorder path.
-    <li // NOSONAR -- Alt+arrow bubbles from the focused link; the "…" menu is the complete keyboard path.
+    // oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
+    <li // NOSONAR
       draggable={!pending}
       onKeyDown={onKeyDown}
       onDragStart={(event) => {

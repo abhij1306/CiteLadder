@@ -1,7 +1,8 @@
-import { useLocation, useSearchParams } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 
 import { SidebarNavGroup, SidebarScrollList } from '@/components/ui/sidebar';
 import { scopedNavigationDestination } from '@/lib/navigation/project-destination';
+import { useUrlSearch } from '@/lib/navigation/url-params';
 import { setGroupFolded, useGroupFolded } from '@/lib/navigation/sidebar-folds';
 import { useRouteIntent } from '@/lib/navigation/use-route-intent';
 import { useProjectContext } from '@/lib/project/project-context';
@@ -18,7 +19,7 @@ import { RailGroupMenu, RailLink } from './sidebar-rail';
 
 export function useDestinations() {
   const { pathname = '', search = '' } = useLocation();
-  const searchParams = useSearchParams()[0];
+  const searchParams = useUrlSearch();
   const { activeProjectId, activeWorkspaceId } = useProjectContext();
   const isActive = (item: Pick<NavItem, 'href'>) => isNavItemActive(pathname, searchParams, item);
   const href = (item: NavItem) =>

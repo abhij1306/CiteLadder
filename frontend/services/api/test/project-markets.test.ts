@@ -300,7 +300,6 @@ describe('admission per market', () => {
       code: 'market_unsupported',
       details: { engine: 'chatgpt_search', country_code: 'JP', language_code: 'zh' },
     });
-    // Gemini's consumer surface lists no Portuguese.
     await expect(launch(['gemini_consumer'], brazil)).rejects.toMatchObject({
       status: 422,
       code: 'market_unsupported',
@@ -426,12 +425,13 @@ describe('visibility by market', () => {
         row.state,
         row.audit_id,
         row.mention_rate,
+        row.responses,
       ]),
     ).toEqual([
-      ['US', 'measured', fallbackRun, 0.25],
-      ['DE', 'measured', germanRun, 0.75],
-      ['FR', 'no_run', null, null],
-      ['ES', 'metrics_pending', null, null],
+      ['US', 'measured', fallbackRun, 0.25, 4],
+      ['DE', 'measured', germanRun, 0.75, 4],
+      ['FR', 'no_run', null, null, null],
+      ['ES', 'metrics_pending', null, null, null],
     ]);
 
     const outsider = await fixtures.tenant();

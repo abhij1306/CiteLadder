@@ -75,7 +75,7 @@ describe('answer formats at analysis', () => {
     ];
     const results = [];
     for (const [engine, envelope] of cases)
-      results.push(await derive(tenant, auditId, engine, envelope)); // NOSONAR -- one audit, in order.
+      results.push(await derive(tenant, auditId, engine, envelope)); // NOSONAR
     expect(results.map(({ artifact_id: _id, ...row }) => row)).toEqual([
       {
         answer_format_state: 'observed',

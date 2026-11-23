@@ -86,8 +86,10 @@ export function DisclosureRow({
         onClick={() => setOpen(!open)}
         className={cn(listRowClasses(), pressableRowClasses, 'min-h-10')}
       >
-        <span className="flex min-w-0 flex-1 items-center gap-3">
-          <ClampText className={textRole('label', 'text-ink min-w-0')}>{title}</ClampText>
+        <span className="phone:flex-wrap phone:gap-y-1 phone:py-2 flex min-w-0 flex-1 items-center gap-3">
+          <ClampText phoneWrap className={textRole('label', 'text-ink phone:basis-full min-w-0')}>
+            {title}
+          </ClampText>
           <span className={textRole('caption', 'text-ink-2 flex shrink-0 items-center gap-3')}>
             {meta}
           </span>
@@ -217,19 +219,27 @@ export function ItemRow({
   return (
     <li
       {...props}
-      className="grid grid-cols-[20px_minmax(0,1fr)_fit-content(40%)] items-center gap-3 py-3 @[640px]:grid-cols-[20px_minmax(0,1fr)_fit-content(40%)_auto]"
+      className="phone:grid-cols-[20px_minmax(0,1fr)] grid grid-cols-[20px_minmax(0,1fr)_fit-content(40%)] items-center gap-3 py-3 @[640px]:grid-cols-[20px_minmax(0,1fr)_fit-content(40%)_auto]"
     >
       <span className="flex size-5 items-center justify-center self-start">{icon}</span>
       <div className="grid min-w-0 gap-0.5">
         <p className={textRole('label', 'text-ink')}>{title}</p>
         <div
           data-item-caption=""
-          className={textRole('caption', 'text-ink-2 flex min-w-0 items-baseline gap-1')}
+          className={textRole(
+            'caption',
+            'text-ink-2 phone:flex-wrap flex min-w-0 items-baseline gap-1',
+          )}
         >
           {caption}
         </div>
       </div>
-      <div className={textRole('caption', 'text-ink-2 flex min-w-0 items-center gap-2')}>
+      <div
+        className={textRole(
+          'caption',
+          'text-ink-2 phone:col-start-2 flex min-w-0 items-center gap-2',
+        )}
+      >
         {status}
       </div>
       <div className="col-[2/-1] flex flex-wrap items-center gap-2 @[640px]:col-auto">

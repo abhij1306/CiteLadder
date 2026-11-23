@@ -87,8 +87,12 @@ export function ActionDock({
   return (
     <PageDock label="Work on this action">
       <output className="sr-only">{decide.isSuccess ? ANNOUNCED[decide.variables] : null}</output>
-      {slot(first, FIRST)}
-      {second === 'declare' ? declare : slot(second, SECOND)}
+      {first === null && second === null ? null : (
+        <>
+          {slot(first, FIRST)}
+          {second === 'declare' ? declare : slot(second, SECOND)}
+        </>
+      )}
       <ProjectLink href={agentHref} className={buttonClasses('primary', DOCK_SLOT.primary)}>
         <Icon icon={Sparkles} />
         <span className={DOCK_SLOT.primaryLabel}>{agentLabel}</span>

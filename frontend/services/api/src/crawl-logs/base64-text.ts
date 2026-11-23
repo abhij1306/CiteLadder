@@ -1,5 +1,4 @@
 const BASE64 = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u;
-// Non-streaming decode() keeps no state between calls, so one decoder serves all.
 const UTF8 = new TextDecoder('utf-8', { fatal: true });
 
 export function base64Text(data: string, maxBytes: number): string | null {

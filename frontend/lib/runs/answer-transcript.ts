@@ -97,8 +97,6 @@ export function answerBrands(
   });
 }
 
-// A markdown link that is not an image, as the analysis counts them. The text
-// excludes `[` so the scan stays linear; a nested `[` still yields the same URL.
 const MARKDOWN_LINK = /(?<!!)\[[^[\]]*\]\((https?:\/\/[^\s)]+)/gu;
 
 const bareHost = (host: string) =>

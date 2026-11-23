@@ -5,7 +5,7 @@ import { actorOf, requireCapability, type Actor } from '../auth/actor.ts';
 import type { WorkspaceCapability } from '../auth/workspace.ts';
 import type { AppEnv } from '../context.ts';
 
-export type Permission = Readonly<{ capability: WorkspaceCapability; scope: ApiKeyScope }>;
+export type Permission = Readonly<{ capability: WorkspaceCapability; scope?: ApiKeyScope }>;
 
 declare const checked: unique symbol;
 

@@ -19,6 +19,7 @@ import type {
   LogicalEngine,
   PromptSet,
 } from '@citeladder/contracts';
+import { auditScheduleCadenceSchema } from '@citeladder/contracts';
 import { mutationNoticeForError } from '@/lib/api/mutation-notice';
 import { DisplayTime } from '@/components/ui/display-time';
 import { textRole } from '@/components/ui/typography';
@@ -196,9 +197,9 @@ function ScheduleForm({
             ariaLabel="Cadence"
             value={cadence}
             onValueChange={setCadence}
-            options={Object.entries(CADENCE_LABELS).map(([value, label]) => ({
-              value: value as AuditScheduleCadence,
-              label,
+            options={auditScheduleCadenceSchema.options.map((value) => ({
+              value,
+              label: CADENCE_LABELS[value],
             }))}
           />
         </FormRow>

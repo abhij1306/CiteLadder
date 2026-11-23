@@ -105,8 +105,8 @@ export async function loadSkillCatalog(root: string): Promise<PackagedCatalog> {
   };
 }
 export function usesFormats(skill: Pick<Skill, 'outputKind'>) {
-  return (p.format_kinds as readonly string[]).includes(skill.outputKind);
+  return p.format_kinds.includes(skill.outputKind);
 }
 export function fetchesPage(skill: Pick<Skill, 'outputKind'>) {
-  return (p.fetched_kinds as readonly string[]).includes(skill.outputKind);
+  return p.fetched_kinds.includes(skill.outputKind);
 }

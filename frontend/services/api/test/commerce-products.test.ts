@@ -485,7 +485,6 @@ describe('Product detail read', () => {
     expect(theirs.body.sources).toEqual([]);
   });
 
-  // Last in the file: it rejects the approved competitor the reads above count.
   it('drops a competitor rejected after its answers from the competing products', async () => {
     const road = await holderId(t, 'Acme Road Runner');
     const rival = await holderId(t, 'Rival Pacer');

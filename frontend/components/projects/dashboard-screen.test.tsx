@@ -3,8 +3,8 @@ import type { ReactElement, ReactNode } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vite-plus/test';
-const { project, downloadOverviewReport, queryResult, promptsResult, layoutResult, role } =
-  vi.hoisted(() => ({
+const { project, downloadOverviewReport, queryResult, promptsResult, layoutResult } = vi.hoisted(
+  () => ({
     project: {
       id: '00000000-0000-4000-8000-000000000001',
       workspace_id: '00000000-0000-4000-8000-000000000002',
@@ -22,7 +22,6 @@ const { project, downloadOverviewReport, queryResult, promptsResult, layoutResul
       isFetching: false,
       refetch: () => undefined,
     },
-    role: { canWrite: true },
     queryResult: {
       data: undefined as unknown,
       error: null as unknown,
@@ -38,7 +37,8 @@ const { project, downloadOverviewReport, queryResult, promptsResult, layoutResul
       isFetching: false,
       refetch: vi.fn(),
     },
-  }));
+  }),
+);
 const commandCenter = {
   project,
   facts: {
@@ -134,22 +134,6 @@ vi.mock('@tanstack/react-query', () => ({
   useQueryClient: () => ({ invalidateQueries: vi.fn() }),
   useMutation: () => ({ mutate: vi.fn(), isPending: false }),
 }));
-vi.mock('@/lib/project/project-context', () => {
-  const context = () => ({
-    projects: [project],
-    activeProject: project,
-    activeProjectId: project.id,
-    setActiveProjectId: vi.fn(),
-    isLoading: false,
-  });
-  return {
-    useActiveWorkspaceId: () => 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-    useWorkspaceCapability: () => role.canWrite,
-    useActiveProject: () => project,
-    useOptionalProjectContext: context,
-    useProjectContext: context,
-  };
-});
 vi.mock('@/lib/api/projects', () => ({
   projectsApi: { getCommandCenter: vi.fn(), downloadOverviewReport },
   projectQueries: {
@@ -167,6 +151,8 @@ vi.mock('@/lib/api/opportunities', () => ({
 }));
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { ActiveProjectScopeProvider } from '@/lib/project/active-project-scope';
+import { ProjectSelectionProvider } from '@/lib/project/project-scope';
+import { projectScope, testProjectSelection, type TestRole } from '@/test/render';
 import { makeProject } from '@/test/fixtures/project';
 import { providerCatalogFixture } from '@/test/provider-catalog-fixture';
 import { DashboardScreen } from './dashboard-screen';
@@ -179,25 +165,29 @@ const scopeProject = makeProject({
   website_url: project.website_url,
 });
 
-function RouterTestWrapper({ children }: Readonly<{ children: ReactNode }>) {
-  return (
-    <MemoryRouter initialEntries={['/projects']}>
-      <ActiveProjectScopeProvider project={scopeProject}>{children}</ActiveProjectScopeProvider>
-    </MemoryRouter>
-  );
-}
-
-function renderDashboard(ui: ReactElement) {
+function renderDashboard(ui: ReactElement, role: TestRole = 'owner') {
+  const selection = testProjectSelection(projectScope(scopeProject, role));
+  function RouterTestWrapper({ children }: Readonly<{ children: ReactNode }>) {
+    return (
+      <MemoryRouter initialEntries={['/projects']}>
+        <ProjectSelectionProvider value={selection}>
+          <ActiveProjectScopeProvider project={scopeProject}>{children}</ActiveProjectScopeProvider>
+        </ProjectSelectionProvider>
+      </MemoryRouter>
+    );
+  }
   return raw(ui, { wrapper: RouterTestWrapper });
 }
 
-async function openMore(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(screen.getByRole('button', { name: 'More' }));
+async function openPageActions(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole('button', { name: 'Page actions' }));
   return screen.findByRole('menu');
 }
 
 async function exportPdf(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(within(await openMore(user)).getByRole('menuitem', { name: 'Export PDF' }));
+  await user.click(
+    within(await openPageActions(user)).getByRole('menuitem', { name: 'Export PDF' }),
+  );
 }
 
 const DEFAULT_LAYOUT = {
@@ -226,7 +216,6 @@ describe('DashboardScreen', () => {
     queryResult.refetch.mockReset();
     promptsResult.data = [];
     layoutResult.data = DEFAULT_LAYOUT;
-    role.canWrite = true;
   });
   it('renders state, comparable movement and actions', () => {
     renderDashboard(
@@ -313,11 +302,11 @@ describe('DashboardScreen', () => {
       },
       movements: [],
     };
-    role.canWrite = false;
     const viewer = renderDashboard(
       <TooltipProvider>
         <DashboardScreen />
       </TooltipProvider>,
+      'viewer',
     );
     expect(
       within(screen.getByRole('region', { name: 'Movement' })).getByText(
@@ -326,7 +315,6 @@ describe('DashboardScreen', () => {
     ).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Launch run' })).not.toBeInTheDocument();
     viewer.unmount();
-    role.canWrite = true;
     renderDashboard(
       <TooltipProvider>
         <DashboardScreen />
@@ -526,9 +514,7 @@ describe('DashboardScreen', () => {
     ).toEqual(['company_facts', 'project_state']);
     expect(screen.queryByRole('heading', { name: 'Movement' })).not.toBeInTheDocument();
   });
-  it('keeps Layout and Export PDF behind More at desktop width, Layout for editors only', async () => {
-    // jsdom loads no Tailwind, so the masthead's row is drawn as at desktop width;
-    // it has no `checkVisibility`, so it answers as a browser would here.
+  it('keeps Layout and Export PDF behind Page actions at desktop width, Layout for editors only', async () => {
     Object.defineProperty(HTMLElement.prototype, 'checkVisibility', {
       configurable: true,
       value(this: HTMLElement) {
@@ -546,7 +532,7 @@ describe('DashboardScreen', () => {
     );
     expect(screen.getByRole('button', { name: /manage project/i })).toBeVisible();
     expect(screen.getByRole('button', { name: 'Launch run' })).toBeVisible();
-    const menu = await openMore(user);
+    const menu = await openPageActions(user);
     expect(
       within(menu)
         .getAllByRole('menuitem')
@@ -559,14 +545,14 @@ describe('DashboardScreen', () => {
     await user.keyboard('{Escape}');
     editor.unmount();
 
-    role.canWrite = false;
     renderDashboard(
       <TooltipProvider>
         <DashboardScreen />
       </TooltipProvider>,
+      'viewer',
     );
     expect(
-      within(await openMore(user))
+      within(await openPageActions(user))
         .getAllByRole('menuitem')
         .map((item) => item.textContent),
     ).toEqual(['Export PDF']);
@@ -667,7 +653,7 @@ describe('DashboardScreen', () => {
     expect(screen.queryByRole('region', { name: 'Project state' })).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Company facts' })).toBeVisible();
     expect(
-      within(await openMore(user)).getByRole('menuitem', { name: 'Export PDF' }),
+      within(await openPageActions(user)).getByRole('menuitem', { name: 'Export PDF' }),
     ).toBeVisible();
   });
   it('asks a project with no active prompts to add some', () => {

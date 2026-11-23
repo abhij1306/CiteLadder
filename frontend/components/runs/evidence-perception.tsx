@@ -1,6 +1,7 @@
 import type { ExecutionPerception } from '@citeladder/contracts/visibility-perception';
 
 import { Absence } from '@/components/ui/absence';
+import { RailItem, RailLine, RailList, RailSection } from '@/components/ui/answer-chat';
 import { StatusMark } from '@/components/ui/status-mark';
 import { Tag } from '@/components/ui/tag';
 import { Inline, Stack } from '@/components/ui/layout';
@@ -76,5 +77,41 @@ export function EvidencePerception({
         ))}
       </Stack>
     </Stack>
+  );
+}
+
+export function AttributesRail({
+  perception,
+}: Readonly<{ perception: readonly ExecutionPerception[] }>) {
+  const own = perception.find((entity) => entity.is_brand && entity.state === 'classified');
+  const labelled = (own?.aspects ?? []).flatMap((aspect) =>
+    aspect.attribute.kind === 'labelled'
+      ? [
+          {
+            key: `${aspect.start}:${aspect.end}`,
+            name: aspect.attribute.name,
+            polarity: aspect.polarity,
+          },
+        ]
+      : [],
+  );
+  if (!labelled.length) return null;
+  return (
+    <RailSection title="Attributes" count={labelled.length}>
+      <RailList label="Attributes" dense>
+        {labelled.map((attribute) => (
+          <RailItem key={attribute.key}>
+            <RailLine>
+              <span className={textRole('body', 'min-w-0 flex-1 truncate')} title={attribute.name}>
+                {attribute.name}
+              </span>
+              <StatusMark variant="sentiment" value={attribute.polarity}>
+                {SENTIMENT_LABELS[attribute.polarity]}
+              </StatusMark>
+            </RailLine>
+          </RailItem>
+        ))}
+      </RailList>
+    </RailSection>
   );
 }

@@ -1,6 +1,3 @@
-/** Bounded publisher-page inspection. Page lifecycle is separate from presence:
- * an unread page never establishes absence. Page format never classifies a publisher.
- */
 export const sourcePages = {
   identity_version: 'citation-identity-1',
   inspector_version: 'source-page-inspector-1',

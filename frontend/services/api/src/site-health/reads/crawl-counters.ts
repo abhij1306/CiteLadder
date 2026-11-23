@@ -34,11 +34,6 @@ type Activity = Counters['activity'];
 const STALLED: [Activity['state'], Activity['reason']] = ['stalled', 'expired_lease'];
 const WORKING: [Activity['state'], Activity['reason']] = ['working', 'active_work'];
 
-/**
- * Whether any open task of the crawl holds an expired lease. The literal
- * status list matches `ix_site_crawl_tasks_open`'s predicate, so the probe
- * reads that partial index instead of the crawl's settled history.
- */
 async function hasExpiredLease(db: Database, crawl: Crawl) {
   const { rows } = await sql<{ expired: boolean }>`
     select exists (

@@ -38,7 +38,7 @@ function logDirectory(): string {
     return execFileSync('git', gitArgs, {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
-    }).trim(); // NOSONAR: trusted PATH.
+    }).trim(); // NOSONAR
   } catch {
     return tmpdir();
   }
@@ -53,7 +53,7 @@ try {
     env,
     stdio: ['ignore', output, output],
   } satisfies SpawnSyncOptions;
-  status = spawnSync('pnpm', command, options).status; // NOSONAR: trusted PATH.
+  status = spawnSync('pnpm', command, options).status; // NOSONAR
 } finally {
   closeSync(output);
 }

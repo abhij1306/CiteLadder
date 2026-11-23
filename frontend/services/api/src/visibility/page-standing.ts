@@ -3,6 +3,7 @@ import { sql } from 'kysely';
 import type { z } from 'zod';
 
 import { policy } from '../config.ts';
+import { record } from '../db/json.ts';
 import { isListingGap } from '../analysis/listing-gap.ts';
 import type { Database } from '../db/database.ts';
 import type { ProjectScope } from '../projects/brand-profile.ts';
@@ -13,17 +14,19 @@ import {
   type Reading,
   type ReadingPresence,
 } from '../source-pages/reading.ts';
+import { scalarText } from '../text-order.ts';
 import type { RunSelection } from './selection.ts';
 
 export type PageStanding = z.infer<typeof pageStandingSchema>;
 
 const s = policy.opportunity.source_pages;
 const classes = policy.opportunity.source_patterns;
-const OWN_PAGE_CLASSES = policy.opportunity.earned_actions.EARNED_EXCLUDED_SOURCE_CLASSES;
+const earned = policy.opportunity.earned_actions;
+const OWN_PAGE_CLASSES = earned.EARNED_EXCLUDED_SOURCE_CLASSES;
 const INSPECTED = s.INSPECTION_INSPECTED;
 
 export function pageStanding(
-  page: { source_class: string | null; inspection_state: string },
+  page: { source_class: string | null; registrable_domain: string; inspection_state: string },
   reading: Reading | undefined,
   presences: readonly ReadingPresence[],
 ): PageStanding {
@@ -36,7 +39,8 @@ export function pageStanding(
   const brand = presences.find((row) => row.entity_kind === s.ENTITY_KIND_BRAND);
   if (brand?.presence === s.PRESENCE_PRESENT) return 'listed';
   if (brand?.presence === s.PRESENCE_NOT_ASSESSABLE) return 'not_assessable';
-  return isListingGap(page, presences) ? 'gap' : 'read';
+  const title = scalarText(record(reading.page_facts).title);
+  return isListingGap({ ...page, title }, presences) ? 'gap' : 'read';
 }
 
 export async function pageStandings(db: Database, scope: ProjectScope, hashes: readonly string[]) {
@@ -51,6 +55,7 @@ export async function pageStandings(db: Database, scope: ProjectScope, hashes: r
       'page.id',
       'page.url_hash',
       'page.source_class',
+      'page.registrable_domain',
       'page.inspection_state',
       'page.page_format',
       'page.page_format_method',
@@ -83,7 +88,7 @@ export function gapPageHashes(selection: RunSelection) {
     select gap_page.url_hash
     from source_pages gap_page
     cross join lateral (
-      select reading.id
+      select reading.id, reading.page_facts
       from source_page_snapshots reading
       where reading.source_page_id = gap_page.id
         and reading.workspace_id = ${selection.workspaceId}
@@ -96,6 +101,21 @@ export function gapPageHashes(selection: RunSelection) {
     where gap_page.workspace_id = ${selection.workspaceId}
       and gap_page.project_id = ${selection.projectId}
       and coalesce(gap_page.source_class, '') not in (${sql.join([...OWN_PAGE_CLASSES])})
+      and not exists (
+        select 1 from unnest(${[...earned.EARNED_EXCLUDED_DOMAINS]}::text[]) excluded(domain)
+        where gap_page.registrable_domain = excluded.domain
+          or gap_page.registrable_domain like '%.' || excluded.domain
+      )
+      and not exists (
+        select 1 from source_page_entity_presences subject
+        where subject.snapshot_id = latest.id
+          and subject.workspace_id = ${selection.workspaceId}
+          and subject.entity_kind <> ${s.ENTITY_KIND_BRAND}
+          and subject.presence = ${s.PRESENCE_PRESENT}
+          and lower(btrim(subject.entity_name)) = lower(btrim(regexp_replace(
+            coalesce(latest.page_facts ->> 'title', ''), ${earned.EARNED_TITLE_SITE_SUFFIX}, ''
+          )))
+      )
       and exists (
         select 1 from source_page_entity_presences brand
         where brand.snapshot_id = latest.id

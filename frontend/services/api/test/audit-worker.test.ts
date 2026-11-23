@@ -166,42 +166,67 @@ describe('leased audit worker phases', () => {
       .executeTakeFirstOrThrow();
     expect(audit).toEqual({ completed_count: 0, failed_count: 1 });
   });
-  it('stops the remaining search-surface answers after the provider refuses the account', async () => {
-    const t = await seed(true, ['Which trail shoes grip on wet rock?']);
-    let calls = 0;
-    const w = worker(t, async () => {
-      calls++;
-      return Response.json({ status_code: 20000, tasks: [{ status_code: 40201 }] });
-    });
-    await w.runOnce();
-    const [next] = await db
-      .selectFrom('audit_tasks')
-      .select('id')
-      .where('audit_id', '=', t.auditId)
-      .where('id', '!=', t.task.id)
-      .execute();
-    await ready(next!.id);
-    await w.runOnce();
+  it.each([
+    {
+      engine: 'dataforseo',
+      surface: true,
+      refusal: () => Response.json({ status_code: 20000, tasks: [{ status_code: 40201 }] }),
+    },
+    {
+      engine: 'openai',
+      surface: false,
+      refusal: () =>
+        Response.json(
+          {
+            error: {
+              message:
+                'You exceeded your current quota, please check your plan and billing details.',
+              type: 'insufficient_quota',
+              code: 'insufficient_quota',
+            },
+          },
+          { status: 429 },
+        ),
+    },
+  ])(
+    'stops the remaining $engine answers after the provider refuses the account',
+    async ({ engine, surface, refusal }) => {
+      const t = await seed(surface, ['Which trail shoes grip on wet rock?']);
+      let calls = 0;
+      const w = worker(t, async () => {
+        calls++;
+        return refusal();
+      });
+      await w.runOnce();
+      const [next] = await db
+        .selectFrom('audit_tasks')
+        .select('id')
+        .where('audit_id', '=', t.auditId)
+        .where('id', '!=', t.task.id)
+        .execute();
+      await ready(next!.id);
+      await w.runOnce();
 
-    expect(calls).toBe(1);
-    expect(await stored(t.task.id)).toMatchObject({
-      status: 'failed',
-      error_code: 'provider_account_unavailable',
-    });
-    expect(await stored(next!.id)).toMatchObject({
-      status: 'failed',
-      error_code: 'provider_account_unavailable',
-      attempt_count: 0,
-    });
-    expect(
-      await db
-        .selectFrom('provider_connections')
-        .select('pause_reason')
-        .where('workspace_id', '=', t.workspaceId)
-        .where('transport_provider', '=', 'dataforseo')
-        .executeTakeFirstOrThrow(),
-    ).toEqual({ pause_reason: 'provider_account' });
-  });
+      expect(calls).toBe(1);
+      expect(await stored(t.task.id)).toMatchObject({
+        status: 'failed',
+        error_code: 'provider_account_unavailable',
+      });
+      expect(await stored(next!.id)).toMatchObject({
+        status: 'failed',
+        error_code: 'provider_account_unavailable',
+        attempt_count: 0,
+      });
+      expect(
+        await db
+          .selectFrom('provider_connections')
+          .select('pause_reason')
+          .where('workspace_id', '=', t.workspaceId)
+          .where('transport_provider', '=', engine)
+          .executeTakeFirstOrThrow(),
+      ).toEqual({ pause_reason: 'provider_account' });
+    },
+  );
   it('recovers an uncertain paid submission by exact tag and then GET, never repeating task_post', async () => {
     const t = await seed(true),
       methods: string[] = [];

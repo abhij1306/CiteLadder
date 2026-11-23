@@ -116,7 +116,7 @@ export const onError: ErrorHandler = (error, c) => {
     );
   }
   if (error instanceof HTTPException) {
-    const status = error.status as ContentfulStatusCode;
+    const status = error.status;
     const message = error.message || statusPhrase(error.getResponse());
     return c.json(
       errorEnvelope({

@@ -7,8 +7,6 @@ import type { PerceptionPackage } from './passages.ts';
 export const LABELS = perceptionLabelSchema.options;
 export type Label = (typeof LABELS)[number];
 
-// Lenient on counts and themes: the deterministic validator truncates and
-// remaps them, so one extra aspect never discards a whole answer.
 export const perceptionOutputSchema = z.object({
   entities: z.array(
     z.object({
@@ -17,22 +15,18 @@ export const perceptionOutputSchema = z.object({
       confidence: z.number().min(0).max(1),
       aspects: z.array(
         z.object({
-          theme: z.string(),
+          category: z.string(),
+          attribute: z.string(),
           polarity: z.enum(['positive', 'negative']),
           quote: z.string(),
         }),
       ),
     }),
   ),
-  // Names only (AV-11); code verifies and dedupes them. Absent means the
-  // answer's untracked names are unknown, never that it named none.
   untracked_businesses: z.array(z.string()).optional(),
 });
 export type PerceptionOutput = z.infer<typeof perceptionOutputSchema>;
 
-// A fact-checked audit's output adds the brand's factual claims. A missing
-// list is unusable output, never zero claims; topic and count stay lenient for
-// the same reason as aspects.
 export const claimsOutputSchema = perceptionOutputSchema.extend({
   claims: z.array(
     z.object({
@@ -55,7 +49,11 @@ export function perceptionPrompt(
   pkg: PerceptionPackage,
   policy: Pick<
     PerceptionPolicy,
-    'system_template' | 'user_template' | 'project_themes' | 'max_aspects_per_entity'
+    | 'system_template'
+    | 'user_template'
+    | 'project_themes'
+    | 'max_aspects_per_entity'
+    | 'max_aspects_per_brand'
   >,
   claims: ClaimsRequest | null = null,
 ) {
@@ -68,15 +66,15 @@ export function perceptionPrompt(
   const slots: Record<string, string> = {
     '{prompt}': pkg.prompt,
     '{language}': pkg.language || 'unknown',
-    '{themes}': [...pkg.themes.map((theme) => theme.name), policy.project_themes.fallback].join(
+    '{categories}': [...pkg.themes.map((theme) => theme.name), policy.project_themes.fallback].join(
       ', ',
     ),
+    '{max_brand_aspects}': String(policy.max_aspects_per_brand),
     '{max_aspects}': String(policy.max_aspects_per_entity),
     '{entities}': JSON.stringify(entities, null, 2),
   };
-  // One pass, so a slot-shaped string inside the answer is never re-substituted.
   const user = policy.user_template.replaceAll(
-    /\{(?:prompt|language|themes|max_aspects|entities)\}/gu,
+    /\{(?:prompt|language|categories|max_brand_aspects|max_aspects|entities)\}/gu,
     (slot) => slots[slot]!,
   );
   if (!claims) return { system: policy.system_template, user };

@@ -15,11 +15,10 @@ describe('evidenceFacts', () => {
     ).toEqual(['JSON-LD', 'Microdata']);
     expect(
       evidenceFacts('aeo.open_graph_present', {
-        has_og_title: false,
-        property_count: 0,
-        has_og_description: false,
+        missing_properties: ['og:image', 'og:url'],
+        property_count: 2,
       }),
-    ).toEqual(['og:title', 'og:description']);
+    ).toEqual(['og:image', 'og:url']);
     expect(
       evidenceFacts('technical.canonical_present', { present: false, canonical_url: '' }),
     ).toEqual(['<link rel="canonical">']);

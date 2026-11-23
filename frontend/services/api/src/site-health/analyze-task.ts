@@ -77,8 +77,6 @@ async function guardRows(
   task: SiteTask,
   lock: boolean,
 ): Promise<GuardRows> {
-  // Analysis spends no allowance, so analyses share the runtime lock; it still
-  // orders them behind a discover, which writes analyze task rows before the crawl.
   const runtimeQuery = db
     .selectFrom('workspace_site_health_runtime')
     .select('id')
@@ -113,7 +111,6 @@ async function reusableArtifact(db: Database, crawl: Crawl, task: SiteTask) {
     .select(['f.id', 'f.normalized_facts'])
     .where('f.workspace_id', '=', crawl.workspace_id)
     .where('f.crawl_id', '=', crawl.id)
-    // The task's slot key (crawl, kind, URL) leads the plan, not a scan of the crawl's artifacts.
     .where('t.crawl_id', '=', crawl.id)
     .where('t.task_kind', '=', 'discover')
     .where('f.fetch_purpose', '=', 'discover')
@@ -236,11 +233,6 @@ async function acquire(ctx: SiteTaskContext, crawl: Crawl, task: SiteTask): Prom
   };
 }
 
-/**
- * A progress event on its display cadence. The crawl row is never rewritten
- * per page: its analyzed count is counted by the reconcile and the live
- * counters (CO-3), so page commits share the crawl lock.
- */
 async function recordProgress(ctx: SiteTaskContext, trx: Database, crawl: Crawl) {
   if (ctx.cadence.analysisEvent.admits(crawl.id))
     await recordCrawlEvent(trx, crawl, 'analysis.progress', 'analysis progress', {});
@@ -272,7 +264,6 @@ async function persist(
       : null;
   const result = context && outcome.facts ? await analyzePageAsync(outcome.facts, context) : null;
   await commitTask(ctx, claimed, async (trx, lock) => {
-    // Runtime and membership come before the crawl in Site Health lock order.
     const rows = await guardRows(trx, scope.crawl, scope.task, true);
     const { crawl, task } = await lock('share');
     if (!guardAllows(crawl, rows)) {
@@ -282,8 +273,6 @@ async function persist(
     let artifactId = outcome.reusedArtifactId;
     if (outcome.facts && task.site_url_id && result) {
       const page = { ...task, site_url_id: task.site_url_id };
-      // Requeued without an attempt (whose number keys its fetch records), so
-      // interpretation never reruns under the commit's locks.
       if (await contextMoved(trx, crawl, page, context))
         return settleTask(trx, ctx, task, { kind: 'deferred', delaySeconds: 0 });
       artifactId ??= await writeArtifact(trx, crawl, task, outcome.page!, outcome.facts, {

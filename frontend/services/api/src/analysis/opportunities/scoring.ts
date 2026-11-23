@@ -24,7 +24,6 @@ export function valueFactorForPrompt(
   return [valueFactorForIntent(l), 'legacy_intent', l];
 }
 export function recommendationStrengthFactor(assessments: Record<string, unknown>[]): number {
-  // A loop, not `Math.max(...spread)`: an audit's assessments are unbounded.
   let strongest = -Infinity;
   for (const a of assessments) {
     strongest = Math.max(strongest, weight(p.RECOMMENDATION_STRENGTH_FACTORS, String(a.state), 1));

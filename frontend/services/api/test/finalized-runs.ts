@@ -104,8 +104,7 @@ export function finalizedRuns(db: Database, fixtures: VisibilityFixtures) {
       return true;
     };
     let more = true;
-    while (more)
-      more = await /* NOSONAR -- Tasks run one at a time, as one worker runs them. */ runNext();
+    while (more) more = await /* NOSONAR */ runNext();
     await finalizeAudit(db, t.workspaceId, auditId!, async () => {});
     return auditId!;
   }

@@ -24,12 +24,7 @@ const onlyItem = <T,>(items: readonly T[]) => (items.length === 1 ? items[0] : u
 
 function suggestedProperty(provider: IntegrationProvider, properties: IntegrationProperty[]) {
   const matching = properties.filter((property) => property.matches_project === true);
-  return (
-    onlyItem(matching) ??
-    // GA4 exposes no site to match, so a single property is the only safe suggestion.
-    (provider === 'ga4' ? onlyItem(properties) : undefined) ??
-    null
-  );
+  return onlyItem(matching) ?? (provider === 'ga4' ? onlyItem(properties) : undefined) ?? null;
 }
 
 export function usePropertyChoice({

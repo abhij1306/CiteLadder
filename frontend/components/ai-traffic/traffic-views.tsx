@@ -27,6 +27,8 @@ import { OverviewFigures, RequestsByPurpose, overviewMeasured } from './overview
 import { trafficNarrowed } from './traffic-controls';
 import type { SourceStep } from '@/components/integrations/data-sources';
 import { CrawlerPages } from './crawler-pages';
+import { ClampText } from '@/components/ui/clamp-text';
+import { StatusMark } from '@/components/ui/status-mark';
 import { DataTable, type DataTableColumn, type DataTableState } from '@/components/ui/data-table';
 import { readErrorProps } from '@/components/ui/notice';
 import { SectionStack, TitledSection } from '@/components/ui/section';
@@ -37,7 +39,8 @@ const CRAWLER_COLUMNS: readonly DataTableColumn[] = [
   { key: 'requests', label: 'Requests', width: 'figure', kind: 'number' },
   { key: 'pages', label: 'Path-level pages', width: 'metric', kind: 'number' },
   { key: 'last-seen', label: 'Last observed', width: 'date', kind: 'date', priority: 'low' },
-  { key: 'status', label: 'Status and verification' },
+  { key: 'status', label: 'Status codes' },
+  { key: 'verification', label: 'Verification', width: 'name' },
   { key: 'breakdown', label: 'Folder and resource breakdown', priority: 'low' },
 ];
 const COVERAGE_COLUMNS: readonly DataTableColumn[] = [
@@ -162,13 +165,14 @@ export function TrafficCrawlers(scope: CrawlTableScope) {
                 <TableTime value={b.last_seen} />
               </TableCell>
               <TableCell>
-                <CellLines
-                  lines={[
-                    entries(b.status_codes),
-                    entries(b.verification),
-                    reasonEntries(b.verification_reasons),
-                  ]}
-                />
+                <ClampText>{entries(b.status_codes)}</ClampText>
+              </TableCell>
+              <TableCell>
+                <ClampText className="max-w-56!">
+                  {[entries(b.verification), reasonEntries(b.verification_reasons)]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </ClampText>
               </TableCell>
               <TableCell>
                 <CellLines lines={[topEntries(b.folders), topEntries(b.resources)]} />
@@ -244,7 +248,15 @@ export function TrafficActivity(scope: CrawlTableScope) {
                 />
               </TableCell>
               <TableCell>{words(r.resource_class)}</TableCell>
-              <TableCell numeric>{r.status_code}</TableCell>
+              <TableCell numeric>
+                {r.status_code >= 400 ? (
+                  <StatusMark tone={r.status_code >= 500 ? 'negative' : 'warning'}>
+                    {r.status_code}
+                  </StatusMark>
+                ) : (
+                  r.status_code
+                )}
+              </TableCell>
               <TableCell>
                 <CellLines
                   lines={[
@@ -281,13 +293,15 @@ function reasonEntries(values: Record<string, number>) {
 }
 function entries(values: Record<string, number>) {
   return Object.entries(values)
-    .map(([key, value]) => words(key) + ': ' + value)
+    .map(([key, value]) => words(key) + ': ' + formatCount(value))
     .join(' · ');
 }
 const TOP_ENTRIES = 3;
 function topEntries(values: Record<string, number>) {
   const sorted = Object.entries(values).sort(([, a], [, b]) => b - a);
-  const shown = sorted.slice(0, TOP_ENTRIES).map(([key, value]) => words(key) + ': ' + value);
+  const shown = sorted
+    .slice(0, TOP_ENTRIES)
+    .map(([key, value]) => words(key) + ': ' + formatCount(value));
   const more = sorted.length - TOP_ENTRIES;
   return [...shown, ...(more > 0 ? [`+${formatCount(more)} more`] : [])].join(' · ');
 }

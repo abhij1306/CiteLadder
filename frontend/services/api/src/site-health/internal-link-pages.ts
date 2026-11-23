@@ -20,7 +20,6 @@ export function linkUrl(value: string, base: string): string | null {
     const url = new URL(value, base);
     if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password) return null;
     url.hash = '';
-    // Snapshot the keys: deleting while iterating the live iterator would skip entries.
     for (const name of Array.from(url.searchParams.keys()))
       if (isTracking(name.toLowerCase())) url.searchParams.delete(name);
     return url.href;

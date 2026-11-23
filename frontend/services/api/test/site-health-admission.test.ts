@@ -88,7 +88,12 @@ describe('URL admission', () => {
     const kind = (path: string) => classifyUrlAdmission(`https://example.test${path}`).valueKind;
     expect(kind('/blog/product-review')).toBe('article');
     expect(kind('/about-us')).toBe('about');
-    expect(kind('/help/getting-started')).toBe('guide');
+    expect(kind('/help/getting-started')).toBe('docs');
+    expect(kind('/support/returns')).toBe('docs');
+    expect(kind('/store/Airport%20West')).toBe('local');
+    expect(kind('/stores/capalaba')).toBe('local');
+    expect(kind('/shop/dresses')).toBe('category');
+    expect(kind('/products/widget')).toBe('product');
     expect(kind('/productivity-tips')).toBe('other');
   });
 });

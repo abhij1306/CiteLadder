@@ -12,7 +12,6 @@ export function lockAuditEnqueue(db: Database, workspaceId: string) {
   return subjectXactLock(db, `audit-enqueue:${workspaceId}`);
 }
 
-/** Called under the workspace enqueue lock: the active-run and daily provider-task limits. */
 export async function reserveAuditCapacity(
   db: Database,
   workspaceId: string,

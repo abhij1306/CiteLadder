@@ -78,8 +78,8 @@ const FAILURE_REASONS: Record<string, string> = {
 };
 const GENERIC_FAILURE = 'The answer could not be collected. Try running it again.';
 
-export function executionFailureReason(errorCode: string): string {
-  return FAILURE_REASONS[errorCode] ?? GENERIC_FAILURE;
+export function executionFailureReason(errorCode: string, unknown = GENERIC_FAILURE): string {
+  return FAILURE_REASONS[errorCode] ?? unknown;
 }
 
 const SCHEDULE_PAUSE_REASONS: Record<string, string> = {
@@ -121,19 +121,4 @@ export function runTitle(
   const noun = audit.audit_scope === 'probe' ? 'probe' : 'audit';
   const kind = audit.parent_audit_id ? `${scope} repair run` : `${scope} ${noun}`;
   return `${kind} · ${formatDisplayDate(audit.created_at, timeZone)}`;
-}
-
-export function classificationLabel(classification: CitationClassification): string {
-  switch (classification) {
-    case 'owned':
-      return 'Owned';
-    case 'unintended':
-      return 'Owned (unintended)';
-    case 'competitor':
-      return 'Competitor';
-    case 'third_party':
-      return 'Third-party';
-    default:
-      return classification satisfies never;
-  }
 }

@@ -2,6 +2,7 @@ import { sql } from 'kysely';
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { readinessReason } from './analysis/scoring.ts';
+import { aeoChecksSql } from './reads/page-rows.ts';
 import { classificationState } from './score-summary.ts';
 import type { Crawl } from './site-task.ts';
 import { compareText } from '../text-order.ts';
@@ -15,9 +16,17 @@ type KindRow = {
   analyzed: number;
   web_sum: number;
   web_scored: number;
+  web_applicable: number;
   aeo_sum: number;
   aeo_scored: number;
+  aeo_applicable: number;
+  web_run: number;
+  web_total: number;
+  aeo_run: number;
+  aeo_total: number;
 };
+
+type Totalled = Exclude<keyof KindRow, 'page_kind' | 'other_reason'>;
 
 function currentAnalyses(db: Database, crawl: Crawl) {
   return db
@@ -45,8 +54,20 @@ function kindRows(db: Database, crawl: Crawl): Promise<KindRow[]> {
       sql<number>`count(*)::int`.as('analyzed'),
       sql<number>`coalesce(sum(p.web_fundamentals_score), 0)::float8`.as('web_sum'),
       sql<number>`count(p.web_fundamentals_score)::int`.as('web_scored'),
+      sql<number>`(count(*) filter (where p.technical_expected_weight > 0
+        or p.web_fundamentals_score is not null))::int`.as('web_applicable'),
       sql<number>`coalesce(sum(p.aeo_readiness_score), 0)::float8`.as('aeo_sum'),
       sql<number>`count(p.aeo_readiness_score)::int`.as('aeo_scored'),
+      sql<number>`(count(*) filter (where ${aeoChecksSql('p.readiness_dimensions', 'expected_points')} > 0
+        or p.aeo_readiness_score is not null))::int`.as('aeo_applicable'),
+      sql<number>`coalesce(sum(p.technical_determinate_weight), 0)::int`.as('web_run'),
+      sql<number>`coalesce(sum(p.technical_expected_weight), 0)::int`.as('web_total'),
+      sql<number>`coalesce(sum(${aeoChecksSql('p.readiness_dimensions', 'determinate_points')}), 0)::int`.as(
+        'aeo_run',
+      ),
+      sql<number>`coalesce(sum(${aeoChecksSql('p.readiness_dimensions', 'expected_points')}), 0)::int`.as(
+        'aeo_total',
+      ),
     ])
     .groupBy([sql`1`, sql`2`])
     .orderBy('p.page_kind')
@@ -54,19 +75,23 @@ function kindRows(db: Database, crawl: Crawl): Promise<KindRow[]> {
 }
 
 function scores(rows: KindRow[]) {
-  const total = (key: 'analyzed' | 'web_sum' | 'web_scored' | 'aeo_sum' | 'aeo_scored') =>
-    rows.reduce((sum, row) => sum + row[key], 0);
+  const total = (key: Totalled) => rows.reduce((sum, row) => sum + row[key], 0);
+  const checks = (run: Totalled, of: Totalled) =>
+    total(of) ? { run: total(run), total: total(of) } : null;
   const analyzed = total('analyzed');
-  const mean = (sum: number, scored: number) => (scored ? sum / scored : null);
+  const mean = (role: 'web' | 'aeo') =>
+    total(`${role}_scored`) ? total(`${role}_sum`) / total(`${role}_applicable`) : null;
   const coverage = (scored: number) => (analyzed ? scored / analyzed : null);
   return {
     analyzed,
-    web_fundamentals_score: mean(total('web_sum'), total('web_scored')),
+    web_fundamentals_score: mean('web'),
     web_fundamentals_coverage: coverage(total('web_scored')),
     web_fundamentals_state: LIVE_STATE,
-    aeo_readiness_score: mean(total('aeo_sum'), total('aeo_scored')),
+    aeo_readiness_score: mean('aeo'),
     aeo_measurement_coverage: coverage(total('aeo_scored')),
     aeo_measurement_state: LIVE_STATE,
+    web_fundamentals_checks: checks('web_run', 'web_total'),
+    aeo_readiness_checks: checks('aeo_run', 'aeo_total'),
   };
 }
 

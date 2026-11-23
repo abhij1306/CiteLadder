@@ -77,7 +77,6 @@ export async function duplicateOf(
     .select('a.id')
     .where('t.workspace_id', '=', crawl.workspace_id)
     .where('t.crawl_id', '=', crawl.id)
-    // Only these kinds write artifacts; naming them lets the task slot index serve the lookup.
     .where('t.task_kind', 'in', ['discover', 'analyze'])
     .where('t.url_hash', '=', target)
     .limit(1)

@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import type { Database } from '../db/database.ts';
-import type { McpWriteKind } from '../mcp/write-tools.ts';
 
 type SecurityEvent =
   | 'acquisition.control'
   | 'api_key.create'
   | 'api_key.revoke'
+  | 'api_key.delete'
   | 'api_key.rejected_revoked'
   | 'api_key.rejected_expired'
   | 'crawl_log.create'
@@ -14,7 +14,7 @@ type SecurityEvent =
   | 'credential.create'
   | 'credential.update'
   | 'credential.delete'
-  | `mcp.write.${McpWriteKind}`;
+  | `agent.change.${string}`;
 
 /** Append in the mutation transaction; no arbitrary payload or secrets. */
 export async function recordSecurityEvent(

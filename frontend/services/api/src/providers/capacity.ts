@@ -199,7 +199,7 @@ export async function acquireCapacity(
         .executeTakeFirst();
       const expiry = new Date(at.getTime() + runtime.audits.capacity_lease_ttl_seconds * 1000);
       const renewed = prior
-        ? await trx // NOSONAR -- One transaction: leases follow the bucket lock order.
+        ? await trx // NOSONAR
             .updateTable('provider_capacity_leases')
             .set({ units: '1', released_at: null, expires_at: expiry, updated_at: at })
             .where('id', '=', prior.id)

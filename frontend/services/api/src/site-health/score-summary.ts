@@ -17,10 +17,6 @@ export function classificationState(classified: number, expected: number) {
   return classified === expected ? 'complete' : 'partial';
 }
 
-/**
- * Publishing from the latest audits serializes per profile. A crawl's own
- * provisional summary takes no profile lock: it reads only its analyses.
- */
 export async function lockProfile(db: Database, crawl: Crawl) {
   await db
     .selectFrom('site_health_profiles')
@@ -157,9 +153,9 @@ async function eachBatch(
   const size = batchSize();
   let after: string | null = null;
   for (;;) {
-    const ids: string[] = await selectedAfter(db, crawl, { after, size }); // NOSONAR -- Keyset batches, in order.
+    const ids: string[] = await selectedAfter(db, crawl, { after, size }); // NOSONAR
     if (!ids.length) return;
-    await visit(ids, await batchAnalyses(db, crawl, ids)); // NOSONAR -- Keyset batches, in order.
+    await visit(ids, await batchAnalyses(db, crawl, ids)); // NOSONAR
     const last = ids.at(-1);
     if (!last || ids.length < size) return;
     after = last;

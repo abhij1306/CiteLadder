@@ -142,7 +142,6 @@ export async function completeUpload(
     return completed;
   });
 }
-/** Declared days follow server reporting midnights; the client reports only its scan span. */
 async function scannedDays(
   db: Database,
   input: {

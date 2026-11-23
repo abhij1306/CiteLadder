@@ -13,9 +13,10 @@ import { getLogger } from '../logging.ts';
 import { ModelError, providerErrorCode } from '../models/http.ts';
 import type { ModelGateway } from '../models/gateway.ts';
 import { bindingFailure } from './binding.ts';
+import { draftTokens, isBrandSlot, planBrandSlots } from './brand-slots.ts';
 import type { GenerationContext, OfferingMap } from './generation-context.ts';
 import {
-  cohortShares,
+  draftCallLimit,
   generationSetting,
   type GenerationCohort,
   type GenerationInput,
@@ -127,7 +128,16 @@ export function admitDrafts(
     ...pending.map((row) => row.normalized_text_hash),
     ...prior.map((row) => row.hash),
   ]);
-  const near = [...context.prompts, ...pending, ...prior].map((row) => promptTokens(row.text));
+  const known = [...context.prompts, ...pending].map((row) => promptTokens(row.text));
+  const near = prior.map((row) => draftTokens(row.text, row.slot));
+  const isNearDuplicate = (text: string, slot: Slot) => {
+    const plain = promptTokens(text),
+      tokens = draftTokens(text, slot);
+    return (
+      known.some((other) => nearDuplicate(plain, other)) ||
+      near.some((other) => nearDuplicate(tokens, other))
+    );
+  };
   const usedSlots = new Set(prior.map((row) => row.slot.slot_id));
   const observed = new Set([
     ...context.context.demand_signals.flatMap((row) =>
@@ -200,8 +210,7 @@ export function admitDrafts(
     if (!slot.buyer_need.market && namesPlace(text, geo)) return 'location_unplanned';
     const identity = cohortReason(row, slot.cohort, text);
     if (identity) return identity;
-    const tokens = promptTokens(text);
-    return near.some((other) => nearDuplicate(tokens, other)) ? 'near_duplicate' : null;
+    return isNearDuplicate(text, slot) ? 'near_duplicate' : null;
   };
   const admitted: Draft[] = [];
   const drops: Drops = {};
@@ -225,13 +234,15 @@ export function admitDrafts(
       continue;
     }
     seen.add(hash);
-    near.push(promptTokens(text));
+    near.push(draftTokens(text, slot));
     usedSlots.add(slot.slot_id);
     admitted.push({
       slot,
       text,
       hash,
-      intent: G.intent_legacy[row.prompt_intent as keyof typeof G.intent_legacy],
+      intent: isBrandSlot(slot)
+        ? policy.prompts.brand.intent
+        : G.intent_legacy[row.prompt_intent as keyof typeof G.intent_legacy],
       buyer_stage: row.buyer_stage,
       prompt_intent: row.prompt_intent,
       ...(row.names_place === undefined ? {} : { names_place: row.names_place }),
@@ -341,15 +352,6 @@ async function suggestMaps(
   }
 }
 
-export function draftCallLimit(input: Pick<GenerationInput, 'count' | 'cohort' | 'distribution'>) {
-  const cells = input.count * generationSetting('overgenerate_factor'),
-    size = generationSetting('model_batch_size');
-  const batches = Object.values(cohortShares(input))
-    .filter((share) => share > 0)
-    .reduce((sum, share) => sum + Math.ceil((cells * share) / size), 0);
-  return Math.max(1, batches) + 1;
-}
-
 export function planBatches(slots: readonly Slot[], size: number): Slot[][] {
   return [...Map.groupBy(slots, (slot) => slot.cohort).values()].flatMap((cohortSlots) => {
     const groups = [...Map.groupBy(cohortSlots, (slot) => slot.topic_id).values()].flatMap(
@@ -420,6 +422,7 @@ async function draftBatches(
         generationSystemPrompt({
           businessModel,
           cohort,
+          mode: input.mode,
           grounded,
           runContext: Boolean(input.run_context),
         }),
@@ -497,7 +500,8 @@ export async function generateDrafts(
   deadline: AbortSignal,
 ) {
   const maps = await suggestMaps(gateway, context, deadline);
-  const slots = planSlots(context, input, maps);
+  const slots =
+    input.mode === 'brand' ? planBrandSlots(context, input, maps) : planSlots(context, input, maps);
   return {
     ...(await draftBatches(context, input, gateway, slots, deadline)),
     maps,

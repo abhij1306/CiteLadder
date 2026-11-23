@@ -8,12 +8,7 @@ import {
 } from './crawl.ts';
 import { responseObject, uuid } from './core.ts';
 import { monitoredQuotaSchema } from './inventory.ts';
-import {
-  findingClassSchema,
-  issueDimensionSchema,
-  issueSectionSchema,
-  issueSeveritySchema,
-} from './issues.ts';
+import { issueDimensionSchema, issueSectionSchema, issueSeveritySchema } from './issues.ts';
 import { rootErrorSchema } from './pages.ts';
 import { cursorPageSchema } from './pagination.ts';
 
@@ -24,7 +19,6 @@ const issueHistoryRowSchema = responseObject({
   dimension: issueDimensionSchema,
   category: z.string(),
   severity: issueSeveritySchema,
-  finding_class: findingClassSchema,
   title: z.string(),
   description: z.string(),
   remediation: z.string(),
@@ -212,7 +206,6 @@ const overviewDimensionSchema = responseObject({
 const overviewIssueSchema = responseObject({
   rule_id: z.string(),
   title: z.string(),
-  finding_class: z.string(),
   severity: z.string(),
   category: z.string(),
   description: z.string(),

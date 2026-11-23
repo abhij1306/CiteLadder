@@ -12,7 +12,7 @@ import { policy } from '../config.ts';
 import { resolveSettingSpec } from '../config/settings.ts';
 import promptLibrary from '../config/prompt-library.json' with { type: 'json' };
 import { subjectXactLock } from '../db/advisory-lock.ts';
-import type { Database } from '../db/database.ts';
+import { inTransaction, type Database } from '../db/database.ts';
 import { jsonObject } from '../db/json.ts';
 import { ApiError, notFound } from '../errors.ts';
 import type { BrandDiscoveries } from '../generated/db-schema.ts';
@@ -105,9 +105,7 @@ export function createDiscovery(
   input: DiscoveryInput,
   key: string,
 ) {
-  return db.transaction().execute(async (trx) => {
-    // Locked before the replay lookup, so a concurrent retry of the same key
-    // sees the first request's row instead of spending a second admission.
+  return inTransaction(db, async (trx) => {
     await subjectXactLock(trx, `brand-discovery-admission:${workspaceId}`);
     const existing = await trx
       .selectFrom('brand_discoveries')
@@ -154,7 +152,6 @@ export function createDiscovery(
         competitors: '[]',
         topics: '[]',
         prompt_suggestions: '[]',
-        evidence: '[]',
         gaps: '[]',
         warnings: '[]',
         progress: JSON.stringify(discoveryProgress('opening_website', 0)),
@@ -317,10 +314,7 @@ export async function completeDiscovery(
     if (error instanceof ApiError) throw error;
     throw new ApiError(409, 'Confirmed domains must be public domains');
   }
-  // Competitors were found by discovery and reviewed by the reader; their
-  // websites are not fetched again here, so an unreachable site cannot block
-  // project creation. Domains are still validated as public domains above.
-  return db.transaction().execute(async (trx) => {
+  return inTransaction(db, async (trx) => {
     const row = await discoveryRow(trx, workspaceId, id, true);
     if (replay(row, key)) return completionView(row);
     if (row.status !== cfg.discovery_status_ready)
@@ -351,7 +345,7 @@ export async function completeDiscovery(
       .orderBy('created_at', 'desc')
       .orderBy('id', 'desc')
       .executeTakeFirst();
-    if (!snapshot) throw new ApiError(409, 'Discovery research evidence is unavailable');
+    if (!snapshot) throw new ApiError(409, 'Discovery research is unavailable');
     const artifacts = Object.fromEntries(Object.keys(sources).map((field) => [field, snapshot.id]));
     const brandName = z.string().parse(data.brand_name);
     const aliases = seedBrandAliases(brandName, domains);

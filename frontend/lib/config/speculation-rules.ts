@@ -16,5 +16,4 @@ export const SPECULATION_RULES = {
   ],
 } as const;
 
-/** The exact text of the inline `<script type="speculationrules">`, which the CSP hashes. */
 export const SPECULATION_RULES_JSON = JSON.stringify(SPECULATION_RULES);

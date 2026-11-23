@@ -70,6 +70,7 @@ function handlers(
 ) {
   const base = `/api/v1/projects/${PROJECT}/site-health/changes`;
   mswServer.use(
+    http.get('/api/v1/site-crawls', () => HttpResponse.json({ items: [], next_cursor: null })),
     http.get(`${base}/summary`, () => HttpResponse.json(response(state))),
     http.get(base, ({ request }) => {
       const url = new URL(request.url);

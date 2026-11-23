@@ -10,15 +10,13 @@
  * imports from and forgetting it here fails SILENTLY — the class is just absent
  * — so `e2e/design-repair.spec.ts` is the guard that matters.
  */
-/* Both imports come first: CSS drops an `@import` that follows another
-   at-rule, and putting the `@source` list above this one silently shipped a
-   stylesheet with no design system in it at all. */
 @import 'tailwindcss' source(none);
 @import './globals.css';
 
 @source '../../../apps/app/src';
 @source '../../../components/agent';
 @source '../../../components/ai-traffic';
+@source '../../../components/brand';
 @source '../../../components/demand';
 @source '../../../components/integrations';
 @source '../../../components/knowledge-base';

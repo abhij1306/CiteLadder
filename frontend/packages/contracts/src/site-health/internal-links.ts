@@ -2,14 +2,12 @@ import { z } from 'zod';
 
 const sourcePassageSchema = z.object({
   text: z.string(),
-  /** UTF-16 offsets in the artifact's primary_content_text. */
   start: z.number().int().nonnegative(),
   end: z.number().int().nonnegative(),
 });
 
 export const internalLinkPlacementSchema = sourcePassageSchema.extend({
   anchor: z.string(),
-  /** UTF-16 offset within this passage. */
   anchor_start: z.number().int().nonnegative(),
 });
 

@@ -4,7 +4,7 @@ import type { Database } from '../db/database.ts';
 import { record } from '../db/json.ts';
 import { policy } from '../config.ts';
 import { getLogger } from '../logging.ts';
-import { parseAds, type AdItem } from '../search-surfaces/parsing.ts';
+import { parseAds, type AdItem } from '../search-surfaces/scraper-parsing.ts';
 import { domainIn, type ScoringConfig } from './scoring.ts';
 
 const logger = getLogger('citeladder.analysis.ads');

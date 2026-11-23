@@ -153,7 +153,6 @@ export function ChatSection() {
   );
 }
 
-/** The search field types freely: the menu's typeahead must not take its letters. */
 function keepTyping(event: KeyboardEvent<HTMLInputElement>) {
   if (event.key.length === 1 || event.key === 'Backspace' || event.key === ' ') {
     event.stopPropagation();

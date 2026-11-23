@@ -7,8 +7,15 @@
     "terminal_grace_polls": 2,
     "export_page_size": 200,
     "max_detail_evaluations": 200,
-    "scoring_version": "sh-scoring-1",
+    "scoring_version": "sh-scoring-3",
     "rule_dimensions": ["aeo", "technical"],
+    "issue_values": {
+      "technical.title_length": "title",
+      "technical.meta_description_length": "meta_description",
+      "technical.h1_present": "h1_count",
+      "technical.single_h1": "h1_count",
+      "aeo.thin_content": "word_count"
+    },
     "issue_section_by_category": {
       "content": "content",
       "metadata": "content"
@@ -68,7 +75,7 @@
       }
     },
     "fetch_attempt_error_outcome": "error",
-    "defect_impact_bands": {
+    "severity_impact_bands": {
       "critical": 4,
       "high": 3,
       "medium": 2,
@@ -85,16 +92,32 @@
       "crawlability": 0.15
     },
     "aeo_check_pillar": {
+      "aeo.answer_first": "answerability",
       "aeo.content_date_present": "freshness",
+      "aeo.content_recency": "freshness",
+      "aeo.entity_profiles": "provenance",
       "aeo.heading_hierarchy": "structure",
       "aeo.listing_answer_set": "answerability",
+      "aeo.listing_item_facts": "evidence",
+      "aeo.long_paragraphs": "structure",
       "aeo.offer_freshness_signal": "freshness",
+      "aeo.open_graph_present": "machine-readability",
+      "aeo.open_graph_url_matches": "machine-readability",
+      "aeo.organization_identity": "provenance",
       "aeo.product_answer_facts": "answerability",
       "aeo.product_brand_identity": "provenance",
       "aeo.product_evidence_facts": "evidence",
+      "aeo.question_headings": "structure",
       "aeo.schema_matches_content": "machine-readability",
+      "aeo.schema_recommended_present": "machine-readability",
       "aeo.schema_required_valid": "machine-readability",
       "aeo.server_rendered_content": "machine-readability",
+      "aeo.source_support_present": "evidence",
+      "aeo.structured_data_present": "machine-readability",
+      "aeo.structured_data_valid": "machine-readability",
+      "aeo.thin_content": "answerability",
+      "aeo.trust_path_present": "provenance",
+      "aeo.twitter_card_present": "machine-readability",
       "aeo.visible_attribution": "provenance",
       "search.crawler_access": "crawlability",
       "search.snippet_access": "crawlability",
@@ -116,7 +139,9 @@
     "aeo_max_evidence_pages": 25,
     "content_addressable_check_fields": {
       "technical.title_present": "title",
-      "technical.meta_description_present": "meta_description"
+      "technical.meta_description_present": "meta_description",
+      "technical.meta_description_length": "meta_description",
+      "technical.title_length": "title"
     },
     "partial_reasons": {
       "discovery": "discovery_incomplete",

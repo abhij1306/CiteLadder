@@ -17,32 +17,19 @@ import {
 
 import { resolveCommandGroups } from '@/components/layout/nav-items';
 import { runsQueries } from '@/lib/api/runs';
+import { ProjectSelectionProvider } from '@/lib/project/project-scope';
+import { makeProject } from '@/test/fixtures/project';
+import { testProjectSelection } from '@/test/render';
 import { mswServer } from '@/test/msw-server';
 
-// Hoisted so the mock factories below — which vitest lifts above these
-// statements — can reference the state safely rather than relying on the
-// factories happening to run lazily.
-const { setActiveProjectId, projectContext } = vi.hoisted(() => {
-  const setActiveProjectId = vi.fn();
-  return {
-    setActiveProjectId,
-    projectContext: {
-      projects: [
-        { id: 'p1', brand_name: 'Acme' },
-        { id: 'p2', brand_name: 'Orbit' },
-      ],
-      activeProjectId: 'p1',
-      activeWorkspaceId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-      activeProject: { id: 'p1', workspace_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
-      setActiveProjectId,
-    },
-  };
+const setActiveProjectId = vi.fn();
+const acme = makeProject({ id: 'p1', name: 'Acme', brand_name: 'Acme' });
+const selection = testProjectSelection({
+  projects: [acme, makeProject({ id: 'p2', name: 'Orbit', brand_name: 'Orbit' })],
+  activeProjectId: acme.id,
+  activeProject: acme,
+  setActiveProjectId,
 });
-
-vi.mock('@/lib/project/project-context', () => ({
-  useActiveWorkspaceId: () => 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-  useProjectContext: () => projectContext,
-}));
 
 import { CommandPalette } from './command-palette';
 import { CommandPaletteHost, CommandPaletteTrigger } from './command-palette-launcher';
@@ -58,8 +45,10 @@ function RouterTestWrapper({ children }: Readonly<{ children: ReactNode }>) {
   return (
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={['/projects?project=p1']}>
-        {children}
-        <LocationDisplay />
+        <ProjectSelectionProvider value={selection}>
+          {children}
+          <LocationDisplay />
+        </ProjectSelectionProvider>
       </MemoryRouter>
     </QueryClientProvider>
   );

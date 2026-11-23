@@ -25,8 +25,6 @@ const STEPS = ['Basics', 'Research', 'Confirm'] as const;
 
 export function OnboardingScreen() {
   const location = useLocation();
-  // Cached routes may retain component state. A fresh Add project URL must
-  // start a fresh transaction, and a hidden route must not keep redirecting.
   if (stripTrailingSlashes(location.pathname) !== '/onboarding') return null;
   const transactionKey: string = location.state?.onboardingTransactionKey ?? location.key;
   return <OnboardingTransaction key={transactionKey} transactionKey={transactionKey} />;

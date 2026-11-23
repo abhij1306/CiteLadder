@@ -1,4 +1,4 @@
-import { QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider, type QueryClient } from '@tanstack/react-query';
 import { render, type RenderOptions } from '@testing-library/react';
 import type { ReactElement, ReactNode } from 'react';
 import { MemoryRouter, type MemoryRouterProps } from 'react-router-dom';
@@ -9,7 +9,7 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import { createAppQueryClient } from '@/lib/api/query-client';
 import { queryKeys } from '@/lib/api/query-keys';
 import { providerCatalogFixture } from './provider-catalog-fixture';
-import type { Workspace } from '@citeladder/contracts';
+import type { Project, Workspace } from '@citeladder/contracts';
 import { roles } from '@/services/api/src/config/workspaces.json';
 import { SessionProvider } from '@/lib/auth/session-guard';
 import { ActiveProjectScopeProvider } from '@/lib/project/active-project-scope';
@@ -58,6 +58,22 @@ export function selectionAs(role: TestRole): Partial<ProjectContextValue> {
   return { workspaces: [workspace], activeWorkspace: workspace };
 }
 
+export function projectScope(
+  project: Project,
+  role: TestRole = 'owner',
+): Partial<ProjectContextValue> {
+  const workspace = { ...testWorkspace(role), id: project.workspace_id };
+  return {
+    workspaces: [workspace],
+    activeWorkspace: workspace,
+    activeWorkspaceId: workspace.id,
+    projects: [project],
+    activeProject: project,
+    activeProjectId: project.id,
+    status: 'ready',
+  };
+}
+
 export function testProjectSelection(
   overrides: Partial<ProjectContextValue> = {},
 ): ProjectContextValue {
@@ -89,7 +105,7 @@ export function ResolvedProjectRoute({ children }: Readonly<{ children: ReactNod
   );
 }
 
-export function testQueryClient() {
+function testQueryClient() {
   const queryClient = createAppQueryClient();
   queryClient.setQueryData(queryKeys.providers.catalog(), providerCatalogFixture);
   return queryClient;
@@ -104,6 +120,7 @@ type ProvidersOptions = Omit<RenderOptions, 'wrapper'> & {
    * what would otherwise hide a consumer that cannot survive without one.
    */
   projectSelection?: Partial<ProjectContextValue> | null;
+  queryClient?: QueryClient;
   initialEntries?: MemoryRouterProps['initialEntries'];
 };
 
@@ -123,8 +140,12 @@ type ProvidersOptions = Omit<RenderOptions, 'wrapper'> & {
  * renders inside a valid context here.
  */
 export function renderWithProviders(ui: ReactElement, options?: ProvidersOptions) {
-  const queryClient = testQueryClient();
-  const { projectSelection, initialEntries, ...renderOptions } = options ?? {};
+  const {
+    projectSelection,
+    initialEntries,
+    queryClient = testQueryClient(),
+    ...renderOptions
+  } = options ?? {};
   const selection = projectSelection === null ? null : testProjectSelection(projectSelection);
 
   function Wrapper({ children }: Readonly<{ children: ReactNode }>) {

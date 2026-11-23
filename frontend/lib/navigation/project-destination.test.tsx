@@ -1,6 +1,9 @@
 import { renderHook } from '@testing-library/react';
 import { act } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vite-plus/test';
+import type { ReactNode } from 'react';
+import { ProjectSelectionProvider } from '@/lib/project/project-scope';
+import { testProjectSelection } from '@/test/render';
 import { isAppRoute } from './app-route';
 
 const navigate = vi.fn();
@@ -14,15 +17,6 @@ vi.mock('react-router-dom', () => ({
 
 const setActiveProjectId = vi.fn();
 const setActiveWorkspaceId = vi.fn();
-let activeProjectId: string | null = null;
-vi.mock('@/lib/project/project-context', () => ({
-  useProjectContext: () => ({
-    activeProjectId,
-    setActiveProjectId,
-    activeWorkspaceId: WORKSPACE,
-    setActiveWorkspaceId,
-  }),
-}));
 
 import {
   newProjectDestination,
@@ -37,12 +31,20 @@ const PROJECT_1 = '11111111-1111-4111-8111-111111111111';
 const PROJECT_2 = '22222222-2222-4222-8222-222222222222';
 const WORKSPACE = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 
+function renderScoped<T>(hook: () => T, activeProjectId: string | null = null) {
+  const value = testProjectSelection({ activeProjectId, setActiveProjectId, setActiveWorkspaceId });
+  return renderHook(hook, {
+    wrapper: ({ children }: Readonly<{ children: ReactNode }>) => (
+      <ProjectSelectionProvider value={value}>{children}</ProjectSelectionProvider>
+    ),
+  });
+}
+
 beforeEach(() => {
   navigate.mockClear();
   setActiveProjectId.mockClear();
   pathname = '/projects';
   search = new URLSearchParams();
-  activeProjectId = null;
 });
 
 describe('projectDestination', () => {
@@ -102,9 +104,8 @@ describe('scopedNavigationDestination', () => {
 
 describe('useSelectProject', () => {
   it('pushes one entry for a deliberate switch, so Back returns to the previous project', () => {
-    activeProjectId = PROJECT_1;
     search = new URLSearchParams({ project: PROJECT_1 });
-    const { result } = renderHook(() => useSelectProject());
+    const { result } = renderScoped(useSelectProject, PROJECT_1);
 
     act(() => result.current(PROJECT_2));
 
@@ -113,8 +114,7 @@ describe('useSelectProject', () => {
   });
 
   it('replaces when it is only filling in an absent parameter', () => {
-    activeProjectId = PROJECT_1;
-    const { result } = renderHook(() => useSelectProject());
+    const { result } = renderScoped(useSelectProject, PROJECT_1);
 
     act(() => result.current(PROJECT_1));
 
@@ -125,9 +125,8 @@ describe('useSelectProject', () => {
   });
 
   it('adds no history entry for the project already in the URL', () => {
-    activeProjectId = PROJECT_1;
     search = new URLSearchParams({ project: PROJECT_1 });
-    const { result } = renderHook(() => useSelectProject());
+    const { result } = renderScoped(useSelectProject, PROJECT_1);
 
     act(() => result.current(PROJECT_1));
     const calls = [...navigate.mock.calls];
@@ -137,9 +136,8 @@ describe('useSelectProject', () => {
   });
 
   it('replaces when the entry being left behind is dead', () => {
-    activeProjectId = PROJECT_1;
     search = new URLSearchParams({ project: PROJECT_1 });
-    const { result } = renderHook(() => useSelectProject());
+    const { result } = renderScoped(useSelectProject, PROJECT_1);
 
     act(() => result.current(PROJECT_2, { replace: true }));
 
@@ -150,8 +148,7 @@ describe('useSelectProject', () => {
   });
 
   it('pushes when the selection also changes page', () => {
-    activeProjectId = PROJECT_1;
-    const { result } = renderHook(() => useSelectProject());
+    const { result } = renderScoped(useSelectProject, PROJECT_1);
 
     act(() => result.current(PROJECT_1, { destination: '/settings' }));
 
@@ -159,9 +156,8 @@ describe('useSelectProject', () => {
   });
 
   it('leaves a path that names the outgoing project crawl', () => {
-    activeProjectId = PROJECT_1;
     pathname = '/site/crawls/22222222-2222-4222-8222-222222222222/pages/abc';
-    const { result } = renderHook(() => useSelectProject());
+    const { result } = renderScoped(useSelectProject, PROJECT_1);
 
     act(() => result.current(PROJECT_2));
 
@@ -169,9 +165,8 @@ describe('useSelectProject', () => {
   });
 
   it("leaves the outgoing project's prompt for the new project's prompt library", () => {
-    activeProjectId = PROJECT_1;
     pathname = '/prompts/22222222-2222-4222-8222-222222222222';
-    const { result } = renderHook(() => useSelectProject());
+    const { result } = renderScoped(useSelectProject, PROJECT_1);
 
     act(() => result.current(PROJECT_2));
 
@@ -179,10 +174,9 @@ describe('useSelectProject', () => {
   });
 
   it('keeps a path that names no project-owned resource', () => {
-    activeProjectId = PROJECT_1;
     pathname = '/issues';
     search = new URLSearchParams({ section: 'content', sort: 'pages' });
-    const { result } = renderHook(() => useSelectProject());
+    const { result } = renderScoped(useSelectProject, PROJECT_1);
 
     act(() => result.current(PROJECT_2));
 
@@ -192,7 +186,6 @@ describe('useSelectProject', () => {
   });
 
   it("drops the outgoing project's record ids and keeps its view", () => {
-    activeProjectId = PROJECT_1;
     pathname = '/visibility';
     search = new URLSearchParams({
       project: PROJECT_1,
@@ -200,7 +193,7 @@ describe('useSelectProject', () => {
       run: 'run-of-project-1',
       prompt: 'prompt-of-project-1',
     });
-    const { result } = renderHook(() => useSelectProject());
+    const { result } = renderScoped(useSelectProject, PROJECT_1);
 
     act(() => result.current(PROJECT_2));
 
@@ -208,10 +201,9 @@ describe('useSelectProject', () => {
   });
 
   it('keeps record ids when the active project is re-selected', () => {
-    activeProjectId = PROJECT_1;
     pathname = '/issues';
     search = new URLSearchParams({ issue: 'group-1' });
-    const { result } = renderHook(() => useSelectProject());
+    const { result } = renderScoped(useSelectProject, PROJECT_1);
 
     act(() => result.current(PROJECT_1));
 
@@ -222,9 +214,8 @@ describe('useSelectProject', () => {
   });
 
   it('keeps a crawl detail path when the ACTIVE project is re-selected', () => {
-    activeProjectId = PROJECT_1;
     pathname = '/site/crawls/22222222-2222-4222-8222-222222222222/pages/abc';
-    const { result } = renderHook(() => useSelectProject());
+    const { result } = renderScoped(useSelectProject, PROJECT_1);
 
     act(() => result.current(PROJECT_1));
 
@@ -235,9 +226,8 @@ describe('useSelectProject', () => {
   });
 
   it('keeps an explicit destination even when leaving a crawl detail path', () => {
-    activeProjectId = PROJECT_1;
     pathname = '/site/crawls/22222222-2222-4222-8222-222222222222/pages/abc';
-    const { result } = renderHook(() => useSelectProject());
+    const { result } = renderScoped(useSelectProject, PROJECT_1);
 
     act(() => result.current(PROJECT_2, { destination: '/settings' }));
 
@@ -251,7 +241,7 @@ describe('useSelectWorkspace', () => {
     pathname = path;
     search = new URLSearchParams(params);
     navigate.mockClear();
-    const { result } = renderHook(() => useSelectWorkspace());
+    const { result } = renderScoped(useSelectWorkspace);
     act(() => result.current(OTHER));
     return navigate.mock.calls.at(-1)?.[0];
   };
@@ -268,7 +258,7 @@ describe('useSelectWorkspace', () => {
 
   it('does nothing when the active workspace is picked again', () => {
     pathname = '/insights';
-    const { result } = renderHook(() => useSelectWorkspace());
+    const { result } = renderScoped(useSelectWorkspace);
     act(() => result.current(WORKSPACE));
     expect(navigate).not.toHaveBeenCalled();
     act(() => result.current(OTHER));

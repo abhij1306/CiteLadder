@@ -189,4 +189,36 @@ describe('single-dispatch research transport and scoped normalization', () => {
       normalizeResponse('backlink_summary', body({ target: 'other.example', backlinks: 3 }), plan),
     ).toThrow('scope');
   });
+  it('keeps malformed provider fields unknown without dropping or inventing rows', () => {
+    expect(normalizeResponse('backlink_summary', body({ backlinks: 'many' }), plan)).toMatchObject({
+      received: 1,
+      summary: { backlinks: null, rank: null },
+    });
+    expect(normalizeResponse('backlink_summary', body({ rank: null }), plan).received).toBe(0);
+    const paid = {
+      keyword_data: { keyword: 'shoes', search_intent_info: { main_intent: 'commercial' } },
+      ranked_serp_element: { serp_item: { type: 'paid', url: 'https://ads.example/x' } },
+    };
+    const ranked = normalizeResponse('ranking_keywords', body({ items: [paid, 5, null] }), plan);
+    expect(ranked.received).toBe(3);
+    expect(ranked.rows).toHaveLength(1);
+    expect(ranked.rows[0]).toMatchObject({ keyword: 'shoes', intent: 'commercial', url: '' });
+    const footprint = (items: unknown[], scope = 'exact_host') =>
+      normalizeResponse('footprint', body({ items }), { ...plan, research_scope: scope });
+    const host = {
+      subdomain: 'WWW.example.com',
+      metrics: { organic: { count: 40, pos_1: 2, pos_2_3: 'x', pos_4_10: 5, etv: '12.5' } },
+    };
+    expect(footprint([host, { subdomain: 'blog.example.com' }]).summary).toMatchObject({
+      organic_keywords: 40,
+      estimated_monthly_traffic: '12.5',
+      top_10_keywords: null,
+      ranking_buckets: { pos_1: 2, pos_2_3: null, pos_4_10: 5 },
+    });
+    expect(() => footprint([host, 'loose'], 'domain_subdomains')).toThrow('duplicate');
+    expect(() => normalizeResponse('unknown_kind', body({ items: [{}] }), plan)).toThrow(
+      'Unsupported',
+    );
+    expect(normalizeResponse('unknown_kind', body({ items: [] }), plan).rows).toEqual([]);
+  });
 });

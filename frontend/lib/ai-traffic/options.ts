@@ -18,7 +18,6 @@ import type { AiReferralsRangeParams } from '@/lib/api/ai-traffic';
 import type { snapshotGranularitySchema } from '@citeladder/contracts/analytics';
 export type AiReferralsRange = 'latest' | '30d' | '90d' | '1y';
 
-/** Every sync writes the 30-day preset, so an empty default means nothing synced yet. */
 export const DEFAULT_RANGE: AiReferralsRange = '30d';
 
 export const RANGE_OPTIONS: readonly { value: AiReferralsRange; label: string }[] = [

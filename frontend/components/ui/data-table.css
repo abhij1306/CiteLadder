@@ -2,20 +2,22 @@
   --data-table-identity-min: 25ch;
 }
 
-[data-pinned] .table-frame tr > :nth-child(1),
-[data-pinned='2'] .table-frame tr > :nth-child(2) {
-  position: sticky;
-  z-index: 10;
-  background-color: var(--table-ground);
-}
-[data-pinned] .table-frame tr > :nth-child(1) {
-  left: 0;
-}
-[data-pinned='2'] .table-frame tr > :nth-child(2) {
-  left: calc(var(--spacing) * 10);
-}
-[data-pinned] .table-frame thead tr > :nth-child(1),
-[data-pinned='2'] .table-frame thead tr > :nth-child(2) {
-  z-index: 20;
-  background-color: var(--table-head-ground);
+@media (min-width: 768px) {
+  [data-pinned] .table-frame tr > :nth-child(1),
+  [data-pinned='2'] .table-frame tr > :nth-child(2) {
+    position: sticky;
+    z-index: 10;
+    background-color: var(--table-ground);
+  }
+  [data-pinned] .table-frame tr > :nth-child(1) {
+    left: 0;
+  }
+  [data-pinned='2'] .table-frame tr > :nth-child(2) {
+    left: calc(var(--spacing) * 10);
+  }
+  [data-pinned] .table-frame thead tr > :nth-child(1),
+  [data-pinned='2'] .table-frame thead tr > :nth-child(2) {
+    z-index: 20;
+    background-color: var(--table-head-ground);
+  }
 }

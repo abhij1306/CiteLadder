@@ -45,7 +45,7 @@ export const WIN_RATE_HINT =
 
 export const PERCEPTION_MIN_CLASSIFIED = 20;
 
-export const THEME_MAP_COLUMNS = 6;
+export const PERCEPTION_MIN_THEME_JUDGING = 5;
 
 export const ANSWER_OUTCOMES = [
   { value: 'all', label: 'All answers' },

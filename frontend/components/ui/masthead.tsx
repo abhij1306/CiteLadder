@@ -16,11 +16,13 @@ export function Masthead({
   actions,
   end,
   crumb,
+  heading: isHeading = true,
 }: Readonly<{
   title: string;
   section?: Readonly<{ title: string }> | null;
   lead?: ReactNode;
   crumb?: ReactNode;
+  heading?: boolean;
   search?: ReactNode;
   actions?: ReactNode;
   end?: ReactNode;
@@ -28,6 +30,7 @@ export function Masthead({
   const heading = useRef<HTMLHeadingElement>(null);
   const header = useRef<HTMLElement>(null);
   const cut = useIsCut(heading, title);
+  const Name = isHeading ? 'h1' : 'p';
   usePublishedHeight(header);
   const [primarySlot, setPrimarySlot] = useState<HTMLElement | null>(null);
   const hasControls = [search, actions, end].some(
@@ -37,7 +40,7 @@ export function Masthead({
     <header
       data-masthead=""
       ref={header}
-      className="bg-panel border-rule z-sticky rail:h-[var(--masthead-height)] sticky top-0 -mx-[var(--page-pad-inline)] flex min-h-[var(--masthead-height)] min-w-0 items-center gap-2 border-b ps-[calc(var(--page-pad-inline)+var(--page-start,0px))] pe-[var(--page-pad-inline)]"
+      className="bg-page border-rule z-sticky rail:h-[var(--masthead-height)] sticky top-0 -mx-[var(--page-pad-inline)] flex min-h-[var(--masthead-height)] min-w-0 items-center gap-2 border-b px-[var(--page-pad-inline)]"
     >
       <div data-masthead-title="" className="rail:min-w-0 me-2 flex flex-1 items-center gap-2">
         {lead}
@@ -51,14 +54,14 @@ export function Masthead({
         ) : null}
         {crumb ?? (
           <Tooltip content={title} side="bottom" describe={false} shouldOpen={isTextCut}>
-            <h1
+            <Name
               ref={heading}
-              // oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- Only a cut title takes focus, so a keyboard reader can open the tooltip holding the full name.
+              data-masthead-name=""
               tabIndex={cut ? 0 : undefined}
               className={textRole('label', cn('w-0 min-w-28 flex-1 truncate', cut && 'focus-ring'))}
             >
               {title}
-            </h1>
+            </Name>
           </Tooltip>
         )}
       </div>
@@ -108,7 +111,6 @@ function useIsCut(ref: RefObject<HTMLElement | null>, text: string) {
     if (!node) return;
     const update = () => setCut(isTextCut(node));
     update();
-    // The title's box no longer resizes with its text, so a face that loads late is re-measured here.
     void document.fonts?.ready.then(update);
     const observer = new ResizeObserver(update);
     observer.observe(node);

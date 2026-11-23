@@ -81,7 +81,6 @@ export function defaultSelections(
   );
 }
 
-/** Exact-host comparisons cannot be ordered by traffic or position; the API refuses them. */
 export function comparisonOrderConflict(
   selections: SearchDatasetSelectionRequest[],
   researchScope: ResearchScope,
@@ -94,7 +93,6 @@ export function comparisonOrderConflict(
   );
 }
 
-/** Backlink history covers the whole domain; the API refuses it for an exact host. */
 export function historyScopeConflict(
   selections: SearchDatasetSelectionRequest[],
   researchScope: ResearchScope,

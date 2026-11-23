@@ -91,39 +91,40 @@ export function agentHandoffHref(input: HandoffInput): string {
 
 const PAGE_WORKFLOW = 'optimize_page';
 
-export function actionHandoffHref(
-  action: Readonly<{
-    id: string;
-    target_url: string | null;
-    handoff: ActionHandoff;
-    editable_page?: boolean;
-  }>,
+type HandoffAction = Readonly<{
+  id: string;
+  target_url: string | null;
+  handoff: ActionHandoff;
+  editable_page?: boolean;
+}>;
+
+export function actionHandoffInput(
+  action: HandoffAction,
   actionUrlIds: readonly string[] = [],
-): string {
+): HandoffInput {
   const { handoff } = action;
   const base = { actionId: action.id, actionUrlIds };
   if (action.editable_page && action.target_url)
-    return agentHandoffHref({ ...base, targetUrl: action.target_url, workflowId: PAGE_WORKFLOW });
+    return { ...base, targetUrl: action.target_url, workflowId: PAGE_WORKFLOW };
   switch (handoff.context) {
     case 'opportunity':
-      return agentHandoffHref({
-        ...base,
-        opportunityId: handoff.opportunity_id,
-        workflowId: handoff.workflow_id,
-      });
+      return { ...base, opportunityId: handoff.opportunity_id, workflowId: handoff.workflow_id };
     case 'page_url':
-      return agentHandoffHref({
-        ...base,
-        targetUrl: action.target_url,
-        workflowId: handoff.workflow_id,
-      });
+      return { ...base, targetUrl: action.target_url, workflowId: handoff.workflow_id };
     case 'action':
-      return agentHandoffHref(base);
+      return base;
     default: {
       const unknownHandoff: never = handoff;
       throw new Error(`Unknown Action handoff: ${JSON.stringify(unknownHandoff)}`);
     }
   }
+}
+
+export function actionHandoffHref(
+  action: HandoffAction,
+  actionUrlIds: readonly string[] = [],
+): string {
+  return agentHandoffHref(actionHandoffInput(action, actionUrlIds));
 }
 
 export function agentHandoff(input: HandoffInput): AgentHandoff {

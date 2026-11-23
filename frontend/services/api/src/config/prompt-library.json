@@ -20,7 +20,7 @@
     "create_batch_max": 50,
     "bulk_prompts_max": 500,
     "import_max_bytes": 1048576,
-    "intents": ["comparison", "discovery", "local", "purchase", "service"],
+    "intents": ["comparison", "discovery", "evaluation", "local", "purchase", "service"],
     "branded_cohorts": ["brand_diagnostic", "comparison"],
     "origins": {
       "imported": "imported",

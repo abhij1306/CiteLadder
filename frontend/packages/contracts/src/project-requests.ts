@@ -96,6 +96,7 @@ export type BrandProfileUpdateRequest = z.input<typeof brandProfileUpdateRequest
 
 export const projectThemeRequestSchema = z.object({ name: text().min(1) });
 export type ProjectThemeRequest = z.input<typeof projectThemeRequestSchema>;
+export const projectThemeMergeRequestSchema = z.object({ into_id: z.uuid() });
 
 const factSourceUrl = () => z.url({ protocol: /^https?$/u }).nullish();
 

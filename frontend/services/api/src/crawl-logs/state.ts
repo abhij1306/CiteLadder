@@ -20,7 +20,6 @@ function affectedDays(now: Date, timeZone: string, first?: Date | null, last?: D
       days.push(new Date(date).toISOString().slice(0, 10));
   return days;
 }
-/** All ingestion, source mutations and rollup publication serialize here. */
 export async function lockCrawlState(db: Database, scope: CrawlScope) {
   await db
     .insertInto('crawl_log_states')
@@ -60,7 +59,6 @@ export async function adoptReportingTimezone(
     last: now,
   });
 }
-/** Rollups coalesce: queued work merges the affected reporting days; leased work gets a successor. */
 export async function enqueueRollup(
   db: Database,
   scope: CrawlScope,

@@ -18,7 +18,7 @@ import { z } from 'zod';
 
 import { policy } from '../config.ts';
 import { factTopicOrder } from '../config/perception.ts';
-import type { Database } from '../db/database.ts';
+import { inTransaction, type Database } from '../db/database.ts';
 import { ApiError, notFound } from '../errors.ts';
 import type { BrandFacts } from '../generated/db-schema.ts';
 import { acquireProjectLock } from '../prompts/locks.ts';
@@ -100,7 +100,7 @@ export function createBrandFact(
   userId: string,
   input: z.output<typeof brandFactCreate>,
 ): Promise<BrandFact> {
-  return db.transaction().execute(async (trx) => {
+  return inTransaction(db, async (trx) => {
     await acquireProjectLock(trx, scope.projectId);
     const { count } = await trx
       .selectFrom('brand_facts')
@@ -155,7 +155,7 @@ export function importBrandFacts(
   userId: string,
   input: z.output<typeof brandFactImport>,
 ): Promise<BrandFactImportResult> {
-  return db.transaction().execute(async (trx) => {
+  return inTransaction(db, async (trx) => {
     await acquireProjectLock(trx, scope.projectId);
     const kept = await trx
       .selectFrom('brand_facts')
@@ -221,7 +221,7 @@ export function updateBrandFact(
   factId: string,
   input: z.output<typeof brandFactUpdate>,
 ): Promise<BrandFact> {
-  return db.transaction().execute(async (trx) => {
+  return inTransaction(db, async (trx) => {
     await acquireProjectLock(trx, scope.projectId);
     const current = await trx
       .selectFrom('brand_facts')

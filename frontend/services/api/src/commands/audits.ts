@@ -6,6 +6,7 @@ import { estimateAudit } from '../audits/estimate.ts';
 import { auditInput, auditLaunchInput } from '../audits/inputs.ts';
 import { executeInteractiveAudit } from '../audits/interactive.ts';
 import { cancelAudit as cancelOwnedAudit } from '../audits/maintenance.ts';
+import { auditProjections } from '../audits/projections.ts';
 import { readAudit, readAudits } from '../audits/reads.ts';
 import type { ServiceConfig } from '../config.ts';
 import type { Database } from '../db/database.ts';
@@ -85,6 +86,11 @@ export async function cancelAudit(
   projectId: string | null,
   auditId: string,
 ) {
-  await cancelOwnedAudit(db, { workspaceId: actor.workspaceId, projectId }, auditId);
+  const { finalize } = await cancelOwnedAudit(
+    db,
+    { workspaceId: actor.workspaceId, projectId },
+    auditId,
+  );
+  if (finalize) await auditProjections(db).finalize(actor.workspaceId, auditId);
   return readAudit(db, actor.workspaceId, auditId);
 }

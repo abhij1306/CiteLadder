@@ -68,7 +68,6 @@ function useScrollEnds(ref: RefObject<HTMLElement | null>): ScrollEnds {
     const node = ref.current;
     if (!node) return;
     const update = () => {
-      // A 1px tolerance: the rounded heights may differ by 1 with nothing hidden.
       const hidden = node.scrollHeight - node.clientHeight;
       const top = hidden > 1 && node.scrollTop > 1;
       const bottom = hidden > 1 && node.scrollTop < hidden - 1;
@@ -229,14 +228,14 @@ export function sidebarRailButtonClasses(current: boolean) {
 export function sidebarModeTrackClasses(rail: boolean) {
   return rail
     ? 'flex flex-col items-center'
-    : 'border-rule rounded-control flex h-[var(--control-md)] w-full min-w-0 shrink-0 border p-px';
+    : 'bg-state-hover rounded-control flex h-[var(--control-md)] w-full min-w-0 shrink-0 p-0.5';
 }
 
 export function sidebarModeSegmentClasses(current: boolean, rail: boolean) {
   if (rail) return cn(RAIL_BUTTON, current ? cn('text-ink', CURRENT_FILL) : AT_REST);
   return cn(
     'focus-ring type-label rounded-mark relative flex h-full min-w-0 flex-1 basis-0 items-center justify-center px-3 transition-colors',
-    current ? cn('text-ink', CURRENT_FILL) : AT_REST,
+    current ? 'text-ink bg-raised shadow-card' : AT_REST,
   );
 }
 

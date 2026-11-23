@@ -618,6 +618,7 @@
       "schema_content_match_min_token_overlap": 0.6,
       "schema_content_match_max_candidates": 5,
       "ttfb_warn_ms": 800,
+      "html_max_bytes": 2000000,
       "aeo_dimensions": [
         "answerability",
         "structure",
@@ -628,7 +629,6 @@
         "crawlability"
       ],
       "structural_na_reasons": [
-        "content_not_server_rendered",
         "crawl_finalize_scope",
         "empty_meta_description",
         "empty_title",
@@ -637,9 +637,11 @@
         "format_has_no_html",
         "intentional_non_indexing",
         "no_canonical",
+        "no_h1",
         "no_content_date",
         "no_expected_type_block",
         "no_hreflang",
+        "no_open_graph_url",
         "no_html",
         "no_product_schema",
         "no_recommended_properties",
@@ -675,7 +677,8 @@
         "audit_time_unavailable",
         "content_date_in_future",
         "content_date_unparseable",
-        "body_text_truncated"
+        "body_text_truncated",
+        "client_rendering_required"
       ],
       "content_recency_max_age_days": 365,
       "content_recency_future_tolerance_days": 2,
@@ -690,7 +693,7 @@
         "shingle_words": 3,
         "max_hamming_distance": 3
       },
-      "on_page_advisories": {
+      "on_page_thresholds": {
         "title_length": { "min_chars": 30, "max_chars": 60 },
         "meta_description_length": { "min_chars": 70, "max_chars": 160 },
         "thin_content_min_words": 300,

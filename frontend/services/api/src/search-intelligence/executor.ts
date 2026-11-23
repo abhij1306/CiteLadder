@@ -138,10 +138,6 @@ async function acquire(
   await state.finish();
 }
 
-/**
- * Finite frozen plan: park without spending queue attempts; an ambiguous paid
- * dispatch is never repeated. A managed analysis that ended is charged at once.
- */
 export function acquisitionExecutor(options: AcquisitionOptions = {}): Executor {
   return async (task, context) => {
     const runId = z.uuid().parse(record(task.payload).run_id);

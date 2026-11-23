@@ -54,7 +54,10 @@ describe('visibility dashboard helpers', () => {
       },
     ]);
     expect(options.map((o) => o.id)).toEqual([AUDIT_C, AUDIT_A]);
-    expect(options.map((o) => o.label)).toEqual(['14 Jul 00:00', '10 Jul 00:00']);
+    expect(options.map((o) => o.label)).toEqual([
+      'Jul 14, 2026, 12:00 AM',
+      'Jul 10, 2026, 12:00 AM',
+    ]);
   });
 
   it('flags dashboard statuses', () => {

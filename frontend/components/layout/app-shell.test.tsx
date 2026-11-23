@@ -180,7 +180,6 @@ describe('AppShell resizable sidebar', () => {
     renderShell();
     const account = () =>
       screen.getByRole('button', { name: 'Account menu for test.user@example.test' });
-    // jsdom lays nothing out; report every line as wider than the sidebar.
     vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockReturnValue(1000);
 
     focusByKeyboard(account());

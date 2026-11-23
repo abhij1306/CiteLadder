@@ -47,20 +47,19 @@ async function seed(db: Database) {
     const url = product
       ? 'https://example.com/products/widget'
       : 'https://example.com/collections/tools';
-    const page =
-      await /* NOSONAR -- Fixture pages insert in a fixed order; `analyses` keeps it. */ fixtures.page(
-        seed,
-        url,
-        storedFacts({
-          canonical_url: url,
-          headings: { h1_texts: [product ? 'Widget' : 'Tools'] },
-          structured_data: product
-            ? { product: { sku: ['W1'], price: ['12.50'], price_currency: ['USD'] } }
-            : {},
-          links: { anchors: [{ region: 'main', url: '/collections/tools/products/widget' }] },
-        }),
-      );
-    await db // NOSONAR -- Needs this page's analysis id.
+    const page = await /* NOSONAR */ fixtures.page(
+      seed,
+      url,
+      storedFacts({
+        canonical_url: url,
+        headings: { h1_texts: [product ? 'Widget' : 'Tools'] },
+        structured_data: product
+          ? { product: { sku: ['W1'], price: ['12.50'], price_currency: ['USD'] } }
+          : {},
+        links: { anchors: [{ region: 'main', url: '/collections/tools/products/widget' }] },
+      }),
+    );
+    await db // NOSONAR
       .updateTable('site_page_analyses')
       .set({ page_kind: product ? 'product' : 'category' })
       .where('id', '=', page.analysisId)

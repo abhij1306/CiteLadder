@@ -75,6 +75,14 @@ describe('loadConfig', () => {
     }
   });
 
+  it('refuses a setting of unknown type even when its environment variable is absent', () => {
+    const spec = { env: ['TEST_ONLY_SETTING'], type: 'str', default: 'x' };
+    expect(resolveSettingSpec(spec, {})).toBe('x');
+    expect(() => resolveSettingSpec({ ...spec, type: 'text' }, {})).toThrow(
+      'TEST_ONLY_SETTING has an unknown setting type text',
+    );
+  });
+
   it('uses native config defaults when the environment is silent', () => {
     const config = loadConfig({ APP_ENV: 'test' });
     expect(config.database.poolSize).toBe(policy.settings.db_pool_size.default);
@@ -105,6 +113,12 @@ describe('loadConfig', () => {
     const spec = { env: ['BOUNDED'], type: 'float', default: 1, exclusive_maximum: 672 };
     expect(resolveSettingSpec(spec, { BOUNDED: '671.5' })).toBe(671.5);
     expect(() => resolveSettingSpec(spec, { BOUNDED: '672' })).toThrow(ConfigError);
+  });
+
+  it('refuses a value whose type contradicts the type of its default', () => {
+    const spec = { env: ['MISTYPED'], type: 'str', default: 0 };
+    expect(resolveSettingSpec(spec, {})).toBe(0);
+    expect(() => resolveSettingSpec(spec, { MISTYPED: '5' })).toThrow('MISTYPED must be a number');
   });
 
   it('enforces field bounds and literal values', () => {

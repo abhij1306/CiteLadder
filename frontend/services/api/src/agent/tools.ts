@@ -37,11 +37,6 @@ export type ReadTool = {
 };
 
 const jsonObject = z.record(z.string(), z.json());
-/**
- * What the model is offered: the same compact input schema MCP publishes, so
- * the provider checks the arguments the tool will parse, sorted by name so the
- * cached prompt prefix never changes order.
- */
 export function toolDefinitions(
   tools: readonly Pick<ReadTool, 'name' | 'description' | 'arguments'>[],
 ): ConversationTool[] {

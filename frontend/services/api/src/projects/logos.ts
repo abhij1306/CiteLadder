@@ -42,7 +42,6 @@ export async function logoResponse(
     throw notFound(competitorId === null ? 'Brand logo' : 'Competitor logo');
   const etag = `"${asset.sha256}"`;
   const headers = {
-    // Revalidated on every use, so each display re-checks workspace access.
     'cache-control': REVALIDATE_CACHE_CONTROL,
     'content-disposition': 'inline',
     'content-security-policy': "default-src 'none'; sandbox",

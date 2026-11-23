@@ -90,7 +90,6 @@ export async function persistLinkMetrics(db: Database, crawl: Crawl) {
     top_inbound: JSON.stringify(metric.top_inbound),
     top_outbound: JSON.stringify(metric.top_outbound),
   }));
-  // Chunked only to stay under PostgreSQL's 65535 bind-parameter limit.
   const [first] = rows;
   const chunk = first ? Math.floor(65_535 / Object.keys(first).length) : 1;
   let inserted = 0;

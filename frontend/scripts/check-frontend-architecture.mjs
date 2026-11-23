@@ -1,7 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { typeDisciplineFindings } from './type-discipline-checks.mjs';
+import {
+  isApiSource,
+  nonNullCount,
+  nonNullRatchetFailures,
+  typeDisciplineFindings,
+} from './type-discipline-checks.mjs';
 
 const root = process.cwd();
 const failures = [];
@@ -62,14 +67,25 @@ if (fs.existsSync(facade)) {
   }
 }
 
+const NON_NULL_BASELINE = path.join(root, 'scripts', 'non-null-baseline.json');
+const nonNullCounts = {};
 for (const file of ['apps', 'components', 'lib', 'packages', 'services'].flatMap(sourceFiles)) {
   if (/\.(?:test|spec)\.tsx?$|\.d\.ts$|\/(?:test|e2e|generated)\//.test(file)) continue;
-  for (const { line, message } of typeDisciplineFindings(
-    fs.readFileSync(path.join(root, file), 'utf8'),
-    file,
-  ))
+  const source = fs.readFileSync(path.join(root, file), 'utf8');
+  for (const { line, message } of typeDisciplineFindings(source, file))
     failures.push(`${file}:${line}: ${message}`);
+  if (isApiSource(file)) {
+    const count = nonNullCount(source, file);
+    if (count) nonNullCounts[file] = count;
+  }
 }
+const nonNullFailures = nonNullRatchetFailures(
+  nonNullCounts,
+  JSON.parse(fs.readFileSync(NON_NULL_BASELINE, 'utf8')),
+);
+failures.push(...nonNullFailures);
+if (process.argv.includes('--write-non-null-baseline') && !nonNullFailures.length)
+  fs.writeFileSync(NON_NULL_BASELINE, `${JSON.stringify(nonNullCounts, null, 2)}\n`);
 
 if (failures.length) {
   console.error(failures.join('\n'));

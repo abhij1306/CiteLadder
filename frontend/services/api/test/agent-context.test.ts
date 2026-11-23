@@ -42,7 +42,6 @@ describe('Agent persisted context binding', () => {
           dimension: rule.dimension,
           category: rule.category,
           severity: rule.severity,
-          finding_class: rule.finding_class,
           description: rule.description,
           remediation: rule.remediation,
           analyzer_version: policy.site_health.versions.analyzer,
@@ -58,7 +57,7 @@ describe('Agent persisted context binding', () => {
     await refreshIssueCurrency(db, await loadCrawl(db, seed.workspaceId, seed.crawlId));
     const ref = {
       crawl_id: seed.crawlId,
-      group_id: issueGroupId(seed.crawlId, rule.rule_id, rule.finding_class),
+      group_id: issueGroupId(seed.crawlId, rule.rule_id),
     };
     const aggregate = await readAgentContext(
       db,

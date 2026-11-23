@@ -6,6 +6,7 @@ import {
 } from '@citeladder/contracts/fact-checking';
 import type { ReactNode } from 'react';
 
+import { AnswerLink } from '@/components/runs/answer-link';
 import { Delta } from '@/components/ui/delta';
 import { TabPanel, Tabs } from '@/components/ui/tabs';
 import { Tooltip } from '@/components/ui/tooltip';
@@ -14,7 +15,6 @@ import { DataTable } from '@/components/ui/data-table';
 import { Inline, Stack } from '@/components/ui/layout';
 import { ClampText } from '@/components/ui/clamp-text';
 import { TableCell, TableRow } from '@/components/ui/table';
-import { TextLink } from '@/components/ui/text-link';
 import { textRole } from '@/components/ui/typography';
 import { ShieldCheck } from '@/lib/icons';
 import { stringUrlCodec, useUrlState } from '@/lib/navigation/url-state';
@@ -186,14 +186,6 @@ function Headline({ data, lede }: Readonly<{ data: AccuracyResponse; lede?: Reac
   );
 }
 
-function ClaimLink({ claim }: Readonly<{ claim: AccuracyClaim }>) {
-  return (
-    <TextLink href={`/runs/${claim.run_id}?execution=${claim.execution_id}`}>
-      “{claim.quote}”
-    </TextLink>
-  );
-}
-
 function ContradictedClaims({ claims }: Readonly<{ claims: AccuracyClaim[] }>) {
   const { label: engineLabel } = useEngineCatalog();
   return (
@@ -204,7 +196,7 @@ function ContradictedClaims({ claims }: Readonly<{ claims: AccuracyClaim[] }>) {
         <Stack as="ul">
           {claims.map((claim) => (
             <Stack as="li" gap="tight" key={`${claim.execution_id}:${claim.quote}`}>
-              <ClaimLink claim={claim} />
+              <AnswerLink answer={claim}>“{claim.quote}”</AnswerLink>
               {claim.facts.map((fact) => (
                 <span key={fact.statement} className="type-caption text-ink-2">
                   Your fact: {fact.statement}
@@ -217,7 +209,10 @@ function ContradictedClaims({ claims }: Readonly<{ claims: AccuracyClaim[] }>) {
                 >
                   {TOPIC_LABELS[claim.topic]}
                 </StatusMark>
-                {engineLabel(claim.logical_engine)} · {claim.prompt}
+                {engineLabel(claim.logical_engine)} ·{' '}
+                <AnswerLink answer={claim} text="inherit" tone="muted">
+                  {claim.prompt}
+                </AnswerLink>
               </Inline>
             </Stack>
           ))}

@@ -1,6 +1,5 @@
 import { GCP_PULL_SETUP } from '@/lib/config/crawl-logs';
 
-/** A single quote inside a single-quoted POSIX shell string: close, escaped quote, reopen. */
 const QUOTE = String.raw`'\''`;
 const quoted = (value: string) => "'" + value.replaceAll("'", QUOTE) + "'";
 

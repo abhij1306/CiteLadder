@@ -25,7 +25,6 @@ const RULES = [
 const CATALOG = new Map(policy.site_health.rule_catalog.map((rule) => [rule.rule_id, rule]));
 
 const db = testDatabase();
-// Fixture work only: removing a tens-of-thousands-page workspace outlasts the service statement bound.
 const fixtureDb = testDatabase(
   testConfig({ DB_STATEMENT_TIMEOUT_MS: '300000', DB_COMMAND_TIMEOUT_SECONDS: '300' }),
 );
@@ -96,7 +95,7 @@ async function analyze(seed: SiteSeed, limit: number) {
     .execute();
   const now = new Date();
   for (let offset = 0; offset < tasks.length; offset += CHUNK)
-    await settleChunk({ seed, chunk: chunkOf(tasks, offset), now }); // NOSONAR -- Chunks write in order so the fixture's memory stays one chunk.
+    await settleChunk({ seed, chunk: chunkOf(tasks, offset), now }); // NOSONAR
   return tasks.length;
 }
 
@@ -230,7 +229,6 @@ async function settleChunk({
           dimension: rule.dimension,
           category: rule.category,
           severity: rule.severity,
-          finding_class: rule.finding_class,
           evidence: JSON.stringify({}),
           description: rule.description,
           remediation: rule.remediation,
@@ -252,7 +250,7 @@ async function settleChunk({
     )
     .execute();
   for (const page of chunk)
-    await db // NOSONAR -- One artifact per task, in order.
+    await db // NOSONAR
       .updateTable('site_crawl_tasks')
       .set({ result_artifact_id: page.artifactId })
       .where('workspace_id', '=', seed.workspaceId)
@@ -341,7 +339,7 @@ describe('Site Health crawl at scale', () => {
     await publishRunningIssues(db, { workspace_id: seed.workspaceId, crawl_id: seed.crawlId });
     const paging = { limit: 50, cursor: null };
     const running = await timed(() =>
-      issues(db, seed.workspaceId, seed.crawlId, unfilteredIssues(null), paging),
+      issues(db, seed.workspaceId, seed.crawlId, unfilteredIssues(), paging),
     );
     expect(
       running.value.items.find((item) => item.rule_id === 'technical.title_present')
@@ -356,7 +354,7 @@ describe('Site Health crawl at scale', () => {
     const runningScans = {
       pages: await scanned((trx) => pages(trx, w, c, {}, 'status', paging)),
       issues_high: await scanned((trx) =>
-        issues(trx, w, c, { ...unfilteredIssues(null), severity: 'high' }, paging),
+        issues(trx, w, c, { ...unfilteredIssues(), severity: 'high' }, paging),
       ),
       issue_fixes: await scanned((trx) => issueFixes(trx, w, c)),
     };
@@ -384,7 +382,7 @@ describe('Site Health crawl at scale', () => {
     );
 
     const final = await timed(() =>
-      issues(db, seed.workspaceId, seed.crawlId, unfilteredIssues(null), paging),
+      issues(db, seed.workspaceId, seed.crawlId, unfilteredIssues(), paging),
     );
     expect(
       final.value.items.find((item) => item.rule_id === 'technical.title_present')

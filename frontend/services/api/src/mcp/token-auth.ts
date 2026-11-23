@@ -102,5 +102,5 @@ export async function authenticateMcp(
     grant.catch(() => grants.delete(digest));
   }
   const [grantId, { userId, workspaceId }] = await Promise.all([grant, localAccount(db)]);
-  return { userId, grantId, workspaceIds: [workspaceId], tokenHash: digest, canWrite: true };
+  return { userId, grantId, workspaceIds: [workspaceId], tokenHash: digest };
 }

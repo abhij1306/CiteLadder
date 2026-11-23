@@ -49,7 +49,6 @@ export function Tooltip({
 }>) {
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLElement | null>(null);
-  // Stable, so Radix's composed trigger ref is not detached on every render.
   const setTrigger = useCallback((node: HTMLElement | null) => {
     trigger.current = node;
   }, []);
@@ -66,7 +65,6 @@ export function Tooltip({
       <TooltipPrimitive.Trigger
         asChild
         ref={setTrigger}
-        // A handled focus skips Radix's own, which opens on any focus.
         onFocus={(event) => {
           if (!focusFromKeyboard()) event.preventDefault();
         }}

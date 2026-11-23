@@ -3,7 +3,6 @@ import type { Database } from '../db/database.ts';
 import { ApiError, notFound } from '../errors.ts';
 import { auditPolicy } from './config.ts';
 
-/** Caller holds the audit row lock; status and its event commit together. */
 export async function transitionAudit(
   db: Database,
   workspaceId: string,

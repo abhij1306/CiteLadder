@@ -306,9 +306,6 @@ export async function pagesRead(db: Database, scope: CrawlScope, input: PageOpti
     await withReportingTimezone(db, scope, input),
   );
   const limit = pageLimit(requested);
-  // A keyset cursor marks a position, so a continuation may ask for a different page size.
-  // It also carries the window the first page resolved, so a preset's pages
-  // all read the same days even when the reporting day rolls over between them.
   const { cursor, limit: _limit, ...rest } = requested,
     filters = { ...rest, sort: requested.sort ?? 'requests_desc' },
     endpoint = [scope.workspaceId, scope.projectId, 'pages'].join(':');

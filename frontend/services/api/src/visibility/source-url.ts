@@ -28,8 +28,6 @@ function scopeOf(db: Database, selection: RunSelection) {
       observedAt.as('observed_at'),
       'snapshot.text as prompt_text',
       'snapshot.theme as theme',
-      // Coalesced to the frozen text: a deleted prompt's snapshot has a NULL
-      // id, and count(distinct) would skip it.
       sql`coalesce(snapshot.prompt_id::text, snapshot.text)`.as('prompt_key'),
     ])
     .as('scope');
@@ -155,9 +153,9 @@ async function brands(
   });
 }
 
-async function pageSection(
+export async function pageSection(
   db: Database,
-  selection: RunSelection,
+  scope: { workspaceId: string; projectId: string },
   urlHash: string | null | undefined,
 ): Promise<SourceUrlDetail['page']> {
   if (!urlHash) return null;
@@ -171,13 +169,13 @@ async function pageSection(
       'page_format',
       'page_format_method',
       'source_class',
+      'registrable_domain',
     ])
-    .where('workspace_id', '=', selection.workspaceId)
-    .where('project_id', '=', selection.projectId)
+    .where('workspace_id', '=', scope.workspaceId)
+    .where('project_id', '=', scope.projectId)
     .where('url_hash', '=', urlHash)
     .executeTakeFirst();
   if (!page) return null;
-  const scope = { workspaceId: selection.workspaceId, projectId: selection.projectId };
   const reading = (await latestReadings(db, scope, [page.id])).get(page.id);
   const presences = reading
     ? ((await readingPresences(db, scope, [reading.id])).get(reading.id) ?? [])

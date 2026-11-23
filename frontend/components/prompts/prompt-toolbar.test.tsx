@@ -50,7 +50,6 @@ describe('promptFilterControls', () => {
     }
 
     render(<Harness />);
-    // jsdom drops the space the browser reads between label and count.
     const archived = screen.getByRole('tab', { name: /^Archived\s*\(3\)$/ });
     const active = screen.getByRole('tab', { name: /^Active\s*\(12\)$/ });
     expect(active).toHaveAttribute('aria-selected', 'true');

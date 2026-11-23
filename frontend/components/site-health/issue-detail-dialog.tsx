@@ -1,26 +1,35 @@
 import { AskAgentLink } from '@/components/agent/ask-agent-link';
 import { IssueEvidence } from '@/components/site-health/issue-evidence';
 import { IssueFixActions, type IssueFixScope } from '@/components/site-health/issue-fix-actions';
+import { IssuePagesExport } from '@/components/site-health/issues-export';
+import { IssueValueLine, showsPageText, valueRange } from '@/components/site-health/issue-value';
 import { AffectedPageLink, SharedOccurrences } from '@/components/site-health/shared-occurrences';
 import type { UseQueryResult } from '@tanstack/react-query';
+import { Button } from '@/components/ui/button';
 import { CopyButton } from '@/components/ui/copy-button';
 import { Drawer } from '@/components/ui/drawer';
 import { Inline, Stack } from '@/components/ui/layout';
 import { Pager } from '@/components/ui/pager';
+import { ProjectLink } from '@/components/ui/project-link';
 import { Skeleton } from '@/components/ui/skeleton';
 import { textRole } from '@/components/ui/typography';
 import { ledgerClasses, ledgerItemClasses } from '@/components/ui/workspace';
 import { useAgentPanelSeed } from '@/lib/agent/panel-context';
-import type { IssueOccurrence, SiteIssue, SiteIssueDetail } from '@citeladder/contracts';
+import type { AffectedPage, SiteIssue, SiteIssueDetail } from '@citeladder/contracts';
 import { originOf, sitePath } from '@/lib/site-health/evidence-values';
 import {
+  isSiteLevelRule,
   linkOutcomeLabel,
   pageCountLabel,
   siteLevelEvidence,
   type SiteLevelEvidence,
 } from '@/lib/site-health/site-level-evidence';
 import { dimensionLabel, issueTitle, severityLabel } from '@/lib/site-health/issues';
-import { groupOccurrences, loadedPageCount } from '@/lib/site-health/occurrence-groups';
+import {
+  groupOccurrences,
+  loadedPageCount,
+  type OccurrenceEntry,
+} from '@/lib/site-health/occurrence-groups';
 import { pageKindLabel } from '@/lib/site-health/page-kinds';
 import { ClampText } from '@/components/ui/clamp-text';
 import { Notice, readErrorProps } from '@/components/ui/notice';
@@ -33,7 +42,6 @@ export type IssueHead = Pick<
   | 'title'
   | 'dimension'
   | 'severity'
-  | 'finding_class'
   | 'description'
   | 'remediation'
   | 'affected_url_count'
@@ -68,6 +76,7 @@ export function IssueDetailDrawer({
   };
   useAgentPanelSeed(handoff);
   const pageKinds = issue.page_kinds ?? [];
+  const pageLevel = !isSiteLevelRule(issue.rule_id);
   return (
     <Drawer
       open
@@ -77,10 +86,6 @@ export function IssueDetailDrawer({
       title={issueTitle(issue)}
       footer={
         detail || canPrevious ? (
-          // The retained page keeps its `next_cursor` while the next one is in
-          // flight, so a second click would push the SAME cursor onto the
-          // stack and Previous would need two presses to undo one: `busy`
-          // holds both steps until the page lands.
           <Pager
             hideWhenSinglePage
             canPrev={canPrevious}
@@ -109,6 +114,18 @@ export function IssueDetailDrawer({
         <CopyButton value={buildFixPrompt(issue)} variant="secondary" className="w-fit">
           Copy fix prompt
         </CopyButton>
+        {pageLevel ? (
+          <>
+            <Button variant="secondary" asChild>
+              <ProjectLink href={pagesWithIssueHref(issue.rule_id)}>View in Pages</ProjectLink>
+            </Button>
+            <IssuePagesExport
+              workspaceId={scope.workspaceId}
+              crawlId={crawlId}
+              groupId={issue.group_id}
+            />
+          </>
+        ) : null}
       </Inline>
       <IssueFixActions scope={scope} crawlId={crawlId} groupId={issue.group_id} />
       <Stack as="section" gap="workspace" aria-busy={detailQuery.isFetching || undefined}>
@@ -149,6 +166,11 @@ export function PendingIssueDrawer({
       )}
     </Drawer>
   );
+}
+
+function pagesWithIssueHref(ruleId: string): string {
+  const params = new URLSearchParams({ tab: 'pages', pages_view: 'all', pages_rule: ruleId });
+  return `/site?${params.toString()}`;
 }
 
 export function askAgentPrompt(
@@ -195,9 +217,17 @@ function OccurrenceList({
   if (siteLevel) return <SiteLevelList evidence={siteLevel} crawlId={crawlId} />;
   const complete = firstPage && !detail.next_cursor;
   const loaded = loadedPageCount(detail.occurrences);
+  const entries: OccurrenceEntry<AffectedPage>[] = detail.occurrences.some((row) =>
+    showsPageText(row.value),
+  )
+    ? detail.occurrences.map((occurrence): OccurrenceEntry<AffectedPage> => ({
+        kind: 'page',
+        occurrence,
+      }))
+    : groupOccurrences(detail.occurrences);
   return (
     <ul className={ledgerClasses()}>
-      {groupOccurrences(detail.occurrences).map((entry) =>
+      {entries.map((entry) =>
         entry.kind === 'page' ? (
           <PageOccurrence
             key={entry.occurrence.occurrence_id}
@@ -228,7 +258,12 @@ function PageOccurrence({
   issue,
   occurrence,
   crawlId,
-}: Readonly<{ issue: IssueHead; occurrence: IssueOccurrence; crawlId: string }>) {
+}: Readonly<{
+  issue: IssueHead;
+  occurrence: AffectedPage;
+  crawlId: string;
+}>) {
+  const range = valueRange(occurrence.rule_id, occurrence.evidence, occurrence.value);
   return (
     <Stack as="li" gap="tight" className={ledgerItemClasses()}>
       <AffectedPageLink
@@ -238,7 +273,8 @@ function PageOccurrence({
         url={occurrence.display_url}
         pageKind={occurrence.page_kind}
       />
-      <IssueEvidence occurrence={occurrence} />
+      <IssueValueLine value={occurrence.value} hint={range?.hint} />
+      {range ? null : <IssueEvidence occurrence={occurrence} />}
       <AskAgentLink
         appearance="text"
         handoff={{
@@ -347,7 +383,6 @@ function DuplicateSetList({
             {set.pages.length < set.pageCount ? (
               <span className="type-caption">Including:</span>
             ) : null}
-            {/* Each page link is its own row, at least 24 high, so stacked targets never touch (WCAG 2.5.8). */}
             <Stack as="ul" gap="item">
               {set.pages.map((page) => (
                 <li key={page.siteUrlId} className="flex min-h-6 min-w-0 items-center">
@@ -402,7 +437,6 @@ function LinkTargetList({
               On {pageCountLabel(target.pageCount)}
               {hidden > 0 ? ', including:' : ':'}
             </span>
-            {/* Each page link is its own row, at least 24 high, so stacked targets never touch (WCAG 2.5.8). */}
             <Stack as="ul" gap="item">
               {target.pages.map((page) => (
                 <li key={page.siteUrlId} className="flex min-h-6 min-w-0 items-center">
@@ -426,13 +460,11 @@ function LinkTargetList({
 export function buildFixPrompt(
   issue: Pick<
     SiteIssue,
-    'title' | 'rule_id' | 'dimension' | 'severity' | 'finding_class' | 'description' | 'remediation'
+    'title' | 'rule_id' | 'dimension' | 'severity' | 'description' | 'remediation'
   >,
 ): string {
-  const rating =
-    issue.finding_class === 'defect' ? `${severityLabel(issue.severity)} severity` : 'advisory';
   const lines = [
-    `Fix this Website issue on my website: "${issueTitle(issue)}" (${dimensionLabel(issue.dimension)}, ${rating}).`,
+    `Fix this Website issue on my website: "${issueTitle(issue)}" (${dimensionLabel(issue.dimension)}, ${severityLabel(issue.severity)} severity).`,
   ];
   if (issue.description) lines.push('', 'The check passes when:', issue.description);
   if (issue.remediation) lines.push('', 'Recommended remediation:', issue.remediation);

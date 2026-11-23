@@ -8,12 +8,9 @@ export const SITE_HEALTH_STREAM_RECONNECT_BASE_MS = 1_000;
 export const SITE_HEALTH_STREAM_RECONNECT_MAX_MS = 15_000;
 
 export const ISSUE_PAGE_LIMIT = 25;
+export const ISSUE_FILTER_OPTION_LIMIT = 200;
 export const ISSUE_OCCURRENCE_LIMIT = 25;
 
-/**
- * robots.txt observations per page: fixed, because the server caps the page
- * (`robots_history_max_limit`, 20) below most rows-per-page choices.
- */
 export const ROBOTS_HISTORY_PAGE_SIZE = 5;
 
 export const CHANGE_EVIDENCE_LIMIT = 8;

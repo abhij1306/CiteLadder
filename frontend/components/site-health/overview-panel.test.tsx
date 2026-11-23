@@ -66,7 +66,6 @@ const terminalOverview = (overrides: Record<string, unknown> = {}) => ({
     {
       rule_id: 'technical.title_present',
       title: 'Missing page title',
-      finding_class: 'defect',
       severity: 'critical',
       category: 'technical',
       section: 'technical',
@@ -81,7 +80,6 @@ const terminalOverview = (overrides: Record<string, unknown> = {}) => ({
     {
       rule_id: 'aeo.visible_attribution',
       title: 'Visible creator attribution incomplete',
-      finding_class: 'advisory',
       severity: 'medium',
       category: 'content',
       section: 'content',
@@ -91,22 +89,21 @@ const terminalOverview = (overrides: Record<string, unknown> = {}) => ({
       affected_pages: 1,
       eligibility_blocker: false,
       impact_band: 2,
-      impact_label: 'Authority · 10%',
+      impact_label: 'Medium',
     },
     {
       rule_id: 'technical.meta_description_present',
       title: 'Missing meta description',
-      finding_class: 'advisory',
-      severity: 'info',
+      severity: 'low',
       category: 'content',
       section: 'content',
       description: 'The page has a meta description.',
       remediation: 'Add a meta description.',
-      score_roles: [],
+      score_roles: ['web_fundamentals'],
       affected_pages: 1,
       eligibility_blocker: false,
-      impact_band: 0,
-      impact_label: 'Advisory',
+      impact_band: 1,
+      impact_label: 'Low',
     },
   ],
   web_fundamentals: {
@@ -206,14 +203,14 @@ describe('OverviewPanel', () => {
       screen.queryByRole('heading', { name: 'Classification completeness' }),
     ).not.toBeInTheDocument();
     expect(figureText('AEO checklist completion')).toBe('50%');
-    expect(figureText('Crawl coverage')).toBe('40%');
+    expect(figureText('Crawl coverage')).toBe('4 of 10 pages audited');
     expect(screen.queryByRole('meter')).not.toBeInTheDocument();
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Loading Overview details')).not.toBeInTheDocument();
     expect(overviewRequests).toBe(0);
   });
 
-  it('says how many found pages were analyzed and why the rest were not', async () => {
+  it('counts audited against found pages for a plan-limited crawl of a large site', async () => {
     mswServer.use(
       http.get(`/api/v1/projects/${PROJECT}/site-health/overview`, () =>
         HttpResponse.json(
@@ -222,10 +219,10 @@ describe('OverviewPanel', () => {
               state: 'partial',
               evidence: {
                 reasons: ['requested_page_limit_reached'],
-                observation_count: 100,
-                analyzed_url_count: 20,
+                observation_count: 51306,
+                analyzed_url_count: 199,
                 failed_url_count: 2,
-                automatic_limit: 20,
+                automatic_limit: 200,
               },
               denominator_kind: 'selected_intended_public_urls',
             },
@@ -242,7 +239,7 @@ describe('OverviewPanel', () => {
       />,
     );
 
-    await waitFor(() => expect(figureText('Crawl coverage')).toBe('20%'));
+    await waitFor(() => expect(figureText('Crawl coverage')).toBe('199 of 51,306 pages audited'));
   });
 
   it('keeps an unknown crawl that found nothing from reading as a percentage', async () => {
@@ -383,7 +380,7 @@ describe('OverviewPanel', () => {
     const areas = within(screen.getByRole('list', { name: 'Web fundamentals areas' }));
     expect(areas.getAllByRole('listitem').map((item) => item.textContent)).toEqual([
       'accessibilityMeasured',
-      'mobileLimited evidence',
+      'mobile1 of 4 checks run',
     ]);
     await user.click(screen.getByRole('button', { name: 'View evidence' }));
     expect(screen.getByRole('dialog')).toHaveTextContent('Images missing alt attributes');
@@ -392,7 +389,7 @@ describe('OverviewPanel', () => {
     expect(screen.getByRole('dialog')).not.toHaveTextContent('Core Web Vitals');
   });
 
-  it('names each top issue by its failing title and marks only advisories', async () => {
+  it('names each top issue by its failing title under its severity', async () => {
     mswServer.use(
       http.get(`/api/v1/projects/${PROJECT}/site-health/overview`, () =>
         HttpResponse.json(terminalOverview()),
@@ -419,8 +416,8 @@ describe('OverviewPanel', () => {
     expect(rows.map((row) => row.textContent)).toEqual([
       'ImpactIssuePages affected',
       'HighMissing page title1',
-      'MediumVisible creator attribution incompleteAdvisory1',
-      'LowMissing meta descriptionAdvisory1',
+      'MediumVisible creator attribution incomplete1',
+      'LowMissing meta description1',
     ]);
   });
 

@@ -19,14 +19,14 @@ export type PageEvidence = {
 };
 const cfg = policy.brand_evidence;
 const excluded = new Set(['script', 'style', 'noscript', 'template', 'svg', 'canvas']);
-function element(node: Node): node is Element {
+function isElement(node: Node): node is Element {
   return 'tagName' in node;
 }
 function attr(node: Element, name: string) {
   return node.attrs.find((item) => item.name === name)?.value ?? '';
 }
 function textOf(node: Node): string {
-  if (element(node) && excluded.has(node.tagName)) return '';
+  if (isElement(node) && excluded.has(node.tagName)) return '';
   if ('value' in node && node.nodeName === '#text') return node.value;
   return 'childNodes' in node ? node.childNodes.map(textOf).join(' ') : '';
 }
@@ -72,7 +72,7 @@ export function extractPage(body: Buffer, url: string): PageEvidence {
     icons: [],
   };
   function visit(node: Node) {
-    if (element(node)) {
+    if (isElement(node)) {
       if (excluded.has(node.tagName)) return;
       collectElement(node, result);
     }

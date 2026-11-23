@@ -19,6 +19,7 @@ import {
 } from './support.ts';
 import { gatewayCalls } from '../src/models/gateway.ts';
 import { ModelError } from '../src/models/http.ts';
+import { policy } from '../src/config.ts';
 import { recordingMeter } from './meter-fixtures.ts';
 
 const input = discoveryCreate.parse({
@@ -84,7 +85,6 @@ describe('durable onboarding', () => {
         method: 'recorded-test',
         extracted_fields: JSON.stringify({ themes: ['Price', 'Delivery speed'] }),
         field_confidence: '{}',
-        evidence: '[]',
         warnings: '[]',
         created_at: new Date(),
       })
@@ -317,7 +317,7 @@ describe('durable onboarding', () => {
       .execute();
     await expect(
       completeDiscovery(db, t.workspaceId, t.userId, missing.id, completion, randomUUID()),
-    ).rejects.toMatchObject({ status: 409, message: 'Discovery research evidence is unavailable' });
+    ).rejects.toMatchObject({ status: 409, message: 'Discovery research is unavailable' });
     const row = await ready(t.workspaceId);
     await expect(
       completeDiscovery(
@@ -542,17 +542,18 @@ describe('durable onboarding', () => {
       .selectAll()
       .where('discovery_id', '=', row.id)
       .executeTakeFirstOrThrow();
-    expect(snapshot.extracted_fields).toMatchObject({
-      evidence_manifest: expect.arrayContaining([
-        expect.objectContaining({ source_url: 'https://acme.com/' }),
-      ]),
+    expect(snapshot).toMatchObject({
+      method: 'first_party+keenable_search+structured_models',
+      extracted_fields: { review_state: 'unreviewed', identity_status: null },
     });
+    expect(snapshot).not.toHaveProperty('evidence');
+    expect(snapshot.extracted_fields).not.toHaveProperty('evidence_manifest');
     expect(await worker.runOnce('test-worker', target)).toBe(false);
   });
   it('retries a timed-out identity and then fails with its own code, never an empty ready review', async () => {
     const t = await tenant();
     const row = await createDiscovery(db, t.workspaceId, input, randomUUID());
-    const complete = vi.fn(async () => {
+    const complete = vi.fn(async (_system: string) => {
       throw new ModelError('timeout');
     });
     const gateway = {
@@ -593,7 +594,11 @@ describe('durable onboarding', () => {
       error_code: 'brand_identity_unavailable',
       competitors: [],
     });
-    expect(complete).toHaveBeenCalledTimes(2);
+    expect(
+      complete.mock.calls.filter(
+        ([system]) => system === policy.discovery.constants.identity_research_system_prompt,
+      ),
+    ).toHaveLength(2);
     expect(
       await db
         .selectFrom('brand_research_snapshots')

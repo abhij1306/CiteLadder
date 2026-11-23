@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { asApiErrorCode } from '@citeladder/contracts/error-codes';
 
 import { policy } from '../config.ts';
-import type { Database } from '../db/database.ts';
+import { inTransaction, type Database } from '../db/database.ts';
 import { WorkspaceScope } from '../db/workspace-scope.ts';
 import { ApiError, notFound } from '../errors.ts';
 import { stableKey } from './projection.ts';
@@ -16,7 +16,7 @@ export function updateOrder(
   scope: Scope,
   update: { orderedIds: string[]; expectedVersion: number; userId: string },
 ) {
-  return db.transaction().execute(async (trx) => {
+  return inTransaction(db, async (trx) => {
     const workspace = new WorkspaceScope(scope.workspaceId);
     const project = await workspace
       .selectFrom(trx, 'projects')

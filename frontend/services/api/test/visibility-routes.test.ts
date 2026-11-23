@@ -136,7 +136,13 @@ describe('GET /executions/{execution_id}', () => {
 
   it('is not found from another workspace or to the local user', async () => {
     const auditId = await fixtures.audit(tenant);
-    const { taskId } = await fixtures.execution(tenant, { auditId });
+    const { taskId } = await fixtures.execution(tenant, {
+      auditId,
+      engine: 'google_ai_mode',
+      observation: {},
+    });
+    const own = await get(tenant, `/api/v1/executions/${taskId}`);
+    expect([own.status, own.body.logical_engine]).toEqual([200, 'google_ai_mode']);
 
     const foreign = await get(outsider, `/api/v1/executions/${taskId}`);
     expect(foreign.status).toBe(404);
@@ -237,21 +243,28 @@ describe('GET /projects/{project_id}/visibility/surface-rates', () => {
     tenant = await fixtures.tenant();
   });
 
-  it('excludes failed retrievals from every denominator', async () => {
+  it('excludes failed retrievals from every denominator and keeps each engine apart', async () => {
     const auditId = await fixtures.audit(tenant, { configuration: CONFIGURATION });
-    const observed = (promptIndex: number, observation: object, analysis: object | null = {}) =>
-      fixtures.execution(tenant, {
-        auditId,
-        engine: 'google_ai_overview',
-        promptIndex,
-        analysis,
-        observation,
-      });
-    await observed(0, {});
-    await observed(1, { outcome: 'no_ai_overview', aioPresent: false });
-    await observed(2, { outcome: 'execution_failure', aioPresent: null }, null);
+    const observed = (
+      engine: string,
+      promptIndex: number,
+      observation: object,
+      analysis: object | null = {},
+    ) => fixtures.execution(tenant, { auditId, engine, promptIndex, analysis, observation });
+    await observed('google_ai_overview', 0, {});
+    await observed('google_ai_overview', 1, { outcome: 'no_ai_overview', aioPresent: false });
+    await observed(
+      'google_ai_overview',
+      2,
+      { outcome: 'execution_failure', aioPresent: null },
+      null,
+    );
+    await observed('google_ai_mode', 0, {});
+    await observed('google_ai_mode', 1, {});
+    await observed('google_ai_mode', 2, {});
 
     const { status, body } = await rates(tenant, { audit_id: auditId });
+    const mode = await rates(tenant, { audit_id: auditId, engine: 'google_ai_mode' });
 
     expect(status).toBe(200);
     expect(body).toMatchObject({ successful: 2, with_overview: 1, excluded: 1 });
@@ -260,6 +273,12 @@ describe('GET /projects/{project_id}/visibility/surface-rates', () => {
       denominator: 2,
       denominator_kind: 'successful_observations',
       value: 0.5,
+    });
+    expect(mode.body).toMatchObject({
+      logical_engine: 'google_ai_mode',
+      successful: 3,
+      with_overview: 3,
+      excluded: 0,
     });
   });
 
@@ -441,6 +460,7 @@ describe('GET /projects/{project_id}/visibility/sources/*', () => {
       dimension: 'domain',
       granularity: 'day',
       buckets: ['2026-02-01T00:00:00Z'],
+      bucket_responses: [2],
       series: [
         {
           key: 'example.com',
@@ -463,6 +483,7 @@ describe('GET /projects/{project_id}/visibility/sources/*', () => {
       { query: { granularity: 'month', limit: '1' } },
     );
     expect(body.buckets).toEqual(['2026-02-01T00:00:00Z', '2026-03-01T00:00:00Z']);
+    expect(body.bucket_responses).toEqual([2, 1]);
     expect(body.series).toEqual([
       {
         key: 'example.com',
@@ -656,6 +677,32 @@ describe('GET /projects/{project_id}/visibility/sources/*', () => {
       query: { audit_id: selected, standing: 'gap' },
     });
     expect(domains.status).toBe(422);
+
+    const reread = async (title: string, at: string) => {
+      const next = { ...reading('inspected', at), page_facts: JSON.stringify({ title }) };
+      await db.insertInto('source_page_snapshots').values(next).execute();
+      await db
+        .insertInto('source_page_entity_presences')
+        .values([
+          { ...presence('brand', 'Acme Corp', 'not_detected', []), snapshot_id: next.id },
+          { ...presence('competitor', 'Globex', 'present', [0]), snapshot_id: next.id },
+        ])
+        .execute();
+    };
+    await reread('Globex - Wikipedia', '2026-02-04T00:00:00Z');
+    expect(await urlRows({})).toEqual([
+      [url, 'read', action.id],
+      ['https://other.example/x', null, null],
+    ]);
+    expect(await urlRows({ standing: 'gap' })).toEqual([]);
+    await reread('Best budget retailers', '2026-02-05T00:00:00Z');
+    expect(await urlRows({ standing: 'gap' })).toEqual([[url, 'gap', action.id]]);
+    await db
+      .updateTable('source_pages')
+      .set({ registrable_domain: 'en.wikipedia.org' })
+      .where('id', '=', pageId)
+      .execute();
+    expect(await urlRows({ standing: 'gap' })).toEqual([]);
   });
 
   it("draws one page's own line for its detail view", async () => {
@@ -717,7 +764,13 @@ describe('GET /projects/{project_id}/visibility/sources/*', () => {
       outsider,
       `/api/v1/projects/${outsider.projectId}/visibility/sources/series`,
     );
-    expect(own.body).toEqual({ dimension: 'domain', granularity: 'day', buckets: [], series: [] });
+    expect(own.body).toEqual({
+      dimension: 'domain',
+      granularity: 'day',
+      buckets: [],
+      bucket_responses: [],
+      series: [],
+    });
     const foreign = await get(
       outsider,
       `/api/v1/projects/${tenant.projectId}/visibility/sources/url`,

@@ -9,8 +9,6 @@ export function useCommerceQueries(projectId: string) {
   const scope = { workspaceId, projectId };
   const catalog = useQuery(commerceQueries.catalog(scope));
   const projection = useCatalogProjection(projectId, catalog);
-  // No interval: the discovery tracker owns the in-flight signal and
-  // invalidates this list when the last tracked run terminalizes.
   const competitors = useQuery(commerceQueries.competitors(scope));
   const buyerPrompts = useQuery(commerceQueries.buyerPrompts(scope));
   return { catalog, projection, competitors, buyerPrompts };

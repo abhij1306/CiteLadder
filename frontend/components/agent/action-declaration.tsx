@@ -61,9 +61,6 @@ export function useMarkImplemented({
   proposed,
 }: MarkImplementedProps) {
   const [open, setOpen] = useState(false);
-  // One key per dialog opening and chosen day, so a retry after an ambiguous
-  // failure replays the identical declaration instead of sending a request the
-  // server would refuse as a reused key with changed input.
   const [attempt, setAttempt] = useState(() => newAttempt(proposed));
   const declare = useMutation(actionsMutations.declare(workspaceId));
   const range = declarationDays(action.declarable_since, attempt.openedAt);

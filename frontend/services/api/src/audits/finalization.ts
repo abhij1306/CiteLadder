@@ -1,5 +1,5 @@
 import { sql, type Selectable } from 'kysely';
-import type { Database } from '../db/database.ts';
+import { inTransaction, type Database } from '../db/database.ts';
 import type { Audits } from '../generated/db-schema.ts';
 import { policy } from '../config.ts';
 import { failureFacts, getLogger } from '../logging.ts';
@@ -31,7 +31,7 @@ export function finalizeAudit(
   at = new Date(),
   derive: DeriveExecution = deriveExecution,
 ) {
-  return db.transaction().execute(async (trx) => {
+  return inTransaction(db, async (trx) => {
     const audit = await trx
       .selectFrom('audits')
       .selectAll()

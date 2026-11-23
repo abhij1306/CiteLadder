@@ -162,7 +162,7 @@ async function verifyExistingEvidence(
         ]
       : [],
   );
-  for (const trigger of triggers) await enqueueImplementationVerification(trx, trigger); // NOSONAR -- The declaration transaction runs one statement at a time.
+  for (const trigger of triggers) await enqueueImplementationVerification(trx, trigger); // NOSONAR
 }
 
 async function resolvedBeforeGoLive(trx: Database, action: ActionRow, declaredAt: string) {
@@ -204,8 +204,6 @@ export function declareAction(
     .digest('hex');
   const { workspaceId } = scope;
   return inTransaction(db, async (trx) => {
-    // Refresh takes the project lock before updating Action rows. A declaration
-    // needs the same order so members, snapshot and workflow form one revision.
     const authorized = await requireAction(trx, scope, actionId);
     await acquireProjectLock(trx, authorized.project_id);
     const action = await requireAction(trx, scope, actionId, true);
@@ -282,8 +280,6 @@ export function declareAction(
       .onConflict((oc) => oc.columns(['workspace_id', 'idempotency_key']).doNothing())
       .returningAll()
       .executeTakeFirst();
-    // A different project can race on a workspace-wide key. No side effects
-    // occur until the insert wins; conflict recovery checks identity again.
     if (!row) {
       const stored = await replay(trx, action, key, input, declaredAt);
       if (!stored) throw replayConflict();

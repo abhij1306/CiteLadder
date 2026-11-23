@@ -48,15 +48,10 @@ if (typeof window !== 'undefined' && typeof window.matchMedia !== 'function') {
   })) as unknown as typeof window.matchMedia;
 }
 
-// Radix measures positioned content with ResizeObserver and a chat follows
-// its thread's size. jsdom implements neither layout nor the observer, so
-// tests drive size changes through `emitResize`.
 installResizeObserver();
 
 installIntersectionObserver();
 
-// Radix Select uses pointer capture and element scrolling in browsers. jsdom
-// does not implement either API, so install inert contract-compatible stubs.
 if (typeof Element !== 'undefined') {
   Element.prototype.hasPointerCapture ??= () => false;
   Element.prototype.setPointerCapture ??= () => {};

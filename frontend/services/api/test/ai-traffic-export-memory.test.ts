@@ -9,7 +9,6 @@ import { crawlLogs } from '../src/config/crawl-logs.ts';
 import { createSource } from '../src/crawl-logs/sources.ts';
 import { ingest } from '../src/crawl-logs/ingest.ts';
 
-// Forced collection makes the sampled heap the retained heap, not garbage awaiting a GC.
 setFlagsFromString('--expose-gc');
 const collect = runInNewContext('gc') as () => void;
 

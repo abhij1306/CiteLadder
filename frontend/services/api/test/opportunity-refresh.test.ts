@@ -183,9 +183,9 @@ describe('opportunity_refresh', () => {
       ['brand_absent_high_value_prompt', 120],
       ['owned_page_not_cited', 80],
       ['content_gap_improve_page', 50],
-      ['site_issue_family', 30.3],
-      ['site_issue_family', 20.2],
-      ['site_issue_family', 10.1],
+      ['site_issue_family', 30],
+      ['site_issue_family', 20],
+      ['site_issue_family', 10],
     ]);
     const absent = byRule(rows, 'brand_absent_high_value_prompt');
     expect(absent).toMatchObject({

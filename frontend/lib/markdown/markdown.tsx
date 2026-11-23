@@ -44,7 +44,6 @@ function MarkdownLink({
   const chip = useContext(LinkChipContext)?.(href ?? '', children) ?? null;
   const confirm =
     guard !== null && href !== undefined && leavesForUnknownHost(href, guard.knownHosts);
-  // Ctrl/Cmd/Shift-click fire `click`; a middle click fires only `auxclick`.
   const intercept = (event: MouseEvent<HTMLAnchorElement>) => {
     if (event.type === 'auxclick' && event.button !== 1) return;
     event.preventDefault();
@@ -106,15 +105,10 @@ const MARKDOWN_COMPONENTS: Components = {
   h4: ({ node: _node, children, ...props }) => <h5 {...props}>{children}</h5>,
   h5: ({ node: _node, children, ...props }) => <h6 {...props}>{children}</h6>,
   h6: ({ node: _node, children, ...props }) => <h6 {...props}>{children}</h6>,
-  // Untrusted output: never render images (remote-fetch beacon risk).
   img: () => null,
   table: ({ node, ...props }) => <MarkdownTable name={tableName(node)} {...props} />,
   th: ({ node: _node, ...props }) => <th {...props} scope="col" />,
-  // Forward the remaining DOM props (id, aria-describedby,
-  // data-footnote-*) so GFM footnote back-links keep working; `node`
-  // is react-markdown's AST handle, not a DOM attribute.
   a: MarkdownLink,
-  // Markdown never makes a span (raw HTML is escaped); only chip slots do.
   span: MarkdownSpan,
 };
 

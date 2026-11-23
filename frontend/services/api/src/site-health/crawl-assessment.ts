@@ -112,16 +112,11 @@ async function refreshCounters(db: Database, crawl: Crawl, summary: Summary) {
     .executeTakeFirstOrThrow();
   crawl.failed_url_count = await failedUrlCount(db, crawl);
   crawl.analyzed_url_count = summary.analyzeSucceeded;
-  // A parent page reserves its children before they are fetched, so the live
-  // admission counter runs ahead of observations; lowering it would reopen
-  // the requested budget for every sibling.
   crawl.admitted_url_count = Math.max(crawl.admitted_url_count, observed.count);
 }
 
 function reconcileDiscovery(crawl: Crawl, summary: Summary) {
   const discoveryFailed = crawl.discovered_url_count === 0;
-  // A recrawl that analyzed monitored pages after its root was blocked holds
-  // useful partial evidence; it is not a failed crawl.
   const fullyFailed =
     summary.analyzeSucceeded === 0 && (discoveryFailed || summary.analyzeApplicable > 0);
   if (!summary.discoverOpen && ['pending', 'running'].includes(crawl.discovery_status))

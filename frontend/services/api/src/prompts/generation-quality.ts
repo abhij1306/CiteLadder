@@ -23,11 +23,14 @@ export const probability = (value: unknown): number | null =>
   typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1 ? value : null;
 const logger = getLogger('app.domain.prompts.quality_judge');
 
-export const noulQuestions = (cohort: unknown) => ({
+export const noulQuestions = (cohort: unknown, claims = cohort === 'brand_diagnostic') => ({
   ...Q.noul_questions,
   ...(cohort === 'core' ? Q.core_noul_questions : {}),
-  ...(cohort === 'brand_diagnostic' ? Q.brand_noul_questions : {}),
+  ...(claims ? Q.brand_noul_questions : {}),
 });
+
+const decisionQuestions = ({ cohort = 'core', claims }: Record<string, unknown>) =>
+  noulQuestions(cohort, typeof claims === 'boolean' ? claims : undefined);
 
 export function applyQualityPolicy(decision: Record<string, unknown>) {
   const thresholds = {
@@ -46,7 +49,7 @@ export function applyQualityPolicy(decision: Record<string, unknown>) {
     throw new Error('Invalid JEV thresholds');
   const answers = record(decision.answers),
     duplicate = record(decision.duplicate_of);
-  const values = Object.keys(noulQuestions(decision.cohort ?? 'core')).map((key) => {
+  const values = Object.keys(decisionQuestions(decision)).map((key) => {
     const core = Object.hasOwn(Q.core_noul_questions, key);
     return {
       key,
@@ -110,15 +113,20 @@ function jevQuestions({
   options,
   hasPrior,
   cohort,
+  claims,
   topics,
 }: {
   options: Record<string, string>;
   hasPrior: boolean;
   cohort: string;
+  claims: boolean;
   topics: Record<string, string>;
 }) {
   const questions: Record<string, unknown> = Object.fromEntries(
-    Object.entries(noulQuestions(cohort)).map(([key, value]) => [key, { type: 'noul', ...value }]),
+    Object.entries(noulQuestions(cohort, claims)).map(([key, value]) => [
+      key,
+      { type: 'noul', ...value },
+    ]),
   );
   if (Object.keys(topics).length > 1)
     questions.topic = { type: 'choice', instructions: Q.topic_instructions, criteria: topics };
@@ -237,6 +245,7 @@ export async function judgeDrafts(
           .map((text, index) => [`p${index + 1}`, text]),
       );
       prior.set(draft.slot.topic_id, [...texts, draft.text]);
+      const claims = Boolean(draft.slot.grounded_attributes);
       const state = {
         business: safeBusiness,
         topic: draft.slot.topic_name,
@@ -250,6 +259,7 @@ export async function judgeDrafts(
         options,
         hasPrior: texts.length > 0,
         cohort: draft.slot.cohort,
+        claims,
         topics,
       });
       const hash = createHash('sha256')
@@ -282,7 +292,7 @@ export async function judgeDrafts(
         return;
       }
       const answers = Object.fromEntries(
-        Object.keys(noulQuestions(draft.slot.cohort)).map((key) => [
+        Object.keys(noulQuestions(draft.slot.cohort, claims)).map((key) => [
           key,
           probability(result.answers[key]?.noul),
         ]),
@@ -292,6 +302,7 @@ export async function judgeDrafts(
         model: result.model,
         question_schema_version: Q.question_schema_version,
         cohort: draft.slot.cohort,
+        claims,
         state_hash: hash,
         answers,
         intent: choice(result.answers.intent, Object.keys(Q.intent_descriptions)),
@@ -314,7 +325,7 @@ export const gatedOut = (draft: Draft) =>
   draft.decision?.mode === 'gate' && draft.decision.verdict === 'fail';
 
 export function cohortQuotas(
-  input: Pick<GenerationInput, 'count' | 'cohort' | 'distribution'>,
+  input: Pick<GenerationInput, 'count' | 'mode' | 'cohort' | 'distribution'>,
 ): Record<GenerationCohort, number> {
   const shares = cohortShares(input);
   const exact = generationCohorts.map((cohort) => ({
@@ -337,9 +348,10 @@ export function cohortQuotas(
 
 export function selectRun(
   drafts: Draft[],
-  input: Pick<GenerationInput, 'count' | 'cohort' | 'distribution'>,
+  input: Pick<GenerationInput, 'count' | 'mode' | 'cohort' | 'distribution'>,
   topicWeights: ReadonlyMap<string, number> = new Map(),
 ): Draft[] {
+  if (input.mode === 'brand') return selectDrafts(drafts, input.count, { topicWeights });
   const quotas = cohortQuotas(input);
   return generationCohorts
     .flatMap((cohort) =>

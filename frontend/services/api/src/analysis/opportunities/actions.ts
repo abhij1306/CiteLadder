@@ -152,8 +152,6 @@ function group(t: ActionTarget, members: NonEmpty<ActionMember>) {
     goal: goalOf(ordered[0].grouping),
     grouping: ordered[0].grouping,
     families,
-    // The strongest finding ranks the Action. Agreement is not rewarded: most
-    // findings on a page come from the one crawl, so a count would double it.
     priority_score: roundScaled(ordered[0].priority_score, p.ACTION_PRIORITY_ROUNDING_DECIMALS),
     approach: branch.approach,
     skill_id: branch.skill_id,

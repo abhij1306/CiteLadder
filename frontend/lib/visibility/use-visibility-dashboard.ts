@@ -18,6 +18,7 @@ import {
   isEvidenceTab,
   VISIBILITY_TABS,
   toRunOptions,
+  type RunOption,
   type VisibilityTab,
   type VisibilityView,
 } from '@/lib/visibility/dashboard';
@@ -28,9 +29,15 @@ import {
   setUrlParams,
   stringUrlCodec,
   useUrlState,
+  type UrlCodec,
 } from '@/lib/navigation/url-state';
 import { logicalEngineSchema } from '@citeladder/contracts/providers';
-import { rangeToFrom, type TrendGranularity, type TrendRange } from '@/lib/visibility/trends';
+import {
+  DEFAULT_TREND_RANGE,
+  rangeToFrom,
+  type TrendGranularity,
+  type TrendRange,
+} from '@/lib/visibility/trends';
 
 export { EVIDENCE_LIMIT } from '@/lib/config/operational';
 
@@ -43,9 +50,9 @@ const pageKeys = [
   'query_offset',
   'prompt_page',
 ];
-const tabCodec = stringUrlCodec(
+const tabCodec = stringUrlCodec<VisibilityTab>(
   VISIBILITY_TABS.map(({ id }) => id),
-  'domains' as VisibilityTab,
+  'domains',
 );
 const sourceKeys = [
   'source_cursor',
@@ -54,12 +61,15 @@ const sourceKeys = [
   'source_type',
   'source_standing',
   'source_pick',
-  'source_domain',
   'source_url',
-  'source_view',
 ];
 const engineCodec = stringUrlCodec(['all', ...logicalEngineSchema.options], 'all');
-const rangeCodec = stringUrlCodec<TrendRange>(['all', '30d', '90d', '1y'], '90d');
+const rangeCodec = stringUrlCodec<TrendRange>(['all', '30d', '90d', '1y'], DEFAULT_TREND_RANGE);
+type SelectionMode = 'run' | 'range';
+const chosenSelectionCodec: UrlCodec<SelectionMode | null> = {
+  parse: (raw) => (raw === 'run' || raw === 'range' ? raw : null),
+  serialize: (value) => value,
+};
 const granularityCodec = stringUrlCodec<TrendGranularity>(['run', 'day', 'week', 'month'], 'run');
 
 function selectPeriod(value: TrendRange) {
@@ -94,7 +104,37 @@ export function visibilityEvidenceHref(
   return `/visibility?${params.toString()}`;
 }
 
-export function useVisibilityFilters() {
+export function measuredSelection({
+  chosen,
+  namedRun,
+  fallback,
+  runs,
+  from,
+  to,
+}: Readonly<{
+  chosen: SelectionMode | null;
+  namedRun: boolean;
+  fallback: SelectionMode;
+  runs: readonly Pick<RunOption, 'completedAt'>[] | undefined;
+  from: string | undefined;
+  to: string | undefined;
+}>): SelectionMode {
+  if (chosen !== null) return chosen;
+  if (namedRun) return 'run';
+  if (fallback === 'run' || runs === undefined) return fallback;
+  const start = from === undefined ? -Infinity : Date.parse(from);
+  const end = to === undefined ? Infinity : Date.parse(to);
+  const inWindow = (completedAt: string | null) => {
+    if (completedAt === null) return false;
+    const at = Date.parse(completedAt);
+    return at >= start && at <= end;
+  };
+  return runs.some((run) => inWindow(run.completedAt)) ? 'range' : 'run';
+}
+
+export function useVisibilityFilters({
+  defaultSelection = 'run',
+}: { defaultSelection?: SelectionMode } = {}) {
   const [activeTab, selectTab] = useUrlState('tab', tabCodec, { clearKeys: sourceKeys });
   const [selectedRunId, setSelectedRunId] = useUrlState('run', optionalStringUrlCodec, {
     clearKeys: pageKeys,
@@ -108,10 +148,7 @@ export function useVisibilityFilters() {
   const [range] = useUrlState('range', rangeCodec);
   const [fromAt] = useUrlState('from', optionalStringUrlCodec);
   const [toAt] = useUrlState('to', optionalStringUrlCodec);
-  const [selectionMode] = useUrlState(
-    'selection',
-    stringUrlCodec(['run', 'range'] as const, 'run'),
-  );
+  const [chosenSelection] = useUrlState('selection', chosenSelectionCodec);
   const [configuration, setConfiguration] = useUrlState('configuration', optionalStringUrlCodec, {
     clearKeys: pageKeys,
   });
@@ -176,7 +213,9 @@ export function useVisibilityFilters() {
     competitor,
     domain,
     url,
-    selectionMode,
+    chosenSelection,
+    defaultSelection,
+    selectionMode: chosenSelection ?? defaultSelection,
     selectMeasurement: (runId: string | null) =>
       setUrlParams({
         selection: 'run',
@@ -253,7 +292,15 @@ export function useVisibilityQueries(
     () => filters.fromAt ?? rangeToFrom(filters.range),
     [filters.fromAt, filters.range],
   );
-  const selectedParams = selectionParams(filters, from, engine);
+  const selectionMode = measuredSelection({
+    chosen: filters.chosenSelection,
+    namedRun: filters.selectedRunId !== null,
+    fallback: filters.defaultSelection,
+    runs: auditsQuery.isSuccess ? runOptions : undefined,
+    from,
+    to: filters.toAt ?? undefined,
+  });
+  const selectedParams = selectionParams(filters, { mode: selectionMode, from, engine });
   const projectionOptions = visibilityQueries.project(requestScope, selectedParams);
   const visibilityQuery = useQuery({
     ...projectionOptions,
@@ -295,9 +342,6 @@ export function useVisibilityQueries(
     activeRunId,
     selectedRunIds,
   });
-  // A range that resolved to NO runs sends neither `audit_id` nor a usable
-  // `audit_ids`, so the request would read the project unscoped and answer a
-  // question nobody asked. An empty selection has empty evidence.
   const hasEvidenceScope = Boolean(activeRunId) && selectedRunIds?.length !== 0;
   const evidenceParams = evidenceSelectionParams(filters, activeRunId, selectedRunIds, engine);
   const evidenceOptions = {
@@ -314,6 +358,7 @@ export function useVisibilityQueries(
     }
   };
   return {
+    selectionMode,
     auditsQuery,
     runOptions,
     activeRun,
@@ -390,18 +435,11 @@ function useVisibilityRuns(
   return { queryClient, auditsQuery, runOptions, hasRuns, activeRun };
 }
 
-function selectionModeParam(
-  filters: ReturnType<typeof useVisibilityFilters>,
-): 'range' | 'run' | 'latest' {
-  if (filters.selectionMode === 'range') return 'range';
-  return filters.selectedRunId ? 'run' : 'latest';
-}
-
 function selectionParams(
   filters: ReturnType<typeof useVisibilityFilters>,
-  from: string | undefined,
-  engine: string | undefined,
+  { mode, from, engine }: Readonly<{ mode: SelectionMode; from?: string; engine?: string }>,
 ) {
+  const range = mode === 'range';
   return {
     audit_id: filters.selectedRunId ?? undefined,
     market: filters.market ?? undefined,
@@ -409,9 +447,9 @@ function selectionParams(
     engine,
     topic: filters.topic ?? undefined,
     baseline_id: filters.baselineId ?? undefined,
-    selection_mode: selectionModeParam(filters),
-    from: filters.selectionMode === 'range' ? from : undefined,
-    to: filters.selectionMode === 'range' ? (filters.toAt ?? undefined) : undefined,
+    selection_mode: range ? 'range' : filters.selectedRunId ? 'run' : 'latest',
+    from: range ? from : undefined,
+    to: range ? (filters.toAt ?? undefined) : undefined,
     configuration_key: filters.configuration ?? undefined,
   };
 }

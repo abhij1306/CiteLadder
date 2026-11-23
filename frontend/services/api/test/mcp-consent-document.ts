@@ -28,10 +28,8 @@ export function consentDocument(source: string) {
   const refresh = all('meta').find((meta) => meta['http-equiv'] === 'refresh')?.content ?? '';
   return {
     workspaces: inputs.filter(
-      (input) =>
-        input.type === 'checkbox' && !['accept_terms', 'allow_changes'].includes(input.name ?? ''),
+      (input) => input.type === 'checkbox' && input.name !== 'accept_terms',
     ),
-    changes: inputs.find((input) => input.name === 'allow_changes'),
     terms: inputs.find((input) => input.name === 'accept_terms'),
     termsRevision: inputs.find((input) => input.name === 'terms_revision')?.value,
     links: all('a').flatMap((a) => (a.href ? [a.href] : [])),
@@ -40,10 +38,6 @@ export function consentDocument(source: string) {
   };
 }
 
-/**
- * Where a decision hands the browser back: a page, not a redirect, because
- * `form-action` governs every redirect after the post. Its link repeats the target.
- */
 export async function callbackOf(response: Response) {
   expect(response.status).toBe(200);
   expect(response.headers.get('location')).toBeNull();
