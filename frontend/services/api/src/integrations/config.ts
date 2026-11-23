@@ -1,11 +1,6 @@
 import { createHmac } from 'node:crypto';
-import {
-  ConfigError,
-  policy,
-  resolveSettingSpec,
-  settingValues,
-  type SettingSource,
-} from '../config.ts';
+import { ConfigError, policy, resolveSettingSpec, type SettingSource } from '../config.ts';
+import { settingValues } from '../config/settings.ts';
 import { createSecretCipher } from './fernet.ts';
 
 export const integrationPolicy = policy.integrations;

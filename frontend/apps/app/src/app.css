@@ -16,6 +16,7 @@
 @source '../../../apps/app/src';
 @source '../../../components/agent';
 @source '../../../components/ai-traffic';
+@source '../../../components/brand';
 @source '../../../components/demand';
 @source '../../../components/integrations';
 @source '../../../components/knowledge-base';

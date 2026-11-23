@@ -278,7 +278,7 @@ export const promptSetKinds = {
             ? rowsOf('Topic', named)
             : [{ label: 'Topics', value: `All ${plural(topics.length, 'topic')}` }]),
         ],
-        spend: `AI credits for up to ${plural(draftCallLimit(request) + policy.prompts.generation.map_calls, 'model call')}`,
+        spend: `Up to ${plural(draftCallLimit(request) + policy.prompts.generation.map_calls, 'model call')} on your own model key`,
         opens: { label: 'Open Prompts', path: '/prompts' },
       };
     },

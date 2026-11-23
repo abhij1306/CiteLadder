@@ -5,6 +5,7 @@ type SecurityEvent =
   | 'acquisition.control'
   | 'api_key.create'
   | 'api_key.revoke'
+  | 'api_key.delete'
   | 'api_key.rejected_revoked'
   | 'api_key.rejected_expired'
   | 'crawl_log.create'
@@ -12,7 +13,8 @@ type SecurityEvent =
   | 'crawl_log.revoke'
   | 'credential.create'
   | 'credential.update'
-  | 'credential.delete';
+  | 'credential.delete'
+  | `agent.change.${string}`;
 
 /** Append in the mutation transaction; no arbitrary payload or secrets. */
 export async function recordSecurityEvent(

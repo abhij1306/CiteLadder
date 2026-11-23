@@ -176,7 +176,7 @@ describe('API keys', () => {
         await app.request(`/api/v1/api-keys/${keyId}`, {
           method: 'DELETE',
           headers: {
-            cookie: `${config.session.cookieName}=${await sessionToken({ sub: userId, ver: 0 })}`,
+            cookie: `${TEST_SESSION_COOKIE}=${await sessionToken({ sub: userId, ver: 0 })}`,
             'x-workspace-id': workspaceId,
           },
         })

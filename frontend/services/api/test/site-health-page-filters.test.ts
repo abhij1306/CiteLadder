@@ -7,7 +7,7 @@ import { createApp } from '../src/app.ts';
 import { policy } from '../src/config.ts';
 import { refreshIssueCurrency } from '../src/site-health/issue-currency.ts';
 import { loadCrawl } from '../src/site-health/reads/crawl.ts';
-import { sessionToken, testConfig, testDatabase } from './support.ts';
+import { sessionToken, TEST_SESSION_COOKIE, testConfig, testDatabase } from './support.ts';
 import { SiteFixtures, type SiteSeed } from './site-health-fixtures.ts';
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
@@ -27,7 +27,7 @@ type Measures = { indexable: boolean; web: number; aeo: number | null; depth: nu
 async function get(seed: SiteSeed, path: string) {
   return app.request(`/api/v1${path}`, {
     headers: {
-      cookie: `${config.session.cookieName}=${await sessionToken({ sub: seed.userId, ver: 0 })}`,
+      cookie: `${TEST_SESSION_COOKIE}=${await sessionToken({ sub: seed.userId, ver: 0 })}`,
       'x-workspace-id': seed.workspaceId,
     },
   });

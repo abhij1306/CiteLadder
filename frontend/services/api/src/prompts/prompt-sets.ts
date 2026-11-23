@@ -15,7 +15,7 @@ import { notFound } from '../errors.ts';
 import type { DB } from '../generated/db-schema.ts';
 import { acquireProjectLock, acquirePromptSetLock } from './locks.ts';
 import { promptSetView, type PromptSetRow, type PromptSetView } from './views.ts';
-import { generationSetting } from './generation-input.ts';
+import { draftCallLimit, generationSetting } from './generation-input.ts';
 
 export const promptSetCreate = promptSetCreateRequestSchema.extend({
   name: z.string().max(255).default(''),

@@ -289,8 +289,6 @@ export async function researchRuns({ db, scope }: ProjectRead, args: Page): Prom
     status: run.status,
     awaiting_confirmation: run.status === 'reviewed' && run.confirmed_at === null,
     action: run.action,
-    estimated_credits: run.estimated_credits,
-    charged_credits: run.charged_credits,
     planned_calls: run.planned_calls,
     completed_calls: run.completed_calls,
     error_code: run.error_code,

@@ -126,10 +126,21 @@ export function createResearchClient(
       { provider: 'keenable', model: 'keenable' },
       async () => {
         assertMetered('keenable');
-        return { value: await send(path, body), usage: null };
+        const value = await transport(new URL(path, base), {
+          method: 'POST',
+          headers: {
+            'X-API-Key': settings.keenable_api_key,
+            accept: 'application/json',
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify(body),
+          redirect: 'error',
+          signal: AbortSignal.timeout(settings.keenable_request_timeout_seconds * 1000),
+        });
+        if (!value.ok) throw new Error('external_research_failed');
+        return { value, usage: null };
       },
     );
-    if (!response.ok) throw new Error('external_research_failed');
     return z.record(z.string(), z.unknown()).parse(await response.json());
   }
   return {

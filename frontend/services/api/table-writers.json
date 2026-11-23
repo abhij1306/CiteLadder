@@ -178,7 +178,7 @@
     ],
     "integration_sync_runs": ["src/integrations/sync.ts", "src/workers/integration-worker.ts"],
     "mcp_oauth_clients": ["src/mcp/token-auth.ts"],
-    "mcp_oauth_grants": ["src/mcp/token-auth.ts"],
+    "mcp_oauth_grants": ["src/mcp/maintenance.ts", "src/mcp/token-auth.ts"],
     "metric_snapshots": ["src/analysis/finalization.ts"],
     "model_calls": ["src/models/metering.ts"],
     "monitored_site_urls": ["src/site-health/admission-writes.ts", "src/site-health/frontier.ts"],
@@ -339,7 +339,6 @@
     "workspaces": ["src/auth/local.ts"]
   },
   "dynamic_writers": [
-    "src/mcp/maintenance.ts",
     "src/projects/service.ts",
     "src/queue/audit-queue.ts",
     "src/queue/recovery.ts",

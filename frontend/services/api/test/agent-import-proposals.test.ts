@@ -7,8 +7,8 @@ import { readChat } from '../src/agent/reads.ts';
 import type { Json, Scope } from '../src/agent/contracts.ts';
 import { AgentFixtures, scripted, text, toolUse } from './agent-support.ts';
 import { auditTenant } from './audit-fixtures.ts';
-import { billingAccount, grant, promptSet } from './prompt-fixtures.ts';
-import { asOwner, testConfig, testDatabase } from './support.ts';
+import { promptSet } from './prompt-fixtures.ts';
+import { testConfig, testDatabase } from './support.ts';
 
 const config = testConfig();
 const db = testDatabase(config);
@@ -24,21 +24,6 @@ async function tenant() {
   const scope: Scope = { workspaceId: t.workspaceId, projectId: t.projectId, userId: t.userId };
   fixtures.scopes.push(scope);
   return { ...t, scope };
-}
-
-async function enable(workspaceId: string, key: 'fact_checking' | 'commerce') {
-  await grant(db, await billingAccount(db, workspaceId), { key, value: 1, sourceKind: 'override' });
-}
-
-async function revoke(workspaceId: string, key: 'commerce') {
-  const account = await billingAccount(db, workspaceId);
-  await asOwner((owner) =>
-    owner
-      .deleteFrom('account_grants')
-      .where('billing_account_id', '=', account)
-      .where('key', '=', key)
-      .execute(),
-  );
 }
 
 async function proposed(scope: Scope, calls: { kind: string; payload: Json }[]) {
@@ -197,13 +182,6 @@ it('refuses facts without the fact-checking flag, then previews duplicates and i
       { topic: 'integrations', statement: ` ${slack.toUpperCase()} `, source_url: '' },
     ],
   };
-  const refused = await proposed(t.scope, [{ kind: 'import_brand_facts', payload }]);
-  expect(refused.results).toEqual([
-    refusedNow("Fact-checking is not included in this workspace's plan"),
-  ]);
-  expect(refused.proposals).toEqual([]);
-
-  await enable(t.workspaceId, 'fact_checking');
   const stageAs = async (role: string) => {
     await setRole(t.scope, role);
     const state = { proposals: [], steps: [] };
@@ -255,7 +233,7 @@ it('refuses facts without the fact-checking flag, then previews duplicates and i
   expect(await facts()).toEqual([{ topic: 'integrations', statement: slack, status: 'draft' }]);
 });
 
-it('refuses a catalog import without commerce, then previews new and rejected products and applies them on confirm', async () => {
+it('previews new and rejected products and applies them on confirm', async () => {
   const t = await tenant();
   const payload = {
     source: 'csv',
@@ -267,11 +245,6 @@ it('refuses a catalog import without commerce, then previews new and rejected pr
       ',Acme,10,USD,https://shop.example/untitled,Accessories',
     ].join('\n'),
   };
-  await revoke(t.workspaceId, 'commerce');
-  const refused = await proposed(t.scope, [{ kind: 'import_catalog', payload }]);
-  expect(refused.results).toEqual([refusedNow('Commerce is not included in your plan')]);
-
-  await enable(t.workspaceId, 'commerce');
   const { proposals, confirm } = await proposed(t.scope, [{ kind: 'import_catalog', payload }]);
   expect(proposals).toEqual([
     {

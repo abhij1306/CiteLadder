@@ -49,7 +49,6 @@ async function competitorNames(context: PreviewContext, ids: readonly string[]) 
 
 function runSpend(run: Awaited<ReturnType<typeof projectRun>>) {
   if (run.planned_calls === 0) return 'Nothing: every dataset is reused from a recent run';
-  if (run.credential_source === 'platform') return plural(run.estimated_credits ?? 0, 'AI credit');
   return `${plural(run.planned_calls, 'DataForSEO call')} on your own DataForSEO key, about $${Number(run.estimated_cost_usd).toFixed(2)}`;
 }
 

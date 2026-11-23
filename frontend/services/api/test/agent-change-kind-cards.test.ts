@@ -30,14 +30,7 @@ const owner = (scope: KindScope): Actor => ({
 });
 
 async function spending(scope: KindScope) {
-  const holds = await db
-    .selectFrom('consumable_ledger')
-    .select(['capability_key', sql<string>`sum(units)::text`.as('units')])
-    .where('workspace_id', '=', scope.workspaceId)
-    .where('entry_kind', '=', 'reservation')
-    .groupBy('capability_key')
-    .orderBy('capability_key')
-    .execute();
+  const holds: Record<string, number> = {};
   const budgets = await db
     .selectFrom('usage_windows')
     .select(['operation', 'count'])
@@ -45,7 +38,7 @@ async function spending(scope: KindScope) {
     .orderBy('operation')
     .execute();
   return {
-    holds: Object.fromEntries(holds.map((row) => [row.capability_key, Number(row.units)])),
+    holds,
     budgets: Object.fromEntries(budgets.map((row) => [row.operation, row.count])),
   };
 }
@@ -130,39 +123,11 @@ const DELETES: [TabledKind, string, { label: string; value: string }[]][] = [
     ],
   ],
   [
-    'delete_objection_group',
-    'Delete an objection group',
-    [{ label: 'Group', value: 'Price' }, { label: 'Answers deleted', value: '0' }, UNDO],
-  ],
-  [
-    'merge_objection_groups',
-    'Merge objection groups',
-    [
-      { label: 'Merge', value: 'Price' },
-      { label: 'Into', value: 'Fit' },
-      { label: 'Answers moved', value: '0' },
-      UNDO,
-    ],
-  ],
-  [
     'merge_themes',
     'Merge themes',
-    [
-      { label: 'Merge', value: 'Comfort' },
-      { label: 'Into', value: 'Fit' },
-      { label: 'Probe answers moved', value: '0' },
-      UNDO,
-    ],
+    [{ label: 'Merge', value: 'Comfort' }, { label: 'Into', value: 'Fit' }, UNDO],
   ],
-  [
-    'delete_theme',
-    'Delete a theme',
-    [
-      { label: 'Theme', value: 'Comfort' },
-      { label: 'Probe answers left without a theme', value: '0' },
-      UNDO,
-    ],
-  ],
+  ['delete_theme', 'Delete a theme', [{ label: 'Theme', value: 'Comfort' }, UNDO]],
 ];
 
 it.each(DELETES)(
@@ -177,36 +142,30 @@ type Spend = Awaited<ReturnType<typeof spending>>;
 const nothing: Spend = { holds: {}, budgets: {} };
 
 const METERED: [TabledKind, string, Spend | null][] = [
-  ['generate_prompts', 'AI credits for up to 3 model calls', null],
+  ['generate_prompts', 'Up to 3 model calls on your own model key', null],
   ['refresh_logos', "One of the day's logo refreshes", null],
-  [
-    'run_probe',
-    '45 AI credits',
-    { holds: { ai_credits: 45 }, budgets: { 'audit.provider_tasks': 9 } },
-  ],
-  ['set_probe_schedule', '45 AI credits each run', nothing],
   [
     'rerun_audit_failures',
     '3 prompt runs for 3 answers, with your own provider keys',
-    { holds: { prompt_runs_per_period: 3 }, budgets: { 'audit.provider_tasks': 3 } },
+    { holds: {}, budgets: { 'audit.provider_tasks': 3 } },
   ],
   [
     'start_crawl',
-    'Up to 5 page fetches from the Site Health allowance',
+    'Page fetches use your own site crawl; nothing is metered',
     {
-      holds: { site_health_page_fetches_per_period: 5 },
+      holds: {},
       budgets: { 'site_health.crawl_create': 1 },
     },
   ],
   [
     'rerun_page',
-    'Up to 1 page fetch from the Site Health allowance',
-    { holds: { site_health_page_fetches_per_period: 1 }, budgets: {} },
+    'Page fetches use your own site crawl; nothing is metered',
+    { holds: {}, budgets: {} },
   ],
   [
     'rerun_issue_group',
-    'Up to 1 page fetch from the Site Health allowance',
-    { holds: { site_health_page_fetches_per_period: 1 }, budgets: {} },
+    'Page fetches use your own site crawl; nothing is metered',
+    { holds: {}, budgets: {} },
   ],
   [
     'start_link_analysis',
@@ -214,8 +173,8 @@ const METERED: [TabledKind, string, Spend | null][] = [
     { holds: {}, budgets: { 'internal_links.analysis': 1 } },
   ],
   ['analyze_page', 'Agent usage for the analysis, as for a chat message', nothing],
-  ['confirm_keyword_run', '5 AI credits', { holds: { ai_credits: 5 }, budgets: {} }],
-  ['generate_buyer_prompts', 'AI credits for up to 1 model call', null],
+  ['confirm_keyword_run', '1 DataForSEO call on your own DataForSEO key, about $0.04', nothing],
+  ['generate_buyer_prompts', 'Up to 1 model call on your own model key', null],
   [
     'discover_commerce_competitors',
     "1 competitor discovery from the day's allowance; no AI credits",
@@ -265,13 +224,6 @@ it.each(METERED)(
     expect({ holds: added('holds'), budgets: added('budgets') }).toEqual(clicked);
   },
 );
-
-it('generate_buyer_prompts quotes the AI credits its model call can hold when the model is priced', async () => {
-  vi.stubEnv('DEFAULT_AGENT_MODEL', 'claude-haiku-5-5');
-  const { before, previewed, preview } = await staged('generate_buyer_prompts');
-  expect(preview.spend).toBe('Up to 6 AI credits');
-  expect(previewed).toEqual(before);
-});
 
 it('start_crawl says in plain words when the crawl ignores robots.txt, chosen or inherited', async () => {
   const { scope } = await table.start_crawl.arrange();

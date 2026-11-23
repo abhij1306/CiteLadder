@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { vi } from 'vitest';
 import * as bindingsOwner from '../src/agent/bindings.ts';
 import { createAgentBindings } from '../src/agent/bindings.ts';
-import type { FundingIdentity } from '../src/agent/store.ts';
+import type { AdmittedModel } from '../src/agent/store.ts';
 import type { Database } from '../src/db/database.ts';
 import { issueGroupId } from '../src/site-health/reads/rules.ts';
 import { auditTenant } from './audit-fixtures.ts';
@@ -260,9 +260,8 @@ export function siteAndActionCases(db: Database, fixtures: SiteFixtures) {
           const bindings = await createAgentBindings(handle, {});
           bindings.store.dependencies.admission = () =>
             Promise.resolve({
-              funding_source: 'development',
               requested_model: 'test-model',
-            } satisfies FundingIdentity);
+            } satisfies AdmittedModel);
           return bindings;
         });
         const seed = await fixtures.crawl();

@@ -133,19 +133,3 @@ export const PERMANENT = { label: 'Undo', value: 'This cannot be undone.' };
 export const ROW_COUNT = sql<string>`count(*)`.as('count');
 export const countOf = async (row: Promise<{ count: string } | undefined>) =>
   Number((await row)?.count ?? 0);
-
-export async function heldUnits(
-  db: Database,
-  subject: Readonly<{ workspaceId: string; kind: string; ids: readonly string[] }>,
-) {
-  if (!subject.ids.length) return 0;
-  const row = await db
-    .selectFrom('consumable_ledger')
-    .select(sql<string>`coalesce(sum(units), 0)`.as('units'))
-    .where('workspace_id', '=', subject.workspaceId)
-    .where('entry_kind', '=', 'reservation')
-    .where('subject_kind', '=', subject.kind)
-    .where('subject_id', 'in', subject.ids)
-    .executeTakeFirst();
-  return Number(row?.units ?? 0);
-}

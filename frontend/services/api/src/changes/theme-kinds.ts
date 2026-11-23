@@ -8,14 +8,7 @@ import {
   themeRequest,
 } from '../projects/themes.ts';
 import { mergeCategories } from '../perception/category-merge.ts';
-import {
-  changeKind,
-  countOf,
-  MEMBER_WRITE,
-  PERMANENT,
-  ROW_COUNT,
-  type PreviewContext,
-} from './kind.ts';
+import { changeKind, MEMBER_WRITE, PERMANENT, type PreviewContext } from './kind.ts';
 
 const PERCEPTION = { label: 'Open Perception', path: '/perception' };
 const themePayload = z.strictObject({ theme_id: z.uuid() });
@@ -26,22 +19,10 @@ async function themeName(context: PreviewContext, id: string) {
   return theme.name;
 }
 
-function probeAnswersIn(context: PreviewContext, themeId: string) {
-  return countOf(
-    context.db
-      .selectFrom('probe_answer_items')
-      .select(ROW_COUNT)
-      .where('workspace_id', '=', context.workspaceId)
-      .where('project_id', '=', context.projectId)
-      .where('theme_id', '=', themeId)
-      .executeTakeFirst(),
-  );
-}
-
 export const themeKinds = {
   create_theme: changeKind({
     permission: MEMBER_WRITE,
-    purpose: 'add a perception theme that probe answers are grouped under',
+    purpose: 'add a perception theme that answers are grouped under',
     payload: themeRequest,
     async execute(trx, _config, actor, change, payload) {
       const theme = await createTheme(
@@ -104,10 +85,6 @@ export const themeKinds = {
         rows: [
           { label: 'Merge', value: await themeName(context, payload.theme_id) },
           { label: 'Into', value: await themeName(context, payload.into_id) },
-          {
-            label: 'Probe answers moved',
-            value: String(await probeAnswersIn(context, payload.theme_id)),
-          },
           PERMANENT,
         ],
         spend: null,
@@ -117,7 +94,7 @@ export const themeKinds = {
   }),
   delete_theme: changeKind({
     permission: MEMBER_WRITE,
-    purpose: 'delete a perception theme; probe answers filed under it are left without a theme',
+    purpose: 'delete a perception theme',
     payload: themePayload,
     async execute(trx, _config, actor, change, payload) {
       await deleteTheme(trx, {
@@ -130,14 +107,7 @@ export const themeKinds = {
     async preview(context, payload) {
       return {
         title: 'Delete a theme',
-        rows: [
-          { label: 'Theme', value: await themeName(context, payload.theme_id) },
-          {
-            label: 'Probe answers left without a theme',
-            value: String(await probeAnswersIn(context, payload.theme_id)),
-          },
-          PERMANENT,
-        ],
+        rows: [{ label: 'Theme', value: await themeName(context, payload.theme_id) }, PERMANENT],
         spend: null,
         opens: null,
       };

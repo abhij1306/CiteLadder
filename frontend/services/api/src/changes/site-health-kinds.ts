@@ -13,7 +13,6 @@ import { updateSchedule } from '../site-health/schedules.ts';
 import { rerunPage } from '../site-health/selection.ts';
 import {
   changeKind,
-  heldUnits,
   MEMBER_RUN,
   MEMBER_WRITE,
   plural,
@@ -41,14 +40,8 @@ const changeScope = (workspaceId: string, change: PreparedChange) => ({
 });
 
 async function fetchSpend(context: PreviewContext, crawlId: string) {
-  const fetches = await heldUnits(context.db, {
-    workspaceId: context.workspaceId,
-    kind: 'site_crawl',
-    ids: [crawlId],
-  });
-  return fetches
-    ? `Up to ${plural(fetches, 'page fetch', 'page fetches')} from the Site Health allowance`
-    : 'No metered page fetches';
+  await projectCrawl(context.db, context, crawlId);
+  return 'Page fetches use your own site crawl; nothing is metered';
 }
 
 async function crawlStarted(context: PreviewContext, crawlId: string) {

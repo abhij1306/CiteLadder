@@ -153,17 +153,10 @@ it('returns the owner’s error when the world changed and leaves the card confi
   expect(await outcome(t.scope, chatId)).toMatchObject([{ outcome: 'executed', refusal: null }]);
 });
 
-it('previews a paid launch with its spend from the estimate, never the model’s ceiling, and holds nothing until the click', async () => {
+it('previews a launch with its spend from the estimate, never the model’s ceiling, and starts nothing until the click', async () => {
   const t = await tenant();
-  const ledger = () =>
-    db
-      .selectFrom('consumable_ledger')
-      .select('id')
-      .where('workspace_id', '=', t.workspaceId)
-      .execute();
   const audits = () =>
     db.selectFrom('audits').select('status').where('project_id', '=', t.projectId).execute();
-  const before = await ledger();
   const { chatId, messageId, proposals } = await proposed(t.scope, [
     {
       kind: 'launch_audit',
@@ -178,7 +171,6 @@ it('previews a paid launch with its spend from the estimate, never the model’s
     },
   ]);
   expect(await audits()).toEqual([]);
-  expect(await ledger()).toEqual(before);
 
   await decideProposal(db, config, {
     scope: t.scope,
@@ -414,7 +406,11 @@ it('refuses at proposal what the owner would refuse, never runs a model-calling 
   const { chatId, proposals, at, runs, generated, road } = await liveCard(t);
   await db.deleteFrom('topics').where('id', '=', road).execute();
   expect(proposals).toMatchObject([
-    { title: 'Suggest 3 prompts', spend: 'AI credits for up to 3 model calls', outcome: 'open' },
+    {
+      title: 'Suggest 3 prompts',
+      spend: 'Up to 3 model calls on your own model key',
+      outcome: 'open',
+    },
     { title: 'Suggest 4 prompts', outcome: 'open' },
   ]);
   expect(await runs()).toEqual([]);

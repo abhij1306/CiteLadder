@@ -7,7 +7,6 @@ import { z } from 'zod';
 import {
   buyerGenerateInput,
   buyerManualInput,
-  buyerPromptHold,
   generateBuyerPrompts,
   manualBuyerPrompt,
   requestContexts,
@@ -105,7 +104,7 @@ export const commerceKinds = {
   generate_buyer_prompts: changeKind({
     permission: MEMBER_RUN,
     purpose:
-      'have CiteLadder write buyer prompts for categories or hero products; spends AI credits when confirmed, then they wait for approval',
+      'have CiteLadder write buyer prompts for categories or hero products; then they wait for approval',
     payload: buyerGenerateInput,
     async live(trx, _config, actor, change, payload) {
       await requestContexts(trx, commerceScope(actor.workspaceId, change), payload);
@@ -117,20 +116,14 @@ export const commerceKinds = {
     },
     async preview(context, payload) {
       const scope = commerceScope(context.workspaceId, context);
-      const held = buyerPromptHold(
-        await requestContexts(context.db, scope, payload),
-        payload.count,
-      );
+      await requestContexts(context.db, scope, payload);
       return {
         title: `Write buyer prompts for ${plural(payload.targets.length, 'target')}`,
         rows: [
           { label: 'Targets', value: (await targetNames(context, payload.targets)).join(', ') },
           { label: 'Prompts each', value: `Up to ${payload.count}` },
         ],
-        spend:
-          held === null
-            ? `AI credits for up to ${plural(payload.targets.length, 'model call')}`
-            : `Up to ${plural(held, 'AI credit')}`,
+        spend: `Up to ${plural(payload.targets.length, 'model call')} on your own model key`,
         opens: PRODUCTS,
       };
     },

@@ -16,7 +16,6 @@ import { notFound } from '../errors.ts';
 import {
   changeKind,
   countOf,
-  heldUnits,
   MEMBER_RUN,
   PERMANENT,
   plural,
@@ -74,12 +73,7 @@ async function repairSpend(
     .where('workspace_id', '=', context.workspaceId)
     .where('audit_id', '=', rehearsed.audit.id)
     .execute();
-  const runs = await heldUnits(context.db, {
-    workspaceId: context.workspaceId,
-    kind: 'audit',
-    ids: tasks.map((task) => task.id),
-  });
-  return `${plural(runs, 'prompt run')} for ${plural(tasks.length, 'answer')}, with your own provider keys`;
+  return `${plural(tasks.length, 'prompt run')} for ${plural(tasks.length, 'answer')}, with your own provider keys`;
 }
 
 export const auditKinds = {
